@@ -1,0 +1,9 @@
+[package]
+name = "cthelp_parser"
+version = "0.0.1"
+edition = "2021"
+license = "Mulan PSL v2.0"
+description = "A collection of functions to parse the markdown code of help files"
+
+homepage = "https://www.ctyun.cn/developer/"
+repository = "https://work.ctyun.cn/git/syskit/ctyunos_syskit/src/cthelp_parser"

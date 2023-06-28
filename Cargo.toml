@@ -1,0 +1,218 @@
+# syskits workspace 信息
+[workspace.package] # 共享的package配置项
+version = "0.0.1" 
+authors = ["CTyunOS linux developers"]
+license = "Mulan PSL v2.0"
+homepage = "https://www.ctyun.cn/developer"
+keywords = ["syskits", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+[package]
+name = "syskits"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+description = "CTyunOS implemented as universal (cross-platform) utils, written in Rust"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+default-run = "syskits"
+readme = "README.md"
+rust-version = "1.70.0"
+build = "build.rs"
+
+[features]
+default = ["feat_common_core"]
+
+## OS feature shortcodes
+unix = ["feat_os_unix"]
+windows = ["feat_os_windows"]
+
+## project-specific feature shortcodes
+nightly = []
+test_unimplemented = []
+# * 仅在启用了 `--feature ctdoc` 时构建 `ctdoc`
+ctdoc = ["zip", "dep:cthelp_parser"]
+
+##
+## 功能集
+## (常见/核心和Tier1) 功能集
+# "feat_common_core" == 可在大多数目标上构建/运行的基线核心实用工具集
+feat_common_core = [
+  "arch",
+]
+
+# "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
+feat_os_unix = [
+  "feat_common_core",
+]
+
+# "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
+feat_os_windows = [
+  "feat_common_core",  
+]
+
+[workspace.dependencies]
+bigdecimal = "0.4"
+binary-heap-plus = "0.5.0"
+bstr = "1.9.1"
+bytecount = "0.6.7"
+byteorder = "1.5.0"
+chrono = { version = "^0.4.35", default-features = false, features = [
+  "std",
+  "alloc",
+  "clock",
+] }
+clap = { version = "4.4", features = ["wrap_help", "cargo"] }
+clap_complete = "4.4"
+clap_mangen = "0.2"
+compare = "0.1.0"
+coz = { version = "0.1.3" }
+crossterm = ">=0.27.0"
+ctrlc = { version = "3.4", features = ["termination"] }
+exacl = "0.12.0"
+file_diff = "1.0.0"
+filetime = "0.2"
+fnv = "1.0.7"
+fs_extra = "1.3.0"
+fts-sys = "0.2"
+fundu = "2.0.0"
+gcd = "2.3"
+glob = "0.3.1"
+half = "2.4"
+hostname = "0.3"
+indicatif = "0.17"
+itertools = "0.12.1"
+libc = "0.2.153"
+lscolors = { version = "0.16.0", default-features = false, features = [
+  "gnu_legacy",
+] }
+memchr = "2"
+memmap2 = "0.9"
+nix = { version = "0.28", default-features = false }
+nom = "7.1.3"
+notify = { version = "=6.0.1", features = ["macos_kqueue"] }
+num-bigint = "0.4.4"
+num-traits = "0.2.18"
+number_prefix = "0.4"
+once_cell = "1.19.0"
+onig = { version = "~6.4", default-features = false }
+parse_datetime = "0.5.0"
+phf = "0.11.2"
+phf_codegen = "0.11.2"
+platform-info = "2.0.2"
+quick-error = "2.0.1"
+rand = { version = "0.8", features = ["small_rng"] }
+rand_core = "0.6"
+rayon = "1.9"
+redox_syscall = "0.5"
+regex = "1.10.4"
+rstest = "0.18.2"
+rust-ini = "0.19.0"
+same-file = "1.0.6"
+self_cell = "1.0.3"
+selinux = "0.4"
+signal-hook = "0.3.17"
+smallvec = { version = "1.13", features = ["union"] }
+tempfile = "3.10.1"
+uutils_term_grid = "0.3"
+terminal_size = "0.3.0"
+textwrap = { version = "0.16.1", features = ["terminal_size"] }
+thiserror = "1.0"
+time = { version = "0.3" }
+unicode-segmentation = "1.11.0"
+unicode-width = "0.1.11"
+utf-8 = "0.7.6"
+walkdir = "2.5"
+winapi-util = "0.1.6"
+windows-sys = { version = "0.48.0", default-features = false }
+xattr = "1.3.1"
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+
+hex = "0.4.3"
+md-5 = "0.10.6"
+sha1 = "0.10.6"
+sha2 = "0.10.8"
+sha3 = "0.10.8"
+blake2b_simd = "1.0.2"
+blake3 = "1.5.1"
+sm3 = "0.4.2"
+digest = "0.10.7"
+
+ctcore = { version = ">=0.0.1", package = "ctcore", path = "src/ctcore" }
+ctcore_procs = { version = ">=0.0.1", package = "ctcore_procs", path = "src/ctcore_procs" }
+
+[dependencies]
+clap = { workspace = true }
+once_cell = { workspace = true }
+ctcore = { workspace = true }
+clap_complete = { workspace = true }
+clap_mangen = { workspace = true }
+phf = { workspace = true }
+selinux = { workspace = true, optional = true }
+textwrap = { workspace = true }
+zip = { workspace = true, optional = true }
+
+cthelp_parser = { optional = true, version = ">=0.0.1", path = "src/cthelp_parser" }
+
+arch = { optional = true, package = "ct_arch", path = "src/ct/arch" }
+
+[dev-dependencies]
+chrono = { workspace = true }
+conv = "0.3"
+filetime = { workspace = true }
+glob = { workspace = true }
+libc = { workspace = true }
+pretty_assertions = "1"
+rand = { workspace = true }
+regex = { workspace = true }
+sha1 = { version = "0.10", features = ["std"] }
+tempfile = { workspace = true }
+time = { workspace = true, features = ["local-offset"] }
+unindent = "0.2"
+ctcore = { workspace = true, features = ["entries", "process", "signals"] }
+walkdir = { workspace = true }
+hex-literal = "0.4.1"
+rstest = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
+procfs = { version = "0.16", default-features = false }
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = { workspace = true, features = ["process", "signal", "user", "term"] }
+rlimit = "0.10.1"
+rand_pcg = "0.3"
+xattr = { workspace = true }
+
+[build-dependencies]
+phf_codegen = { workspace = true }
+
+[[bin]]
+name = "syskits"
+path = "src/bin/syskits.rs"
+
+[[bin]]
+name = "ctdoc"
+path = "src/bin/ctdoc/mod.rs"
+required-features = ["ctdoc"]
+
+# 默认的发布配置文件。它包含了所有的优化，而不牺牲调试信息。
+# 使用这个配置文件（如同标准的发布配置），调试信息和堆栈追踪依然可以获取。
+[profile.release]
+lto = true
+
+# 默认发布配置文件。它包含所有优化，不牺牲调试信息。使用此配置文件（如标准发布配置文件），调试信息和堆栈追踪仍然可用。
+# 类似发布的配置文件，调整为尽可能快，即使速度会牺牲二进制大小。这包括在panic时中止。
+[profile.release-fast]
+inherits = "release"
+panic = "abort"
+
+# 类似发布的配置文件，尽可能小。
+[profile.release-small]
+inherits = "release"
+opt-level = "z"
+panic = "abort"
+strip = true

@@ -90,7 +90,7 @@ pub struct ResourceLimits {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CommandExecution {
     /// 退出码
-    pub exit_code: i32,
+    pub exit_code: Option<i32>,
     /// 标准输出
     pub stdout: Option<String>,
     /// 标准错误
@@ -103,7 +103,7 @@ pub struct FunctionalVerification {
     /// 验证命令
     pub command: String,
     /// 预期退出码
-    pub expected_exit: i32,
+    pub expected_exit: Option<i32>,
     /// 预期标准输出
     pub expected_stdout: Option<String>,
     /// 预期标准错误
@@ -282,7 +282,17 @@ impl From<CommandExecution> for CommandResult {
         CommandResult {
             stdout: execution.stdout.unwrap_or_default(),
             stderr: execution.stderr.unwrap_or_default(),
-            exit_code: execution.exit_code,
+            exit_code: execution.exit_code.unwrap_or(0),
+        }
+    }
+}
+
+impl From<&FunctionalVerification> for CommandResult {
+    fn from(verification: &FunctionalVerification) -> Self {
+        CommandResult {
+            stdout: verification.expected_stdout.clone().unwrap_or_default(),
+            stderr: verification.expected_stderr.clone().unwrap_or_default(),
+            exit_code: verification.expected_exit.unwrap_or(0),
         }
     }
 }
@@ -332,7 +342,7 @@ mod tests {
         let test_case: TestCase = serde_json::from_str(json).unwrap();
         assert_eq!(test_case.command, "echo");
         assert_eq!(test_case.args, vec!["Hello, World!"]);
-        assert_eq!(test_case.expectation.execution.exit_code, 0);
+        assert_eq!(test_case.expectation.execution.exit_code, Some(0));
         assert_eq!(
             test_case.expectation.execution.stdout,
             Some("Hello, World!\n".to_string())
@@ -398,5 +408,152 @@ mod tests {
         assert_eq!(test_suite.tests[0].command, "ls");
         assert_eq!(test_suite.tests[0].setup_commands.len(), 2);
         assert_eq!(test_suite.tests[0].cleanup_commands.len(), 1);
+    }
+
+    #[test]
+    fn test_deserialize_null_fields() {
+        let json = r#"{
+            "command": "echo",
+            "description": "测试带null字段的命令",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": null,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "use_patterns": false,
+                "env_changes": {},
+                "file_changes": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false
+                }
+            },
+            "setup_commands": [],
+            "cleanup_commands": [],
+            "requires_root": false,
+            "timeout": 5,
+            "tags": ["basic"],
+            "environment": {
+                "files": [],
+                "env_vars": {},
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }"#;
+
+        let test_case: TestCase = serde_json::from_str(json).unwrap();
+        assert_eq!(test_case.command, "echo");
+        assert_eq!(test_case.args, vec!["Hello, World!"]);
+        assert_eq!(test_case.expectation.execution.exit_code, None);
+        assert_eq!(test_case.expectation.execution.stdout, None);
+        assert_eq!(test_case.expectation.execution.stderr, None);
+    }
+
+    #[test]
+    fn test_deserialize_mixed_null_fields() {
+        let json = r#"{
+            "command": "echo",
+            "description": "测试部分null字段的命令",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo test",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "use_patterns": false,
+                "env_changes": {},
+                "file_changes": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false
+                }
+            },
+            "setup_commands": [],
+            "cleanup_commands": [],
+            "requires_root": false,
+            "timeout": 5,
+            "tags": ["basic"],
+            "environment": {
+                "files": [],
+                "env_vars": {},
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }"#;
+
+        let test_case: TestCase = serde_json::from_str(json).unwrap();
+        assert_eq!(test_case.command, "echo");
+        assert_eq!(test_case.args, vec!["Hello, World!"]);
+        assert_eq!(test_case.expectation.execution.exit_code, Some(0));
+        assert_eq!(test_case.expectation.execution.stdout, None);
+        assert_eq!(test_case.expectation.execution.stderr, Some("".to_string()));
+
+        // 验证命令的null字段
+        assert_eq!(test_case.expectation.verifications.len(), 1);
+        assert_eq!(
+            test_case.expectation.verifications[0].expected_exit,
+            Some(0)
+        );
+        assert_eq!(test_case.expectation.verifications[0].expected_stdout, None);
+        assert_eq!(test_case.expectation.verifications[0].expected_stderr, None);
+    }
+
+    #[test]
+    fn test_command_execution_to_command_result() {
+        // 测试正常值转换
+        let execution = CommandExecution {
+            exit_code: Some(0),
+            stdout: Some("output".to_string()),
+            stderr: Some("error".to_string()),
+        };
+
+        let result: CommandResult = execution.into();
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "output");
+        assert_eq!(result.stderr, "error");
+
+        // 测试null值转换
+        let execution = CommandExecution {
+            exit_code: None,
+            stdout: None,
+            stderr: None,
+        };
+
+        let result: CommandResult = execution.into();
+        assert_eq!(result.exit_code, 0); // 默认值为0
+        assert_eq!(result.stdout, ""); // 默认值为空字符串
+        assert_eq!(result.stderr, ""); // 默认值为空字符串
+
+        // 测试混合值转换
+        let execution = CommandExecution {
+            exit_code: Some(1),
+            stdout: None,
+            stderr: Some("error".to_string()),
+        };
+
+        let result: CommandResult = execution.into();
+        assert_eq!(result.exit_code, 1);
+        assert_eq!(result.stdout, "");
+        assert_eq!(result.stderr, "error");
     }
 }

@@ -17,6 +17,24 @@
 1. 就是命令执行结果的基准问题，在测试中，需要以coreutils 的执行结果作为基准，但是不能每次都执行coreutils 命令，这样会降低测试效率。所以设计了基准模式，在第一次执行命令时，将执行结果作为基准，后续执行命令时，可以直接使用基准结果作为期望结果，来比较执行结果。
 2. 命令执行功能性验证逻辑可观测思考，命令的不同，他们可能不能使用标准输出和标准错误输出来观察，例如 chmod，所以在设计单元测试用例参数时，添加了verifications功能验证字段来完成功能验证，也就是在这个字段，可以添加其他命令来辅助验证功能是不是生效，来综合判断。
 
+## 命令执行结果环境变量
+
+为了方便在验证阶段引用命令执行结果，框架会自动将命令执行结果保存到以下环境变量中：
+
+- `CMD_EXIT_CODE`: 命令的退出码
+- `CMD_STDOUT`: 命令的标准输出
+- `CMD_STDERR`: 命令的标准错误
+
+这些环境变量可以在 `verifications` 部分的命令中使用，例如：
+
+```json
+"verifications": [
+  {
+    "command": "test \"$CMD_STDOUT\" = \"expected output\"",
+    "expected_exit": 0
+  }
+]
+```
 
 ## 工作模式
 
@@ -191,17 +209,17 @@ pub struct Reporter {
       "expectation": {
         // 命令执行结果
         "execution": {
-          "exit_code": 0,               // 预期退出码
-          "stdout": "",                 // 预期标准输出
-          "stderr": ""                  // 预期标准错误
+          "exit_code": 0,               // 预期退出码，设置为null则忽略比较
+          "stdout": "",                 // 预期标准输出，设置为null则忽略比较
+          "stderr": ""                  // 预期标准错误，设置为null则忽略比较
         },
         // 功能验证命令列表
         "verifications": [
           {
             "command": "验证命令",        // 验证命令
             "expected_exit": 0,          // 预期退出码
-            "expected_stdout": null,     // 预期标准输出
-            "expected_stderr": null      // 预期标准错误
+            "expected_stdout": null,     // 预期标准输出，设置为null则忽略比较
+            "expected_stderr": null      // 预期标准错误，设置为null则忽略比较
           }
         ],
         // 结果比较的忽略配置
@@ -250,9 +268,9 @@ pub struct Reporter {
 
 2. **期望结果（必填）**
    - `expectation.execution`: 命令执行结果
-     * `exit_code`: 预期的命令退出码
-     * `stdout`: 预期的标准输出内容
-     * `stderr`: 预期的标准错误内容
+     * `exit_code`: 预期的命令退出码，设置为null则忽略比较
+     * `stdout`: 预期的标准输出内容，设置为null则忽略比较
+     * `stderr`: 预期的标准错误内容，设置为null则忽略比较
    - `expectation.verifications`: 功能验证命令列表
      * `command`: 要执行的验证命令
      * `expected_exit`: 验证命令的预期退出码

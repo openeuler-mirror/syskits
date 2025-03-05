@@ -1,0 +1,112 @@
+{
+    "tests": [
+        {
+            "command": "echo",
+            "description": "测试忽略stdout比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "echo",
+            "description": "测试忽略stderr比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello, World!\n",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "echo",
+            "description": "测试忽略exit_code比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": null,
+                    "stdout": "Hello, World!\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "echo",
+            "description": "测试忽略所有比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": null,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "echo",
+            "description": "测试验证命令忽略stdout比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello, World!\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | wc -c",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "echo",
+            "description": "测试验证命令忽略stderr比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello, World!\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | wc -c",
+                        "expected_exit": 0,
+                        "expected_stdout": "14\n",
+                        "expected_stderr": null
+                    }
+                ]
+            }
+        },
+        {
+            "command": "echo",
+            "description": "测试验证命令忽略所有比较",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello, World!\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | wc -c",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ]
+            }
+        }
+    ]
+} 

@@ -371,7 +371,12 @@ impl IsolatedSandbox {
     }
 
     /// 执行命令
-    pub fn execute_command(&mut self, cmd: &str, args: &[String]) -> Result<CommandResult> {
+    pub fn execute_command(
+        &mut self,
+        cmd: &str,
+        args: &[String],
+        is_record_result: bool,
+    ) -> Result<CommandResult> {
         let mut command = std::process::Command::new(cmd);
         command
             .args(args)
@@ -383,6 +388,14 @@ impl IsolatedSandbox {
             .map_err(|e| TestError::ExecutionError(format!("Failed to execute command: {}", e)))?;
 
         let result = CommandResult::from(output);
+
+        // 将命令执行结果保存到环境变量中，供验证阶段使用
+        if is_record_result {
+            self.add_env("CMD_EXIT_CODE", &result.exit_code.to_string());
+            self.add_env("CMD_STDOUT", &result.stdout);
+            self.add_env("CMD_STDERR", &result.stderr);
+        }
+
         self.update_status(&result);
         Ok(result)
     }

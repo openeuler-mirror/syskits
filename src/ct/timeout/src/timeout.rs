@@ -387,3 +387,236 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    mod timeout_flags_tests {
+        use super::*;
+
+        #[test]
+        fn test_flags_basic() {
+            let args = vec![ctcore::ct_util_name(), "5s", "sleep", "1"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+
+            assert!(!flags.is_foreground);
+            assert!(flags.kill_after.is_none());
+            assert_eq!(flags.duration, Duration::from_secs(5));
+            assert!(!flags.is_preserve_status);
+            assert!(!flags.is_verbose);
+            assert_eq!(flags.command, vec!["sleep".to_string(), "1".to_string()]);
+        }
+
+        #[test]
+        fn test_flags_with_signal() {
+            let args = vec![ctcore::ct_util_name(), "--signal=KILL", "5s", "yes"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(
+                flags.signal,
+                get_ct_signal_by_name_or_value("KILL").unwrap()
+            );
+        }
+
+        #[test]
+        fn test_flags_with_kill_after() {
+            let args = vec![ctcore::ct_util_name(), "-k", "2s", "5s", "sleep", "5"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
+        }
+
+        #[test]
+        fn test_flags_with_preserve_status() {
+            let args = vec![ctcore::ct_util_name(), "--preserve-status", "1s", "false"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert!(flags.is_preserve_status);
+        }
+
+        #[test]
+        fn test_flags_with_verbose() {
+            let args = vec![ctcore::ct_util_name(), "--verbose", "1s", "true"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert!(flags.is_verbose);
+        }
+
+        #[test]
+        fn test_flags_invalid_signal() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--signal=INVALID",
+                "5s",
+                "sleep",
+                "10",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = TimeoutFlags::new(&matches);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_flags_invalid_duration() {
+            let args = vec![ctcore::ct_util_name(), "invalid", "sleep", "1"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = TimeoutFlags::new(&matches);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_flags_invalid_kill_after() {
+            let args = vec![ctcore::ct_util_name(), "-k", "invalid", "5s", "sleep", "10"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = TimeoutFlags::new(&matches);
+            assert!(result.is_err());
+        }
+    }
+
+    mod timeout_execution_tests {
+        use super::*;
+
+        #[test]
+        fn test_timeout_normal_exit() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_secs(1),
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["true".to_string()],
+            });
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 124);
+        }
+
+        #[test]
+        fn test_timeout_command_not_found() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_secs(1),
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["nonexistent_command".to_string()],
+            });
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 127);
+        }
+
+        #[test]
+        fn test_timeout_with_preserve_status() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_millis(100),
+                is_preserve_status: true,
+                is_verbose: false,
+                command: vec!["false".to_string()],
+            });
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 1);
+        }
+    }
+
+    mod timeout_main_tests {
+        use super::*;
+
+        #[test]
+        fn test_main_normal_timeout() {
+            let args = vec![ctcore::ct_util_name(), "1s", "sleep", "2"];
+            let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 124);
+        }
+
+        #[test]
+        fn test_main_command_exits() {
+            let args = vec![ctcore::ct_util_name(), "2s", "true"];
+            let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 124);
+        }
+    }
+
+    mod ct_app_tests {
+        use super::*;
+
+        #[test]
+        fn test_app_all_options() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--foreground",
+                "-k",
+                "2s",
+                "--preserve-status",
+                "--signal=TERM",
+                "--verbose",
+                "5s",
+                "sleep",
+                "5",
+            ];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_app_minimal_options() {
+            let args = vec![ctcore::ct_util_name(), "5s", "sleep", "1"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_app_invalid_options() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--invalid-option",
+                "5s",
+                "sleep",
+                "1",
+            ];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_app_missing_duration() {
+            let args = vec![ctcore::ct_util_name(), "--signal=TERM", "command", "arg1"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_app_missing_duration_with_option() {
+            let args = vec![ctcore::ct_util_name(), "--foreground", "command", "arg1"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_app_duration_validation() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--foreground",
+                "not_a_duration",
+                "command",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = TimeoutFlags::new(&matches);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_app_missing_command() {
+            let args = vec![ctcore::ct_util_name(), "5s"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+    }
+}

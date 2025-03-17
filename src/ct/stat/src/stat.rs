@@ -1389,3 +1389,36 @@ mod test_stat_all {
     }
 }
 
+#[cfg(test)]
+mod test_i18n {
+    use super::*;
+
+    #[test]
+    fn test_help_messages() {
+        println!("\n=== Testing help messages ===");
+
+        // 设置中文语言环境
+        println!("Setting locale to zh-CN");
+        rust_i18n::set_locale("zh-CN");
+        let cmd = ct_app();
+
+        // 测试帮助信息
+        let helps = cmd.get_about().unwrap().to_string();
+
+        //let helps = "hello";
+        let trans = rust_i18n::t!(&helps);
+        println!("\nOriginal help text:\n{}", helps);
+        println!("\nTranslated help text:\n{}", trans);
+
+        // 测试参数描述
+        println!("\nArgument descriptions:");
+        let args: Vec<_> = cmd.get_arguments().collect();
+        for arg in args {
+            if let Some(help) = arg.get_help() {
+                println!("- {} => {}", arg.get_id(), help);
+            }
+        }
+
+        println!("=== Test completed ===\n");
+    }
+}

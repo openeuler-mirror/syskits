@@ -20,6 +20,8 @@ clap = { workspace = true }
 ctcore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
 chrono = { workspace = true }
 tempfile = "3.4" 
+rust-i18n = "2"
+sys-locale = "0.2" 
 
 [[bin]]
 name = "stat"

@@ -374,6 +374,7 @@ dd = { optional = true, package = "ct_dd", path = "src/ct/dd" }
 tail = { optional = true, package = "ct_tail", path = "src/ct/tail" }
 nl = { optional = true, package = "ct_nl", path = "src/ct/nl"}
 stat = { optional = true, package = "ct_stat", path = "src/ct/stat" }
+tac = { optional = true, package = "ct_tac", path = "src/ct/tac" }
 
 [dev-dependencies]
 conv = "0.3"

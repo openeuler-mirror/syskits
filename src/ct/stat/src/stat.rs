@@ -21,7 +21,7 @@ use ctcore::{
 };
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -253,7 +253,9 @@ fn print_it(output: &StatOutputType, flags: Flags, width: usize, precision: Opti
     match output {
         StatOutputType::Str(s) => print_str(s, &flags, width, precision),
         StatOutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
-        StatOutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
+        StatOutputType::Unsigned(num) => {
+            print_unsigned(*num, &flags, width, precision, padding_char)
+        }
         StatOutputType::UnsignedOct(num) => {
             print_unsigned_oct(*num, &flags, width, precision, padding_char);
         }
@@ -553,10 +555,10 @@ impl Stater {
     fn new(matches: &ArgMatches) -> CTResult<Self> {
         // Get files first since this is required
         let files = Self::get_files(matches)?;
-        
+
         // Get format configuration
         let (default_tokens, default_dev_tokens) = Self::configure_format(matches)?;
-        
+
         // Get mount list if needed
         let mount_list = if matches.get_flag(stat_options::STAT_FILE_SYSTEM) {
             None
@@ -567,8 +569,8 @@ impl Stater {
         Ok(Self {
             is_follow: matches.get_flag(stat_options::STAT_DEREFERENCE),
             is_show_fs: matches.get_flag(stat_options::STAT_FILE_SYSTEM),
-            is_from_user: matches.contains_id(stat_options::STAT_FORMAT) || 
-                         matches.contains_id(stat_options::STAT_PRINTF),
+            is_from_user: matches.contains_id(stat_options::STAT_FORMAT)
+                || matches.contains_id(stat_options::STAT_PRINTF),
             files,
             default_tokens,
             default_dev_tokens,
@@ -581,10 +583,12 @@ impl Stater {
             .get_many::<OsString>(stat_options::STAT_FILES)
             .map(|v| v.map(OsString::from).collect())
             .filter(|files: &Vec<OsString>| !files.is_empty())
-            .ok_or_else(|| CtSimpleError::new(
-                1,
-                "missing operand\nTry 'stat --help' for more information.".to_string(),
-            ).into())
+            .ok_or_else(|| {
+                CtSimpleError::new(
+                    1,
+                    "missing operand\nTry 'stat --help' for more information.".to_string(),
+                )
+            })
     }
 
     fn configure_format(matches: &ArgMatches) -> CTResult<(Vec<StatToken>, Vec<StatToken>)> {
@@ -609,10 +613,8 @@ impl Stater {
             Self::generate_tokens(format_str, use_printf)?
         };
 
-        let default_dev_tokens = Self::generate_tokens(
-            &Self::default_format(show_fs, terse, true), 
-            use_printf
-        )?;
+        let default_dev_tokens =
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
         Ok((default_tokens, default_dev_tokens))
     }
@@ -623,11 +625,11 @@ impl Stater {
             .iter()
             .map(|mi| mi.mount_dir.clone())
             .collect::<Vec<String>>();
-        
+
         // Reverse sort. The longer comes first.
         mount_list.sort();
         mount_list.reverse();
-        
+
         Ok(Some(mount_list))
     }
 
@@ -659,30 +661,28 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
         let display_name = file.to_string_lossy();
-        
+
         // Handle file path resolution
-        let file = match self.resolve_file_path(&display_name, stdin_is_fifo) {
+        let file = match self.resolve_file_path(display_name.as_ref(), stdin_is_fifo) {
             Ok(path) => path,
             Err(status) => return status,
         };
 
         // Process based on mode (filesystem or file)
         if self.is_show_fs {
-            self.handle_filesystem_stat(&file, &display_name)
+            self.handle_filesystem_stat(&file, display_name.as_ref())
         } else {
-            self.handle_file_stat(&file, &display_name, stdin_is_fifo)
+            self.handle_file_stat(&file, display_name.as_ref(), stdin_is_fifo)
         }
     }
 
-    fn resolve_file_path(&self, display_name: &Cow<str>, _stdin_is_fifo: bool) -> Result<OsString, i32> {
+    fn resolve_file_path(&self, display_name: &str, _stdin_is_fifo: bool) -> Result<OsString, i32> {
         if !cfg!(unix) || display_name != "-" {
-            return Ok(OsString::from(display_name.as_ref()));
+            return Ok(OsString::from(display_name));
         }
 
         if self.is_show_fs {
-            ct_show_error!(
-                "using '-' to denote standard input does not work in file system mode"
-            );
+            ct_show_error!("using '-' to denote standard input does not work in file system mode");
             return Err(1);
         }
 
@@ -693,7 +693,7 @@ impl Stater {
         })
     }
 
-    fn handle_filesystem_stat(&self, file: &OsStr, display_name: &Cow<str>) -> i32 {
+    fn handle_filesystem_stat(&self, file: &OsStr, display_name: &str) -> i32 {
         #[cfg(unix)]
         let path = file.as_bytes();
         #[cfg(not(unix))]
@@ -715,7 +715,7 @@ impl Stater {
         }
     }
 
-    fn handle_file_stat(&self, file: &OsStr, display_name: &Cow<str>, stdin_is_fifo: bool) -> i32 {
+    fn handle_file_stat(&self, file: &OsStr, display_name: &str, stdin_is_fifo: bool) -> i32 {
         let result = if self.is_follow || stdin_is_fifo && display_name == "-" {
             fs::metadata(file)
         } else {
@@ -736,7 +736,9 @@ impl Stater {
     }
 
     fn select_tokens(&self, meta: &fs::Metadata) -> &[StatToken] {
-        if self.is_from_user || !(meta.file_type().is_char_device() || meta.file_type().is_block_device()) {
+        if self.is_from_user
+            || !(meta.file_type().is_char_device() || meta.file_type().is_block_device())
+        {
             &self.default_tokens
         } else {
             &self.default_dev_tokens
@@ -747,7 +749,12 @@ impl Stater {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
-                StatToken::Directive { flag, width, precision, format } => {
+                StatToken::Directive {
+                    flag,
+                    width,
+                    precision,
+                    format,
+                } => {
                     let output = self.get_filesystem_output(meta, *format);
                     print_it(&output, *flag, *width, *precision);
                 }
@@ -759,7 +766,12 @@ impl Stater {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
-                StatToken::Directive { flag, width, precision, format } => {
+                StatToken::Directive {
+                    flag,
+                    width,
+                    precision,
+                    format,
+                } => {
                     let output = self.get_file_output(meta, *format);
                     print_it(&output, *flag, *width, *precision);
                 }
@@ -784,9 +796,12 @@ impl Stater {
             // maximum length of filenames
             'l' => StatOutputType::Unsigned(meta.namelen()),
             // file name
-            'n' => StatOutputType::Str(self.files.first()
-                .map(|f| f.to_string_lossy().into_owned())
-                .unwrap_or_default()),
+            'n' => StatOutputType::Str(
+                self.files
+                    .first()
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            ),
             // block size (for faster transfers)
             's' => StatOutputType::Unsigned(meta.io_size()),
             // fundamental block size (for block counts)
@@ -800,9 +815,12 @@ impl Stater {
     }
 
     fn get_file_output(&self, meta: &fs::Metadata, format: char) -> StatOutputType {
-        let display_name = self.files.first().map(|f| f.to_string_lossy()).unwrap_or_default();
+        let display_name = self
+            .files
+            .first()
+            .map(|f| f.to_string_lossy())
+            .unwrap_or_default();
         let file_type = meta.file_type();
-        let tokens = self.select_tokens(meta);
 
         match format {
             // access rights in octal
@@ -821,16 +839,15 @@ impl Stater {
             // raw mode in hex
             'f' => StatOutputType::UnsignedHex(meta.mode() as u64),
             // file type
-            'F' => StatOutputType::Str(
-                pretty_filetype(meta.mode() as mode_t, meta.len())
-                    .to_owned(),
-            ),
+            'F' => {
+                StatOutputType::Str(pretty_filetype(meta.mode() as mode_t, meta.len()).to_owned())
+            }
             // group ID of owner
             'g' => StatOutputType::Unsigned(meta.gid() as u64),
             // group name of owner
             'G' => {
-                let group_name = ct_entries::gid2grp(meta.gid())
-                    .unwrap_or_else(|_| "UNKNOWN".to_owned());
+                let group_name =
+                    ct_entries::gid2grp(meta.gid()).unwrap_or_else(|_| "UNKNOWN".to_owned());
                 StatOutputType::Str(group_name)
             }
             // number of hard links
@@ -838,7 +855,10 @@ impl Stater {
             // inode number
             'i' => StatOutputType::Unsigned(meta.ino()),
             // mount point
-            'm' => StatOutputType::Str(self.find_mount_point(display_name.as_ref()).unwrap_or_default()),
+            'm' => StatOutputType::Str(
+                self.find_mount_point(display_name.as_ref())
+                    .unwrap_or_default(),
+            ),
             // file name
             'n' => StatOutputType::Str(display_name.to_string()),
             // quoted file name with dereference if symbolic link
@@ -871,8 +891,8 @@ impl Stater {
             'u' => StatOutputType::Unsigned(meta.uid() as u64),
             // user name of owner
             'U' => {
-                let user_name = ct_entries::uid2usr(meta.uid())
-                    .unwrap_or_else(|_| "UNKNOWN".to_owned());
+                let user_name =
+                    ct_entries::uid2usr(meta.uid()).unwrap_or_else(|_| "UNKNOWN".to_owned());
                 StatOutputType::Str(user_name)
             }
 
@@ -880,30 +900,22 @@ impl Stater {
             'w' => StatOutputType::Str(
                 meta.birth()
                     .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
-                    .unwrap_or_else(|| "-".to_string())),
+                    .unwrap_or_else(|| "-".to_string()),
+            ),
 
             // time of file birth, seconds since Epoch; 0 if unknown
             'W' => StatOutputType::Unsigned(meta.birth().unwrap_or_default().0),
 
             // time of last access, human-readable
-            'x' => StatOutputType::Str(pretty_time(
-                meta.atime(),
-                meta.atime_nsec(),
-            )),
+            'x' => StatOutputType::Str(pretty_time(meta.atime(), meta.atime_nsec())),
             // time of last access, seconds since Epoch
             'X' => StatOutputType::Integer(meta.atime()),
             // time of last data modification, human-readable
-            'y' => StatOutputType::Str(pretty_time(
-                meta.mtime(),
-                meta.mtime_nsec(),
-            )),
+            'y' => StatOutputType::Str(pretty_time(meta.mtime(), meta.mtime_nsec())),
             // time of last data modification, seconds since Epoch
             'Y' => StatOutputType::Integer(meta.mtime()),
             // time of last status change, human-readable
-            'z' => StatOutputType::Str(pretty_time(
-                meta.ctime(),
-                meta.ctime_nsec(),
-            )),
+            'z' => StatOutputType::Str(pretty_time(meta.ctime(), meta.ctime_nsec())),
             // time of last status change, seconds since Epoch
             'Z' => StatOutputType::Integer(meta.ctime()),
 
@@ -952,35 +964,31 @@ pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
         .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
-    
+
     // Convert non-zero exit status to error
     match stater.exec() {
         0 => Ok(()),
-        status => Err(status.into())
+        status => Err(status.into()),
     }
 }
 
 pub fn ct_app() -> Command {
-
     let args = vec![
         Arg::new(stat_options::STAT_DEREFERENCE)
             .short('L')
             .long(stat_options::STAT_DEREFERENCE)
             .help("follow links")
             .action(ArgAction::SetTrue),
-
         Arg::new(stat_options::STAT_FILE_SYSTEM)
             .short('f')
             .long(stat_options::STAT_FILE_SYSTEM)
             .help("display file system status instead of file status")
             .action(ArgAction::SetTrue),
-
         Arg::new(stat_options::STAT_TERSE)
             .short('t')
             .long(stat_options::STAT_TERSE)
             .help("print the information in terse form")
             .action(ArgAction::SetTrue),
-
         Arg::new(stat_options::STAT_FORMAT)
             .short('c')
             .long(stat_options::STAT_FORMAT)
@@ -989,7 +997,6 @@ pub fn ct_app() -> Command {
 output a newline after each use of FORMAT",
             )
             .value_name("FORMAT"),
-
         Arg::new(stat_options::STAT_PRINTF)
             .long(stat_options::STAT_PRINTF)
             .value_name("FORMAT")
@@ -998,12 +1005,10 @@ output a newline after each use of FORMAT",
         and do not output a mandatory trailing newline;
         if you want a newline, include \n in FORMAT",
             ),
-
         Arg::new(stat_options::STAT_FILES)
             .action(ArgAction::Append)
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
-
     ];
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
@@ -1011,7 +1016,6 @@ output a newline after each use of FORMAT",
         .override_usage(ct_format_usage(STAT_USAGE))
         .infer_long_args(true)
         .args(args)
-        
 }
 
 const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
@@ -1026,7 +1030,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{group_num, Flags, ScanUtil, Stater, StatToken};
+    use super::{Flags, ScanUtil, StatToken, Stater, group_num};
 
     #[test]
     fn test_scanners() {
@@ -1144,14 +1148,19 @@ mod test_stat_all {
     use std::fs::File;
     use tempfile::tempdir;
 
-    fn create_test_matches(files: Vec<&str>, show_fs: bool, format: Option<&str>, use_printf: bool) -> ArgMatches {
-        let mut cmd = ct_app();
+    fn create_test_matches(
+        files: Vec<&str>,
+        show_fs: bool,
+        format: Option<&str>,
+        use_printf: bool,
+    ) -> ArgMatches {
+        let cmd = ct_app();
         let mut args = vec!["stat"]; // 添加程序名称作为第一个参数
-        
+
         if show_fs {
             args.push("-f");
         }
-        
+
         if let Some(fmt) = format {
             if use_printf {
                 args.extend_from_slice(&["--printf", fmt]);
@@ -1159,10 +1168,10 @@ mod test_stat_all {
                 args.extend_from_slice(&["-c", fmt]);
             }
         }
-        
+
         // 添加文件参数
         args.extend(files);
-        
+
         cmd.try_get_matches_from(args).unwrap()
     }
 
@@ -1198,13 +1207,13 @@ mod test_stat_all {
         let matches = create_test_matches(vec!["file.txt"], false, Some("%n %s"), false);
         let (tokens, _) = Stater::configure_format(&matches).unwrap();
         // %n + space + %s + newline = 4 tokens
-        assert_eq!(tokens.len(), 4); 
+        assert_eq!(tokens.len(), 4);
 
         // Test printf format
         let matches = create_test_matches(vec!["file.txt"], false, Some("%n\\n"), true);
         let (tokens, _) = Stater::configure_format(&matches).unwrap();
         // %n + \n = 2 tokens (printf mode doesn't add extra newline)
-        assert_eq!(tokens.len(), 2); 
+        assert_eq!(tokens.len(), 2);
 
         // Additional test cases to verify token parsing
         let matches = create_test_matches(vec!["file.txt"], false, Some("simple"), false);
@@ -1229,7 +1238,10 @@ mod test_stat_all {
         let mut sorted_list = list.clone();
         sorted_list.sort();
         sorted_list.reverse();
-        assert_eq!(list, sorted_list, "Mount list should be sorted in reverse order");
+        assert_eq!(
+            list, sorted_list,
+            "Mount list should be sorted in reverse order"
+        );
 
         // 打印挂载点列表以便调试
         #[cfg(test)]
@@ -1245,10 +1257,10 @@ mod test_stat_all {
     fn test_find_mount_point() {
         let temp_dir = tempdir().unwrap();
         let temp_path = temp_dir.path();
-        
+
         let matches = create_test_matches(vec![temp_path.to_str().unwrap()], false, None, false);
         let stater = Stater::new(&matches).unwrap();
-        
+
         let mount_point = stater.find_mount_point(temp_path);
         assert!(mount_point.is_some());
     }
@@ -1259,13 +1271,13 @@ mod test_stat_all {
         let stater = Stater::new(&matches).unwrap();
 
         // Test normal file
-        let result = stater.resolve_file_path(&"file.txt".into(), false);
+        let result = stater.resolve_file_path("file.txt", false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), OsString::from("file.txt"));
 
         // Test stdin in filesystem mode
         let stater = Stater::new(&create_test_matches(vec!["-"], true, None, false)).unwrap();
-        let result = stater.resolve_file_path(&"-".into(), true);
+        let result = stater.resolve_file_path("-", true);
         assert!(result.is_err());
     }
 
@@ -1273,13 +1285,13 @@ mod test_stat_all {
     fn test_handle_filesystem_stat() {
         let temp_dir = tempdir().unwrap();
         let temp_path = temp_dir.path();
-        
+
         let matches = create_test_matches(vec![temp_path.to_str().unwrap()], true, None, false);
         let stater = Stater::new(&matches).unwrap();
-        
+
         let result = stater.handle_filesystem_stat(
             &OsString::from(temp_path.as_os_str()),
-            &temp_path.to_string_lossy()
+            temp_path.to_string_lossy().as_ref(),
         );
         assert_eq!(result, 0);
     }
@@ -1291,24 +1303,19 @@ mod test_stat_all {
         File::create(&temp_file).unwrap();
 
         let file_path = temp_file.to_str().unwrap();
-        
+
         // 确保文件路径被正确添加到参数中
-        let matches = create_test_matches(
-            vec![file_path], 
-            false, 
-            None,
-            false
-        );
-        
+        let matches = create_test_matches(vec![file_path], false, None, false);
+
         // 创建 Stater 实例前先验证参数
         assert!(matches.contains_id(stat_options::STAT_FILES));
-        
+
         let stater = Stater::new(&matches).unwrap();
 
         let result = stater.handle_file_stat(
             &OsString::from(temp_file.as_os_str()),
-            &temp_file.to_string_lossy(),
-            false
+            temp_file.to_string_lossy().as_ref(),
+            false,
         );
         assert_eq!(result, 0);
     }
@@ -1323,10 +1330,10 @@ mod test_stat_all {
             vec![temp_file.to_str().unwrap()],
             false,
             Some("%n %s"),
-            false
+            false,
         );
         let stater = Stater::new(&matches).unwrap();
-        
+
         let metadata = fs::metadata(&temp_file).unwrap();
         let tokens = stater.select_tokens(&metadata);
         assert!(!tokens.is_empty());
@@ -1336,16 +1343,16 @@ mod test_stat_all {
     fn test_get_filesystem_output() {
         let temp_dir = tempdir().unwrap();
         let temp_path = temp_dir.path();
-        
+
         let matches = create_test_matches(vec![temp_path.to_str().unwrap()], true, None, false);
         let stater = Stater::new(&matches).unwrap();
-        
+
         let fs_meta = statfs(temp_path.as_os_str().as_bytes()).unwrap();
-        
+
         // Test various format specifiers
         let output = stater.get_filesystem_output(&fs_meta, 'b');
         assert!(matches!(output, StatOutputType::Unsigned(_)));
-        
+
         let output = stater.get_filesystem_output(&fs_meta, 'T');
         assert!(matches!(output, StatOutputType::Str(_)));
     }
@@ -1356,20 +1363,15 @@ mod test_stat_all {
         let temp_file = temp_dir.path().join("test.txt");
         File::create(&temp_file).unwrap();
 
-        let matches = create_test_matches(
-            vec![temp_file.to_str().unwrap()],
-            false,
-            None,
-            false
-        );
+        let matches = create_test_matches(vec![temp_file.to_str().unwrap()], false, None, false);
         let stater = Stater::new(&matches).unwrap();
-        
+
         let metadata = fs::metadata(&temp_file).unwrap();
-        
+
         // Test various format specifiers
         let output = stater.get_file_output(&metadata, 'n');
         assert!(matches!(output, StatOutputType::Str(_)));
-        
+
         let output = stater.get_file_output(&metadata, 's');
         assert!(matches!(output, StatOutputType::Integer(_)));
     }

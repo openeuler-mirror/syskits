@@ -15,10 +15,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
 use ctcore::libc::mode_t;
-use ctcore::{
-    ct_entries, ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error,
-    ct_show_warning,
-};
+use ctcore::{ct_entries, ct_show_error, ct_show_warning};
 
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -29,9 +26,11 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
-const STAT_ABOUT: &str = ct_help_about!("stat.md");
-const STAT_USAGE: &str = ct_help_usage!("stat.md");
-const STAT_LONG_USAGE: &str = ct_help_section!("long usage", "stat.md");
+extern crate rust_i18n;
+
+// 声明 i18n 宏和初始化函数
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use sys_locale::get_locale;
 
 mod stat_options {
     pub const STAT_DEREFERENCE: &str = "dereference";
@@ -40,6 +39,11 @@ mod stat_options {
     pub const STAT_PRINTF: &str = "printf";
     pub const STAT_TERSE: &str = "terse";
     pub const STAT_FILES: &str = "files";
+    pub const STAT_HELP: &str = "help";
+    pub const STAT_VERSION: &str = "version";
+    pub const STAT_ABOUT: &str = "about";
+    pub const STAT_USAGE: &str = "usage";
+    pub const STAT_LONG_USAGE: &str = "long_usage";
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
@@ -902,7 +906,6 @@ impl Stater {
                     .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
                     .unwrap_or_else(|| "-".to_string()),
             ),
-
             // time of file birth, seconds since Epoch; 0 if unknown
             'W' => StatOutputType::Unsigned(meta.birth().unwrap_or_default().0),
 
@@ -959,8 +962,12 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言（需转换为 `rust_i18n` 支持的格式，例如 "en" -> "en", "zh-CN" -> "zh-CN"）
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
     let matches = ct_app()
-        .after_help(STAT_LONG_USAGE)
+        .after_help(rust_i18n::t!(stat_options::STAT_LONG_USAGE))
         .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
@@ -977,43 +984,48 @@ pub fn ct_app() -> Command {
         Arg::new(stat_options::STAT_DEREFERENCE)
             .short('L')
             .long(stat_options::STAT_DEREFERENCE)
-            .help("follow links")
+            .help(rust_i18n::t!(stat_options::STAT_DEREFERENCE))
             .action(ArgAction::SetTrue),
         Arg::new(stat_options::STAT_FILE_SYSTEM)
             .short('f')
             .long(stat_options::STAT_FILE_SYSTEM)
-            .help("display file system status instead of file status")
+            .help(rust_i18n::t!(stat_options::STAT_FILE_SYSTEM))
             .action(ArgAction::SetTrue),
         Arg::new(stat_options::STAT_TERSE)
             .short('t')
             .long(stat_options::STAT_TERSE)
-            .help("print the information in terse form")
+            .help(rust_i18n::t!(stat_options::STAT_TERSE))
             .action(ArgAction::SetTrue),
         Arg::new(stat_options::STAT_FORMAT)
             .short('c')
             .long(stat_options::STAT_FORMAT)
-            .help(
-                "use the specified FORMAT instead of the default;
-output a newline after each use of FORMAT",
-            )
+            .help(rust_i18n::t!(stat_options::STAT_FORMAT))
             .value_name("FORMAT"),
         Arg::new(stat_options::STAT_PRINTF)
             .long(stat_options::STAT_PRINTF)
             .value_name("FORMAT")
-            .help(
-                "like --ct_format, but interpret backslash escapes,
-        and do not output a mandatory trailing newline;
-        if you want a newline, include \n in FORMAT",
-            ),
+            .help(rust_i18n::t!(stat_options::STAT_PRINTF)),
         Arg::new(stat_options::STAT_FILES)
             .action(ArgAction::Append)
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
+        Arg::new(stat_options::STAT_HELP)
+            .short('h')
+            .long(stat_options::STAT_HELP)
+            .help(rust_i18n::t!(stat_options::STAT_HELP))
+            .action(ArgAction::Help),
+        Arg::new(stat_options::STAT_VERSION)
+            .short('v')
+            .long(stat_options::STAT_VERSION)
+            .help(rust_i18n::t!(stat_options::STAT_VERSION))
+            .action(ArgAction::Version),
     ];
     Command::new(ctcore::ct_util_name())
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .version(crate_version!())
-        .about(STAT_ABOUT)
-        .override_usage(ct_format_usage(STAT_USAGE))
+        .about(rust_i18n::t!(stat_options::STAT_ABOUT))
+        .override_usage(rust_i18n::t!(stat_options::STAT_USAGE))
         .infer_long_args(true)
         .args(args)
 }
@@ -1376,3 +1388,4 @@ mod test_stat_all {
         assert!(matches!(output, StatOutputType::Integer(_)));
     }
 }
+

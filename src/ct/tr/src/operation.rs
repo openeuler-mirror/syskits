@@ -713,3 +713,262 @@ where
         eprintln!("Error flushing output: {}", e);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 测试序列解析相关功能
+    mod sequence_tests {
+        use super::*;
+
+        #[test]
+        fn test_sequence_flatten() {
+            // 测试单个字符
+            let char_seq = Sequence::Char(b'a');
+            assert_eq!(char_seq.flatten().collect::<Vec<_>>(), vec![b'a']);
+
+            // 测试字符范围
+            let range_seq = Sequence::CharRange(b'a', b'c');
+            assert_eq!(
+                range_seq.flatten().collect::<Vec<_>>(),
+                vec![b'a', b'b', b'c']
+            );
+
+            // 测试字符重复
+            let repeat_seq = Sequence::CharRepeat(b'x', 3);
+            assert_eq!(
+                repeat_seq.flatten().collect::<Vec<_>>(),
+                vec![b'x', b'x', b'x']
+            );
+
+            // 测试预定义字符类
+            let digit_seq = Sequence::Digit;
+            assert_eq!(
+                digit_seq.flatten().collect::<Vec<_>>(),
+                (b'0'..=b'9').collect::<Vec<_>>()
+            );
+
+            // 测试空白字符类
+            let blank_seq = Sequence::Blank;
+            assert_eq!(
+                blank_seq.flatten().collect::<Vec<_>>(),
+                vec![unicodes::SPACE, unicodes::HT]
+            );
+
+            // 测试控制字符类
+            let control_seq = Sequence::Control;
+            let control_chars: Vec<u8> = (0..=31).chain(std::iter::once(127)).collect();
+            assert_eq!(control_seq.flatten().collect::<Vec<_>>(), control_chars);
+
+            // 测试标点符号类
+            let punct_seq = Sequence::Punct;
+            let punct_chars: Vec<u8> = (33..=47)
+                .chain(58..=64)
+                .chain(91..=96)
+                .chain(123..=126)
+                .collect();
+            assert_eq!(punct_seq.flatten().collect::<Vec<_>>(), punct_chars);
+        }
+
+        #[test]
+        fn test_sequence_from_str() {
+            // 测试基本字符
+            assert!(matches!(
+                Sequence::from_str(b"a").unwrap()[0],
+                Sequence::Char(b'a')
+            ));
+
+            // 测试字符范围
+            let range = Sequence::from_str(b"a-z").unwrap();
+            assert!(matches!(range[0], Sequence::CharRange(b'a', b'z')));
+
+            // 测试字符类
+            assert!(matches!(
+                Sequence::from_str(b"[:digit:]").unwrap()[0],
+                Sequence::Digit
+            ));
+
+            // 测试转义序列
+            assert!(matches!(
+                Sequence::from_str(b"\\n").unwrap()[0],
+                Sequence::Char(0x0A)
+            ));
+        }
+
+        #[test]
+        fn test_sequence_from_str_special_cases() {
+            // 测试八进制转义序列
+            assert!(matches!(
+                Sequence::from_str(b"\\101").unwrap()[0],
+                Sequence::Char(65) // 'A' in ASCII
+            ));
+
+            // 测试无限重复
+            assert!(matches!(
+                Sequence::from_str(b"[x*]").unwrap()[0],
+                Sequence::CharStar(b'x')
+            ));
+
+            // 测试指定次数重复
+            assert!(matches!(
+                Sequence::from_str(b"[x*5]").unwrap()[0],
+                Sequence::CharRepeat(b'x', 5)
+            ));
+
+            // 测试等价类
+            assert!(matches!(
+                Sequence::from_str(b"[=a=]").unwrap()[0],
+                Sequence::Char(b'a')
+            ));
+        }
+
+        #[test]
+        fn test_sequence_error_cases() {
+            // 测试缺少等价类字符
+            assert!(matches!(
+                Sequence::from_str(b"[==]").unwrap_err(),
+                BadSequence::MissingEquivalentClassChar
+            ));
+
+            // 测试 SET1 中的重复构造
+            assert!(matches!(
+                Sequence::solve_set_characters(b"[x*]", b"a", false).unwrap_err(),
+                BadSequence::CharRepeatInSet1
+            ));
+
+            // 测试 SET2 中的多个重复构造
+            assert!(matches!(
+                Sequence::solve_set_characters(b"a", b"[x*][y*]", false).unwrap_err(),
+                BadSequence::MultipleCharRepeatInSet2
+            ));
+
+            // 测试 SET2 为空但不截断时的错误
+            assert!(matches!(
+                TranslateOperation::new(vec![b'a'], vec![], false).unwrap_err(),
+                BadSequence::EmptySet2WhenNotTruncatingSet1
+            ));
+        }
+
+        #[test]
+        fn test_solve_set_characters() {
+            // 测试基本转换
+            let (set1, set2) = Sequence::solve_set_characters(b"abc", b"123", false).unwrap();
+            assert_eq!(set1, vec![b'a', b'b', b'c']);
+            assert_eq!(set2, vec![b'1', b'2', b'3']);
+
+            // 测试截断
+            let (set1, set2) = Sequence::solve_set_characters(b"abcd", b"12", true).unwrap();
+            assert_eq!(set1, vec![b'a', b'b']);
+            assert_eq!(set2, vec![b'1', b'2']);
+
+            // 测试字符重复
+            let (set1, set2) = Sequence::solve_set_characters(b"abc", b"1[x*]3", false).unwrap();
+            assert_eq!(set1, vec![b'a', b'b', b'c']);
+            assert_eq!(set2, vec![b'1', b'x', b'3']);
+        }
+
+        #[test]
+        fn test_sequence_process_char_set() {
+            // 测试空集
+            let empty_set: Vec<Sequence> = vec![];
+            assert_eq!(Sequence::process_char_set(&empty_set), Vec::<u8>::new());
+
+            // 测试混合集合
+            let mixed_set = vec![
+                Sequence::Char(b'a'),
+                Sequence::CharRange(b'1', b'3'),
+                Sequence::CharRepeat(b'x', 2),
+            ];
+            assert_eq!(
+                Sequence::process_char_set(&mixed_set),
+                vec![b'a', b'1', b'2', b'3', b'x', b'x']
+            );
+        }
+
+        #[test]
+        fn test_find_char_star() {
+            // 测试空集
+            let empty_set: Vec<Sequence> = vec![];
+            assert_eq!(Sequence::find_char_star(&empty_set), None);
+
+            // 测试无星号的集合
+            let no_star_set = vec![Sequence::Char(b'a'), Sequence::CharRange(b'1', b'3')];
+            assert_eq!(Sequence::find_char_star(&no_star_set), None);
+
+            // 测试有星号的集合
+            let star_set = vec![
+                Sequence::Char(b'a'),
+                Sequence::CharStar(b'x'),
+                Sequence::CharRange(b'1', b'3'),
+            ];
+            assert_eq!(Sequence::find_char_star(&star_set), Some(b'x'));
+
+            // 测试多个星号的集合（应返回第一个）
+            let multi_star_set = vec![
+                Sequence::CharStar(b'x'),
+                Sequence::Char(b'a'),
+                Sequence::CharStar(b'y'),
+            ];
+            assert_eq!(Sequence::find_char_star(&multi_star_set), Some(b'x'));
+        }
+
+        #[test]
+        fn test_solve_set_characters_edge_cases() {
+            // 测试两个空集
+            let (set1, set2) = Sequence::solve_set_characters(b"", b"", false).unwrap();
+            assert_eq!(set1, Vec::<u8>::new());
+            assert_eq!(set2, Vec::<u8>::new());
+
+            // 测试 set1 比 set2 短
+            let (set1, set2) = Sequence::solve_set_characters(b"a", b"123", false).unwrap();
+            assert_eq!(set1, vec![b'a']);
+            assert_eq!(set2, vec![b'1', b'2', b'3']);
+
+            // 测试 set2 中的字符星号填充
+            let (set1, set2) = Sequence::solve_set_characters(b"abcde", b"1[x*]5", false).unwrap();
+            assert_eq!(set1, vec![b'a', b'b', b'c', b'd', b'e']);
+            assert_eq!(set2, vec![b'1', b'x', b'x', b'x', b'5']);
+
+            // 测试 set2 中的字符星号在开头
+            let (set1, set2) = Sequence::solve_set_characters(b"abc", b"[x*]yz", false).unwrap();
+            assert_eq!(set1, vec![b'a', b'b', b'c']);
+            assert_eq!(set2, vec![b'x', b'y', b'z']);
+
+            // 测试 set2 中的字符星号在结尾
+            let (set1, set2) = Sequence::solve_set_characters(b"abc", b"12[x*]", false).unwrap();
+            assert_eq!(set1, vec![b'a', b'b', b'c']);
+            assert_eq!(set2, vec![b'1', b'2', b'x']);
+        }
+
+        #[test]
+        fn test_parse_octal() {
+            // 测试有效的八进制转义序列
+            let (_, result) = Sequence::parse_octal(b"\\101").unwrap();
+            assert_eq!(result, 65); // 'A' in ASCII
+
+            let (_, result) = Sequence::parse_octal(b"\\7").unwrap();
+            assert_eq!(result, 7);
+
+            let (_, result) = Sequence::parse_octal(b"\\12").unwrap();
+            assert_eq!(result, 10);
+        }
+
+        #[test]
+        fn test_parse_backslash() {
+            // 测试特殊转义字符
+            let (_, result) = Sequence::parse_backslash(b"\\a").unwrap();
+            assert_eq!(result, unicodes::BEL);
+
+            let (_, result) = Sequence::parse_backslash(b"\\t").unwrap();
+            assert_eq!(result, unicodes::HT);
+
+            let (_, result) = Sequence::parse_backslash(b"\\n").unwrap();
+            assert_eq!(result, unicodes::LF);
+
+            // 测试普通字符的转义
+            let (_, result) = Sequence::parse_backslash(b"\\x").unwrap();
+            assert_eq!(result, b'x');
+        }
+    }
+}

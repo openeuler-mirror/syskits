@@ -1300,4 +1300,92 @@ mod tests {
             assert_eq!(op.translate(b'a'), Some(b'a')); // 在集合中，不压缩
         }
     }
+
+    /// 测试链式操作相关功能
+    mod chain_operation_tests {
+        use super::*;
+
+        #[test]
+        fn test_chain_operations() {
+            // 测试删除后压缩
+            let delete_op = DeleteOperation::new(vec![b'x'], false);
+            let squeeze_op = SqueezeOperation::new(vec![b'a'], false);
+            let mut chained = delete_op.chain(squeeze_op);
+
+            assert_eq!(chained.translate(b'x'), None); // 'x' 被删除
+            assert_eq!(chained.translate(b'a'), Some(b'a')); // 第一个 'a' 保留
+            assert_eq!(chained.translate(b'a'), None); // 第二个 'a' 被压缩
+            assert_eq!(chained.translate(b'b'), Some(b'b')); // 'b' 不变
+        }
+
+        #[test]
+        fn test_complex_chain_operations() {
+            // 测试三重链式操作：删除 -> 转换 -> 压缩
+            let delete_op = DeleteOperation::new(vec![b'x'], false);
+            let translate_op = TranslateOperation::new(vec![b'a'], vec![b'1'], false).unwrap();
+            let squeeze_op = SqueezeOperation::new(vec![b'1'], false);
+
+            let mut chained = delete_op.chain(translate_op).chain(squeeze_op);
+
+            assert_eq!(chained.translate(b'x'), None); // 'x' 被删除
+            assert_eq!(chained.translate(b'a'), Some(b'1')); // 'a' 被转换为 '1'
+
+            // 根据 test_squeeze_basic_behavior 的结果，我们知道 SqueezeOperation 会压缩连续的相同字符
+            // 所以当我们输入 b'1' 时，由于前一个字符已经是 '1'（从 'a' 转换而来），所以这个 '1' 会被压缩
+            assert_eq!(chained.translate(b'1'), None); // 输入的 '1' 被压缩，因为前一个字符也是 '1'
+
+            // 测试其他字符
+            assert_eq!(chained.translate(b'b'), Some(b'b')); // 其他字符正常保留
+
+            // 在其他字符后的 '1' 应该保留
+            assert_eq!(chained.translate(b'1'), Some(b'1')); // 在 'b' 后的 '1' 保留
+
+            // 再次出现的 '1' 应该被压缩
+            assert_eq!(chained.translate(b'1'), None); // 连续的 '1' 被压缩
+        }
+
+        #[test]
+        fn test_multi_level_chain() {
+            // 测试多级链式操作
+            let delete_op = DeleteOperation::new(vec![b' '], false); // 删除空格
+            let translate_op = TranslateOperation::new(
+                vec![b'a', b'e', b'i', b'o', b'u'],
+                vec![b'A', b'E', b'I', b'O', b'U'],
+                false,
+            )
+            .unwrap(); // 将元音转为大写
+            let squeeze_op = SqueezeOperation::new(vec![b'A', b'E', b'I', b'O', b'U'], false); // 压缩大写元音
+
+            // 三级链式操作
+            let mut chained = delete_op.chain(translate_op).chain(squeeze_op);
+
+            // 测试输入 "hello world"
+            assert_eq!(chained.translate(b'h'), Some(b'h')); // 保持不变
+            assert_eq!(chained.translate(b'e'), Some(b'E')); // 转为大写
+            assert_eq!(chained.translate(b'l'), Some(b'l')); // 保持不变
+            assert_eq!(chained.translate(b'l'), Some(b'l')); // 保持不变
+            assert_eq!(chained.translate(b'o'), Some(b'O')); // 转为大写
+            assert_eq!(chained.translate(b' '), None); // 空格被删除
+            assert_eq!(chained.translate(b'w'), Some(b'w')); // 保持不变
+            assert_eq!(chained.translate(b'o'), Some(b'O')); // 转为大写
+            assert_eq!(chained.translate(b'r'), Some(b'r')); // 保持不变
+            assert_eq!(chained.translate(b'l'), Some(b'l')); // 保持不变
+            assert_eq!(chained.translate(b'd'), Some(b'd')); // 保持不变
+        }
+
+        #[test]
+        fn test_chain_with_empty_operations() {
+            // 测试空操作的链式
+            let delete_op = DeleteOperation::new(vec![], false); // 不删除任何字符
+            let translate_op = TranslateOperation::new(vec![], vec![], false).unwrap(); // 不转换任何字符
+            let squeeze_op = SqueezeOperation::new(vec![], false); // 不压缩任何字符
+
+            let mut chained = delete_op.chain(translate_op).chain(squeeze_op);
+
+            // 所有字符应该保持不变
+            for i in 0..128 {
+                assert_eq!(chained.translate(i), Some(i));
+            }
+        }
+    }
 }

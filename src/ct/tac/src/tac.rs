@@ -478,3 +478,79 @@ fn tac_try_mmap_path(path: &Path) -> Option<Mmap> {
 
     Some(mmap)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod tac_flags_tests {
+        use super::*;
+
+        #[test]
+        fn test_tac_flags_default() {
+            let flags = TacFlags::default();
+            assert!(!flags.is_before);
+            assert!(!flags.is_regex);
+            assert_eq!(flags.separator, "\n");
+            assert_eq!(flags.files, vec!["-"]);
+        }
+
+        #[test]
+        fn test_tac_flags_new_with_defaults() {
+            let app = ct_app();
+            let matches = app.try_get_matches_from(vec!["tac"]).unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+            assert!(!flags.is_before);
+            assert!(!flags.is_regex);
+            assert_eq!(flags.separator, "\n");
+            assert_eq!(flags.files, vec!["-"]);
+        }
+
+        #[test]
+        fn test_tac_flags_new_with_before() {
+            let app = ct_app();
+            let matches = app.try_get_matches_from(vec!["tac", "--before"]).unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+            assert!(flags.is_before);
+        }
+
+        #[test]
+        fn test_tac_flags_new_with_regex() {
+            let app = ct_app();
+            let matches = app.try_get_matches_from(vec!["tac", "--regex"]).unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+            assert!(flags.is_regex);
+        }
+
+        #[test]
+        fn test_tac_flags_new_with_separator() {
+            let app = ct_app();
+            let matches = app
+                .try_get_matches_from(vec!["tac", "--separator", ":"])
+                .unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+            assert_eq!(flags.separator, ":");
+        }
+
+        #[test]
+        fn test_tac_flags_new_with_empty_separator() {
+            let app = ct_app();
+            let matches = app
+                .try_get_matches_from(vec!["tac", "--separator", ""])
+                .unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+            assert_eq!(flags.separator, "\0");
+        }
+
+        #[test]
+        fn test_tac_flags_new_with_files() {
+            let app = ct_app();
+            let matches = app
+                .try_get_matches_from(vec!["tac", "file1.txt", "file2.txt"])
+                .unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+            assert_eq!(flags.files, vec!["file1.txt", "file2.txt"]);
+        }
+    }
+}

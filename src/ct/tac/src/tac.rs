@@ -831,4 +831,64 @@ mod tests {
             assert_eq!(output, b"content");
         }
     }
+
+    #[cfg(test)]
+    mod tac_buffer_regex_tests {
+        use super::*;
+        use regex::bytes::Regex;
+
+        #[test]
+        fn test_tac_buffer_regex_simple() {
+            let mut output = Vec::new();
+            let data = b"line1\nline2\nline3";
+            let pattern = Regex::new(r"\n").unwrap();
+            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
+            assert_eq!(output, b"line3line2\nline1\n");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_before() {
+            let mut output = Vec::new();
+            let data = b"line1\nline2\nline3";
+            let pattern = Regex::new(r"\n").unwrap();
+            tac_buffer_regex(&mut output, data, &pattern, true).unwrap();
+            assert_eq!(output, b"line3\nline2\nline1");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_complex_pattern() {
+            let mut output = Vec::new();
+            let data = b"line1\r\nline2\nline3\r\n";
+            let pattern = Regex::new(r"\r?\n").unwrap();
+            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
+            assert_eq!(output, b"line3\r\nline2\nline1\r\n");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_with_word_boundaries() {
+            let mut output = Vec::new();
+            let data = b"word1 word2 word3";
+            let pattern = Regex::new(r"\s+").unwrap();
+            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
+            assert_eq!(output, b"word3word2 word1 ");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_with_capturing_groups() {
+            let mut output = Vec::new();
+            let data = b"a=1;b=2;c=3";
+            let pattern = Regex::new(r"[;=]").unwrap();
+            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
+            assert_eq!(output, b"3c=2;b=1;a=");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_with_overlapping_matches() {
+            let mut output = Vec::new();
+            let data = b"aaaa";
+            let pattern = Regex::new(r"aa").unwrap();
+            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
+            assert_eq!(output, b"aaaa");
+        }
+    }
 }

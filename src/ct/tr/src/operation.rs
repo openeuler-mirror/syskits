@@ -1182,4 +1182,122 @@ mod tests {
             assert_eq!(next_iter, b'o' + 1);
         }
     }
+
+    /// 测试压缩操作相关功能
+    mod squeeze_operation_tests {
+        use super::*;
+
+        #[test]
+        fn test_squeeze_operation() {
+            // 测试基本压缩
+            let mut op = SqueezeOperation::new(vec![b'a', b'b'], false);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'a'), None); // 重复的 'a' 被删除
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+            assert_eq!(op.translate(b'b'), None); // 重复的 'b' 被删除
+            assert_eq!(op.translate(b'c'), Some(b'c'));
+            assert_eq!(op.translate(b'c'), Some(b'c')); // 'c' 不在集合中，不被压缩
+
+            // 测试补集压缩
+            let mut op = SqueezeOperation::new(vec![b'a'], true);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'a'), Some(b'a')); // 'a' 在集合中，不被压缩
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+            assert_eq!(op.translate(b'b'), None); // 'b' 不在集合中，被压缩
+        }
+
+        #[test]
+        fn test_squeeze_complex_cases() {
+            // 测试混合字符序列
+            let mut op = SqueezeOperation::new(vec![b'a', b'b'], false);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+            assert_eq!(op.translate(b'c'), Some(b'c'));
+
+            // 测试补集模式下的连续不同字符
+            let mut op = SqueezeOperation::new(vec![b'x'], true);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+            assert_eq!(op.translate(b'x'), Some(b'x'));
+            assert_eq!(op.translate(b'x'), Some(b'x'));
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+        }
+
+        #[test]
+        fn test_squeeze_basic_behavior() {
+            // 测试基本的压缩行为
+            let mut op = SqueezeOperation::new(vec![b'1'], false);
+
+            // 第一个 '1' 应该保留
+            assert_eq!(op.translate(b'1'), Some(b'1'));
+
+            // 第二个 '1' 应该被压缩
+            assert_eq!(op.translate(b'1'), None);
+
+            // 其他字符应该保留
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+
+            // 在其他字符后的 '1' 应该保留
+            assert_eq!(op.translate(b'1'), Some(b'1'));
+
+            // 再次出现的 '1' 应该被压缩
+            assert_eq!(op.translate(b'1'), None);
+        }
+
+        #[test]
+        fn test_squeeze_operation_with_special_chars() {
+            // 测试压缩控制字符
+            let mut op =
+                SqueezeOperation::new(vec![unicodes::HT, unicodes::LF, unicodes::CR], false);
+            assert_eq!(op.translate(unicodes::HT), Some(unicodes::HT));
+            assert_eq!(op.translate(unicodes::HT), None); // 重复的制表符被压缩
+            assert_eq!(op.translate(unicodes::LF), Some(unicodes::LF));
+            assert_eq!(op.translate(unicodes::LF), None); // 重复的换行符被压缩
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'a'), Some(b'a')); // 普通字符不被压缩
+        }
+
+        #[test]
+        fn test_squeeze_operation_with_large_set() {
+            // 创建一个大的字符集
+            let large_set: Vec<u8> = (0..128).collect();
+            let mut op = SqueezeOperation::new(large_set, false);
+
+            // 测试压缩范围内的字符
+            for i in 0..128 {
+                assert_eq!(op.translate(i), Some(i)); // 第一次出现保留
+                assert_eq!(op.translate(i), None); // 第二次出现被压缩
+            }
+
+            // 测试范围外的字符
+            for i in 128..=255 {
+                assert_eq!(op.translate(i), Some(i)); // 第一次出现保留
+                assert_eq!(op.translate(i), Some(i)); // 范围外的字符不被压缩
+            }
+        }
+
+        #[test]
+        fn test_squeeze_operation_complement_complex() {
+            // 测试复杂的补集压缩
+            let mut op = SqueezeOperation::new(vec![b'a', b'e', b'i', b'o', b'u'], true);
+
+            // 在集合中的字符不被压缩
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'e'), Some(b'e'));
+            assert_eq!(op.translate(b'e'), Some(b'e'));
+
+            // 不在集合中的字符被压缩
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+            assert_eq!(op.translate(b'b'), None);
+            assert_eq!(op.translate(b'c'), Some(b'c'));
+            assert_eq!(op.translate(b'c'), None);
+
+            // 混合序列
+            assert_eq!(op.translate(b'a'), Some(b'a')); // 在集合中，不压缩
+            assert_eq!(op.translate(b'b'), Some(b'b')); // 不在集合中，但与前一个不同，保留
+            assert_eq!(op.translate(b'b'), None); // 不在集合中，与前一个相同，压缩
+            assert_eq!(op.translate(b'a'), Some(b'a')); // 在集合中，不压缩
+        }
+    }
 }

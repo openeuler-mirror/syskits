@@ -891,4 +891,85 @@ mod tests {
             assert_eq!(output, b"aaaa");
         }
     }
+
+    #[cfg(test)]
+    mod tac_process_file_tests {
+        use super::*;
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        fn create_temp_file_with_content(content: &[u8]) -> NamedTempFile {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(content).unwrap();
+            temp_file
+        }
+
+        #[test]
+        fn test_tac_process_file_simple() {
+            let temp_file = create_temp_file_with_content(b"line1\nline2\nline3\n");
+            let mut output = Vec::new();
+            let settings = TacFlags::default();
+            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            assert_eq!(output, b"line3\nline2\nline1\n");
+        }
+
+        #[test]
+        fn test_tac_process_file_before() {
+            let temp_file = create_temp_file_with_content(b"line1\nline2\nline3");
+            let mut output = Vec::new();
+            let settings = TacFlags {
+                is_before: true,
+                ..Default::default()
+            };
+            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            assert_eq!(output, b"line3\nline2\nline1");
+        }
+
+        #[test]
+        fn test_tac_process_file_with_empty_file() {
+            let temp_file = NamedTempFile::new().unwrap();
+            let mut output = Vec::new();
+            let settings = TacFlags::default();
+            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            assert_eq!(output, b"");
+        }
+
+        #[test]
+        fn test_tac_process_file_with_invalid_regex() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"test content").unwrap();
+            let mut output = Vec::new();
+            let settings = TacFlags {
+                is_regex: true,
+                separator: "[".to_string(), // Invalid regex
+                ..Default::default()
+            };
+            let result =
+                tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tac_process_file_with_custom_separator_and_before() {
+            let temp_file = create_temp_file_with_content(b"1,2,3");
+            let mut output = Vec::new();
+            let settings = TacFlags {
+                is_before: true,
+                separator: ",".to_string(),
+                ..Default::default()
+            };
+            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            assert_eq!(output, b"3,2,1");
+        }
+
+        #[test]
+        fn test_tac_process_file_with_binary_content() {
+            let content = vec![0u8, 1u8, 2u8, 255u8];
+            let temp_file = create_temp_file_with_content(&content);
+            let mut output = Vec::new();
+            let settings = TacFlags::default();
+            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            assert_eq!(output, content);
+        }
+    }
 }

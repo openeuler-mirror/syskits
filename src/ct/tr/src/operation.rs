@@ -971,4 +971,215 @@ mod tests {
             assert_eq!(result, b'x');
         }
     }
+
+    /// 测试删除操作相关功能
+    mod delete_operation_tests {
+        use super::*;
+
+        #[test]
+        fn test_delete_operation() {
+            // 测试基本删除
+            let mut op = DeleteOperation::new(vec![b'a', b'e', b'i', b'o', b'u'], false);
+            assert_eq!(op.translate(b'a'), None);
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+            assert_eq!(op.translate(b'e'), None);
+
+            // 测试补集删除
+            let mut op = DeleteOperation::new(vec![b'a', b'e'], true);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'b'), None);
+            assert_eq!(op.translate(b'e'), Some(b'e'));
+        }
+
+        #[test]
+        fn test_delete_operation_complex() {
+            // 测试空集删除
+            let mut op = DeleteOperation::new(vec![], false);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'\n'), Some(b'\n'));
+
+            // 测试全集删除（补集模式）
+            let mut op = DeleteOperation::new(vec![], true);
+            assert_eq!(op.translate(b'a'), None);
+            assert_eq!(op.translate(b'\n'), None);
+
+            // 测试特殊字符删除
+            let mut op = DeleteOperation::new(vec![b'\n', b'\t', b' '], false);
+            assert_eq!(op.translate(b'\n'), None);
+            assert_eq!(op.translate(b'\t'), None);
+            assert_eq!(op.translate(b' '), None);
+            assert_eq!(op.translate(b'x'), Some(b'x'));
+        }
+
+        #[test]
+        fn test_delete_operation_with_special_chars() {
+            // 测试删除控制字符
+            let mut op =
+                DeleteOperation::new(vec![unicodes::HT, unicodes::LF, unicodes::CR], false);
+            assert_eq!(op.translate(unicodes::HT), None);
+            assert_eq!(op.translate(unicodes::LF), None);
+            assert_eq!(op.translate(unicodes::CR), None);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+
+            // 测试删除ASCII范围外的字符（假设我们处理的是u8）
+            let mut op = DeleteOperation::new(vec![127, 128, 255], false);
+            assert_eq!(op.translate(127), None);
+            assert_eq!(op.translate(128), None);
+            assert_eq!(op.translate(255), None);
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+        }
+
+        #[test]
+        fn test_delete_operation_with_large_set() {
+            // 创建一个大的字符集
+            let large_set: Vec<u8> = (0..128).collect();
+            let mut op = DeleteOperation::new(large_set, false);
+
+            // 测试删除范围内的字符
+            for i in 0..128 {
+                assert_eq!(op.translate(i), None);
+            }
+
+            // 测试范围外的字符
+            for i in 128..=255 {
+                assert_eq!(op.translate(i), Some(i));
+            }
+        }
+    }
+
+    /// 测试转换操作相关功能
+    mod translate_operation_tests {
+        use super::*;
+
+        #[test]
+        fn test_standard_translation() {
+            // 测试基本转换
+            let mut op =
+                TranslateOperation::new(vec![b'a', b'b', b'c'], vec![b'1', b'2', b'3'], false)
+                    .unwrap();
+            assert_eq!(op.translate(b'a'), Some(b'1'));
+            assert_eq!(op.translate(b'b'), Some(b'2'));
+            assert_eq!(op.translate(b'c'), Some(b'3'));
+            assert_eq!(op.translate(b'x'), Some(b'x')); // 未映射字符保持不变
+        }
+
+        #[test]
+        fn test_complement_translation() {
+            // 测试补集转换
+            let mut op = TranslateOperation::new(vec![b'a', b'b'], vec![b'1', b'2'], true).unwrap();
+            assert_eq!(op.translate(b'a'), Some(b'a')); // 在集合中的字符保持不变
+            assert_eq!(op.translate(b'x'), Some(b'1')); // 不在集合中的字符被映射
+            assert_eq!(op.translate(b'y'), Some(b'2')); // 不在集合中的下一个字符被映射
+        }
+
+        #[test]
+        fn test_translate_edge_cases() {
+            // 测试空集转换
+            let mut op = TranslateOperation::new(vec![], vec![], false).unwrap();
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+
+            // 测试单字符到多字符的映射
+            let mut op =
+                TranslateOperation::new(vec![b'a'], vec![b'1', b'2', b'3'], false).unwrap();
+            assert_eq!(op.translate(b'a'), Some(b'1'));
+            assert_eq!(op.translate(b'b'), Some(b'b'));
+
+            // 测试补集模式下的边界情况
+            let mut op = TranslateOperation::new(vec![b'a'], vec![b'1'], true).unwrap();
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'b'), Some(b'1'));
+        }
+
+        #[test]
+        fn test_translate_error_cases() {
+            // 测试 SET2 为空但不截断时的错误
+            assert!(matches!(
+                TranslateOperation::new(vec![b'a'], vec![], false).unwrap_err(),
+                BadSequence::EmptySet2WhenNotTruncatingSet1
+            ));
+        }
+
+        #[test]
+        fn test_translate_operation_with_special_chars() {
+            // 测试转换控制字符
+            let mut op = TranslateOperation::new(
+                vec![unicodes::HT, unicodes::LF, unicodes::CR],
+                vec![b'1', b'2', b'3'],
+                false,
+            )
+            .unwrap();
+            assert_eq!(op.translate(unicodes::HT), Some(b'1'));
+            assert_eq!(op.translate(unicodes::LF), Some(b'2'));
+            assert_eq!(op.translate(unicodes::CR), Some(b'3'));
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+
+            // 测试转换ASCII范围外的字符
+            let mut op =
+                TranslateOperation::new(vec![127, 128, 255], vec![b'1', b'2', b'3'], false)
+                    .unwrap();
+            assert_eq!(op.translate(127), Some(b'1'));
+            assert_eq!(op.translate(128), Some(b'2'));
+            assert_eq!(op.translate(255), Some(b'3'));
+        }
+
+        #[test]
+        fn test_translate_operation_fallback() {
+            // 测试当set1比set2长时的回退行为
+            let mut op =
+                TranslateOperation::new(vec![b'a', b'b', b'c', b'd'], vec![b'1', b'2'], false)
+                    .unwrap();
+            assert_eq!(op.translate(b'a'), Some(b'1'));
+            assert_eq!(op.translate(b'b'), Some(b'2'));
+            assert_eq!(op.translate(b'c'), Some(b'2')); // 使用set2的最后一个字符作为回退
+            assert_eq!(op.translate(b'd'), Some(b'2')); // 使用set2的最后一个字符作为回退
+        }
+
+        #[test]
+        fn test_complement_translation_complex() {
+            // 测试复杂的补集转换
+            let mut op = TranslateOperation::new(
+                vec![b'a', b'e', b'i', b'o', b'u'],
+                vec![b'A', b'E', b'I', b'O', b'U'],
+                true,
+            )
+            .unwrap();
+
+            // 在集合中的字符保持不变
+            assert_eq!(op.translate(b'a'), Some(b'a'));
+            assert_eq!(op.translate(b'e'), Some(b'e'));
+
+            // 不在集合中的字符被映射
+            assert_eq!(op.translate(b'b'), Some(b'A'));
+            assert_eq!(op.translate(b'c'), Some(b'E'));
+            assert_eq!(op.translate(b'd'), Some(b'I'));
+
+            // 测试映射耗尽后的行为
+            let mut chars = vec![];
+            for i in 0..10 {
+                chars.push(op.translate(b'x' + i).unwrap());
+            }
+            // 最后几个字符应该使用set2的最后一个字符
+            assert!(chars.iter().any(|&c| c == b'U'));
+        }
+
+        #[test]
+        fn test_next_complement_char() {
+            // 测试基本功能
+            let (next_iter, next_key) = TranslateOperation::next_complement_char(0, &[b'a', b'c']);
+            assert_eq!(next_key, b'b');
+            assert_eq!(next_iter, b'b' + 1);
+
+            // 测试连续忽略
+            let (next_iter, next_key) =
+                TranslateOperation::next_complement_char(0, &[b'a', b'b', b'c']);
+            assert_eq!(next_key, b'd');
+            assert_eq!(next_iter, b'd' + 1);
+
+            // 测试从中间开始
+            let (next_iter, next_key) =
+                TranslateOperation::next_complement_char(b'm', &[b'n', b'p']);
+            assert_eq!(next_key, b'o');
+            assert_eq!(next_iter, b'o' + 1);
+        }
+    }
 }

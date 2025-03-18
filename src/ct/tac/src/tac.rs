@@ -553,4 +553,70 @@ mod tests {
             assert_eq!(flags.files, vec!["file1.txt", "file2.txt"]);
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use super::*;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec!["tac", "--version"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec!["tac", "--help"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_flag() {
+            let command = ct_app();
+            let args = vec!["tac", "--invalid-flag"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_before_flag() {
+            let command = ct_app();
+            let args = vec!["tac", "--before"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(tac_flags::TAC_BEFORE));
+        }
+
+        #[test]
+        fn test_ct_app_regex_flag() {
+            let command = ct_app();
+            let args = vec!["tac", "--regex"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(tac_flags::TAC_REGEX));
+        }
+
+        #[test]
+        fn test_ct_app_separator_flag() {
+            let command = ct_app();
+            let args = vec!["tac", "--separator", ":"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<String>(tac_flags::TAC_SEPARATOR)
+                    .map(String::as_str),
+                Some(":")
+            );
+        }
+    }
 }

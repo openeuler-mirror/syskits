@@ -1531,4 +1531,53 @@ mod tests {
             assert_eq!(output, b"hElOwOrld\ntEst\n");
         }
     }
+
+    /// 测试错误处理
+    mod error_handling_tests {
+        use super::*;
+
+        #[test]
+        fn test_bad_sequence_display() {
+            // 测试错误消息格式化
+            assert_eq!(
+                BadSequence::MissingCharClassName.to_string(),
+                "missing character class name '[::]'"
+            );
+            assert_eq!(
+                BadSequence::MissingEquivalentClassChar.to_string(),
+                "missing equivalence class character '[==]'"
+            );
+            assert_eq!(
+                BadSequence::MultipleCharRepeatInSet2.to_string(),
+                "only one [c*] repeat construct may appear in string2"
+            );
+            assert_eq!(
+                BadSequence::CharRepeatInSet1.to_string(),
+                "the [c*] repeat construct may not appear in string1"
+            );
+            assert_eq!(
+                BadSequence::InvalidRepeatCount("abc".to_string()).to_string(),
+                "invalid repeat count 'abc' in [c*n] construct"
+            );
+            assert_eq!(
+                BadSequence::EmptySet2WhenNotTruncatingSet1.to_string(),
+                "when not truncating set1, string2 must be non-empty"
+            );
+        }
+
+        #[test]
+        fn test_error_propagation() {
+            // 测试错误传播
+            let result = Sequence::solve_set_characters(b"[x*]", b"a", false);
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), BadSequence::CharRepeatInSet1));
+
+            let result = TranslateOperation::new(vec![b'a'], vec![], false);
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                BadSequence::EmptySet2WhenNotTruncatingSet1
+            ));
+        }
+    }
 }

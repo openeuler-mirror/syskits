@@ -1388,4 +1388,147 @@ mod tests {
             }
         }
     }
+
+    /// 测试输入处理相关功能
+    mod translate_input_tests {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_translate_input() {
+            // 准备测试数据
+            let input = b"hello\nworld\n";
+            let mut output = Vec::new();
+
+            // 创建一个简单的转换器（将 'o' 转换为 '0'）
+            let op = TranslateOperation::new(vec![b'o'], vec![b'0'], false).unwrap();
+
+            // 执行转换
+            translate_input(&mut Cursor::new(input), &mut output, op);
+
+            // 验证结果
+            assert_eq!(output, b"hell0\nw0rld\n");
+        }
+
+        #[test]
+        fn test_translate_input_complex() {
+            // 测试多行输入和多种操作
+            let input = b"hello\nworld\ntest\n";
+            let mut output = Vec::new();
+
+            // 创建复杂的转换器：删除空格并将元音转换为数字
+            let delete_op = DeleteOperation::new(vec![b' '], false);
+            let translate_op = TranslateOperation::new(
+                vec![b'a', b'e', b'i', b'o', b'u'],
+                vec![b'1', b'2', b'3', b'4', b'5'],
+                false,
+            )
+            .unwrap();
+
+            let op = delete_op.chain(translate_op);
+            translate_input(&mut Cursor::new(input), &mut output, op);
+
+            assert_eq!(output, b"h2ll4\nw4rld\nt2st\n");
+        }
+
+        #[test]
+        fn test_translate_input_empty() {
+            // 测试空输入
+            let input = b"";
+            let mut output = Vec::new();
+            let op = DeleteOperation::new(vec![b'a'], false);
+
+            translate_input(&mut Cursor::new(input), &mut output, op);
+            assert_eq!(output, b"");
+        }
+
+        #[test]
+        fn test_translate_input_no_newline() {
+            // 测试不以换行符结尾的输入
+            let input = b"hello";
+            let mut output = Vec::new();
+            let op = TranslateOperation::new(vec![b'o'], vec![b'0'], false).unwrap();
+
+            translate_input(&mut Cursor::new(input), &mut output, op);
+            assert_eq!(output, b"hell0");
+        }
+
+        #[test]
+        fn test_translate_input_with_large_data() {
+            // 创建一个较大的输入数据
+            let mut input = Vec::new();
+            for _ in 0..1000 {
+                input.extend_from_slice(b"abcdefghijklmnopqrstuvwxyz\n");
+            }
+
+            let mut output = Vec::new();
+
+            // 创建一个简单的转换器
+            let op = TranslateOperation::new(
+                vec![b'a', b'e', b'i', b'o', b'u'],
+                vec![b'A', b'E', b'I', b'O', b'U'],
+                false,
+            )
+            .unwrap();
+
+            // 执行转换
+            translate_input(&mut Cursor::new(&input), &mut output, op);
+
+            // 验证结果
+            assert_eq!(output.len(), input.len());
+            assert!(output.iter().any(|&c| c == b'A'));
+            assert!(output.iter().any(|&c| c == b'E'));
+            assert!(!output.iter().any(|&c| c == b'a'));
+            assert!(!output.iter().any(|&c| c == b'e'));
+        }
+
+        #[test]
+        fn test_translate_input_with_binary_data() {
+            // 创建包含二进制数据的输入
+            let input = [0, 1, 2, 3, 4, 5, 127, 128, 255];
+            let mut output = Vec::new();
+
+            // 创建一个转换器，将某些二进制值转换为其他值
+            let op = TranslateOperation::new(vec![0, 1, 2, 3], vec![b'0', b'1', b'2', b'3'], false)
+                .unwrap();
+
+            // 执行转换
+            translate_input(&mut Cursor::new(&input), &mut output, op);
+
+            // 验证结果
+            assert_eq!(output.len(), input.len());
+            assert_eq!(output[0], b'0');
+            assert_eq!(output[1], b'1');
+            assert_eq!(output[2], b'2');
+            assert_eq!(output[3], b'3');
+            assert_eq!(output[4], 4);
+            assert_eq!(output[5], 5);
+            assert_eq!(output[6], 127);
+            assert_eq!(output[7], 128);
+            assert_eq!(output[8], 255);
+        }
+
+        #[test]
+        fn test_translate_input_with_all_operations() {
+            // 测试所有操作的组合
+            let input = b"hello  world\ntest\n";
+            let mut output = Vec::new();
+
+            // 创建复合操作：删除空格，将元音转为大写，压缩重复字符
+            let delete_op = DeleteOperation::new(vec![b' '], false);
+            let translate_op = TranslateOperation::new(
+                vec![b'a', b'e', b'i', b'o', b'u'],
+                vec![b'A', b'E', b'I', b'O', b'U'],
+                false,
+            )
+            .unwrap();
+            let squeeze_op = SqueezeOperation::new(vec![b'l'], false);
+
+            let op = delete_op.chain(translate_op).chain(squeeze_op);
+            translate_input(&mut Cursor::new(input), &mut output, op);
+
+            // 验证结果：空格被删除，元音变大写，重复的'l'被压缩
+            assert_eq!(output, b"hElOwOrld\ntEst\n");
+        }
+    }
 }

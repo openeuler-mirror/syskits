@@ -277,3 +277,45 @@ pub fn ct_app() -> Command {
         .trailing_var_arg(true)
         .args(&args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::io::Cursor;
+
+    /// 测试命令行参数解析相关功能
+    mod cli_tests {
+        use super::*;
+
+        #[test]
+        fn test_ct_app() {
+            let app = ct_app();
+
+            // 验证基本参数
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_DELETE)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_SQUEEZE)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_TRUNCATE_SET1)
+            );
+
+            // 验证参数别名
+            let complement_arg = app
+                .get_arguments()
+                .find(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT)
+                .unwrap();
+            assert!(complement_arg.get_short().unwrap() == 'c');
+        }
+    }
+}

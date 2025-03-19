@@ -407,3 +407,31 @@ pub fn factor_chunk(n_s: &mut [u64; CHUNK_SIZE], f_s: &mut [Factors; CHUNK_SIZE]
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Factors;
+    use quickcheck::quickcheck;
+    use std::array;
+
+    quickcheck! {
+        fn chunk_vs_iter(seed: u64) -> () {
+            // 创建确定性的测试数据
+            let mut n_c = array::from_fn(|i| (seed.wrapping_add(i as u64)) | 1);
+            let mut f_c = array::from_fn(|_| Factors::one());
+
+            // 复制数组以便比较
+            let mut n_i = n_c.clone();
+            let mut f_i = f_c.clone();
+
+            // 使用相同的算法处理数据
+            factor_chunk(&mut n_c, &mut f_c);
+            factor_chunk(&mut n_i, &mut f_i);
+
+            // 比较结果
+            assert_eq!(n_i, n_c);
+            assert_eq!(f_i, f_c);
+        }
+    }
+}

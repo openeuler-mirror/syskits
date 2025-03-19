@@ -433,4 +433,105 @@ mod tests {
             assert!(flags.validate_backslash_ending().is_ok());
         }
     }
+
+    /// 测试主要处理逻辑
+    mod process_tests {
+        use super::*;
+
+        #[test]
+        fn test_tr_process_delete() {
+            let mut input = Cursor::new(b"hello world");
+            let mut output = Vec::new();
+
+            // 测试删除操作
+            let flags = TrFlags {
+                is_delete_flag: true,
+                sets: vec!["aeiou".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"hll wrld");
+        }
+
+        #[test]
+        fn test_tr_process_translate() {
+            let mut input = Cursor::new(b"hello");
+            let mut output = Vec::new();
+
+            // 测试转换操作
+            let flags = TrFlags {
+                sets: vec!["el".to_string(), "12".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"h122o");
+        }
+
+        #[test]
+        fn test_tr_process_squeeze() {
+            let mut input = Cursor::new(b"hello  world");
+            let mut output = Vec::new();
+
+            // 测试压缩操作
+            let flags = TrFlags {
+                is_squeeze_flag: true,
+                sets: vec![" ".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"hello world");
+        }
+
+        #[test]
+        fn test_tr_process_complex() {
+            let mut input = Cursor::new(b"hello  world");
+            let mut output = Vec::new();
+
+            // 测试组合操作：删除元音并压缩空格
+            let flags = TrFlags {
+                is_delete_flag: true,
+                is_squeeze_flag: true,
+                sets: vec!["aeiou".to_string(), " ".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"hll wrld");
+        }
+
+        #[test]
+        fn test_tr_process_complement() {
+            let mut input = Cursor::new(b"hello123");
+            let mut output = Vec::new();
+
+            // 测试补集操作
+            let flags = TrFlags {
+                is_complement_flag: true,
+                sets: vec!["0-9".to_string(), "x".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"xxxxx123");
+        }
+
+        #[test]
+        fn test_tr_process_truncate() {
+            let mut input = Cursor::new(b"hello");
+            let mut output = Vec::new();
+
+            // 测试截断操作
+            let flags = TrFlags {
+                is_truncate_set1_flag: true,
+                sets: vec!["helo".to_string(), "123".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"1233o");
+        }
+    }
 }

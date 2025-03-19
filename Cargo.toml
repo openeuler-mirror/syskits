@@ -214,6 +214,8 @@ hostname = "0.3"
 indicatif = "0.17"
 itertools = "0.12.1"
 libc = "0.2.153"
+num-modular = "0.6.1"
+num-prime = "0.4.3"
 lscolors = { version = "0.16.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -384,6 +386,8 @@ conv = "0.3"
 filetime = { workspace = true }
 glob = { workspace = true }
 libc = { workspace = true }
+num-modular = "0.6.1"
+num-prime = "0.4.3"
 pretty_assertions = "1"
 rand = { workspace = true }
 regex = { workspace = true }

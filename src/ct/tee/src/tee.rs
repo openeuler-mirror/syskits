@@ -384,3 +384,30 @@ impl Read for NamedReader {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stat_options_default() {
+        let options = StatOptions::default();
+        assert!(!options.is_append);
+        assert!(!options.is_ignore_interrupts);
+        assert!(options.files.is_empty());
+        assert!(options.output_error.is_none());
+    }
+
+    #[test]
+    fn test_stat_options_new() {
+        let matches = ct_app()
+            .try_get_matches_from(["tee", "-a", "file.txt"])
+            .unwrap();
+        let options = StatOptions::new(&matches);
+
+        assert!(options.is_append);
+        assert!(!options.is_ignore_interrupts);
+        assert_eq!(options.files, vec!["file.txt"]);
+        assert!(options.output_error.is_none());
+    }
+}

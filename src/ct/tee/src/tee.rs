@@ -598,3 +598,61 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod test_basic {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_ct_app() {
+        let mut app = ct_app();
+
+        // 测试基本命令行参数
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == stat_flags::TEE_APPEND)
+        );
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == stat_flags::TEE_IGNORE_INTERRUPTS)
+        );
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == stat_flags::TEE_FILE)
+        );
+
+        // 测试帮助信息
+        let help_text = app.render_help().to_string();
+        assert!(help_text.contains("append to the given FILEs"));
+        assert!(help_text.contains("ignore interrupt signals"));
+    }
+
+    #[test]
+    fn test_open() {
+        // 测试正常打开文件
+        let temp_file = NamedTempFile::new().unwrap();
+        let result = open(temp_file.path().to_string_lossy().to_string(), false, None);
+        assert!(result.is_ok());
+
+        // 测试追加模式
+        let result = open(temp_file.path().to_string_lossy().to_string(), true, None);
+        assert!(result.is_ok());
+
+        // 测试打开不存在的文件
+        let result = open(
+            "/nonexistent/file".to_string(),
+            false,
+            Some(&OutputErrorMode::Warn),
+        );
+        assert!(result.is_ok()); // 应该返回 sink writer
+
+        // 测试错误模式
+        let result = open(
+            "/nonexistent/file".to_string(),
+            false,
+            Some(&OutputErrorMode::Exit),
+        );
+        assert!(result.is_err());
+    }
+}

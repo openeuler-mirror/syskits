@@ -489,4 +489,112 @@ mod tests {
             assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
         }
     }
+
+    #[cfg(test)]
+    mod named_reader_tests {
+        use super::*;
+        use std::io::{self, Cursor};
+
+        #[test]
+        fn test_named_reader_read_success() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 13];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 13);
+            assert_eq!(&buffer, data);
+        }
+
+        #[test]
+        fn test_named_reader_read_partial() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 5];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 5);
+            assert_eq!(&buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_named_reader_read_error() {
+            struct ErrorReader;
+
+            impl Read for ErrorReader {
+                fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
+                    Err(io::Error::new(io::ErrorKind::Other, "read error"))
+                }
+            }
+
+            let mut reader = NamedReader {
+                inner: Box::new(ErrorReader) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 10];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
+        }
+
+        #[test]
+        fn test_named_reader_read_empty() {
+            let data = b"";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 10];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_named_reader_read_buffer_smaller_than_data() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 5];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 5);
+            assert_eq!(&buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_named_reader_read_buffer_larger_than_data() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 20];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 13);
+            assert_eq!(&buffer[..13], data);
+        }
+
+        #[test]
+        fn test_named_reader_read_multiple_times() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer1 = [0; 5];
+            let result1 = reader.read(&mut buffer1);
+            assert!(result1.is_ok());
+            assert_eq!(result1.unwrap(), 5);
+            assert_eq!(&buffer1, b"Hello");
+
+            let mut buffer2 = [0; 8];
+            let result2 = reader.read(&mut buffer2);
+            assert!(result2.is_ok());
+            assert_eq!(result2.unwrap(), 8);
+            assert_eq!(&buffer2, b", world!");
+        }
+    }
 }

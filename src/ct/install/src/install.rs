@@ -1386,4 +1386,74 @@ mod tests {
         assert!(!installer.create_leading);
         assert!(installer.target_dir.is_none());
     }
+
+    #[test]
+    fn test_standard() {
+        let temp = tempdir().unwrap();
+
+        // 创建源文件
+        let source = temp.path().join("source.txt");
+        std::fs::write(&source, "test content").unwrap();
+
+        // 创建目标目录
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&target_dir).unwrap();
+
+        // 基本安装测试
+        let installer = Installer {
+            main_function: MainFunction::Standard,
+            specified_mode: Some(0o644),
+            backup_mode: CtBackupMode::NoBackup,
+            suffix: String::new(),
+            owner_id: None,
+            group_id: None,
+            verbose: true,
+            preserve_timestamps: false,
+            compare: false,
+            strip: false,
+            strip_program: String::from(DEFAULT_STRIP_PROGRAM),
+            create_leading: false,
+            target_dir: Some(target_dir.to_string_lossy().into_owned()),
+        };
+
+        let paths = vec![source.to_string_lossy().into_owned()];
+        assert!(install_standard(paths, &installer).is_ok());
+
+        // 验证文件是否正确安装
+        let installed_file = target_dir.join("source.txt");
+        assert!(installed_file.exists());
+        assert_eq!(
+            std::fs::read_to_string(&installed_file).unwrap(),
+            "test content"
+        );
+        assert_eq!(installed_file.metadata().unwrap().mode() & 0o777, 0o644);
+
+        // 测试备份功能
+        let installer = Installer {
+            backup_mode: CtBackupMode::SimpleBackup,
+            suffix: String::from("~"),
+            ..installer
+        };
+
+        let paths = vec![source.to_string_lossy().into_owned()];
+        assert!(install_standard(paths, &installer).is_ok());
+
+        // 验证备份文件是否创建
+        let backup_file = target_dir.join("source.txt~");
+        assert!(backup_file.exists());
+
+        // 测试多文件安装
+        let source2 = temp.path().join("source2.txt");
+        std::fs::write(&source2, "test content 2").unwrap();
+
+        let paths = vec![
+            source.to_string_lossy().into_owned(),
+            source2.to_string_lossy().into_owned(),
+        ];
+        assert!(install_standard(paths, &installer).is_ok());
+
+        // 验证多个文件是否都安装成功
+        assert!(target_dir.join("source.txt").exists());
+        assert!(target_dir.join("source2.txt").exists());
+    }
 }

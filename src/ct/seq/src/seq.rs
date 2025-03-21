@@ -328,4 +328,39 @@ mod tests {
         assert!(help_text.contains("Separator character"));
         assert!(help_text.contains("Terminator character"));
     }
+
+    #[test]
+    fn test_done_printing() {
+        // 测试正增量
+        let result = done_printing(&1, &1, &5);
+        assert!(!result, "Expected false for 1 < 5 with increment 1");
+
+        let result = done_printing(&6, &1, &5);
+        assert!(result, "Expected true for 6 > 5 with increment 1");
+
+        // 测试负增量
+        let result = done_printing(&5, &-1, &1);
+        assert!(!result, "Expected false for 5 > 1 with increment -1");
+
+        let result = done_printing(&0, &-1, &1);
+        assert!(result, "Expected true for 0 < 1 with increment -1");
+
+        // 测试零增量
+        let result = done_printing(&1, &0, &1);
+        assert!(!result, "Expected false for zero increment");
+    }
+
+    #[test]
+    fn test_write_value_float() {
+        // 测试普通数值
+        let mut output = Vec::new();
+        let value = "123.456".parse::<PreciseNumber>().unwrap().number;
+        write_value_float(&mut output, &value, 8, 3).unwrap();
+        assert_eq!(String::from_utf8(output).unwrap(), "0123.456");
+
+        // 测试无限值
+        let mut output = Vec::new();
+        write_value_float(&mut output, &ExtendedBigDecimal::Infinity, 8, 3).unwrap();
+        assert_eq!(String::from_utf8(output).unwrap(), "     inf");
+    }
 }

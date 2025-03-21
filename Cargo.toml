@@ -175,6 +175,7 @@ feat_os_unix = [
   "link",
   "paste",
   "timeout",
+  "install",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -386,6 +387,7 @@ tr = { optional = true, package = "ct_tr", path = "src/ct/tr" }
 factor = { optional = true, package = "ct_factor", path = "src/ct/factor"}
 tee = { optional = true, package = "ct_tee", path = "src/ct/tee" }
 seq = { optional = true, package = "ct_seq", path = "src/ct/seq" }
+install = { optional = true, package = "ct_install", path = "src/ct/install" }
 
 [dev-dependencies]
 conv = "0.3"

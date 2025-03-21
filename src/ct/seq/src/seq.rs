@@ -363,4 +363,48 @@ mod tests {
         write_value_float(&mut output, &ExtendedBigDecimal::Infinity, 8, 3).unwrap();
         assert_eq!(String::from_utf8(output).unwrap(), "     inf");
     }
+
+    #[test]
+    fn test_print_seq() {
+        let mut output = Vec::new();
+
+        // 测试基本序列
+        let range = (
+            "1".parse::<PreciseNumber>().unwrap().number,
+            "1".parse::<PreciseNumber>().unwrap().number,
+            "3".parse::<PreciseNumber>().unwrap().number,
+        );
+        print_seq(range, PrintConfig {
+            largest_dec: 0,
+            separator: ",",
+            terminator: "\n",
+            pad: false,
+            padding: 1,
+            format: &None,
+            buffer: Some(&mut output),
+        }).unwrap();
+        assert_eq!(String::from_utf8(output.clone()).unwrap(), "1,2,3\n");
+
+        output.clear();
+
+        // 测试等宽输出
+        let range = (
+            "1".parse::<PreciseNumber>().unwrap().number,
+            "1".parse::<PreciseNumber>().unwrap().number,
+            "10".parse::<PreciseNumber>().unwrap().number,
+        );
+        print_seq(range, PrintConfig {
+            largest_dec: 0,
+            separator: "\n",
+            terminator: "\n",
+            pad: true,
+            padding: 2,
+            format: &None,
+            buffer: Some(&mut output),
+        }).unwrap();
+        assert_eq!(
+            String::from_utf8(output.clone()).unwrap(),
+            "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n"
+        );
+    }
 }

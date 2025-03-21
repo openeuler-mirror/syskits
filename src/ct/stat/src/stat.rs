@@ -47,7 +47,7 @@ mod stat_options {
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
-struct Flags {
+struct StatFlags {
     is_alter: bool,
     is_zero: bool,
     is_left: bool,
@@ -106,7 +106,7 @@ pub enum StatOutputType {
 enum StatToken {
     Char(char),
     Directive {
-        flag: Flags,
+        flag: StatFlags,
         width: usize,
         precision: Option<usize>,
         format: char,
@@ -222,7 +222,7 @@ struct Stater {
 /// * `precision` - An Option containing the precision value.
 ///
 /// This function delegates the printing process to more specialized functions depending on the output type.
-fn print_it(output: &StatOutputType, flags: Flags, width: usize, precision: Option<usize>) {
+fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: Option<usize>) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -280,7 +280,7 @@ fn print_it(output: &StatOutputType, flags: Flags, width: usize, precision: Opti
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> StatPadding {
+fn determine_padding_char(flags: &StatFlags, precision: &Option<usize>) -> StatPadding {
     if flags.is_zero && !flags.is_left && precision.is_none() {
         StatPadding::Zero
     } else {
@@ -296,7 +296,7 @@ fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> StatPaddi
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - An Option containing the precision value.
-fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
+fn print_str(s: &str, flags: &StatFlags, width: usize, precision: Option<usize>) {
     let s = match precision {
         Some(p) if p < s.len() => &s[..p],
         _ => s,
@@ -315,7 +315,7 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_integer(
     num: i64,
-    flags: &Flags,
+    flags: &StatFlags,
     width: usize,
     precision: Option<usize>,
     padding_char: StatPadding,
@@ -351,7 +351,7 @@ fn print_integer(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned(
     num: u64,
-    flags: &Flags,
+    flags: &StatFlags,
     width: usize,
     precision: Option<usize>,
     padding_char: StatPadding,
@@ -377,7 +377,7 @@ fn print_unsigned(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_oct(
     num: u32,
-    flags: &Flags,
+    flags: &StatFlags,
     width: usize,
     precision: Option<usize>,
     padding_char: StatPadding,
@@ -401,7 +401,7 @@ fn print_unsigned_oct(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_hex(
     num: u64,
-    flags: &Flags,
+    flags: &StatFlags,
     width: usize,
     precision: Option<usize>,
     padding_char: StatPadding,
@@ -432,7 +432,7 @@ impl Stater {
             return Ok(StatToken::Char('%'));
         }
 
-        let mut flag = Flags::default();
+        let mut flag = StatFlags::default();
 
         while *i < bound {
             match chars[*i] {
@@ -1042,7 +1042,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Flags, ScanUtil, StatToken, Stater, group_num};
+    use super::{StatFlags, ScanUtil, StatToken, Stater, group_num};
 
     #[test]
     fn test_scanners() {
@@ -1084,7 +1084,7 @@ mod tests {
         let s = "%'010.2ac%-#5.w\n";
         let expected = vec![
             StatToken::Directive {
-                flag: Flags {
+                flag: StatFlags {
                     is_group: true,
                     is_zero: true,
                     ..Default::default()
@@ -1095,7 +1095,7 @@ mod tests {
             },
             StatToken::Char('c'),
             StatToken::Directive {
-                flag: Flags {
+                flag: StatFlags {
                     is_left: true,
                     is_alter: true,
                     ..Default::default()
@@ -1114,7 +1114,7 @@ mod tests {
         let s = r#"%-# 15a\t\r\"\\\a\b\e\f\v%+020.-23w\x12\167\132\112\n"#;
         let expected = vec![
             StatToken::Directive {
-                flag: Flags {
+                flag: StatFlags {
                     is_left: true,
                     is_alter: true,
                     is_space: true,
@@ -1134,7 +1134,7 @@ mod tests {
             StatToken::Char('\x0C'),
             StatToken::Char('\x0B'),
             StatToken::Directive {
-                flag: Flags {
+                flag: StatFlags {
                     is_sign: true,
                     is_zero: true,
                     ..Default::default()

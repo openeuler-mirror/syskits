@@ -76,7 +76,7 @@ impl Display for ExtendedBigDecimal {
                 } else {
                     write!(f, "inf")
                 }
-            },
+            }
             Self::MinusInfinity => write!(f, "-inf"),
             Self::MinusZero => write!(f, "-0"),
             Self::Nan => write!(f, "nan"),
@@ -105,24 +105,32 @@ impl Add for ExtendedBigDecimal {
         match (&self, &other) {
             // 处理普通数值
             (Self::BigDecimal(_), Self::BigDecimal(_)) => Self::BigDecimal(match self {
-                Self::BigDecimal(m) => m + match other {
-                    Self::BigDecimal(n) => n,
-                    _ => unreachable!(),
-                },
+                Self::BigDecimal(m) => {
+                    m + match other {
+                        Self::BigDecimal(n) => n,
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             }),
             (Self::BigDecimal(_), Self::MinusZero) | (Self::MinusZero, Self::BigDecimal(_)) => {
-                if matches!(self, Self::BigDecimal(_)) { self } else { other }
-            },
-            
+                if matches!(self, Self::BigDecimal(_)) {
+                    self
+                } else {
+                    other
+                }
+            }
+
             // 处理无穷大
-            (Self::Infinity, Self::MinusInfinity) | (Self::MinusInfinity, Self::Infinity) => Self::Nan,
+            (Self::Infinity, Self::MinusInfinity) | (Self::MinusInfinity, Self::Infinity) => {
+                Self::Nan
+            }
             (Self::Infinity, _) | (_, Self::Infinity) => Self::Infinity,
             (Self::MinusInfinity, _) | (_, Self::MinusInfinity) => Self::MinusInfinity,
-            
+
             // 处理NaN
             (Self::Nan, _) | (_, Self::Nan) => Self::Nan,
-            
+
             // 处理负零
             (Self::MinusZero, _) => other,
         }
@@ -141,20 +149,20 @@ impl PartialOrd for ExtendedBigDecimal {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.partial_cmp(n),
             (Self::BigDecimal(m), Self::MinusZero) => m.partial_cmp(&BigDecimal::zero()),
             (Self::MinusZero, Self::BigDecimal(n)) => BigDecimal::zero().partial_cmp(n),
-            
+
             // 处理无穷大
             (Self::Infinity, Self::Infinity) => Some(Ordering::Equal),
             (Self::Infinity, _) => Some(Ordering::Greater),
             (_, Self::Infinity) => Some(Ordering::Less),
-            
+
             // 处理负无穷大
             (Self::MinusInfinity, Self::MinusInfinity) => Some(Ordering::Equal),
             (Self::MinusInfinity, _) => Some(Ordering::Less),
             (_, Self::MinusInfinity) => Some(Ordering::Greater),
-            
+
             // 处理负零
             (Self::MinusZero, Self::MinusZero) => Some(Ordering::Equal),
-            
+
             // NaN 的情况已在前面处理
             _ => unreachable!(),
         }
@@ -209,7 +217,7 @@ mod tests {
         let inf = ExtendedBigDecimal::Infinity;
         let neg_inf = ExtendedBigDecimal::MinusInfinity;
         let nan = ExtendedBigDecimal::Nan;
-        
+
         // Test regular numbers
         let cmp = zero.partial_cmp(&one);
         assert!(matches!(cmp, Some(Ordering::Less)));

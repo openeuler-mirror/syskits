@@ -280,3 +280,30 @@ fn print_seq(
     }
     writer.flush()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_seq_options_default() {
+        let options = SeqOptions::default();
+        assert_eq!(options.separator, "");
+        assert_eq!(options.terminator, "");
+        assert!(!options.is_equal_width);
+        assert!(options.format.is_none());
+    }
+
+    #[test]
+    fn test_seq_options_new() {
+        let matches = ct_app()
+            .try_get_matches_from(["seq", "-w", "-s", ",", "1", "10"])
+            .unwrap();
+        let options = SeqOptions::new(&matches);
+
+        assert_eq!(options.separator, ",");
+        assert_eq!(options.terminator, "\n");
+        assert!(options.is_equal_width);
+        assert!(options.format.is_none());
+    }
+}

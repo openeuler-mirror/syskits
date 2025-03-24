@@ -11,7 +11,7 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_fs::{make_path_relative_to, paths_refer_to_same_file};
@@ -27,7 +27,7 @@ use std::fmt::Display;
 use std::fs;
 
 use ctcore::ct_backup_control::{self, CtBackupMode};
-use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
+use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -145,13 +145,11 @@ pub fn ct_app() -> Command {
             .long(lnoptions::LN_FORCE)
             .help("remove existing destination files")
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_INTERACTIVE)
             .short('i')
             .long(lnoptions::LN_INTERACTIVE)
             .help("prompt whether to remove existing destination files")
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_NO_DEREFERENCE)
             .short('n')
             .long(lnoptions::LN_NO_DEREFERENCE)
@@ -160,21 +158,18 @@ pub fn ct_app() -> Command {
                     symbolic link to a directory",
             )
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_LOGICAL)
             .short('L')
             .long(lnoptions::LN_LOGICAL)
             .help("follow TARGETs that are symbolic links")
             .overrides_with(lnoptions::LN_PHYSICAL)
             .action(ArgAction::SetTrue),
-
         // Not implemented yet
         Arg::new(lnoptions::LN_PHYSICAL)
             .short('P')
             .long(lnoptions::LN_PHYSICAL)
             .help("make hard links directly to symbolic links")
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_SYMBOLIC)
             .short('s')
             .long(lnoptions::LN_SYMBOLIC)
@@ -182,7 +177,6 @@ pub fn ct_app() -> Command {
             // override added for https://github.com/ctutils/coreutils/issues/2359
             .overrides_with(lnoptions::LN_SYMBOLIC)
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_TARGET_DIRECTORY)
             .short('t')
             .long(lnoptions::LN_TARGET_DIRECTORY)
@@ -190,26 +184,22 @@ pub fn ct_app() -> Command {
             .value_name("DIRECTORY")
             .value_hint(clap::ValueHint::DirPath)
             .conflicts_with(lnoptions::LN_NO_TARGET_DIRECTORY),
-
         Arg::new(lnoptions::LN_NO_TARGET_DIRECTORY)
             .short('T')
             .long(lnoptions::LN_NO_TARGET_DIRECTORY)
             .help("treat LINK_NAME as a normal file always")
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_RELATIVE)
             .short('r')
             .long(lnoptions::LN_RELATIVE)
             .help("create symbolic links relative to link location")
             .requires(lnoptions::LN_SYMBOLIC)
             .action(ArgAction::SetTrue),
-
         Arg::new(lnoptions::LN_VERBOSE)
             .short('v')
             .long(lnoptions::LN_VERBOSE)
             .help("print name of each linked file")
             .action(ArgAction::SetTrue),
-
         Arg::new(LN_ARG_FILES)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
@@ -226,7 +216,6 @@ pub fn ct_app() -> Command {
         .arg(ct_backup_control::arguments::backup_no_args())
         .arg(ct_backup_control::arguments::suffix())
         .args(args)
-        
 }
 
 /// 执行链接操作。支持四种不同的链接形式。
@@ -390,80 +379,139 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
-#[allow(clippy::cognitive_complexity)]
+/// 创建链接（符号链接或硬链接）。
+///
+/// # 参数
+/// * `src` - 源文件路径
+/// * `dst` - 目标文件路径
+/// * `settings` - 链接设置
 fn ln_link(src: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
-    let mut backup_path = None;
-    let source: Cow<'_, Path> = if settings.is_relative {
-        relative_path(src, dst)
+    // 1. 解析源路径
+    let source = resolve_source_path(src, dst, settings)?;
+
+    // 2. 处理备份和覆盖
+    let backup_path = handle_backup_and_overwrite(src, dst, settings)?;
+
+    // 3. 创建链接
+    create_link(&source, dst, settings)?;
+
+    // 4. 打印详细信息
+    print_link_info(dst, &source, backup_path, settings);
+
+    Ok(())
+}
+
+/// 解析源路径，处理相对路径。
+fn resolve_source_path<'a>(
+    src: &'a Path,
+    dst: &Path,
+    settings: &LnSettings,
+) -> CTResult<Cow<'a, Path>> {
+    if settings.is_relative {
+        Ok(relative_path(src, dst))
     } else {
-        src.into()
-    };
+        Ok(src.into())
+    }
+}
 
-    if dst.is_symlink() || dst.exists() {
-        backup_path = match settings.backup {
-            CtBackupMode::NoBackup => None,
-            CtBackupMode::SimpleBackup => Some(ln_simple_backup_path(dst, &settings.suffix)),
-            CtBackupMode::NumberedBackup => Some(ln_numbered_backup_path(dst)),
-            CtBackupMode::ExistingBackup => Some(ln_existing_backup_path(dst, &settings.suffix)),
-        };
-        if settings.backup == CtBackupMode::ExistingBackup && !settings.is_symbolic {
-            // when ln --backup f f, it should detect that it is the same file
-            if paths_refer_to_same_file(src, dst, true) {
-                return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
-            }
-        }
-        if let Some(ref p) = backup_path {
-            fs::rename(dst, p).map_err_context(|| format!("cannot backup {}", dst.quote()))?;
-        }
-        match settings.overwrite {
-            OverwriteMode::NoClobber => {}
-            OverwriteMode::Interactive => {
-                if !ct_prompt_yes!("replace {}?", dst.quote()) {
-                    return Err(LnError::SomeLinksFailed.into());
-                }
-
-                if fs::remove_file(dst).is_ok() {};
-                // In case of error, don't do anything
-            }
-            OverwriteMode::Force => {
-                if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
-                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
-                }
-                if fs::remove_file(dst).is_ok() {};
-                // In case of error, don't do anything
-            }
-        };
+/// 处理备份和覆盖模式。
+fn handle_backup_and_overwrite(
+    src: &Path,
+    dst: &Path,
+    settings: &LnSettings,
+) -> CTResult<Option<PathBuf>> {
+    if !dst.is_symlink() && !dst.exists() {
+        return Ok(None);
     }
 
+    let backup_path = generate_backup_path(dst, settings)?;
+    if let Some(ref backup) = backup_path {
+        rename_backup(dst, backup)?;
+    }
+
+    handle_overwrite_mode(dst, src, settings)?;
+    Ok(backup_path)
+}
+
+/// 生成备份路径。
+fn generate_backup_path(dst: &Path, settings: &LnSettings) -> CTResult<Option<PathBuf>> {
+    Ok(match settings.backup {
+        CtBackupMode::NoBackup => None,
+        CtBackupMode::SimpleBackup => Some(ln_simple_backup_path(dst, &settings.suffix)),
+        CtBackupMode::NumberedBackup => Some(ln_numbered_backup_path(dst)),
+        CtBackupMode::ExistingBackup => Some(ln_existing_backup_path(dst, &settings.suffix)),
+    })
+}
+
+/// 重命名为备份文件。
+fn rename_backup(dst: &Path, backup: &Path) -> CTResult<()> {
+    fs::rename(dst, backup).map_err_context(|| format!("cannot backup {}", dst.quote()))
+}
+
+/// 处理覆盖模式。
+fn handle_overwrite_mode(dst: &Path, src: &Path, settings: &LnSettings) -> CTResult<()> {
+    match settings.overwrite {
+        OverwriteMode::NoClobber => Ok(()),
+        OverwriteMode::Interactive => {
+            if !ct_prompt_yes!("replace {}?", dst.quote()) {
+                return Err(LnError::SomeLinksFailed.into());
+            }
+            let _ = fs::remove_file(dst);
+            Ok(())
+        }
+        OverwriteMode::Force => {
+            if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
+                return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+            }
+            let _ = fs::remove_file(dst);
+            Ok(())
+        }
+    }
+}
+
+/// 创建链接（符号或硬链接）。
+fn create_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
     if settings.is_symbolic {
-        symlink(&source, dst)?;
-    } else {
-        let p = if settings.is_logical && source.is_symlink() {
-            // if we want to have an hard link,
-            // source is a symlink and -L is passed
-            // we want to resolve the symlink to create the hardlink
-            fs::canonicalize(&source)
-                .map_err_context(|| format!("failed to access {}", source.quote()))?
-        } else {
-            source.to_path_buf()
-        };
-        fs::hard_link(p, dst).map_err_context(|| {
+        symlink(source, dst).map_err_context(|| {
             format!(
-                "failed to create hard link {} => {}",
+                "failed to create symbolic link {} => {}",
                 source.quote(),
                 dst.quote()
             )
-        })?;
+        })
+    } else {
+        create_hard_link(source, dst, settings)
     }
+}
 
+/// 创建硬链接，处理符号链接解析。
+fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
+    let resolved_source = if settings.is_logical && source.is_symlink() {
+        fs::canonicalize(source)
+            .map_err_context(|| format!("failed to access {}", source.quote()))?
+    } else {
+        source.to_path_buf()
+    };
+
+    fs::hard_link(&resolved_source, dst).map_err_context(|| {
+        format!(
+            "failed to create hard link {} => {}",
+            source.quote(),
+            dst.quote()
+        )
+    })
+}
+
+/// 打印链接详细信息。
+fn print_link_info(dst: &Path, source: &Path, backup_path: Option<PathBuf>, settings: &LnSettings) {
     if settings.is_verbose {
         print!("{} -> {}", dst.quote(), source.quote());
-        match backup_path {
-            Some(path) => println!(" (backup: {})", path.quote()),
-            None => println!(),
+        if let Some(path) = backup_path {
+            println!(" (backup: {})", path.quote());
+        } else {
+            println!();
         }
     }
-    Ok(())
 }
 
 fn ln_simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
@@ -521,8 +569,8 @@ impl LnSettings {
             OverwriteMode::NoClobber
         };
 
-        let backup_mode = ct_backup_control::determine_backup_mode(&matches)?;
-        let backup_suffix = ct_backup_control::determine_backup_suffix(&matches);
+        let backup_mode = ct_backup_control::determine_backup_mode(matches)?;
+        let backup_suffix = ct_backup_control::determine_backup_suffix(matches);
 
         // When we have "-L" or "-L -P", false otherwise
         let logical = matches.get_flag(lnoptions::LN_LOGICAL);

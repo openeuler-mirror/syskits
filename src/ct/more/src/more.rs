@@ -761,4 +761,53 @@ mod tests {
         // 5个表情符号，每个占2个宽度，总共10个宽度，应该在一行内显示
         assert_eq!(vec![10], widths);
     }
+
+    #[test]
+    fn test_search_pattern_empty_lines() {
+        let lines = vec![];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_search_pattern_empty_pattern() {
+        let lines = vec![String::from("line1"), String::from("line2")];
+        let pattern = None;
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_search_pattern_found_pattern() {
+        let lines = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("pattern"),
+        ];
+        let lines2 = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("pattern"),
+            String::from("pattern2"),
+        ];
+        let lines3 = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("other_pattern"),
+        ];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(2, search_pattern_in_file(&lines, &pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines2, &pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines3, &pattern).unwrap());
+    }
+
+    #[test]
+    fn test_search_pattern_not_found_pattern() {
+        let lines = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("something"),
+        ];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
 }

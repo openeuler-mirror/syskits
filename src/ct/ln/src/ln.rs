@@ -631,11 +631,11 @@ mod tests {
     #[test]
     fn test_link_files_in_dir() {
         let temp = tempdir().unwrap();
-        
+
         // 创建源文件
         let source = temp.path().join("source.txt");
         fs::write(&source, "test content").unwrap();
-        
+
         // 创建目标目录
         let target_dir = temp.path().join("target");
         fs::create_dir(&target_dir).unwrap();
@@ -657,29 +657,33 @@ mod tests {
         let files = vec![source.clone()];
         assert!(link_files_in_dir(&files, &target_dir, &settings).is_ok());
         assert!(target_dir.join("source.txt").exists());
-        
+
         // 测试多文件链接
         let source2 = temp.path().join("source2.txt");
         fs::write(&source2, "test content 2").unwrap();
         let files = vec![source.clone(), source2.clone()];
         assert!(link_files_in_dir(&files, &target_dir, &settings).is_ok());
-        
+
         // 测试重复文件
         let files = vec![source.clone(), source.clone()];
         assert!(link_files_in_dir(&files, &target_dir, &settings).is_err());
+
+        // 清理文件
+        let _ = fs::remove_file(&source);
+        let _ = fs::remove_file(&source2);
     }
 
     #[test]
     fn test_relative_path() {
         let temp = tempdir().unwrap();
-        
+
         let src = temp.path().join("src/file.txt");
         let dst = temp.path().join("dst/link.txt");
-        
+
         fs::create_dir_all(src.parent().unwrap()).unwrap();
         fs::create_dir_all(dst.parent().unwrap()).unwrap();
         fs::write(&src, "test").unwrap();
-        
+
         let rel_path = relative_path(&src, &dst);
         assert!(rel_path.to_str().unwrap().contains("../src/file.txt"));
     }

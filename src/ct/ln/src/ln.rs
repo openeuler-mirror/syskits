@@ -691,13 +691,12 @@ mod tests {
     #[test]
     fn test_link() {
         let temp = tempdir().unwrap();
-        
+
         // 创建源文件
         let source = temp.path().join("source.txt");
         fs::write(&source, "test content").unwrap();
-        
         let target = temp.path().join("target.txt");
-        
+
         let settings = LnSettings {
             overwrite: OverwriteMode::Force,
             backup: CtBackupMode::SimpleBackup,
@@ -714,13 +713,13 @@ mod tests {
         // 测试基本链接
         assert!(ln_link(&source, &target, &settings).is_ok());
         assert!(target.exists());
-        
+
         // 测试备份
         fs::write(&target, "old content").unwrap();
         assert!(ln_link(&source, &target, &settings).is_ok());
         assert!(target.exists());
         assert!(temp.path().join("target.txt~").exists());
-        
+
         // 测试硬链接
         let settings = LnSettings {
             is_symbolic: false,
@@ -729,6 +728,12 @@ mod tests {
         let hard_target = temp.path().join("hard_target.txt");
         assert!(ln_link(&source, &hard_target, &settings).is_ok());
         assert_eq!(fs::read(&source).unwrap(), fs::read(&hard_target).unwrap());
+
+        // 清理文件
+        let _ = fs::remove_file(&source);
+        let _ = fs::remove_file(&target);
+        let _ = fs::remove_file(&hard_target);
+        let _ = fs::remove_file(temp.path().join("target.txt~"));
     }
 
     #[test]

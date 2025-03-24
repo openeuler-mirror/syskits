@@ -713,3 +713,52 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
 
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_break_lines_long() {
+        let mut test_string = String::with_capacity(100);
+        for _ in 0..200 {
+            test_string.push('#');
+        }
+
+        let lines = break_line(&test_string, 80);
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|s| UnicodeWidthStr::width(&s[..]))
+            .collect();
+
+        assert_eq!((80, 80, 40), (widths[0], widths[1], widths[2]));
+    }
+
+    #[test]
+    fn test_break_lines_short() {
+        let mut test_string = String::with_capacity(100);
+        for _ in 0..20 {
+            test_string.push('#');
+        }
+
+        let lines = break_line(&test_string, 80);
+
+        assert_eq!(20, lines[0].len());
+    }
+
+    #[test]
+    fn test_break_line_zwj() {
+        let test_string = "👩🏻‍🔬👩🏻‍🔬👩🏻‍🔬👩🏻‍🔬👩🏻‍🔬"; // 5个表情符号
+
+        let lines = break_line(test_string, 80);
+
+        // 每个表情符号占用2个字符宽度
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|s| UnicodeWidthStr::width(&s[..]))
+            .collect();
+
+        // 5个表情符号，每个占2个宽度，总共10个宽度，应该在一行内显示
+        assert_eq!(vec![10], widths);
+    }
+}

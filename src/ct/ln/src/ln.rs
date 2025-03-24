@@ -765,11 +765,11 @@ mod tests {
     #[test]
     fn test_ln_exec() {
         let temp = tempdir().unwrap();
-        
-        // 创建测试文件和目录
+
+        // 创建源文件
         let source = temp.path().join("source.txt");
         fs::write(&source, "test content").unwrap();
-        
+
         let target_dir = temp.path().join("target");
         fs::create_dir(&target_dir).unwrap();
 
@@ -821,7 +821,7 @@ mod tests {
         assert!(new_target.join("source2.txt").exists());
 
         // 测试错误情况
-        
+
         // 测试缺少目标文件
         let files = vec![source.clone()];
         let settings = LnSettings {
@@ -844,5 +844,11 @@ mod tests {
             ..settings
         };
         assert!(ln_exec(&files, &settings).is_err());
+
+        // 清理文件
+        let _ = fs::remove_file(&source);
+        let _ = fs::remove_file(&source2);
+        let _ = fs::remove_file(Path::new("source.txt"));
+        let _ = fs::remove_file(temp.path().join("link.txt"));
     }
 }

@@ -1515,4 +1515,80 @@ mod tests {
         let settings = JoinSettings::new(&matches).unwrap();
         assert_eq!(settings.line_ending, CtLineEnding::Nul);
     }
+
+    use std::io::Cursor;
+
+    #[test]
+    fn test_print_field() {
+        // 设置测试环境
+        let empty = b"EMPTY";
+        let repr = JoinRepr::new(CtLineEnding::Newline, b',', &[], empty);
+        let mut output = Cursor::new(Vec::new());
+
+        // 测试正常字段
+        let field = b"test";
+        repr.print_field(&mut output, Some(field)).unwrap();
+        assert_eq!(output.get_ref(), b"test");
+
+        // 测试空字段(使用empty替换)
+        output = Cursor::new(Vec::new());
+        repr.print_field(&mut output, None).unwrap();
+        assert_eq!(output.get_ref(), b"EMPTY");
+
+        // 测试空字符串字段
+        output = Cursor::new(Vec::new());
+        repr.print_field(&mut output, Some(b"")).unwrap();
+        assert_eq!(output.get_ref(), b"");
+    }
+
+    #[test]
+    fn test_print_fields() {
+        // 创建测试行
+        let line = Line::new(b"field1,field2,field3,field4".to_vec(), Sep::Char(b','), 4);
+
+        // 设置测试环境
+        let empty = b"EMPTY";
+        let repr = JoinRepr::new(CtLineEnding::Newline, b',', &[], empty);
+        let mut output = Cursor::new(Vec::new());
+
+        // 测试跳过第一个字段
+        repr.print_fields(&mut output, &line, 0).unwrap();
+
+        // 添加调试输出
+        println!("Skip first field test:");
+        println!("Expected: {:?}", b",field2,field3,field4");
+        println!("Got: {:?}", output.get_ref());
+        assert_eq!(output.get_ref(), b",field2,field3,field4");
+
+        // 其他测试...
+    }
+
+    #[test]
+    fn test_print_format() {
+        // 设置测试环境
+        let empty = b"EMPTY";
+        let format = vec![
+            JoinSpec::Key,
+            JoinSpec::Field(FileNum::File1, 1),
+            JoinSpec::Field(FileNum::File2, 2),
+        ];
+        let repr = JoinRepr::new(CtLineEnding::Newline, b',', &format, empty);
+        let mut output = Cursor::new(Vec::new());
+
+        // 测试正常格式化
+        let get_field = |spec: &JoinSpec| match spec {
+            JoinSpec::Key => Some(b"key" as &[u8]),
+            JoinSpec::Field(FileNum::File1, 1) => Some(b"field1" as &[u8]),
+            JoinSpec::Field(FileNum::File2, 2) => Some(b"field2" as &[u8]),
+            _ => None,
+        };
+
+        repr.print_format(&mut output, get_field).unwrap();
+
+        // 添加调试输出
+        println!("Normal format test:");
+        println!("Expected: {:?}", b"key,field1,field2");
+        println!("Got: {:?}", output.get_ref());
+        assert_eq!(output.get_ref(), b"key,field1,field2");
+    }
 }

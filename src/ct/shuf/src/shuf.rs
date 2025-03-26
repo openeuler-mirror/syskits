@@ -839,3 +839,47 @@ mod test_number_set_decision {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod settings_tests {
+        use super::*;
+
+        #[test]
+        fn test_new_settings_default() {
+            let matches = ct_app().try_get_matches_from(vec!["shuf"]).unwrap();
+            let settings = ShufSettings::new(&matches).unwrap();
+            assert_eq!(settings.head_count, usize::MAX);
+            assert_eq!(settings.sep, 0x0a_u8);
+            assert!(!settings.is_repeat);
+            assert!(settings.output.is_none());
+            assert!(settings.random_source.is_none());
+        }
+
+        #[test]
+        fn test_new_settings_with_options() {
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    "shuf",
+                    "-n",
+                    "5",
+                    "-z",
+                    "-r",
+                    "-o",
+                    "out.txt",
+                    "--random-source",
+                    "rand.txt",
+                ])
+                .unwrap();
+
+            let settings = ShufSettings::new(&matches).unwrap();
+            assert_eq!(settings.head_count, 5);
+            assert_eq!(settings.sep, 0x00_u8);
+            assert!(settings.is_repeat);
+            assert_eq!(settings.output.as_deref(), Some("out.txt"));
+            assert_eq!(settings.random_source.as_deref(), Some("rand.txt"));
+        }
+    }
+}

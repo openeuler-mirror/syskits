@@ -1591,4 +1591,153 @@ mod tests {
         println!("Got: {:?}", output.get_ref());
         assert_eq!(output.get_ref(), b"key,field1,field2");
     }
+
+    mod join_exec_tests {
+        use super::*;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::tempdir;
+
+        fn create_test_file(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+            let mut file = File::create(path)?;
+            file.write_all(content.as_bytes())?;
+            Ok(())
+        }
+
+        #[test]
+        fn test_join_exec_basic() {
+            let temp = tempdir().unwrap();
+
+            // 创建测试文件
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "1 a\n2 b\n3 c\n").unwrap();
+            create_test_file(&file2_path, "1 x\n2 y\n3 z\n").unwrap();
+
+            // 基本连接测试
+            let settings = JoinSettings {
+                key1: 0,
+                key2: 0,
+                is_print_joined: true,
+                separator: Sep::Whitespaces,
+                ..Default::default()
+            };
+
+            let result = join_exec(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_unmatched() {
+            let temp = tempdir().unwrap();
+
+            // 创建测试文件，包含不匹配的行
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "1 a\n2 b\n4 d\n").unwrap();
+            create_test_file(&file2_path, "1 x\n3 z\n4 w\n").unwrap();
+
+            // 测试打印不匹配行
+            let settings = JoinSettings {
+                key1: 0,
+                key2: 0,
+                is_print_joined: true,
+                is_print_unpaired1: true,
+                is_print_unpaired2: true,
+                separator: Sep::Whitespaces,
+                ..Default::default()
+            };
+
+            let result = join_exec(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_custom_separator() {
+            let temp = tempdir().unwrap();
+
+            // 创建使用自定义分隔符的测试文件
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "1,a\n2,b\n3,c\n").unwrap();
+            create_test_file(&file2_path, "1,x\n2,y\n3,z\n").unwrap();
+
+            // 测试自定义分隔符
+            let settings = JoinSettings {
+                key1: 0,
+                key2: 0,
+                is_print_joined: true,
+                separator: Sep::Char(b','),
+                ..Default::default()
+            };
+
+            let result = join_exec(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_with_headers() {
+            let temp = tempdir().unwrap();
+
+            // 创建带标题行的测试文件
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "id name\n1 a\n2 b\n").unwrap();
+            create_test_file(&file2_path, "id value\n1 x\n2 y\n").unwrap();
+
+            // 测试标题行处理
+            let settings = JoinSettings {
+                key1: 0,
+                key2: 0,
+                is_print_joined: true,
+                is_headers: true,
+                separator: Sep::Whitespaces,
+                ..Default::default()
+            };
+
+            let result = join_exec(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_empty_files() {
+            let temp = tempdir().unwrap();
+
+            // 创建空文件
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "").unwrap();
+            create_test_file(&file2_path, "").unwrap();
+
+            let settings = JoinSettings::default();
+
+            let result = join_exec(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+            );
+            assert!(result.is_ok());
+        }
+    }
 }

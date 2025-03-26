@@ -1359,3 +1359,160 @@ fn parse_field_number_option(value: Option<&str>) -> CTResult<Option<usize>> {
         Some(val) => Ok(Some(parse_field_number(val)?)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_settings_basic() {
+        // 创建基本的命令行参数
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        // 测试默认设置
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.key1, 0);
+        assert_eq!(settings.key2, 0);
+        assert!(!settings.is_print_unpaired1);
+        assert!(!settings.is_print_unpaired2);
+        assert!(settings.is_print_joined);
+        assert!(!settings.is_ignore_case);
+        assert_eq!(settings.line_ending, CtLineEnding::Newline);
+        assert_eq!(settings.separator, Sep::Whitespaces);
+        assert!(!settings.is_autoformat);
+        assert!(settings.format.is_empty());
+        assert!(settings.empty.is_empty());
+        assert_eq!(settings.check_order, CheckOrder::Default);
+        assert!(!settings.is_headers);
+    }
+
+    #[test]
+    fn test_parse_settings_keys() {
+        // 测试设置键字段
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-1", "2", "-2", "3", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.key1, 1); // 2-1 因为是从1开始计数
+        assert_eq!(settings.key2, 2); // 3-1
+    }
+
+    #[test]
+    fn test_parse_settings_print_options() {
+        // 测试打印选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-a", "1", "-v", "2", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_print_unpaired1);
+        assert!(settings.is_print_unpaired2);
+        assert!(!settings.is_print_joined); // -v 选项禁用连接行的打印
+    }
+
+    #[test]
+    fn test_parse_settings_format() {
+        // 测试格式化选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-o", "1.1,2.2,0", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(!settings.is_autoformat);
+        assert_eq!(settings.format.len(), 3);
+
+        // 测试自动格式化
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-o", "auto", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_autoformat);
+        assert!(settings.format.is_empty());
+    }
+
+    #[test]
+    fn test_parse_settings_separator() {
+        // 测试分隔符选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-t", ",", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(matches!(settings.separator, Sep::Char(b',')));
+
+        // 测试空分隔符
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-t", "", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(matches!(settings.separator, Sep::Line));
+    }
+
+    #[test]
+    fn test_parse_settings_order_check() {
+        // 测试排序检查选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "--check-order", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.check_order, CheckOrder::Enabled);
+
+        // 测试禁用排序检查
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "--nocheck-order", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.check_order, CheckOrder::Disabled);
+    }
+
+    #[test]
+    fn test_parse_settings_headers() {
+        // 测试标题选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "--header", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_headers);
+    }
+
+    #[test]
+    fn test_parse_settings_empty_field() {
+        // 测试空字段替换选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-e", "EMPTY", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.empty, b"EMPTY");
+    }
+
+    #[test]
+    fn test_parse_settings_ignore_case() {
+        // 测试忽略大小写选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-i", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_ignore_case);
+    }
+
+    #[test]
+    fn test_parse_settings_zero_terminated() {
+        // 测试零终止符选项
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-z", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.line_ending, CtLineEnding::Nul);
+    }
+}

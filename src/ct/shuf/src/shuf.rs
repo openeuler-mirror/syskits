@@ -843,6 +843,7 @@ mod test_number_set_decision {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     mod settings_tests {
         use super::*;
@@ -914,6 +915,61 @@ mod tests {
         fn test_parse_head_count_invalid() {
             assert!(shuf_parse_head_count(vec!["invalid".to_string()]).is_err());
             assert!(shuf_parse_head_count(vec!["-5".to_string()]).is_err());
+        }
+    }
+
+    mod shuf_exec_tests {
+        use super::*;
+
+        #[test]
+        fn test_shuf_exec_basic() {
+            let temp = tempdir().unwrap();
+            let output_path = temp.path().join("output.txt");
+
+            let settings = ShufSettings {
+                head_count: 3,
+                output: Some(output_path.to_str().unwrap().to_string()),
+                random_source: None,
+                is_repeat: false,
+                sep: b'\n',
+            };
+
+            let mut input = vec![
+                b"1".as_ref(),
+                b"2".as_ref(),
+                b"3".as_ref(),
+                b"4".as_ref(),
+                b"5".as_ref(),
+            ];
+            assert!(shuf_exec(&mut input, settings).is_ok());
+        }
+
+        #[test]
+        fn test_shuf_exec_with_repeat() {
+            let settings = ShufSettings {
+                head_count: 5,
+                output: None,
+                random_source: None,
+                is_repeat: true,
+                sep: b'\n',
+            };
+
+            let mut input = vec![b"1".as_ref(), b"2".as_ref(), b"3".as_ref()];
+            assert!(shuf_exec(&mut input, settings).is_ok());
+        }
+
+        #[test]
+        fn test_shuf_exec_empty_input() {
+            let settings = ShufSettings {
+                head_count: 5,
+                output: None,
+                random_source: None,
+                is_repeat: true,
+                sep: b'\n',
+            };
+
+            let mut input: Vec<&[u8]> = vec![];
+            assert!(shuf_exec(&mut input, settings).is_err());
         }
     }
 }

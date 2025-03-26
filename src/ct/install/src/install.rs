@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
  *  syskits is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL V2
  * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
@@ -10,7 +10,26 @@
  */
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
-
+/// install 命令的实现 - 复制文件并设置属性
+///
+/// 此模块实现了 install 命令的功能,用于复制文件并设置其属性。
+/// 主要功能包括:
+/// - 复制文件到目标位置
+/// - 创建目录
+/// - 设置文件权限和所有权
+/// - 支持备份已存在的文件
+/// - 支持保留时间戳
+/// - 支持 strip 二进制文件
+///
+/// # 主要结构体
+/// - `Installer`: 存储 install 命令的配置和执行方法
+/// - `MainFunction`: 定义主要操作模式
+///
+/// # 主要函数
+/// - `install_main()`: 命令入口函数
+/// - `install_directory()`: 创建目录
+/// - `install_standard()`: 安装文件
+/// - `copy()`: 复制文件并设置属性
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -37,20 +56,33 @@ use std::process;
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
-#[allow(dead_code)]
+/// install 命令的配置和执行器
 pub struct Installer {
+    /// 主要操作模式(目录创建或文件安装)
     main_function: MainFunction,
+    /// 指定的权限模式
     specified_mode: Option<u32>,
+    /// 备份模式
     backup_mode: CtBackupMode,
+    /// 备份文件后缀
     suffix: String,
+    /// 所有者ID
     owner_id: Option<u32>,
+    /// 组ID
     group_id: Option<u32>,
+    /// 是否显示详细信息
     verbose: bool,
+    /// 是否保留时间戳
     preserve_timestamps: bool,
+    /// 是否比较文件内容
     compare: bool,
+    /// 是否执行strip操作
     strip: bool,
+    /// strip程序路径
     strip_program: String,
+    /// 是否创建父目录
     create_leading: bool,
+    /// 指定的目标目录
     target_dir: Option<String>,
 }
 
@@ -74,22 +106,127 @@ impl Default for Installer {
     }
 }
 
+/// install 命令的命令行选项定义
+mod install_options {
+    /// 在复制前比较源文件和目标文件
+    pub const INSTALL_COMPARE: &str = "compare";
+
+    /// 创建目录而不是复制文件
+    pub const INSTALL_DIRECTORY: &str = "directory";
+
+    /// 忽略的选项(未使用)
+    pub const INSTALL_IGNORED: &str = "ignored";
+
+    /// 创建所有必要的父目录
+    pub const INSTALL_CREATE_LEADING: &str = "create-leading";
+
+    /// 设置目标文件的用户组
+    pub const INSTALL_GROUP: &str = "group";
+
+    /// 设置目标文件的权限模式
+    pub const INSTALL_MODE: &str = "mode";
+
+    /// 设置目标文件的所有者
+    pub const INSTALL_OWNER: &str = "owner";
+
+    /// 保留源文件的时间戳
+    pub const INSTALL_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
+
+    /// 对二进制文件执行strip操作
+    pub const INSTALL_STRIP: &str = "strip";
+
+    /// 指定strip程序的路径
+    pub const INSTALL_STRIP_PROGRAM: &str = "strip-program";
+
+    /// 指定目标目录
+    pub const INSTALL_TARGET_DIRECTORY: &str = "target-directory";
+
+    /// 将目标视为普通文件而不是目录
+    pub const INSTALL_NO_TARGET_DIRECTORY: &str = "no-target-directory";
+
+    /// 显示详细操作信息
+    pub const INSTALL_VERBOSE: &str = "verbose";
+
+    /// 保留文件的安全上下文
+    pub const INSTALL_PRESERVE_CONTEXT: &str = "preserve-context";
+
+    /// 设置文件的安全上下文
+    pub const INSTALL_CONTEXT: &str = "context";
+
+    /// 要处理的文件列表
+    pub const INSTALL_FILES: &str = "files";
+}
+
+/// 安装命令可能遇到的错误类型
 #[derive(Debug)]
 enum InstallError {
+    /// 尝试使用未实现的功能特性
+    /// 参数: 未实现特性的名称
     Unimplemented(String),
+
+    /// -d 选项使用时未提供目录参数
     DirNeedsArg(),
+
+    /// chmod 操作失败
+    /// 参数: 目标文件路径
     ChmodFailed(PathBuf),
+
+    /// chown 操作失败
+    /// 参数:
+    /// - 目标文件路径
+    /// - 错误信息
     ChownFailed(PathBuf, String),
+
+    /// 目标路径无效(不存在)
+    /// 参数: 无效的目标路径
     InvalidTarget(PathBuf),
+
+    /// 目标应该是目录但不是目录
+    /// 参数: 目标路径
     TargetDirIsntDir(PathBuf),
+
+    /// 备份文件失败
+    /// 参数:
+    /// - 源文件路径
+    /// - 目标备份文件路径
+    /// - IO错误信息
     BackupFailed(PathBuf, PathBuf, std::io::Error),
+
+    /// 安装(复制)文件失败
+    /// 参数:
+    /// - 源文件路径
+    /// - 目标文件路径
+    /// - IO错误信息
     InstallFailed(PathBuf, PathBuf, std::io::Error),
+
+    /// strip 程序执行失败
+    /// 参数: 错误信息
     StripProgramFailed(String),
+
+    /// 获取文件元数据失败
+    /// 参数: IO错误信息
     MetadataFailed(std::io::Error),
+
+    /// 指定的用户不存在
+    /// 参数: 用户名
     InvalidUser(String),
+
+    /// 指定的用户组不存在
+    /// 参数: 组名
     InvalidGroup(String),
+
+    /// 创建目录失败
+    /// 参数:
+    /// - 目录路径
+    /// - IO错误信息
     CreateDirFailed(PathBuf, std::io::Error),
+
+    /// 跳过目录(当不应处理目录时)
+    /// 参数: 目录路径
     OmittingDirectory(PathBuf),
+
+    /// 路径不是目录
+    /// 参数: 路径
     NotADirectory(PathBuf),
 }
 
@@ -111,7 +248,10 @@ impl Error for InstallError {}
 impl Display for InstallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            // 未实现的功能特性错误
             Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {opt}"),
+
+            // -d 选项需要至少一个参数
             Self::DirNeedsArg() => {
                 write!(
                     f,
@@ -119,32 +259,58 @@ impl Display for InstallError {
                     ctcore::ct_util_name()
                 )
             }
+
+            // 创建目录失败,显示具体错误原因
             Self::CreateDirFailed(dir, e) => {
                 Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
             }
+
+            // 修改文件权限失败
             Self::ChmodFailed(file) => write!(f, "failed to chmod {}", file.quote()),
+
+            // 修改文件所有者失败,包含具体错误信息
             Self::ChownFailed(file, msg) => write!(f, "failed to chown {}: {}", file.quote(), msg),
+
+            // 目标路径不存在
             Self::InvalidTarget(target) => write!(
                 f,
                 "invalid target {}: No such file or directory",
                 target.quote()
             ),
+
+            // 目标不是目录
             Self::TargetDirIsntDir(target) => {
                 write!(f, "target {} is not a directory", target.quote())
             }
+
+            // 备份文件失败,显示源文件、目标文件和错误原因
             Self::BackupFailed(from, to, e) => Display::fmt(
                 &uio_error!(e, "cannot backup {} to {}", from.quote(), to.quote()),
                 f,
             ),
+
+            // 安装文件失败,显示源文件、目标文件和错误原因
             Self::InstallFailed(from, to, e) => Display::fmt(
                 &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
                 f,
             ),
+
+            // strip 程序执行失败
             Self::StripProgramFailed(msg) => write!(f, "strip program failed: {msg}"),
+
+            // 获取文件元数据失败
             Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
+
+            // 指定的用户不存在
             Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
+
+            // 指定的用户组不存在
             Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
+
+            // 跳过目录
             Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
+
+            // 目标路径不是目录
             Self::NotADirectory(dir) => {
                 write!(f, "failed to access {}: Not a directory", dir.quote())
             }
@@ -152,11 +318,12 @@ impl Display for InstallError {
     }
 }
 
+/// 主要操作模式
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum MainFunction {
-    /// Create directories
+    /// 创建目录
     Directory,
-    /// Install files to locations (primary functionality)
+    /// 安装文件(主要功能)
     Standard,
 }
 
@@ -196,10 +363,13 @@ impl Installer {
     }
 
     fn check_conflicts(preserve_timestamps: bool, compare: bool, strip: bool) -> CTResult<()> {
+        // 检查时间戳保留和比较选项的冲突
         if preserve_timestamps && compare {
             ct_show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
             return Err(1.into());
         }
+
+        // 检查比较和strip选项的冲突
         if compare && strip {
             ct_show_error!("Options --compare and --strip are mutually exclusive");
             return Err(1.into());
@@ -208,15 +378,18 @@ impl Installer {
     }
 
     fn parse_owner(matches: &ArgMatches) -> CTResult<Option<u32>> {
+        // 获取所有者名称
         let owner = matches
             .get_one::<String>(install_options::INSTALL_OWNER)
             .map(|s| s.as_str())
             .unwrap_or("")
             .to_string();
 
+        // 如果未指定所有者,返回None
         if owner.is_empty() {
             Ok(None)
         } else {
+            // 将所有者名称转换为ID
             match usr2uid(&owner) {
                 Ok(u) => Ok(Some(u)),
                 Err(_) => Err(InstallError::InvalidUser(owner).into()),
@@ -225,15 +398,18 @@ impl Installer {
     }
 
     fn parse_group(matches: &ArgMatches) -> CTResult<Option<u32>> {
+        // 获取组名称
         let group = matches
             .get_one::<String>(install_options::INSTALL_GROUP)
             .map(|s| s.as_str())
             .unwrap_or("")
             .to_string();
 
+        // 如果未指定组,返回None
         if group.is_empty() {
             Ok(None)
         } else {
+            // 将组名称转换为ID
             match grp2gid(&group) {
                 Ok(g) => Ok(Some(g)),
                 Err(_) => Err(InstallError::InvalidGroup(group).into()),
@@ -502,25 +678,6 @@ impl Installer {
 const INSTALL_ABOUT: &str = ct_help_about!("install.md");
 const INSTALL_USAGE: &str = ct_help_usage!("install.md");
 
-mod install_options {
-    pub const INSTALL_COMPARE: &str = "compare";
-    pub const INSTALL_DIRECTORY: &str = "directory";
-    pub const INSTALL_IGNORED: &str = "ignored";
-    pub const INSTALL_CREATE_LEADING: &str = "create-leading";
-    pub const INSTALL_GROUP: &str = "group";
-    pub const INSTALL_MODE: &str = "mode";
-    pub const INSTALL_OWNER: &str = "owner";
-    pub const INSTALL_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
-    pub const INSTALL_STRIP: &str = "strip";
-    pub const INSTALL_STRIP_PROGRAM: &str = "strip-program";
-    pub const INSTALL_TARGET_DIRECTORY: &str = "target-directory";
-    pub const INSTALL_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-    pub const INSTALL_VERBOSE: &str = "verbose";
-    pub const INSTALL_PRESERVE_CONTEXT: &str = "preserve-context";
-    pub const INSTALL_CONTEXT: &str = "context";
-
-    pub const INSTALL_FILES: &str = "files";
-}
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.

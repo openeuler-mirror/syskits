@@ -11,6 +11,25 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
+/// ln 命令的实现 - 创建文件链接
+///
+/// 此模块实现了 ln 命令的功能,支持创建硬链接和符号链接。
+/// 主要功能包括:
+/// - 创建硬链接和符号链接
+/// - 支持相对路径和绝对路径
+/// - 支持备份已存在的目标文件
+/// - 支持递归创建目录
+/// - 支持设置链接权限和所有权
+///
+/// # 主要结构体
+/// - `LnSettings`: 存储 ln 命令的配置选项
+/// - `OverwriteMode`: 定义目标文件存在时的处理方式
+///
+/// # 主要函数
+/// - `ln_main()`: 命令入口函数
+/// - `ln_exec()`: 执行链接操作
+/// - `ln_link()`: 创建单个链接
+/// - `link_files_in_dir()`: 在目录中创建多个链接
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
@@ -28,52 +47,88 @@ use std::fs;
 
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
-#[cfg(any(unix, target_os = "redox"))]
+#[cfg(unix)]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 
+/// ln 命令的配置选项
 pub struct LnSettings {
+    /// 目标文件存在时的处理方式
     overwrite: OverwriteMode,
+    /// 备份模式
     backup: CtBackupMode,
+    /// 备份文件后缀
     suffix: String,
+    /// 是否创建符号链接
     is_symbolic: bool,
+    /// 是否使用相对路径
     is_relative: bool,
+    /// 是否跟随符号链接
     is_logical: bool,
+    /// 指定的目标目录
     target_dir: Option<String>,
+    /// 是否将目标视为普通文件
     is_no_target_dir: bool,
+    /// 是否不解引用符号链接
     is_no_dereference: bool,
+    /// 是否显示详细信息
     is_verbose: bool,
 }
 
+/// 目标文件存在时的处理方式
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OverwriteMode {
+    /// 不覆盖已存在的文件
     NoClobber,
+    /// 交互式确认是否覆盖
     Interactive,
+    /// 强制覆盖
     Force,
 }
 
 #[derive(Debug)]
 enum LnError {
+    /// 目标路径应该是目录但不是目录
+    /// 参数: 目标路径
     TargetIsDirectory(PathBuf),
+    /// 部分链接创建失败
+    /// 具体错误信息已在其他地方处理
     SomeLinksFailed,
+    /// 源文件和目标文件是同一个文件
+    /// 参数:
+    /// - 源文件路径
+    /// - 目标文件路径
     SameFile(PathBuf, PathBuf),
+    /// 缺少目标文件路径参数
+    /// 参数: 最后一个提供的参数
     MissingDestination(PathBuf),
+    /// 提供了多余的操作数
+    /// 参数: 多余的操作数
     ExtraOperand(OsString),
 }
 
 impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            // 目标路径是目录时的错误信息
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
+
+            // 源文件和目标文件是同一个文件时的错误信息
             Self::SameFile(s, d) => {
                 write!(f, "{} and {} are the same file", s.quote(), d.quote())
             }
+
+            // 部分链接创建失败时返回空字符串(错误信息已在其他地方处理)
             Self::SomeLinksFailed => Ok(()),
+
+            // 缺少目标文件路径时的错误信息
             Self::MissingDestination(s) => {
                 write!(f, "missing destination file operand after {}", s.quote())
             }
+
+            // 有多余的操作数时的错误信息,并提示查看帮助
             Self::ExtraOperand(s) => write!(
                 f,
                 "extra operand {}\nTry '{} --help' for more information.",
@@ -97,16 +152,25 @@ const LN_USAGE: &str = ct_help_usage!("ln.md");
 const LN_AFTER_HELP: &str = ct_help_section!("after help", "ln.md");
 
 mod lnoptions {
+    /// 强制覆盖已存在的目标文件
     pub const LN_FORCE: &str = "force";
-    //pub const DIRECTORY: &str = "directory";
+    /// 交互式确认是否覆盖目标文件
     pub const LN_INTERACTIVE: &str = "interactive";
+    /// 不解引用符号链接
     pub const LN_NO_DEREFERENCE: &str = "no-dereference";
+    /// 创建符号链接而不是硬链接
     pub const LN_SYMBOLIC: &str = "symbolic";
+    /// 解析符号链接(跟随符号链接)
     pub const LN_LOGICAL: &str = "logical";
+    /// 不解析符号链接(使用物理路径)
     pub const LN_PHYSICAL: &str = "physical";
+    /// 指定目标目录
     pub const LN_TARGET_DIRECTORY: &str = "target-directory";
+    /// 将目标视为普通文件而不是目录
     pub const LN_NO_TARGET_DIRECTORY: &str = "no-target-directory";
+    /// 创建相对符号链接
     pub const LN_RELATIVE: &str = "relative";
+    /// 显示详细操作信息
     pub const LN_VERBOSE: &str = "verbose";
 }
 

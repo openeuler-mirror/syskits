@@ -999,4 +999,25 @@ mod tests {
             assert_eq!(data, vec![b"123"]);
         }
     }
+
+    mod read_input_file_tests {
+        use super::*;
+
+        #[test]
+        fn test_read_input_file_valid() {
+            let temp = tempdir().unwrap();
+            let file_path = temp.path().join("test.txt");
+            std::fs::write(&file_path, "test data").unwrap();
+
+            let result = shuf_read_input_file(file_path.to_str().unwrap());
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), b"test data");
+        }
+
+        #[test]
+        fn test_read_input_file_nonexistent() {
+            let result = shuf_read_input_file("nonexistent.txt");
+            assert!(result.is_err());
+        }
+    }
 }

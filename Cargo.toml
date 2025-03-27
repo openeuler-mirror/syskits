@@ -181,6 +181,7 @@ feat_os_unix = [
   "join",
   "shuf",
   "shred",
+  "runcon",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -398,6 +399,7 @@ more = { optional = true, package = "ct_more", path = "src/ct/more" }
 join = { optional = true, package = "ct_join", path = "src/ct/join" }
 shuf = { optional = true, package = "ct_shuf", path = "src/ct/shuf" }
 shred = { optional = true, package = "ct_shred", path = "src/ct/shred" }
+runcon = { optional = true, package = "ct_runcon", path = "src/ct/runcon" }
 
 [dev-dependencies]
 conv = "0.3"

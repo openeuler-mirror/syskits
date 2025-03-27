@@ -265,6 +265,16 @@ impl BytesWriter {
 }
 
 /// 文件擦除的配置选项
+///
+/// # 字段说明
+/// * `path_str` - 要擦除的文件路径
+/// * `n_passes` - 覆写次数
+/// * `remove_method` - 删除方式（无、直接删除、擦除删除、同步擦除删除）
+/// * `size` - 指定的文件大小，None 表示使用原始大小
+/// * `exact` - 是否精确匹配文件大小
+/// * `zero` - 是否在最后用零填充
+/// * `verbose` - 是否显示详细信息
+/// * `force` - 是否强制写入（修改文件权限）
 struct ShredSettings<'a> {
     path_str: &'a str,
     n_passes: usize,

@@ -690,3 +690,35 @@ fn shred_do_remove(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod pattern_tests {
+        use super::*;
+
+        #[test]
+        fn test_bytes_writer_random() {
+            let mut writer = BytesWriter::Random {
+                rng: StdRng::from_entropy(),
+                buffer: [0; SHRED_BLOCK_SIZE],
+            };
+
+            let block1 = writer.bytes_for_pass(10).to_vec();
+            let block2 = writer.bytes_for_pass(10).to_vec();
+            assert_ne!(block1, block2, "随机块应该不相同");
+            assert_eq!(block1.len(), 10, "应该生成请求的长度");
+        }
+
+        #[test]
+        fn test_bytes_writer_pattern() {
+            let pattern = Pattern::Single(0xAA);
+            let mut writer = BytesWriter::from_pass_type(&PassType::Pattern(pattern));
+
+            let block = writer.bytes_for_pass(10);
+            assert_eq!(block.len(), 10, "应该生成请求的长度");
+            assert!(block.iter().all(|&b| b == 0xAA), "应该全是指定的模式");
+        }
+    }
+}

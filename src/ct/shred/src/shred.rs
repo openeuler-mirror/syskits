@@ -695,6 +695,8 @@ fn shred_do_remove(
 mod tests {
     use super::*;
     use std::collections::HashSet;
+    use std::fs;
+    use tempfile::tempdir;
 
     mod pattern_tests {
         use super::*;
@@ -751,6 +753,44 @@ mod tests {
                 SHRED_NAME_CHARSET.len(),
                 "单字符名字应该生成所有可能的组合"
             );
+        }
+    }
+
+    mod remove_method_tests {
+        use super::*;
+
+        #[test]
+        fn test_do_remove_unlink() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test").unwrap();
+
+            let result = shred_do_remove(
+                &file_path,
+                file_path.to_str().unwrap(),
+                false,
+                RemoveMethod::Unlink,
+            );
+
+            assert!(result.is_ok(), "删除应该成功");
+            assert!(!file_path.exists(), "文件应该被删除");
+        }
+
+        #[test]
+        fn test_do_remove_wipe() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test").unwrap();
+
+            let result = shred_do_remove(
+                &file_path,
+                file_path.to_str().unwrap(),
+                false,
+                RemoveMethod::Wipe,
+            );
+
+            assert!(result.is_ok(), "删除应该成功");
+            assert!(!file_path.exists(), "文件应该被删除");
         }
     }
 }

@@ -193,25 +193,25 @@ impl Iterator for ShredFilenameIter {
     }
 }
 
-/// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
-/// or randomness
-// The lint warns about a large difference because StdRng is big, but the buffers are much
-// larger anyway, so it's fine.
-#[allow(clippy::large_enum_variant)]
+/// 用于生成擦除数据的写入器
+/// 
+/// # 变体说明
+/// * `Random` - 生成随机数据
+///   - `rng`: 随机数生成器
+///   - `buffer`: 数据缓冲区
+/// * `Pattern` - 生成固定模式数据
+///   - `offset`: 当前偏移量
+///   - `buffer`: 预填充的模式缓冲区
+///   
+/// # 实现说明
+/// 为了提高效率，Pattern 模式使用扩展缓冲区。
+/// 通过调整偏移量，可以从任意位置开始获取模式数据，
+/// 避免了重复填充缓冲区的开销。
 enum BytesWriter {
     Random {
         rng: StdRng,
         buffer: [u8; SHRED_BLOCK_SIZE],
     },
-    // To write patterns we only write to the buffer once. To be able to do
-    // this, we need to extend the buffer with 2 bytes. We can then easily
-    // obtain a buffer starting with any character of the pattern that we
-    // want with an offset of either 0, 1 or 2.
-    //
-    // For example, if we have the pattern ABC, but we want to write a block
-    // of BLOCK_SIZE starting with B, we just pick the slice [1..BLOCK_SIZE+1]
-    // This means that we only have to fill the buffer once and can just reuse
-    // it afterwards.
     Pattern {
         offset: usize,
         buffer: [u8; SHRED_PATTERN_BUFFER_SIZE],

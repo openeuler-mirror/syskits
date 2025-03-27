@@ -694,6 +694,7 @@ fn shred_do_remove(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     mod pattern_tests {
         use super::*;
@@ -719,6 +720,37 @@ mod tests {
             let block = writer.bytes_for_pass(10);
             assert_eq!(block.len(), 10, "应该生成请求的长度");
             assert!(block.iter().all(|&b| b == 0xAA), "应该全是指定的模式");
+        }
+    }
+
+    mod filename_iter_tests {
+        use super::*;
+
+        #[test]
+        fn test_filename_iter_basic() {
+            let iter = ShredFilenameIter::new(2);
+            let names: Vec<_> = iter.take(5).collect();
+
+            assert_eq!(names.len(), 5, "应该生成5个名字");
+            assert!(names.iter().all(|n| n.len() == 2), "名字长度应该是2");
+            assert!(
+                names
+                    .iter()
+                    .all(|n| n.chars().all(|c| SHRED_NAME_CHARSET.contains(&(c as u8)))),
+                "应该只使用允许的字符"
+            );
+        }
+
+        #[test]
+        fn test_filename_iter_uniqueness() {
+            let iter = ShredFilenameIter::new(1);
+            let names: HashSet<_> = iter.collect();
+
+            assert_eq!(
+                names.len(),
+                SHRED_NAME_CHARSET.len(),
+                "单字符名字应该生成所有可能的组合"
+            );
         }
     }
 }

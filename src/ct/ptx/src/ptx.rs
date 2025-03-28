@@ -1112,4 +1112,48 @@ mod tests {
             assert_eq!(filter.word_regex, "\\w+");
         }
     }
+
+    mod word_ref_tests {
+        use super::*;
+
+        #[test]
+        fn test_word_ref_ordering() {
+            let word1 = WordRef {
+                word: "test".to_string(),
+                global_line_nr: 1,
+                local_line_nr: 1,
+                position: 0,
+                position_end: 4,
+                filename: "test.txt".to_string(),
+            };
+
+            let word2 = WordRef {
+                word: "test".to_string(),
+                global_line_nr: 2,
+                local_line_nr: 1,
+                position: 0,
+                position_end: 4,
+                filename: "test.txt".to_string(),
+            };
+
+            assert!(word1 < word2);
+        }
+    }
+
+    mod string_manipulation_tests {
+        use super::*;
+
+        #[test]
+        fn test_trim_broken_word_right() {
+            let s: Vec<char> = "hello world".chars().collect();
+            assert_eq!(trim_broken_word_right(&s, 0, 7), 6); // "hello"
+            assert_eq!(trim_broken_word_right(&s, 6, 11), 11); // "world"
+        }
+
+        #[test]
+        fn test_trim_idx() {
+            let s: Vec<char> = "  hello  ".chars().collect();
+            assert_eq!(trim_idx(&s, 0, 8), (2, 7));
+        }
+    }
 }

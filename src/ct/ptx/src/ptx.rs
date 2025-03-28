@@ -1023,3 +1023,44 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    mod config_tests {
+        use super::*;
+
+        #[test]
+        fn test_get_config_default() {
+            let matches = ct_app().try_get_matches_from(vec!["ptx"]).unwrap();
+            let result = get_config(&matches);
+            assert!(result.is_err()); // GNU extensions not implemented
+        }
+
+        #[test]
+        fn test_get_config_traditional() {
+            let matches = ct_app().try_get_matches_from(vec!["ptx", "-G"]).unwrap();
+            let config = get_config(&matches).unwrap();
+            assert!(!config.is_gnu_ext);
+            assert!(matches!(config.format, OutFormat::Roff));
+            assert_eq!(config.context_regex, "[^ \t\n]+");
+        }
+
+        #[test]
+        fn test_get_config_with_options() {
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    "ptx", "-G", "-w", "80", "-g", "4", "-M", "test", "-F", "*", "-O",
+                ])
+                .unwrap();
+            let config = get_config(&matches).unwrap();
+            assert_eq!(config.line_width, 80);
+            assert_eq!(config.gap_size, 4);
+            assert_eq!(config.macro_name, "test");
+            assert_eq!(config.trunc_str, "*");
+            assert!(matches!(config.format, OutFormat::Roff));
+        }
+    }
+}

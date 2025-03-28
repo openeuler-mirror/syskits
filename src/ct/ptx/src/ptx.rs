@@ -1477,4 +1477,75 @@ mod tests {
             assert!(word_set.iter().any(|w| w.word == "world"));
         }
     }
+
+    mod reference_tests {
+        use super::*;
+
+        #[test]
+        fn test_ptx_get_reference_auto_ref() {
+            let config = PtxConfig {
+                is_auto_ref: true,
+                is_input_ref: false,
+                ..Default::default()
+            };
+
+            let word_ref = WordRef {
+                word: "test".to_string(),
+                filename: "test.txt".to_string(),
+                local_line_nr: 0,
+                global_line_nr: 1,
+                position: 0,
+                position_end: 4,
+            };
+
+            let context_reg = Regex::new(&config.context_regex).unwrap();
+            let reference = ptx_get_reference(&config, &word_ref, "test line", &context_reg);
+
+            assert_eq!(reference, "test.txt:1");
+        }
+
+        #[test]
+        fn test_ptx_get_reference_input_ref() {
+            let config = PtxConfig {
+                is_auto_ref: false,
+                is_input_ref: true,
+                context_regex: r"\d+".to_string(),
+                ..Default::default()
+            };
+
+            let word_ref = WordRef::default();
+            let context_reg = Regex::new(&config.context_regex).unwrap();
+            let reference = ptx_get_reference(&config, &word_ref, "word 123 text", &context_reg);
+
+            assert_eq!(reference, "123");
+        }
+    }
+
+    mod text_manipulation_tests {
+        use super::*;
+
+        #[test]
+        fn test_trim_broken_word_left() {
+            let text: Vec<char> = "one two three".chars().collect();
+
+            // 测试在单词中间的情况
+            assert_eq!(trim_broken_word_left(&text, 2, text.len()), 3); // "one"的末尾
+
+            // 测试在空格处的情况
+            assert_eq!(trim_broken_word_left(&text, 4, text.len()), 4); // 空格位置
+
+            // 测试在开头的情况
+            assert_eq!(trim_broken_word_left(&text, 0, text.len()), 0);
+
+            // 测试空字符串
+            let empty: Vec<char> = vec![];
+            assert_eq!(trim_broken_word_left(&empty, 0, 0), 0);
+        }
+
+        #[test]
+        fn test_trim_broken_word_left_with_multiple_spaces() {
+            let text: Vec<char> = "one   two".chars().collect();
+            assert_eq!(trim_broken_word_left(&text, 5, text.len()), 5);
+        }
+    }
 }

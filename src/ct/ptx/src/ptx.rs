@@ -1063,4 +1063,53 @@ mod tests {
             assert!(matches!(config.format, OutFormat::Roff));
         }
     }
+
+    mod filter_tests {
+        use super::*;
+
+        fn create_temp_file_with_content(content: &str) -> NamedTempFile {
+            let mut file = NamedTempFile::new().unwrap();
+            write!(file, "{}", content).unwrap();
+            file
+        }
+
+        #[test]
+        fn test_read_word_filter_file() {
+            let file = create_temp_file_with_content("word1\nword2\nword3");
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-o", file.path().to_str().unwrap()])
+                .unwrap();
+
+            let words = read_word_filter_file(&matches, ptx_options::PTX_ONLY_FILE).unwrap();
+            assert_eq!(words.len(), 3);
+            assert!(words.contains("word1"));
+            assert!(words.contains("word2"));
+            assert!(words.contains("word3"));
+        }
+
+        #[test]
+        fn test_read_char_filter_file() {
+            let file = create_temp_file_with_content("abc");
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-b", file.path().to_str().unwrap()])
+                .unwrap();
+
+            let chars = read_char_filter_file(&matches, ptx_options::PTX_BREAK_FILE).unwrap();
+            assert_eq!(chars.len(), 3);
+            assert!(chars.contains(&'a'));
+            assert!(chars.contains(&'b'));
+            assert!(chars.contains(&'c'));
+        }
+
+        #[test]
+        fn test_word_filter_new() {
+            let config = PtxConfig::default();
+            let matches = ct_app().try_get_matches_from(vec!["ptx"]).unwrap();
+
+            let filter = WordFilter::new(&matches, &config).unwrap();
+            assert!(!filter.is_only_specified);
+            assert!(!filter.is_ignore_specified);
+            assert_eq!(filter.word_regex, "\\w+");
+        }
+    }
 }

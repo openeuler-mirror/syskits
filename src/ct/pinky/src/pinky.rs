@@ -498,3 +498,44 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_all {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    mod idle_string_tests {
+        use super::*;
+
+        #[test]
+        fn test_idle_string_less_than_minute() {
+            assert_eq!(
+                pinky_idle_string(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64
+                ),
+                "     "
+            );
+        }
+
+        #[test]
+        fn test_idle_string_hours_minutes() {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            assert_eq!(pinky_idle_string(now - 3665), "01:01"); // 1 hour 1 minute
+        }
+
+        #[test]
+        fn test_idle_string_days() {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            assert_eq!(pinky_idle_string(now - 172800), "2d"); // 2 days
+        }
+    }
+}

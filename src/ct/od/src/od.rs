@@ -757,3 +757,36 @@ fn od_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> Str
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod od_settings_tests {
+        use super::*;
+
+        #[test]
+        fn test_new_with_defaults() {
+            let matches = ct_app().try_get_matches_from(vec!["od"]).unwrap();
+            let settings = OdSettings::new(&matches, &["od".to_string()]).unwrap();
+
+            assert_eq!(settings.byte_order, ByteOrder::Native);
+            assert_eq!(settings.skip_bytes, 0);
+            assert_eq!(settings.read_bytes, None);
+            assert_eq!(settings.line_bytes, 16);
+            assert!(!settings.output_duplicates);
+            assert_eq!(settings.radix, OdRadix::Octal);
+        }
+
+        #[test]
+        fn test_new_with_custom_values() {
+            let matches = ct_app()
+                .try_get_matches_from(vec!["od", "--endian=little", "-j", "100"])
+                .unwrap();
+            let settings = OdSettings::new(&matches, &["od".to_string()]).unwrap();
+
+            assert_eq!(settings.byte_order, ByteOrder::Little);
+            assert_eq!(settings.skip_bytes, 100);
+        }
+    }
+}

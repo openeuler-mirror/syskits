@@ -454,3 +454,47 @@ impl Capitalize for str {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod capitalize_tests {
+        use super::*;
+
+        #[test]
+        fn test_capitalize_empty_string() {
+            assert_eq!("".capitalize(), "");
+        }
+
+        #[test]
+        fn test_capitalize_single_char() {
+            assert_eq!("a".capitalize(), "A");
+            assert_eq!("Z".capitalize(), "Z");
+        }
+
+        #[test]
+        fn test_capitalize_word() {
+            assert_eq!("hello".capitalize(), "Hello");
+            assert_eq!("world".capitalize(), "World");
+        }
+
+        #[test]
+        fn test_capitalize_already_capitalized() {
+            assert_eq!("Hello".capitalize(), "Hello");
+            assert_eq!("WORLD".capitalize(), "WORLD");
+        }
+
+        #[test]
+        fn test_capitalize_with_spaces() {
+            assert_eq!("hello world".capitalize(), "Hello world");
+            assert_eq!(" hello".capitalize(), " hello");
+        }
+
+        #[test]
+        fn test_capitalize_with_special_chars() {
+            assert_eq!("123abc".capitalize(), "123abc");
+            assert_eq!("!hello".capitalize(), "!hello");
+        }
+    }
+}

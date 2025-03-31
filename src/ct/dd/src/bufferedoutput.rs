@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(wstat.writes_complete, 0);
         assert_eq!(wstat.writes_partial, 0);
         assert_eq!(wstat.bytes_total, 0);
-        assert_eq!(output.buf, vec![]);
+        assert_eq!(output.buf, Vec::<u8>::new());
     }
 
     #[test]
@@ -204,7 +204,7 @@ mod tests {
         assert_eq!(wstat.writes_complete, 0);
         assert_eq!(wstat.writes_partial, 1);
         assert_eq!(wstat.bytes_total, 3);
-        assert_eq!(output.buf, vec![]);
+        assert_eq!(output.buf, Vec::<u8>::new());
     }
 }
 
@@ -230,7 +230,7 @@ mod tests_write_blocks {
         assert_eq!(wstat.writes_complete, 3); // 每个字节作为一个完整块
         assert_eq!(wstat.writes_partial, 0);
         assert_eq!(wstat.bytes_total, 3);
-        assert_eq!(output.buf, vec![]); // 所有数据都被写入
+        assert_eq!(output.buf, Vec::<u8>::new()); // 所有数据都被写入
     }
 
     #[test]
@@ -248,7 +248,7 @@ mod tests_write_blocks {
         assert_eq!(wstat.writes_complete, 2);
         assert_eq!(wstat.writes_partial, 0);
         assert_eq!(wstat.bytes_total, 4);
-        assert_eq!(output.buf, vec![]);
+        assert_eq!(output.buf, Vec::<u8>::new());
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod tests_write_blocks {
         assert_eq!(wstat.bytes_total, 6, "Expected 6 bytes written (abc + def)");
         assert_eq!(
             output.buf,
-            vec![],
+            Vec::<u8>::new(),
             "Buffer should be empty after writing complete blocks"
         );
     }
@@ -320,7 +320,11 @@ mod tests_write_blocks {
         );
         assert_eq!(wstat3.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat3.bytes_total, 4, "Expected 4 bytes written");
-        assert_eq!(output.buf, vec![], "Buffer should be empty after write");
+        assert_eq!(
+            output.buf,
+            Vec::<u8>::new(),
+            "Buffer should be empty after write"
+        );
 
         println!("=== Test completed ===\n");
     }
@@ -348,7 +352,11 @@ mod tests_write_blocks {
         );
         assert_eq!(wstat.writes_partial, 1, "Expected one partial write");
         assert_eq!(wstat.bytes_total, 2, "Expected 2 bytes written");
-        assert_eq!(output.buf, vec![], "Buffer should be empty after write");
+        assert_eq!(
+            output.buf,
+            Vec::<u8>::new(),
+            "Buffer should be empty after write"
+        );
 
         // 第二次写入：新的部分块
         let wstat = output.dd_write_blocks(b"xy").unwrap();
@@ -365,7 +373,7 @@ mod tests_write_blocks {
         assert_eq!(wstat.bytes_total, 3, "Expected 3 bytes written");
         assert_eq!(
             output.buf,
-            vec![],
+            Vec::<u8>::new(),
             "Buffer should be empty after complete write"
         );
     }

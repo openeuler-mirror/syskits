@@ -789,4 +789,18 @@ mod tests {
             assert_eq!(settings.skip_bytes, 100);
         }
     }
+
+    mod odexec_tests {
+        use super::*;
+        #[test]
+        fn test_odexec_empty_input() {
+            let mut input_offset = OdInputOffset::new(OdRadix::Octal, 0, None);
+            let mut input = od_open_input_peek_reader(&[], 0, None);
+            let mut input_decoder =
+                OdInputDecoder::new(&mut input, 16, OD_PEEK_BUFFER_SIZE, ByteOrder::Native);
+            let output_info = OutputInfo::new(16, &[], false);
+
+            assert!(odexec(&mut input_offset, &mut input_decoder, &output_info).is_ok());
+        }
+    }
 }

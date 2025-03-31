@@ -829,5 +829,43 @@ mod tests {
             cleanup_test_file(&test_file);
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_od_main_with_options() {
+            let test_file =
+                setup_test_file("test_options.txt", b"Hello, World! This is a test file.");
+            let result = od_main(
+                vec![
+                    OsString::from("od"),
+                    OsString::from("--endian=little"),
+                    OsString::from("-j"),
+                    OsString::from("5"),
+                    OsString::from("-N"),
+                    OsString::from("10"),
+                    OsString::from(&test_file),
+                ]
+                .into_iter(),
+            );
+            cleanup_test_file(&test_file);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_od_main_with_format() {
+            let test_file = setup_test_file("test_format.txt", b"Test data for format");
+            let result = od_main(
+                vec![
+                    OsString::from("od"),
+                    OsString::from("-t"),
+                    OsString::from("x2"),
+                    OsString::from("-w"),
+                    OsString::from("32"),
+                    OsString::from(&test_file),
+                ]
+                .into_iter(),
+            );
+            cleanup_test_file(&test_file);
+            assert!(result.is_ok());
+        }
     }
 }

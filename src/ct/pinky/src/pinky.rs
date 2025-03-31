@@ -538,4 +538,37 @@ mod tests_all {
             assert_eq!(pinky_idle_string(now - 172800), "2d"); // 2 days
         }
     }
+
+    mod gecos_tests {
+        use super::*;
+
+        #[test]
+        fn test_gecos_to_fullname_no_info() {
+            let pw = CtPasswd {
+                user_info: None,
+                ..Default::default()
+            };
+            assert_eq!(gecos_to_fullname(&pw), None);
+        }
+
+        #[test]
+        fn test_gecos_to_fullname_with_comma() {
+            let pw = CtPasswd {
+                name: "test".to_string(),
+                user_info: Some("Test User,Other Info".to_string()),
+                ..Default::default()
+            };
+            assert_eq!(gecos_to_fullname(&pw), Some("Test User".to_string()));
+        }
+
+        #[test]
+        fn test_gecos_to_fullname_with_ampersand() {
+            let pw = CtPasswd {
+                name: "test".to_string(),
+                user_info: Some("& User".to_string()),
+                ..Default::default()
+            };
+            assert_eq!(gecos_to_fullname(&pw), Some("Test User".to_string()));
+        }
+    }
 }

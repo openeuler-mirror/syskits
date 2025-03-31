@@ -867,5 +867,36 @@ mod tests {
             cleanup_test_file(&test_file);
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_od_main_with_duplicate_output() {
+            let test_file = setup_test_file("test_duplicate.txt", b"Duplicate test data");
+            let result = od_main(
+                vec![
+                    OsString::from("od"),
+                    OsString::from("-v"),
+                    OsString::from(&test_file),
+                ]
+                .into_iter(),
+            );
+            cleanup_test_file(&test_file);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_od_main_with_address_radix() {
+            let test_file = setup_test_file("test_radix.txt", b"Address radix test data");
+            let result = od_main(
+                vec![
+                    OsString::from("od"),
+                    OsString::from("-A"),
+                    OsString::from("x"),
+                    OsString::from(&test_file),
+                ]
+                .into_iter(),
+            );
+            cleanup_test_file(&test_file);
+            assert!(result.is_ok());
+        }
     }
 }

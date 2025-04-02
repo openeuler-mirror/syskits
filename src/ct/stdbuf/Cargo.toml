@@ -1,0 +1,28 @@
+[package]
+name = "ct_stdbuf"
+
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+description = "stdbuf ~ (ctutils) run COMMAND with modified standard stream buffering"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/stdbuf"
+
+[lib]
+path = "src/stdbuf.rs"
+
+[dependencies]
+clap = { workspace = true }
+tempfile = { workspace = true }
+ctcore = { workspace = true }
+
+[build-dependencies]
+libstdbuf = { package = "ct_libstdbuf", path = "src/libstdbuf" }
+
+[[bin]]
+name = "stdbuf"
+path = "src/main.rs"

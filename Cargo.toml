@@ -186,6 +186,7 @@ feat_os_unix = [
   "pinky",
   "od",
   "hashsum",
+  "stdbuf"
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -408,6 +409,7 @@ ptx = { optional = true, package = "ct_ptx", path = "src/ct/ptx" }
 pinky = { optional = true, package = "ct_pinky", path = "src/ct/pinky" }
 od = { optional = true, package = "ct_od", path = "src/ct/od" }
 hashsum = { optional = true, package = "ct_hashsum", path = "src/ct/hashsum" }
+stdbuf = { optional = true, package = "ct_stdbuf", path = "src/ct/stdbuf" }
 
 [dev-dependencies]
 conv = "0.3"

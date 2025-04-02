@@ -1,0 +1,346 @@
+/*
+ * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
+// spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
+
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_parse_size::parse_size_u64;
+use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::fs::File;
+use std::io::Write;
+use std::os::unix::process::ExitStatusExt;
+use std::path::PathBuf;
+use std::process;
+use tempfile::TempDir;
+use tempfile::tempdir;
+
+// stdbuf 命令
+//
+// 此模块提供了一个用于调整标准输入、标准输出和标准错误缓冲区的命令行工具。
+// 它允许用户设置不同的缓冲模式，如行缓冲、固定大小缓冲等，并执行指定的命令。
+//
+// 主要功能包括：
+// - 设置标准输入的缓冲模式
+// - 设置标准输出的缓冲模式
+// - 设置标准错误的缓冲模式
+// - 执行指定的命令
+
+// 定义about和usage
+const STDBUF_ABOUT: &str = ct_help_about!("stdbuf.md");
+const STDBUF_USAGE: &str = ct_help_usage!("stdbuf.md");
+const STDBUF_LONG_HELP: &str = ct_help_section!("after help", "stdbuf.md");
+
+// 定义配置标志常量
+pub mod stdbuf_flags {
+    pub const INPUT: &str = "input";
+    pub const INPUT_SHORT: char = 'i';
+    pub const OUTPUT: &str = "output";
+    pub const OUTPUT_SHORT: char = 'o';
+    pub const ERROR: &str = "error";
+    pub const ERROR_SHORT: char = 'e';
+    pub const COMMAND: &str = "command";
+}
+
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
+
+/// 缓冲区类型的枚举
+#[derive(Debug, Clone)]
+enum BufferType {
+    /// 使用默认的缓冲设置
+    Default,
+    /// 行缓冲模式
+    Line,
+    /// 指定大小的缓冲区（以字节为单位）
+    Size(usize),
+}
+
+/// stdbuf 命令的配置结构体
+///
+/// 此结构体包含标准输入、标准输出和标准错误的缓冲区配置
+struct StdbufFlags {
+    /// 标准输入的缓冲设置
+    stdin: BufferType,
+    /// 标准输出的缓冲设置
+    stdout: BufferType,
+    /// 标准错误的缓冲设置
+    stderr: BufferType,
+    /// 要执行的命令及其参数
+    command_args: Vec<String>,
+}
+
+impl Default for StdbufFlags {
+    fn default() -> Self {
+        Self {
+            stdin: BufferType::Default,
+            stdout: BufferType::Default,
+            stderr: BufferType::Default,
+            command_args: Vec::new(),
+        }
+    }
+}
+
+impl StdbufFlags {
+    /// 从命令行参数创建 StdbufFlags 实例
+    ///
+    /// # 参数
+    /// * `matches` - 解析后的命令行参数
+    ///
+    /// # 返回值
+    /// * `CTResult<Self>` - 成功创建的配置或错误
+    fn new(matches: ArgMatches) -> CTResult<Self> {
+        // 解析标准输入的缓冲模式
+        let stdin = Self::parse_buffer_option(&matches, stdbuf_flags::INPUT)
+            .map_err(|e| CTsageError::new(125, e))?;
+
+        // 解析标准输出的缓冲模式
+        let stdout = Self::parse_buffer_option(&matches, stdbuf_flags::OUTPUT)
+            .map_err(|e| CTsageError::new(125, e))?;
+
+        // 解析标准错误的缓冲模式
+        let stderr = Self::parse_buffer_option(&matches, stdbuf_flags::ERROR)
+            .map_err(|e| CTsageError::new(125, e))?;
+
+        // 提取命令和参数
+        let command_args = matches
+            .get_many::<String>(stdbuf_flags::COMMAND)
+            .map_or_else(Vec::new, |v| v.cloned().collect());
+
+        if command_args.is_empty() {
+            return Err(CtSimpleError::new(125, "command is required"));
+        }
+
+        Ok(Self {
+            stdin,
+            stdout,
+            stderr,
+            command_args,
+        })
+    }
+
+    /// 解析缓冲区选项
+    ///
+    /// # 参数
+    /// * `matches` - 解析后的命令行参数
+    /// * `option_name` - 选项名称
+    ///
+    /// # 返回值
+    /// * `Result<BufferType, String>` - 解析后的缓冲类型或错误信息
+    fn parse_buffer_option(matches: &ArgMatches, option_name: &str) -> Result<BufferType, String> {
+        match matches.get_one::<String>(option_name) {
+            Some(value) => match value.as_str() {
+                "L" => {
+                    if option_name == stdbuf_flags::INPUT {
+                        Err("line buffering stdin is meaningless".to_string())
+                    } else {
+                        Ok(BufferType::Line)
+                    }
+                }
+                x => parse_size_u64(x).map_or_else(
+                    |e| Err(format!("invalid mode {e}")),
+                    |m| {
+                        Ok(BufferType::Size(m.try_into().map_err(|_| {
+                            format!("invalid mode '{x}': Value too large for defined data type")
+                        })?))
+                    },
+                ),
+            },
+            None => Ok(BufferType::Default),
+        }
+    }
+
+    /// 设置命令的环境变量
+    ///
+    /// # 参数
+    /// * `command` - 要配置的命令
+    /// * `buffer_name` - 环境变量名称
+    /// * `buffer_type` - 缓冲区类型
+    fn set_command_env(
+        &self,
+        command: &mut process::Command,
+        buffer_name: &str,
+        buffer_type: &BufferType,
+    ) {
+        match buffer_type {
+            BufferType::Size(m) => {
+                command.env(buffer_name, m.to_string());
+            }
+            BufferType::Line => {
+                command.env(buffer_name, "L");
+            }
+            BufferType::Default => {}
+        }
+    }
+
+    /// 配置并执行命令
+    ///
+    /// # 返回值
+    /// * `CTResult<()>` - 执行结果
+    fn execute_command(&self) -> CTResult<()> {
+        // 获取命令和参数
+        let command_name = &self.command_args[0];
+        let command_params = &self.command_args[1..];
+
+        // 创建命令
+        let mut command = process::Command::new(command_name);
+        command.args(command_params);
+
+        // 创建临时目录并准备预加载库
+        let tmp_dir =
+            tempdir().map_err_context(|| "failed to create temporary directory".to_string())?;
+        let (preload_env, libstdbuf) = self.get_preload_env(&tmp_dir)?;
+
+        // 设置环境变量
+        command.env(preload_env, libstdbuf);
+        self.set_command_env(&mut command, "_STDBUF_I", &self.stdin);
+        self.set_command_env(&mut command, "_STDBUF_O", &self.stdout);
+        self.set_command_env(&mut command, "_STDBUF_E", &self.stderr);
+
+        // 执行命令并等待完成
+        let mut process = command
+            .spawn()
+            .map_err_context(|| format!("failed to execute process: {}", command_name))?;
+
+        let status = process
+            .wait()
+            .map_err_context(|| "failed to wait for process".to_string())?;
+
+        // 处理退出状态
+        match status.code() {
+            Some(i) => {
+                if i == 0 {
+                    Ok(())
+                } else {
+                    Err(i.into())
+                }
+            }
+            None => Err(CtSimpleError::new(
+                1,
+                format!("process killed by signal {}", status.signal().unwrap()),
+            )),
+        }
+    }
+
+    /// 获取预加载环境变量和库路径
+    ///
+    /// # 参数
+    /// * `tmp_dir` - 临时目录
+    ///
+    /// # 返回值
+    /// * `CTResult<(String, PathBuf)>` - 环境变量名和库路径
+    fn get_preload_env(&self, tmp_dir: &TempDir) -> CTResult<(String, PathBuf)> {
+        let (preload, extension) = preload_strings()?;
+        let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
+
+        let mut file = File::create(&inject_path)
+            .map_err_context(|| "failed to create libstdbuf file".to_string())?;
+        file.write_all(STDBUF_INJECT)
+            .map_err_context(|| "failed to write to libstdbuf file".to_string())?;
+
+        Ok((preload.to_owned(), inject_path))
+    }
+}
+
+/// 获取平台特定的预加载环境变量名和扩展名
+///
+/// # 返回值
+/// * `CTResult<(&'static str, &'static str)>` - 环境变量名和扩展名
+#[cfg(target_os = "linux")]
+fn preload_strings() -> CTResult<(&'static str, &'static str)> {
+    Ok(("LD_PRELOAD", "so"))
+}
+
+/// 获取平台特定的预加载环境变量名和扩展名
+///
+/// # 返回值
+/// * `CTResult<(&'static str, &'static str)>` - 环境变量名和扩展名或不支持错误
+#[cfg(not(target_os = "linux"))]
+fn preload_strings() -> CTResult<(&'static str, &'static str)> {
+    Err(CtSimpleError::new(
+        1,
+        "Command not supported for this operating system!",
+    ))
+}
+
+/// 主函数入口
+///
+/// # 参数
+/// * `args` - 命令行参数
+///
+/// # 返回值
+/// * `CTResult<()>` - 执行结果
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    stdbuf_main(args)
+}
+
+/// stdbuf 主执行函数
+///
+/// # 参数
+/// * `args` - 命令行参数
+///
+/// # 返回值
+/// * `CTResult<()>` - 执行结果
+pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
+    // 解析命令行参数
+    let matches = ct_app().try_get_matches_from(args)?;
+
+    // 创建配置对象
+    let settings = StdbufFlags::new(matches)?;
+
+    // 执行命令
+    settings.execute_command()
+}
+
+/// 创建命令行参数解析器
+///
+/// # 返回值
+/// * `Command` - 配置好的命令行解析器
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = STDBUF_ABOUT;
+    let usage_description = ct_format_usage(STDBUF_USAGE);
+    let args = vec![
+        Arg::new(stdbuf_flags::INPUT)
+            .long(stdbuf_flags::INPUT)
+            .short(stdbuf_flags::INPUT_SHORT)
+            .help("adjust standard input stream buffering")
+            .value_name("MODE")
+            .required_unless_present_any([stdbuf_flags::OUTPUT, stdbuf_flags::ERROR]),
+        Arg::new(stdbuf_flags::OUTPUT)
+            .long(stdbuf_flags::OUTPUT)
+            .short(stdbuf_flags::OUTPUT_SHORT)
+            .help("adjust standard output stream buffering")
+            .value_name("MODE")
+            .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::ERROR]),
+        Arg::new(stdbuf_flags::ERROR)
+            .long(stdbuf_flags::ERROR)
+            .short(stdbuf_flags::ERROR_SHORT)
+            .help("adjust standard error stream buffering")
+            .value_name("MODE")
+            .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::OUTPUT]),
+        Arg::new(stdbuf_flags::COMMAND)
+            .action(ArgAction::Append)
+            .hide(true)
+            .required(true)
+            .value_hint(clap::ValueHint::CommandName),
+    ];
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .after_help(STDBUF_LONG_HELP)
+        .override_usage(usage_description)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
+        .args(&args)
+}

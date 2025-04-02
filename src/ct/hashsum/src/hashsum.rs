@@ -1390,4 +1390,133 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod unescape_filename_tests {
+        use super::*;
+
+        #[test]
+        fn test_unescape_filename_no_escape_chars() {
+            // 测试没有转义字符的情况
+            let filename = "normal_filename.txt";
+            let (unescaped, prefix) = unescape_filename(filename);
+            assert_eq!(unescaped, "normal_filename.txt");
+            assert_eq!(prefix, "");
+        }
+
+        #[test]
+        fn test_unescape_filename_with_backslash() {
+            // 测试包含反斜杠的情况
+            let filename = "file\\\\with\\\\backslashes.txt";
+            let (unescaped, prefix) = unescape_filename(filename);
+            assert_eq!(unescaped, "file\\with\\backslashes.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_unescape_filename_with_newline() {
+            // 测试包含换行符的情况
+            let filename = "file\\nwith\\nnewlines.txt";
+            let (unescaped, prefix) = unescape_filename(filename);
+            assert_eq!(unescaped, "file\nwith\nnewlines.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_unescape_filename_with_carriage_return() {
+            // 测试包含回车符的情况
+            let filename = "file\\rwith\\rcarriage-returns.txt";
+            let (unescaped, prefix) = unescape_filename(filename);
+            assert_eq!(unescaped, "file\rwith\rcarriage-returns.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_unescape_filename_with_mixed_escapes() {
+            // 测试混合多种转义字符的情况
+            let filename = "file\\\\with\\nmixed\\rescapes.txt";
+            let (unescaped, prefix) = unescape_filename(filename);
+            assert_eq!(unescaped, "file\\with\nmixed\rescapes.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_unescape_filename_empty_string() {
+            // 测试空字符串的情况
+            let filename = "";
+            let (unescaped, prefix) = unescape_filename(filename);
+            assert_eq!(unescaped, "");
+            assert_eq!(prefix, "");
+        }
+    }
+
+    #[cfg(test)]
+    mod escape_filename_tests {
+        use super::*;
+        use std::path::Path;
+
+        #[test]
+        fn test_escape_filename_no_special_chars() {
+            // 测试没有特殊字符的情况
+            let filename = Path::new("normal_filename.txt");
+            let (escaped, prefix) = escape_filename(filename);
+            assert_eq!(escaped, "normal_filename.txt");
+            assert_eq!(prefix, "");
+        }
+
+        #[test]
+        fn test_escape_filename_with_backslash() {
+            // 测试包含反斜杠的情况
+            #[cfg(unix)]
+            let filename_str = "file\\with\\backslashes.txt";
+            #[cfg(windows)]
+            let filename_str = "file\\with\\backslashes.txt";
+
+            let filename = Path::new(filename_str);
+            let (escaped, prefix) = escape_filename(filename);
+
+            assert_eq!(escaped, "file\\\\with\\\\backslashes.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_escape_filename_with_newline() {
+            // 在Windows上直接创建带换行符的文件名可能有问题，所以这个测试可能需要mock
+            // 这里用一个简单的例子来模拟
+            let filename_str = "file\nwith\nnewlines.txt";
+            let filename = Path::new(filename_str);
+            let (escaped, prefix) = escape_filename(filename);
+            assert_eq!(escaped, "file\\nwith\\nnewlines.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_escape_filename_with_carriage_return() {
+            // 同样，这里用一个简单的例子来模拟
+            let filename_str = "file\rwith\rcarriage-returns.txt";
+            let filename = Path::new(filename_str);
+            let (escaped, prefix) = escape_filename(filename);
+            assert_eq!(escaped, "file\\rwith\\rcarriage-returns.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_escape_filename_with_mixed_special_chars() {
+            // 测试混合多种特殊字符的情况
+            let filename_str = "file\\\nwith\rmixed_chars.txt";
+            let filename = Path::new(filename_str);
+            let (escaped, prefix) = escape_filename(filename);
+            assert_eq!(escaped, "file\\\\\\nwith\\rmixed_chars.txt");
+            assert_eq!(prefix, "\\");
+        }
+
+        #[test]
+        fn test_escape_filename_empty_string() {
+            // 测试空字符串的情况
+            let filename = Path::new("");
+            let (escaped, prefix) = escape_filename(filename);
+            assert_eq!(escaped, "");
+            assert_eq!(prefix, "");
+        }
+    }
 }

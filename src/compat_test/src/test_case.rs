@@ -176,6 +176,7 @@ pub struct TestSuite {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TestCase {
     ///标准输入
+    #[serde(default)]
     pub tstdin: String,
     /// 命令名称
     pub command: String,

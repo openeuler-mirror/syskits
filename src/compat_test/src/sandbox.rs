@@ -450,6 +450,7 @@ impl IsolatedSandbox {
         &mut self,
         cmd: &str,
         args: &[String],
+        stdin_content: Option<&str>,
         is_record_result: bool,
     ) -> Result<CommandResult> {
         self.debug_fmt(format_args!("Executing command: {} {:?}", cmd, args));
@@ -458,38 +459,62 @@ impl IsolatedSandbox {
             self.current_dir
         ));
 
-        if cmd.contains('|') {
-            // 如果包含管道，使用 shell 执行完整命令
-            let mut full_cmd = cmd.to_string();
-            for arg in args {
-                full_cmd.push(' ');
-                full_cmd.push_str(arg);
-            }
-            return self.execute_shell_command(&full_cmd);
-        }
-
         let mut command = std::process::Command::new(cmd);
         command
             .args(args)
             .current_dir(&self.current_dir)
-            .envs(&self.current_env);
+            .envs(&self.current_env)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
-        // 使用 output() 的结果，无论成功还是失败
-        let result = match command.output() {
-            Ok(output) => {
-                self.debug_fmt(format_args!("Command executed successfully"));
-                CommandResult::from(output)
-            }
+        // 启动命令
+        let mut child = match command.spawn() {
+            Ok(child) => child,
             Err(e) => {
                 self.debug_fmt(format_args!("Command execution failed: {}", e));
                 self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
-                CommandResult {
+                return Ok(CommandResult {
                     stdout: String::new(),
                     stderr: format!("Failed to execute command: {}", e),
                     exit_code: 127, // Common error code for command not found
-                }
+                });
             }
         };
+
+        // 如果有标准输入内容，写入到命令的标准输入
+        if let Some(content) = stdin_content {
+            if !content.is_empty() {
+                if let Some(stdin) = child.stdin.as_mut() {
+                    if let Err(e) = stdin.write_all(content.as_bytes()) {
+                        self.debug_fmt(format_args!("Failed to write to stdin: {}", e));
+                        return Ok(CommandResult {
+                            stdout: String::new(),
+                            stderr: format!("Failed to write to stdin: {}", e),
+                            exit_code: 1,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 等待命令执行完成并获取输出
+        let output = match child.wait_with_output() {
+            Ok(output) => {
+                self.debug_fmt(format_args!("Command executed successfully"));
+                output
+            }
+            Err(e) => {
+                self.debug_fmt(format_args!("Failed to wait for command: {}", e));
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("Failed to wait for command: {}", e),
+                    exit_code: 1,
+                });
+            }
+        };
+
+        let result = CommandResult::from(output);
 
         self.debug_fmt(format_args!("Command execution results:"));
         self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
@@ -550,7 +575,11 @@ impl IsolatedSandbox {
             .arg("-c")
             .arg(command)
             .current_dir(&self.current_dir)
-            .envs(&self.current_env);
+            .envs(&self.current_env)
+            // 设置标准输入/输出/错误
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
         self.debug_fmt(format_args!(
             "Full command: cd {:?} && /bin/sh -c {:?}",

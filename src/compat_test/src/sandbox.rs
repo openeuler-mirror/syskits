@@ -616,3 +616,188 @@ impl IsolatedSandbox {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    #[test]
+    fn test_sandbox_new() -> Result<()> {
+        let sandbox = IsolatedSandbox::new(true)?;
+        assert!(sandbox.path().exists());
+        assert!(sandbox.path().is_dir());
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_simple() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let result = sandbox.execute_command("echo", &["hello".to_string()], None, true)?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout.trim(), "hello");
+        assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_stdin() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let result = sandbox.execute_command("cat", &[], Some("test input"), true)?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "test input");
+        assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_not_found() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let result = sandbox.execute_command("nonexistent_command", &[], None, true)?;
+        assert_eq!(result.exit_code, 127);
+        assert!(result.stderr.contains("Failed to execute command"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_shell_command() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let result = sandbox.execute_shell_command("echo 'hello world'")?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout.trim(), "hello world");
+        assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_builtin_cd() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 创建测试目录
+        fs::create_dir_all(sandbox.path().join("test_dir"))?;
+        
+        // 测试切换到存在的目录
+        let result = sandbox.builtin_cd("cd test_dir")?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(sandbox.get_current_dir(), &sandbox.path().join("test_dir"));
+
+        // 测试切换到不存在的目录
+        let result = sandbox.builtin_cd("cd nonexistent_dir")?;
+        assert_eq!(result.exit_code, 1);
+        assert!(result.stderr.contains("No such file or directory"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_builtin_export() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 测试设置环境变量
+        let result = sandbox.builtin_export("export TEST_VAR=test_value")?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(sandbox.get_env("TEST_VAR"), Some("test_value"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_builtin_umask() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 测试设置 umask
+        let result = sandbox.builtin_umask("umask 022")?;
+        assert_eq!(result.exit_code, 0);
+        
+        // 测试获取 umask
+        let result = sandbox.builtin_umask("umask")?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout.trim(), "022");
+        
+        // 测试无效的 umask
+        let result = sandbox.builtin_umask("umask invalid")?;
+        assert_eq!(result.exit_code, 1);
+        assert!(result.stderr.contains("invalid mode"));
+        Ok(())
+    }
+
+    /*#[test]
+    fn test_resource_limits() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 测试设置 CPU 时间限制
+        sandbox.set_cpu_time_limit(10)?;
+        
+        // 测试设置内存限制
+        sandbox.set_memory_limit(1024 * 1024)?;
+        
+        // 测试设置打开文件数限制
+        sandbox.set_open_files_limit(100)?;
+        Ok(())
+    }*/
+
+    #[test]
+    fn test_environment_variables() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 测试添加环境变量
+        sandbox.add_env("TEST_VAR", "test_value");
+        assert_eq!(sandbox.get_env("TEST_VAR"), Some("test_value"));
+        
+        // 测试获取不存在的环境变量
+        assert_eq!(sandbox.get_env("NONEXISTENT_VAR"), None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_command_execution_with_null_bytes() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 创建包含空字节的文件
+        let test_file = sandbox.path().join("test.bin");
+        let mut file = File::create(&test_file)?;
+        file.write_all(&[0, 1, 2, 0, 3, 4])?;
+        
+        // 读取包含空字节的文件
+        let result = sandbox.execute_command("cat", &[test_file.to_str().unwrap().to_string()], None, true)?;
+        assert_eq!(result.exit_code, 0);
+        assert!(result.stdout.contains('\0'));
+        Ok(())
+    }
+
+    #[test]
+    fn test_command_execution_with_large_output() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 生成大量输出的命令
+        let result = sandbox.execute_command(
+            "bash",
+            &["-c".to_string(), "for i in {1..1000}; do echo $i; done".to_string()],
+            None,
+            true
+        )?;
+        
+        assert_eq!(result.exit_code, 0);
+        assert!(result.stdout.lines().count() == 1000);
+        Ok(())
+    }
+
+    #[test]
+    fn test_command_execution_timeout() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        
+        // 设置 CPU 时间限制为 1 秒
+        sandbox.set_cpu_time_limit(1)?;
+        
+        // 执行一个耗时的命令
+        let result = sandbox.execute_command(
+            "bash",
+            &["-c".to_string(), "while true; do : ; done".to_string()],
+            None,
+            true
+        )?;
+        
+        // 命令应该因为超时而被终止
+        assert_ne!(result.exit_code, 0);
+        Ok(())
+    }
+}

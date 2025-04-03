@@ -1,6 +1,7 @@
 {
   "tests": [
     {
+      "tstdin": "",
       "command": "chmod",
       "description": "测试文件权限修改",
       "setup_commands": [

@@ -1,6 +1,7 @@
 {
     "tests": [
         {
+            "tstdin": "",
             "command": "echo",
             "description": "测试忽略stdout比较",
             "args": ["Hello, World!"],
@@ -13,6 +14,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "echo",
             "description": "测试忽略stderr比较",
             "args": ["Hello, World!"],
@@ -24,7 +26,8 @@
                 }
             }
         },
-        {
+        {   
+            "tstdin": "",
             "command": "echo",
             "description": "测试忽略exit_code比较",
             "args": ["Hello, World!"],
@@ -37,6 +40,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "echo",
             "description": "测试忽略所有比较",
             "args": ["Hello, World!"],
@@ -49,6 +53,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "echo",
             "description": "测试验证命令忽略stdout比较",
             "args": ["Hello, World!"],
@@ -69,6 +74,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "echo",
             "description": "测试验证命令忽略stderr比较",
             "args": ["Hello, World!"],
@@ -89,6 +95,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "echo",
             "description": "测试验证命令忽略所有比较",
             "args": ["Hello, World!"],

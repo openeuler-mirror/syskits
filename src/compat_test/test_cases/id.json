@@ -1,6 +1,7 @@
 {
     "tests": [
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令默认输出",
             "args": [],
@@ -33,6 +34,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令有效用户ID选项（短选项）",
             "args": ["-u"],
@@ -59,6 +61,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令有效用户ID选项（长选项）",
             "args": ["--user"],
@@ -91,6 +94,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令有效组ID选项（短选项）",
             "args": ["-g"],
@@ -117,6 +121,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令有效组ID选项（长选项）",
             "args": ["--group"],
@@ -149,6 +154,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令所有组ID选项（短选项）",
             "args": ["-G"],
@@ -175,6 +181,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令所有组ID选项（长选项）",
             "args": ["--groups"],
@@ -207,6 +214,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令名称输出选项（用户ID）",
             "args": ["-n", "-u"],
@@ -227,6 +235,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令名称输出选项（组ID）",
             "args": ["-n", "-g"],
@@ -247,6 +256,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令名称输出选项（所有组）",
             "args": ["-n", "-G"],
@@ -267,6 +277,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令真实ID选项（用户ID）",
             "args": ["-r", "-u"],
@@ -287,6 +298,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令真实ID选项（组ID）",
             "args": ["-r", "-g"],
@@ -307,6 +319,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令安全上下文选项",
             "args": ["-Z"],
@@ -319,6 +332,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令零分隔符选项（用户ID）",
             "args": ["-z", "-u"],
@@ -337,6 +351,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令零分隔符选项（组ID）",
             "args": ["-z", "-g"],
@@ -355,6 +370,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令零分隔符选项（所有组）",
             "args": ["-z", "-G"],
@@ -373,6 +389,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令帮助信息",
             "args": ["--help"],
@@ -411,6 +428,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令版本信息",
             "args": ["--version"],
@@ -431,6 +449,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令无效用户",
             "args": ["invalid_user"],
@@ -451,6 +470,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令组合选项 -u -g",
             "args": ["-u", "-g"],
@@ -471,6 +491,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令指定有效用户root",
             "args": ["root"],
@@ -491,6 +512,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令指定有效用户并获取用户ID",
             "args": ["-u", "root"],
@@ -503,6 +525,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令指定有效用户并获取组ID",
             "args": ["-g", "root"],
@@ -515,6 +538,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令指定nobody用户",
             "args": ["nobody"],
@@ -535,6 +559,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令指定多个用户（不支持）",
             "args": ["root", "nobody"],
@@ -547,6 +572,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令在POSIXLY_CORRECT环境下的行为",
             "args": [],
@@ -585,6 +611,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令无效选项",
             "args": ["--invalid-option"],
@@ -605,6 +632,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令名称和真实ID组合（用户ID）",
             "args": ["-r", "-n", "-u"],
@@ -625,6 +653,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令名称和真实ID组合（组ID）",
             "args": ["-r", "-n", "-g"],
@@ -645,6 +674,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "id",
             "description": "测试id命令零分隔符与名称组合",
             "args": ["-z", "-n", "-u"],

@@ -1,6 +1,7 @@
 {
     "tests": [
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "基本路径解析",
             "setup_commands": [
@@ -26,6 +27,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "符号链接解析",
             "setup_commands": [
@@ -53,6 +55,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "不存在路径(-e)",
             "args": [
@@ -67,6 +70,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "强制解析不存在路径(-m)",
             "args": [
@@ -86,6 +90,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "逻辑解析(-L)处理相对路径",
             "setup_commands": [
@@ -113,6 +118,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "物理解析(-P)处理符号链接",
             "setup_commands": [
@@ -140,6 +146,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "静默模式(-q)处理错误",
             "args": [
@@ -154,6 +161,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "相对路径转换(--relative-to)",
             "setup_commands": [
@@ -175,6 +183,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "相对基准目录(--relative-base)在基准目录内",
             "setup_commands": [
@@ -201,6 +210,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "相对基准目录(--relative-base)在基准目录外",
             "setup_commands": [
@@ -227,6 +237,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "禁用符号链接展开(-s)",
             "setup_commands": [
@@ -255,6 +266,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "NUL终止符(-z)",
             "setup_commands": [
@@ -285,6 +297,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "多路径输入",
             "setup_commands": [
@@ -316,6 +329,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "标准输入处理",
             "setup_commands": [
@@ -342,6 +356,7 @@
             ]
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "错误参数处理",
             "args": [
@@ -354,6 +369,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "帮助信息",
             "args": [
@@ -366,6 +382,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "版本信息",
             "args": [
@@ -378,6 +395,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "组合选项测试(-L -s)",
             "setup_commands": [
@@ -406,6 +424,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "realpath",
             "description": "组合选项测试(-P -m)",
             "setup_commands": [

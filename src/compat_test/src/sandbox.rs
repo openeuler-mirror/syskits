@@ -458,6 +458,16 @@ impl IsolatedSandbox {
             self.current_dir
         ));
 
+        if cmd.contains('|') {
+            // 如果包含管道，使用 shell 执行完整命令
+            let mut full_cmd = cmd.to_string();
+            for arg in args {
+                full_cmd.push(' ');
+                full_cmd.push_str(arg);
+            }
+            return self.execute_shell_command(&full_cmd);
+        }
+
         let mut command = std::process::Command::new(cmd);
         command
             .args(args)

@@ -1,6 +1,7 @@
 {
   "tests": [
     {
+      "tstdin": "",
       "command": "timeout",
       "description": "使用 SIGKILL 信号终止长时间运行的进程",
       "args": [
@@ -23,6 +24,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "timeout",
       "description": "使用 -k 选项在发送 SIGTERM 后延迟发送 SIGKILL",
       "args": [
@@ -46,6 +48,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "timeout",
       "description": "使用 --preserve-status 选项保留被终止进程的退出状态",
       "args": [
@@ -65,6 +68,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "timeout",
       "description": "使用 --foreground 选项在前台运行命令",
       "args": [
@@ -90,6 +94,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "timeout",
       "description": "测试超时命令，忽略stdout输出比较",
       "args": [

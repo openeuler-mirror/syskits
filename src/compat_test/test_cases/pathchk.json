@@ -1,6 +1,7 @@
 {
   "tests": [
     {
+      "tstdin": "",
       "command": "pathchk",
       "description": "测试基本的短文件名",
       "args": [
@@ -21,6 +22,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "pathchk",
       "description": "测试最大长度文件名（255字符）",
       "args": [
@@ -41,6 +43,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "pathchk",
       "description": "测试包含特殊字符的文件名",
       "args": [
@@ -62,6 +65,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "pathchk",
       "description": "测试空文件名",
       "args": [
@@ -83,6 +87,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "pathchk",
       "description": "测试深层嵌套路径",
       "args": [
@@ -103,6 +108,7 @@
       ]
     },
     {
+      "tstdin": "",
       "command": "pathchk",
       "description": "测试不存在的路径",
       "args": [

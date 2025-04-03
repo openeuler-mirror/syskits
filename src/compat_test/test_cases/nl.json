@@ -1,6 +1,7 @@
 {
     "tests": [
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试基本行号功能",
         "setup_commands": [
@@ -17,6 +18,7 @@
         "tags": ["basic", "default-options"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试空行处理",
         "setup_commands": [
@@ -39,6 +41,7 @@
         "tags": ["empty-lines", "non-empty-numbering"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试所有行编号样式",
         "setup_commands": [
@@ -61,6 +64,7 @@
         "tags": ["numbering-style", "all-lines"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
@@ -83,6 +87,7 @@
         "tags": ["numbering-style", "no-numbers"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试正则表达式匹配行编号",
         "setup_commands": [
@@ -103,6 +108,7 @@
         "tags": ["regex", "pattern-matching"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试分节符功能",
         "setup_commands": [
@@ -125,6 +131,7 @@
         "tags": ["section-delimiter", "headers-footers"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试行号格式化选项",
         "setup_commands": [
@@ -147,6 +154,7 @@
         "tags": ["number-format", "width"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试行号增量和起始行号",
         "setup_commands": [
@@ -169,6 +177,7 @@
         "tags": ["increment", "starting-number"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试空行合并功能",
         "setup_commands": [
@@ -191,6 +200,7 @@
         "tags": ["join-blank-lines"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试自定义分隔符",
         "setup_commands": [
@@ -213,6 +223,7 @@
         "tags": ["separator"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试不存在的文件处理",
         "args": ["nonexistent.txt"],
@@ -226,6 +237,7 @@
         "tags": ["error-handling", "file-not-found"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试标准输入处理",
         "args": ["-"],
@@ -240,6 +252,7 @@
         "tags": ["stdin", "input-handling"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试不重置各节编号（-p选项）",
         "setup_commands": [
@@ -262,6 +275,7 @@
         "tags": ["section-delimiter", "no-renumber"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试左对齐无前导零格式（-nln选项）",
         "setup_commands": [
@@ -284,6 +298,7 @@
         "tags": ["number-format", "left-justified"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试右对齐无前导零格式（-nrn选项，默认选项）",
         "setup_commands": [
@@ -306,6 +321,7 @@
         "tags": ["number-format", "right-justified"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试自定义分节符",
         "setup_commands": [
@@ -328,6 +344,7 @@
         "tags": ["section-delimiter", "custom-delimiter"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试正则表达式匹配编号正确用法",
         "setup_commands": [
@@ -349,6 +366,7 @@
         "tags": ["regex", "pattern-matching", "body-numbering"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试页眉编号样式",
         "setup_commands": [
@@ -371,6 +389,7 @@
         "tags": ["header-numbering", "nonempty-lines"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试页脚编号样式",
         "setup_commands": [
@@ -393,6 +412,7 @@
         "tags": ["footer-numbering", "nonempty-lines"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试超大行宽（-w选项）",
         "setup_commands": [
@@ -415,6 +435,7 @@
         "tags": ["number-width", "large-width"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理",
         "setup_commands": [
@@ -438,6 +459,7 @@
         "tags": ["multiple-files"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试负数起始行号",
         "setup_commands": [
@@ -460,6 +482,7 @@
         "tags": ["negative-starting-number"]
       },
       {
+        "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",
         "setup_commands": [

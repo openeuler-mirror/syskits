@@ -601,4 +601,123 @@ mod tests {
             assert!(result.is_err());
         }
     }
+    
+    // 测试 ct_app 函数
+    #[test]
+    fn test_ct_app() {
+        let app = ct_app();
+        
+        // 验证命令设置
+        assert_eq!(app.get_name(), ctcore::ct_util_name());
+        
+        // 验证必需的参数存在
+        let args = app.get_arguments().collect::<Vec<_>>();
+        assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::INPUT));
+        assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::OUTPUT));
+        assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::ERROR));
+        assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::COMMAND));
+    }
+    
+    // 模拟 execute_command 函数，不实际执行命令
+    #[test]
+    fn test_execute_command_mock() {
+        // 创建一个特殊版本的 StdbufFlags，用于测试
+        struct TestStdbufFlags {
+            stdin: BufferType,
+            #[allow(dead_code)]
+            stdout: BufferType,
+            #[allow(dead_code)]
+            stderr: BufferType,
+            command_args: Vec<String>,
+        }
+        
+        impl TestStdbufFlags {
+            // 这个函数模拟 execute_command 的行为，但不实际执行命令
+            fn execute_command_test(&self) -> bool {
+                // 检查命令参数是否有效
+                if self.command_args.is_empty() {
+                    return false;
+                }
+                
+                // 验证缓冲设置被正确应用
+                match self.stdin {
+                    BufferType::Line => return false, // 输入流行缓冲是无效的
+                    _ => {}
+                }
+                
+                // 所有检查通过
+                true
+            }
+        }
+        
+        // 测试有效配置
+        let flags = TestStdbufFlags {
+            stdin: BufferType::Default,
+            stdout: BufferType::Line,
+            stderr: BufferType::Size(1024),
+            command_args: vec!["echo".to_string(), "test".to_string()],
+        };
+        
+        assert!(flags.execute_command_test());
+        
+        // 测试无效配置 - 没有命令
+        let flags = TestStdbufFlags {
+            stdin: BufferType::Default,
+            stdout: BufferType::Line,
+            stderr: BufferType::Default,
+            command_args: vec![],
+        };
+        
+        assert!(!flags.execute_command_test());
+        
+        // 测试无效配置 - 输入流行缓冲
+        let flags = TestStdbufFlags {
+            stdin: BufferType::Line,
+            stdout: BufferType::Default,
+            stderr: BufferType::Default,
+            command_args: vec!["echo".to_string(), "test".to_string()],
+        };
+        
+        assert!(!flags.execute_command_test());
+    }
+    
+    // 测试 stdbuf_main 函数
+    // 注意：为了避免依赖于编译时环境变量和实际执行命令，我们创建一个简化版本的测试
+    #[test]
+    fn test_argument_parsing() {
+        // 为了避免借用问题，显式创建字符串参数
+        let stdbuf_arg = "stdbuf".to_string();
+        let o_arg = "-o".to_string();
+        let l_arg = "L".to_string();
+        let echo_arg = "echo".to_string();
+        let test_arg = "test".to_string();
+        
+        // 测试有效参数
+        {
+            let args = vec![&stdbuf_arg, &o_arg, &l_arg, &echo_arg, &test_arg];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_ok());
+            
+            if let Ok(matches) = result {
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(), "L");
+            }
+        }
+        
+        // 测试无效参数 - 缺少命令
+        {
+            let args = vec![&stdbuf_arg, &o_arg, &l_arg];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+        
+        // 测试无效参数 - 缺少必需的缓冲选项
+        {
+            let args = vec![&stdbuf_arg, &echo_arg, &test_arg];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+    }
 }

@@ -1,0 +1,87 @@
+{
+    "tests": [
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut指定字段和分隔符功能",
+        "setup_commands": [
+          "echo -e 'Alice:25:Engineer\nBob:30:Designer\nCharlie::Manager' > test1.txt"
+        ],
+        "args": ["-d", ":", "-f", "2", "test1.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n25\n30\n\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test1.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut补全功能",
+        "setup_commands": [
+          "echo -e 'Alice:25:Engineer\nBob:30:Designer\nCharlie::Manager' > test1.txt"
+        ],
+        "args": ["-d", ":", "-f", "1", "--complement", "test1.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n25:Engineer\n30:Designer\n:Manager\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test1.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut不打印没有包含分界符的行功能",
+        "setup_commands": [
+          "echo -e 'Alice:25:Engineer\nBob:30:Designer\nCharlie::Manager' > test1.txt"
+        ],
+        "args": ["-d", ":", "-s", "-f", "1", "test1.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nAlice\nBob\nCharlie\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test1.txt"
+        ]
+      }
+    ]
+}

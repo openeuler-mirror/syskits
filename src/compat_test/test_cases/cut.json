@@ -139,6 +139,90 @@
         "cleanup_commands": [
           "rm -rf test3.txt"
         ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut使用指定的字符串作为输出分界符",
+        "setup_commands": [
+          "echo -e 'A,B,C,D\n1,,3,4\nX,Y,Z,' > test2.txt"
+        ],
+        "args": ["-d", ",", "-f", "1,3", "--output-delimiter", "|", "test2.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nA|C\n1|3\nX|Z\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test2.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut混合字段和范围（-f 列表）",
+        "setup_commands": [
+          "echo -e 'A,B,C,D\n1,,3,4\nX,Y,Z,' > test2.txt"
+        ],
+        "args": ["-d", ",", "-f", "1,3-4", "test2.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nA,C,D\n1,3,4\nX,Z,\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test2.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut提取超出字段范围的列",
+        "setup_commands": [
+          "echo -e 'A,B,C,D\n1,,3,4\nX,Y,Z,' > test2.txt"
+        ],
+        "args": ["-d", ",", "-f", "5", "test2.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n\n\n\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test2.txt"
+        ]
       }
     ]
 }

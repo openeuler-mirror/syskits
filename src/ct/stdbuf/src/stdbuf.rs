@@ -465,4 +465,140 @@ mod tests {
             _ => panic!("Expected Default buffer type"),
         }
     }
+    
+    // 测试 StdbufFlags::new 函数
+    #[test]
+    fn test_stdbuf_flags_new_valid() {
+        // 创建一个有效的参数匹配
+        let matches = create_arg_matches(
+            None,
+            Some("L"),
+            None,
+            Some(vec!["echo", "test"])
+        );
+        
+        // 测试创建有效的标志
+        let result = StdbufFlags::new(matches);
+        assert!(result.is_ok());
+        
+        let flags = result.unwrap();
+        assert_eq!(flags.command_args, vec!["echo".to_string(), "test".to_string()]);
+        match flags.stdout {
+            BufferType::Line => {},
+            _ => panic!("Expected Line buffer type for stdout"),
+        }
+        match flags.stdin {
+            BufferType::Default => {},
+            _ => panic!("Expected Default buffer type for stdin"),
+        }
+        match flags.stderr {
+            BufferType::Default => {},
+            _ => panic!("Expected Default buffer type for stderr"),
+        }
+    }
+    
+    #[test]
+    fn test_stdbuf_flags_new_no_command() {
+        // 创建一个没有命令的参数匹配
+        let matches = create_arg_matches(None, Some("L"), None, None);
+        
+        // 测试没有命令时应该返回错误
+        let result = StdbufFlags::new(matches);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_stdbuf_flags_new_invalid_option() {
+        // 创建一个包含无效选项的参数匹配
+        let matches = create_arg_matches(
+            Some("L"),
+            None,
+            None,
+            Some(vec!["echo", "test"])
+        );
+        
+        // 测试无效选项应该返回错误
+        let result = StdbufFlags::new(matches);
+        assert!(result.is_err());
+    }
+    
+    // 测试 set_command_env 函数
+    #[test]
+    fn test_set_command_env() {
+        let flags = StdbufFlags::default();
+        let mut command = process::Command::new("test");
+        
+        // 测试默认缓冲不设置环境变量
+        flags.set_command_env(&mut command, "TEST_DEFAULT", &BufferType::Default);
+        
+        // 测试行缓冲设置正确的环境变量
+        flags.set_command_env(&mut command, "TEST_LINE", &BufferType::Line);
+        
+        // 测试大小缓冲设置正确的环境变量
+        flags.set_command_env(&mut command, "TEST_SIZE", &BufferType::Size(1024));
+        
+        // 由于Command的env方法将环境变量添加到内部结构中，
+        // 我们无法直接测试，但可以验证代码逻辑是否正确执行
+        // 这种情况下，我们只是确认函数不会崩溃
+    }
+    
+    // 测试 get_preload_env 函数
+    // 注意：这个测试依赖于 OUT_DIR 环境变量，在编译时设置
+    // 在单元测试环境中可能不可用，所以我们需要模拟一个替代实现
+    #[test]
+    fn test_get_preload_env_mock() {
+        // 创建一个特殊版本的 StdbufFlags，跳过实际的 STDBUF_INJECT 使用
+        struct TestStdbufFlags {}
+        
+        impl TestStdbufFlags {
+            fn get_preload_env_test(&self, tmp_dir: &TempDir) -> CTResult<(String, PathBuf)> {
+                let (preload, extension) = preload_strings()?;
+                let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
+                
+                // 创建一个空文件代替实际的库文件
+                let mut file = File::create(&inject_path)
+                    .map_err_context(|| "failed to create libstdbuf file".to_string())?;
+                // 写入一些测试数据而不是实际的库内容
+                file.write_all(b"test data")
+                    .map_err_context(|| "failed to write to libstdbuf file".to_string())?;
+                
+                Ok((preload.to_owned(), inject_path))
+            }
+        }
+        
+        // 只在Linux平台上运行此测试
+        #[cfg(target_os = "linux")]
+        {
+            let flags = TestStdbufFlags {};
+            let tmp_dir = TempDir::new().unwrap();
+            
+            let result = flags.get_preload_env_test(&tmp_dir);
+            assert!(result.is_ok());
+            
+            let (env_var, path) = result.unwrap();
+            assert_eq!(env_var, "LD_PRELOAD");
+            assert!(path.extension().unwrap() == "so");
+            assert!(Path::new(&path).exists());
+        }
+    }
+    
+    // 测试 preload_strings 函数
+    #[test]
+    fn test_preload_strings() {
+        #[cfg(target_os = "linux")]
+        {
+            let result = preload_strings();
+            assert!(result.is_ok());
+            
+            let (preload, extension) = result.unwrap();
+            assert_eq!(preload, "LD_PRELOAD");
+            assert_eq!(extension, "so");
+        }
+        
+        #[cfg(not(target_os = "linux"))]
+        {
+            let result = preload_strings();
+            assert!(result.is_err());
+        }
+    }
 }

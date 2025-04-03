@@ -54,6 +54,13 @@ fn main() {
         name = target_dir.file_name().unwrap().to_string_lossy();
     }
     let mut dir = target_dir.to_path_buf();
+
+    if out_dir.contains("llvm-cov-target") {
+        let llvm_cov_dir = target_dir.join("llvm-cov-target");
+        if llvm_cov_dir.exists() {
+            dir = llvm_cov_dir;
+        }
+    }
     dir.push(profile_name);
     dir.push("deps");
     let mut path = None;

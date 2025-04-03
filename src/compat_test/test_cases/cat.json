@@ -1,0 +1,33 @@
+{
+    "tests": [
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat命令基本功能",
+        "setup_commands": [
+          "echo -e 'Hello\nWorld\nThis is a test' > test1.txt",
+          "cat test1.txt",
+          "export TEST_VAR=test_value"
+        ],
+        "args": ["test1.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "Hello\nWorld\nThis is a test",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test1.txt"
+        ]
+      }
+    ]
+  }

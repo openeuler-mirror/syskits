@@ -173,6 +173,66 @@
         "cleanup_commands": [
           "rm -rf test6.txt"
         ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat合并多个文件功能",
+        "setup_commands": [ 
+          "echo 'File1 1' > file7.txt",
+          "echo 'File2 2' > file8.txt",
+          "cat file7.txt file8.txt"
+        ],
+        "args": ["file7.txt", "file8.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nFile1 1\nFile2 2\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+            "rm -rf file7.txt",
+            "rm -rf file8.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat输入重定向功能",
+        "setup_commands": [
+          "cat > temp.txt << 'EOF'\nInput from stdin\nEOF",
+          "cat temp.txt"
+        ],
+        "args": ["temp.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nInput from stdin\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf temp.txt"
+        ]
       }
     ]
-  }
+  } 

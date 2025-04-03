@@ -345,6 +345,7 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,5 +842,129 @@ mod tests {
         }
         
         assert!(flags.command_args.is_empty());
+    }
+
+    // 新增测试：测试在多种语言环境和平台下的行为
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_platform_specific_behavior() {
+        // 测试当前平台的预加载环境变量和库扩展名
+        let (preload, extension) = preload_strings().unwrap();
+        
+        // 在Linux上应该是LD_PRELOAD和so
+        assert_eq!(preload, "LD_PRELOAD");
+        assert_eq!(extension, "so");
+        
+        // 测试在临时目录中创建预加载库文件的功能
+        let tmp_dir = TempDir::new().unwrap();
+        
+        // 创建一个mock库文件
+        let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
+        let result = File::create(&inject_path);
+        assert!(result.is_ok());
+        
+        // 验证文件成功创建
+        assert!(Path::new(&inject_path).exists());
+    }
+
+    // 新增测试：测试整个工作流程
+    #[test]
+    fn test_workflow_with_mock() {
+        // 这个测试模拟整个stdbuf的主要工作流程，但不实际执行命令
+        
+        // 步骤1：解析命令行参数
+        let args = vec!["stdbuf", "-o", "L", "echo", "test"];
+        let app = ct_app();
+        let matches_result = app.try_get_matches_from(args);
+        assert!(matches_result.is_ok());
+        
+        // 步骤2：创建StdbufFlags
+        let matches = matches_result.unwrap();
+        let flags_result = StdbufFlags::new(matches);
+        assert!(flags_result.is_ok());
+        
+        let flags = flags_result.unwrap();
+        
+        // 步骤3：验证解析的选项
+        match flags.stdout {
+            BufferType::Line => {},
+            _ => panic!("Expected Line buffer type for stdout"),
+        }
+        
+        // 步骤4：验证命令参数
+        assert_eq!(flags.command_args, vec!["echo".to_string(), "test".to_string()]);
+        
+        // 我们不能直接测试execute_command，因为它会尝试实际执行命令
+        // 但我们已经验证了flags对象已正确设置
+    }
+    
+    // 新增测试：测试命令行参数短选项形式
+    #[test]
+    fn test_short_option_forms() {
+        // 为了避免借用问题，显式创建字符串参数
+        let stdbuf_arg = "stdbuf".to_string();
+        let o_short_arg = "-o".to_string();
+        let i_short_arg = "-i".to_string();
+        let e_short_arg = "-e".to_string();
+        let l_arg = "L".to_string();
+        let zero_arg = "0".to_string();
+        let size_arg = "4096".to_string();
+        let echo_arg = "echo".to_string();
+        let test_arg = "test".to_string();
+        
+        // 测试短选项 -o
+        {
+            let args = vec![&stdbuf_arg, &o_short_arg, &l_arg, &echo_arg, &test_arg];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_ok());
+            
+            if let Ok(matches) = result {
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(), "L");
+            }
+        }
+        
+        // 测试短选项 -i
+        {
+            let args = vec![&stdbuf_arg, &i_short_arg, &zero_arg, &echo_arg, &test_arg];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_ok());
+            
+            if let Ok(matches) = result {
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::INPUT).unwrap(), "0");
+            }
+        }
+        
+        // 测试短选项 -e
+        {
+            let args = vec![&stdbuf_arg, &e_short_arg, &size_arg, &echo_arg, &test_arg];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_ok());
+            
+            if let Ok(matches) = result {
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(), "4096");
+            }
+        }
+        
+        // 测试多个短选项
+        {
+            let args = vec![
+                &stdbuf_arg, &i_short_arg, &zero_arg, 
+                &o_short_arg, &l_arg, 
+                &e_short_arg, &size_arg, 
+                &echo_arg, &test_arg
+            ];
+            let app = ct_app();
+            let result = app.try_get_matches_from(args);
+            assert!(result.is_ok());
+            
+            if let Ok(matches) = result {
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::INPUT).unwrap(), "0");
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(), "L");
+                assert_eq!(matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(), "4096");
+            }
+        }
     }
 }

@@ -28,6 +28,64 @@
         "cleanup_commands": [
           "rm -rf test1.txt"
         ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat显示行号功能",
+        "setup_commands": [
+          "echo -e 'Line 1\n\nLine 3' > test2.txt",
+          "cat -n test2.txt"
+        ],
+        "args": ["-n", "test2.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "  1  Line 1\n  2  \n  3  Line 3",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test2.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat非空行行号功能",
+        "setup_commands": [
+          "echo -e 'Line 1\n\nLine 3' > test3.txt",
+          "cat -b test3.txt"
+        ],
+        "args": ["-b", "test3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\\n     1\\tLine 1\\n\\n     2\\tLine 3\\n\\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test3.txt"
+        ]
       }
     ]
   }

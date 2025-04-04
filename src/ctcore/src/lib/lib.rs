@@ -196,7 +196,7 @@ static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
         .join(" ")
 });
 
-/// 为“usage”派生完整的执行短语
+/// 为"usage"派生完整的执行短语
 pub fn ct_execute_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }

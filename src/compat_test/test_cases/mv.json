@@ -1,0 +1,132 @@
+{
+    "tests": [
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv命令基本功能",
+        "setup_commands": [
+          "mkdir test_dir",
+          "touch file1.txt"
+        ],
+        "args": ["file1.txt", "test_dir/"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "ls -l test_dir/",
+              "expected_exit": 0,
+              "expected_stdout": "file1.txt"
+            },
+            {
+                "command": "ls file1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "no such file or directory"
+              }
+
+          ]
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir source_dir dest_dir",
+            "rm -rf file1.txt file2.txt existing.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv强制覆盖功能",
+        "setup_commands": [
+          "mkdir test_dir source_dir dest_dir",
+          "touch file1.txt file2.txt existing.txt",
+          "echo 'old content' > existing.txt",
+          "echo 'new content' > file2.txt"
+        ],
+        "args": ["-f", "file2.txt", "existing.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat existing.txt",
+              "expected_exit": 0,
+              "expected_stdout": "new content"
+            }
+          ]
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir source_dir dest_dir",
+            "rm -rf file1.txt file2.txt existing.txt"
+        ]
+      },
+      {
+        "tstdin": "n",
+        "command": "mv",
+        "description": "测试mv交互模式",
+        "setup_commands": [
+            "echo 'old content' > existing.txt",
+            "echo 'new content' > file2.txt"
+        ],
+        "args": ["-i", "file2.txt", "existing.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat existing.txt",
+              "expected_exit": 0,
+              "expected_stdout": "old content"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": true
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf file2.txt existing.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv禁止覆盖功能",
+        "setup_commands": [
+            "echo 'old content' > existing.txt",
+            "echo 'new content' > file2.txt"
+        ],
+        "args": ["-n", "file2.txt", "existing.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat existing.txt",
+              "expected_exit": 0,
+              "expected_stdout": "old content"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": true
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf file2.txt existing.txt"
+        ]
+      }
+    ]
+}

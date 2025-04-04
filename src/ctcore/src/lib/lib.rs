@@ -30,8 +30,10 @@ mod ct_features;
 mod ct_macros;
 mod ct_mods;
 mod ct_parser;
+mod tool;
 
 pub use ctcore_procs::*;
+pub use tool::Tool;
 
 // * cross-platform modules
 pub use crate::ct_mods::ct_display;

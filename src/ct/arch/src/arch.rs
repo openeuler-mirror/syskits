@@ -18,14 +18,45 @@ use clap::crate_version;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
 
+use ctcore::Tool;
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
 use ctcore::ct_help_usage;
+use std::ffi::OsString;
 
 const ARCH_ABOUT: &str = ct_help_about!("arch.md");
 const ARCH_SUMMARY: &str = ct_help_usage!("arch.md");
+
+#[derive(Default)]
+pub struct Arch;
+impl Tool for Arch {
+    fn name(&self) -> &'static str {
+        "arch"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 直接调用原有的 arch_main 函数
+        let result = arch_main(args.iter().cloned());
+        match result {
+            Ok(s) => {
+                println!("{}", s);
+                Ok(())
+            }
+            Err(e) => {
+                // println!("{}", e);
+                Err(e)
+            }
+        }
+    }
+}
+
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    // 调用新的arch_main函数
     let result = arch_main(args);
 
     match result {

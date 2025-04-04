@@ -17,6 +17,7 @@ use clap::Command;
 
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
 
+use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
 
@@ -75,6 +76,22 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
 
 pub fn ct_app() -> Command {
     ct_ls::ct_app()
+}
+
+#[derive(Default)]
+pub struct Vdir;
+impl Tool for Vdir {
+    fn name(&self) -> &'static str {
+        "vdir"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        vdir_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[cfg(test)]

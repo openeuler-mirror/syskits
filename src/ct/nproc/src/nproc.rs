@@ -16,9 +16,11 @@ use crate::opt_flags::OPT_ALL;
 
 use crate::opt_flags::OPT_IGNORE;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::{env, thread};
 
@@ -262,6 +264,34 @@ fn available_parallelism() -> usize {
     match thread::available_parallelism() {
         Ok(n) => n.get(),
         Err(_) => 1,
+    }
+}
+
+#[derive(Default)]
+pub struct Nproc;
+impl Tool for Nproc {
+    fn name(&self) -> &'static str {
+        "nproc"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let result = nproc_main(args.iter().cloned());
+        match result {
+            Ok(nproc_info) => {
+                println!("{}", nproc_info);
+
+                Ok(())
+            }
+            _ => {
+                // 如果出现错误，则打印错误信息并返回错误
+                eprint!("{}", result.err().unwrap());
+                Err(125.into())
+            }
+        }
     }
 }
 

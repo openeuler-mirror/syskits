@@ -31,12 +31,13 @@
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_entries::{CtPasswd, Locate};
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::S_IWGRP;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
-
+use std::ffi::OsString;
 use std::io::BufReader;
 use std::io::prelude::*;
 
@@ -129,6 +130,22 @@ fn get_long_usage() -> String {
     )
 }
 
+#[derive(Default)]
+pub struct Pinky;
+impl Tool for Pinky {
+    fn name(&self) -> &'static str {
+        "pinky"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        pinky_main(args.iter().cloned())
+    }
+}
+
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     pinky_main(args)
@@ -139,7 +156,7 @@ pub fn pinky_main(args: impl ctcore::Args) -> CTResult<()> {
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
-    let pk = Pinky::new(&matches);
+    let pk = PinkyFlags::new(&matches);
     let do_short_format = !matches.get_flag(pinky_options::PINKY_LONG_FORMAT);
 
     if do_short_format {
@@ -153,7 +170,7 @@ pub fn pinky_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 }
 
-struct Pinky {
+struct PinkyFlags {
     is_include_idle: bool,
     is_include_heading: bool,
     is_include_fullname: bool,
@@ -210,7 +227,7 @@ fn gecos_to_fullname(pw: &CtPasswd) -> Option<String> {
     })
 }
 
-impl Pinky {
+impl PinkyFlags {
     /// 从命令行参数创建新的 Pinky 实例
     fn new(matches: &clap::ArgMatches) -> Self {
         let users: Vec<String> = matches
@@ -265,11 +282,7 @@ impl Pinky {
         let tty_path = PathBuf::from("/dev").join(ut.tty_device().as_str());
         match tty_path.metadata() {
             Ok(meta) => Ok((
-                if meta.mode() & S_IWGRP == 0 {
-                    '*'
-                } else {
-                    ' '
-                },
+                if meta.mode() & S_IWGRP == 0 { '*' } else { ' ' },
                 meta.atime(),
             )),
             Err(_) => Ok(('?', 0)),

@@ -12,8 +12,10 @@
 //! logname指令，它会显示目前用户的名称。
 
 use clap::{Command, crate_version};
+use ctcore::Tool;
 use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage, ct_show_error};
 use std::ffi::CStr;
+use std::ffi::OsString;
 
 unsafe extern "C" {
     // POSIX 要求使用 getlogin（或同等代码）
@@ -34,6 +36,22 @@ fn get_user_login() -> Option<String> {
 
 const LOGNAME_ABOUT: &str = ct_help_about!("logname.md");
 const LOGNAME_USAGE: &str = ct_help_usage!("logname.md");
+
+#[derive(Default)]
+pub struct Logname;
+impl Tool for Logname {
+    fn name(&self) -> &'static str {
+        "logname"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        logname_main(args.iter().cloned())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {

@@ -21,9 +21,11 @@ mod exit_status;
 
 use crate::exit_status::ExitStatus;
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
+use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -384,6 +386,22 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
                 Err(_) => Err(ExitStatus::TimeoutFailed.into()),
             }
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Timeout;
+impl Tool for Timeout {
+    fn name(&self) -> &'static str {
+        "timeout"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        timeout_main(args.iter().cloned())
     }
 }
 

@@ -3,14 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::ffi::OsString;
-
 use clap::{Command, crate_version};
-
+use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
-
+use std::ffi::OsString;
 mod platform;
 
 const WHOAMI_ABOUT: &str = ct_help_about!("whoami.md");
@@ -73,6 +71,22 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+}
+
+#[derive(Default)]
+pub struct Whoami;
+impl Tool for Whoami {
+    fn name(&self) -> &'static str {
+        "whoami"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        whoami_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[cfg(test)]

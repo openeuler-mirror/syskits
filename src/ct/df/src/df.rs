@@ -39,7 +39,7 @@ use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
 use clap::parser::ValueSource;
-
+use ctcore::Tool;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
@@ -446,6 +446,22 @@ impl fmt::Display for DfError {
         match self {
             Self::OptionsError(e) => e.fmt(f),
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Df;
+impl Tool for Df {
+    fn name(&self) -> &'static str {
+        "df"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        df_main(args.iter().cloned()).map(|_| ())
     }
 }
 

@@ -35,6 +35,7 @@
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
@@ -42,6 +43,7 @@ use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
@@ -74,6 +76,22 @@ mod shuf_options {
     pub static SHUF_REPEAT: &str = "repeat";
     pub static SHUF_ZERO_TERMINATED: &str = "zero-terminated";
     pub static SHUF_FILE_OR_ARGS: &str = "file-or-args";
+}
+
+#[derive(Default)]
+pub struct Shuf;
+impl Tool for Shuf {
+    fn name(&self) -> &'static str {
+        "shuf"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        shuf_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

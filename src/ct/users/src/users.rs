@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_utmpx::{self, CtUtmpx};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
@@ -34,6 +35,29 @@ fn users_get_long_usage() -> String {
 If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
         ct_utmpx::DEFAULT_FILE
     )
+}
+
+#[derive(Default)]
+pub struct Users;
+impl Tool for Users {
+    fn name(&self) -> &'static str {
+        "users"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let result = users_main(args.iter().cloned());
+        match result {
+            Ok(s) => {
+                println!("{}", s);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[ctcore::main]

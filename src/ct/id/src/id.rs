@@ -19,6 +19,7 @@ use std::io::{self, Write};
 
 use clap::{Arg, ArgAction, Command, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{self, CtPasswd, Locate};
 use ctcore::ct_error::CTResult;
@@ -26,6 +27,7 @@ use ctcore::ct_error::{CtSimpleError, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
+use std::ffi::OsString;
 
 const ID_ABOUT: &str = ct_help_about!("id.md");
 const ID_USAGE: &str = ct_help_usage!("id.md");
@@ -67,7 +69,7 @@ struct IdState {
     ids: Option<Ids>,
     // 调用 GNU 的 'id' 和调用 GNU 的 'id $USER' 的行为相似但不同。
     // * SELinux 上下文仅在没有指定用户的情况下显示.
-    // * “getgroups”系统调用仅在没有指定用户的情况下使用，这会导致“id”和“id $USER”之间显示组的顺序不同。
+    // * "getgroups"系统调用仅在没有指定用户的情况下使用，这会导致"id"和"id $USER"之间显示组的顺序不同。
     //
     // Example:
     // $ strace -e getgroups id -G $USER
@@ -79,6 +81,24 @@ struct IdState {
     // 1000 10 968 975
     // +++ exited with 0 +++
     is_user_specified: bool,
+}
+
+#[derive(Default)]
+pub struct Id;
+impl Tool for Id {
+    fn name(&self) -> &'static str {
+        "id"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout_info = io::stdout();
+        let mut stdout_writer = stdout_info.lock();
+        id_main(&mut stdout_writer, args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

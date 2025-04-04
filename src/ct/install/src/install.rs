@@ -33,6 +33,7 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{grp2gid, usr2uid};
@@ -45,6 +46,7 @@ use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show, ct_show_err
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
@@ -1235,6 +1237,22 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Install;
+impl Tool for Install {
+    fn name(&self) -> &'static str {
+        "install"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        install_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

@@ -44,10 +44,11 @@ use crossterm::{
     style::Attribute,
     terminal::{self, ClearType},
 };
-
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::{ct_display::Quotable, ct_show};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -954,6 +955,22 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
     }
 
     Ok(true)
+}
+
+#[derive(Default)]
+pub struct More;
+impl Tool for More {
+    fn name(&self) -> &'static str {
+        "more"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        more_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

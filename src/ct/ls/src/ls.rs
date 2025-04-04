@@ -35,14 +35,7 @@ use std::{collections::HashSet, io::IsTerminal};
 
 use clap::builder::{NonEmptyStringValueParser, ValueParser};
 use clap::{Arg, ArgAction, Command, crate_version};
-use glob::{MatchOptions, Pattern};
-use lscolors::{LsColors, Style};
-use number_prefix::NumberPrefix;
-#[cfg(unix)]
-use once_cell::sync::Lazy;
-use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use unicode_width::UnicodeWidthStr;
-
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
@@ -53,6 +46,13 @@ use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::ct_version_cmp::ct_version_cmp;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use ctcore::{ct_parse_glob, ct_show, ct_show_error, ct_show_warning};
+use glob::{MatchOptions, Pattern};
+use lscolors::{LsColors, Style};
+use number_prefix::NumberPrefix;
+#[cfg(unix)]
+use once_cell::sync::Lazy;
+use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use unicode_width::UnicodeWidthStr;
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
@@ -1187,6 +1187,22 @@ impl LsConfig {
             is_dired,
             is_hyperlink,
         })
+    }
+}
+
+#[derive(Default)]
+pub struct Ls;
+impl Tool for Ls {
+    fn name(&self) -> &'static str {
+        "ls"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        ct_main(args.iter().cloned()).map(|_| ())
     }
 }
 

@@ -17,12 +17,14 @@ use std::time::Duration;
 use clap::{Arg, ArgAction, Command, crate_version};
 use fundu::{DurationParser, ParseError, SaturatingInto};
 
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
 use ctcore::ct_help_section;
 use ctcore::ct_help_usage;
 use ctcore::ct_show_error;
+use std::ffi::OsString;
 
 const SLEEP_ABOUT: &str = ct_help_about!("sleep.md");
 const SLEEP_USAGE: &str = ct_help_usage!("sleep.md");
@@ -30,6 +32,22 @@ const SLEEP_AFTER_HELP: &str = ct_help_section!("after help", "sleep.md");
 
 mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
+}
+
+#[derive(Default)]
+pub struct Sleep;
+impl Tool for Sleep {
+    fn name(&self) -> &'static str {
+        "sleep"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        sleep_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

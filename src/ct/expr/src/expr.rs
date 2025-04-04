@@ -23,6 +23,8 @@ use ctcore::{
 use syntax_tree::SyntaxTreeAstNode;
 
 use crate::syntax_tree::is_syntax_tree_truthy;
+use ctcore::Tool;
+use std::ffi::OsString;
 
 mod syntax_tree;
 // 定义命令行选项常量
@@ -144,6 +146,22 @@ pub fn expr_main(args: impl ctcore::Args) -> CTResult<String> {
         return Err(1.into());
     }
     Ok(result)
+}
+
+#[derive(Default)]
+pub struct Expr;
+impl Tool for Expr {
+    fn name(&self) -> &'static str {
+        "expr"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        expr_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[cfg(test)]

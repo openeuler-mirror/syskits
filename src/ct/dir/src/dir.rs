@@ -15,6 +15,7 @@ use std::path::Path;
 
 use clap::Command;
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
+use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
 
@@ -74,6 +75,22 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
 // 实现逻辑和ls一致
 pub fn ct_app() -> Command {
     ct_ls::ct_app()
+}
+
+#[derive(Default)]
+pub struct Dir;
+impl Tool for Dir {
+    fn name(&self) -> &'static str {
+        "dir"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        dir_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[cfg(test)]

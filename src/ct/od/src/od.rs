@@ -75,12 +75,14 @@ use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_format::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::{
     ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error, ct_show_warning,
 };
+use std::ffi::OsString;
 
 const OD_PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
@@ -755,6 +757,23 @@ fn od_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> Str
         }
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+    }
+}
+
+#[derive(Default)]
+pub struct Od;
+impl Tool for Od {
+    fn name(&self) -> &'static str {
+        "od"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        od_main(args.iter().cloned())
     }
 }
 

@@ -34,6 +34,7 @@
 /// - 文件必须使用相同的字段分隔符
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
@@ -887,6 +888,22 @@ pub fn join_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     join_exec(file1, file2, settings)
+}
+
+#[derive(Default)]
+pub struct Join;
+impl Tool for Join {
+    fn name(&self) -> &'static str {
+        "join"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        join_main(args.iter().cloned())
+    }
 }
 
 pub fn ct_app() -> Command {

@@ -22,6 +22,8 @@ use std::error::Error;
 use std::fmt::Display;
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
+use std::ffi::OsString;
 
 mod opt_flags {
     pub const USERS: &str = "USERNAME";
@@ -100,6 +102,37 @@ impl Display for GroupInfo {
         }
     }
 }
+
+#[derive(Default)]
+pub struct Groups;
+impl Tool for Groups {
+    fn name(&self) -> &'static str {
+        "groups"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let result = groups_main(args.iter().cloned());
+        match result {
+            Ok(groups) => {
+                for g in groups.iter() {
+                    println!("{}", g);
+                }
+
+                Ok(())
+            }
+            _ => {
+                // 如果出现错误，则打印错误信息并返回错误
+                eprint!("{}", result.err().unwrap());
+                Err(125.into())
+            }
+        }
+    }
+}
+
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     let result = groups_main(args);

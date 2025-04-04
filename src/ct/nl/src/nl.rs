@@ -12,6 +12,7 @@
 //! nl - 向指定的各个 <文件> 添加行号，并写到标准输出。
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::{Args, ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
 use std::ffi::OsString;
@@ -636,6 +637,23 @@ pub fn ct_app() -> Command {
         .after_help(NL_AFTER_HELP)
         .disable_help_flag(true)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Nl;
+impl Tool for Nl {
+    fn name(&self) -> &'static str {
+        "nl"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let mut stdout = stdout();
+        nl_main(&mut stdout, args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

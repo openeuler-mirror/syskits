@@ -46,6 +46,7 @@ use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::ExitCode;
 
+use ctcore::Tool;
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
 use ctcore::ct_help_section;
@@ -604,6 +605,22 @@ fn env_apply_specified_env_vars(options: &EnvOptions<'_>) {
         }
         // 设置环境变量
         unsafe { env::set_var(name, val) };
+    }
+}
+
+#[derive(Default)]
+pub struct Env;
+impl Tool for Env {
+    fn name(&self) -> &'static str {
+        "env"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        env_main(args.iter().cloned())
     }
 }
 

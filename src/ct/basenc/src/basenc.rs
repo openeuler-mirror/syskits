@@ -20,12 +20,13 @@ use ctcore::{
     ct_error::{CTResult, CTsageError},
 };
 
+use ctcore::Tool;
 use ctcore::ct_error::UClapError;
-use std::io::Read;
-use std::io::stdin;
-
 use ctcore::ct_help_about;
 use ctcore::ct_help_usage;
+use std::ffi::OsString;
+use std::io::Read;
+use std::io::stdin;
 
 const BASE64_ABOUT: &str = ct_help_about!("basenc.md");
 const BASE64_USAGE: &str = ct_help_usage!("basenc.md");
@@ -85,6 +86,22 @@ fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Forma
         .1;
     let config_mod = BaseConfig::from(&args_match)?;
     Ok((config_mod, format_mod))
+}
+
+#[derive(Default)]
+pub struct Basenc;
+impl Tool for Basenc {
+    fn name(&self) -> &'static str {
+        "basenc"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        basenc_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[ctcore::main]

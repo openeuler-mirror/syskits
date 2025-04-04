@@ -24,7 +24,11 @@ ctcore = { workspace = true, features = [
   "fsxattr",
   "update-control",
 ] }
-tempfile = "3"
+tempfile = { workspace = true }
+selinux = { workspace = true, optional = true }
+
+[features]
+selinux = ["dep:selinux"]
 
 [[bin]]
 name = "mv"

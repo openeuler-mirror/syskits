@@ -325,6 +325,71 @@
         "cleanup_commands": [
             "rm -rf source_dir dest_dir"
         ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv文件不存在",
+        "setup_commands": [
+            "mkdir dest_dir"
+        ],
+        "args": ["non_existing_file", "dest_dir"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": "no such file or directory"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": true
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf  dest_dir"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv权限不足提示",
+        "setup_commands": [
+            "mkdir dest_dir",
+            "chmod -w dest_dir/",
+            "touch file1.txt"
+        ],
+        "args": ["file1.txt", "dest_dir"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": "Permission denied"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf  dest_dir",
+            "rm -rf file1.txt"
+        ]
       }
     ]
 }

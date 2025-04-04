@@ -16,6 +16,7 @@ use std::io::{self, Write};
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
@@ -29,6 +30,22 @@ const YES_USAGE: &str = ct_help_usage!("yes.md");
 
 // 在某些系统上，使用更小或更大的缓冲区可能会提供更好的性能，当前设置满足需求
 const YES_BUF_SIZE: usize = 16 * 1024;
+
+#[derive(Default)]
+pub struct Yes;
+impl Tool for Yes {
+    fn name(&self) -> &'static str {
+        "yes"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        yes_main(args.iter().cloned())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {

@@ -15,9 +15,11 @@ use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_fs::CtFileInformation;
+use std::ffi::OsString;
 use std::fs::File;
 use std::fs::metadata;
 use std::io::{self, IsTerminal, Read, Write};
@@ -264,7 +266,7 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::CAT_NUMBER_NO_NBLANK)
             .help("number nonempty output lines, overrides -n")
             // 注意：这绝对不能overrides_with(options::NUMBER)！在clap中，覆盖操作是对称的，
-            // 因此“-b -n”被视为“-n”，这不是我们想要的。
+            // 因此"-b -n"被视为"-n"，这不是我们想要的。
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SHOW_NON_PRINTING_ENDS)
             .short('e')
@@ -441,7 +443,7 @@ fn cat_get_input_type(input_path: &str) -> CatResult<CatInputType> {
         Ok(metadata) => metadata.file_type(),
         Err(e) => {
             if let Some(raw_error_msg) = e.raw_os_error() {
-                // 在类Unix系统中，“符号链接层数过多”的错误代码为40（ELOOP）。
+                // 在类Unix系统中，"符号链接层数过多"的错误代码为40（ELOOP）。
                 // 在此情况下，我们希望提供一个恰当的错误消息。
                 #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
                 let ct_symlink_code = 40;
@@ -479,7 +481,7 @@ fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> Cat
     let mut cat_stdout_lock = stdout_info.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        // 在类Unix系统中，表示“符号链接层数过多”的错误代码为40（即ELOOP）。
+        // 在类Unix系统中，表示"符号链接层数过多"的错误代码为40（即ELOOP）。
         // 在此情况下，我们希望提供一个恰当的错误消息。
         if !splice::splice_write_fast_using_splice(input_handle, &cat_stdout_lock)? {
             return Ok(());
@@ -740,6 +742,23 @@ fn cat_write_end_of_line<W: Write>(
         cat_writer.flush()?;
     }
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Cat;
+impl Tool for Cat {
+    fn name(&self) -> &'static str {
+        "cat"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        cat_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

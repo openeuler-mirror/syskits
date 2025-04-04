@@ -21,8 +21,10 @@ use operation::{
 use std::io::{BufRead, BufWriter, Write, stdin, stdout};
 
 use crate::operation::DeleteOperation;
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
+use std::ffi::OsString;
 
 const TR_ABOUT: &str = ct_help_about!("tr.md");
 const TR_USAGE: &str = ct_help_usage!("tr.md");
@@ -136,6 +138,25 @@ impl TrFlags {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct Tr;
+impl Tool for Tr {
+    fn name(&self) -> &'static str {
+        "tr"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let mut stdin = stdin().lock();
+        let stdout = stdout().lock();
+        let mut buffered_writer = BufWriter::new(stdout);
+        tr_main(&mut stdin, &mut buffered_writer, args.iter().cloned())
     }
 }
 

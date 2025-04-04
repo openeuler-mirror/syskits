@@ -16,12 +16,13 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_warning};
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
+use std::ffi::OsString;
 
 mod line_break;
 mod para_split;
@@ -230,6 +231,22 @@ fn fmt_process_file<W: ?Sized + Write>(
         .map_err_context(|| "failed to write output".to_string())?;
 
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Fmt;
+impl Tool for Fmt {
+    fn name(&self) -> &'static str {
+        "fmt"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        fmt_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

@@ -23,6 +23,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 use self::searcher::Searcher;
+use ctcore::Tool;
 use ctcore::ct_ranges::CtRange;
 use ctcore::{
     ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error, ct_show_if_err,
@@ -469,7 +470,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &CutMode) {
                     .map_err_context(|| filename.maybe_quote().to_string())
                     .and_then(|file| {
                         match &mode {
-                            CutMode::Bytes(ranges, opts)  => cut_bytes(file, ranges, opts),
+                            CutMode::Bytes(ranges, opts) => cut_bytes(file, ranges, opts),
                             CutMode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
                             CutMode::Characters(ranges, opts) => cut_characters(file, ranges, opts),
                         }
@@ -687,13 +688,30 @@ fn cut_args_init() -> Vec<Arg> {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    cut_main(args).map(|_| ())
+    cut_main(args)
+}
+
+#[derive(Default)]
+pub struct Cut;
+impl Tool for Cut {
+    fn name(&self) -> &'static str {
+        "cut"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 直接调用原有的 cut_main 函数
+        cut_main(args.iter().cloned())
+    }
 }
 
 /**
  * 主执行函数，用于处理文件或标准输入的切割操作。
  *
- * @param args 实现了 `ctcore::Args` 的参数对象，通常来自命令行解析。
+ * @param args 命令行参数的引用
  * @return `CTResult<()>`，成功执行返回 `Ok(())`，错误时返回包含错误信息的 `Err`。
  */
 pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -847,63 +865,52 @@ fn cut_mode_parse<'a>(
 fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTResult<()> {
     let mut buf_in = BufReader::new(reader);
     let mut out = cut_stdout_writer();
-    let mut input_buffer = [0; 1024 * 31];  // 使用固定大小的缓冲区
-    
+    let mut input_buffer = [0; 1024 * 31]; // 使用固定大小的缓冲区
+
     while let Ok(n) = buf_in.read(&mut input_buffer) {
         if n == 0 {
             break;
         }
-        
+
         let mut position = 0;
         while position < n {
             // 获取当前位置到缓冲区末尾的切片
             let current_slice = &input_buffer[position..n];
-            
             // 查找下一个换行符
             let next_newline = current_slice.iter().position(|&b| b == b'\n');
-            
             // 计算当前行的长度
             let line_length = next_newline.unwrap_or(current_slice.len());
             let line = &current_slice[..line_length];
-            
             // 使用 from_utf8_lossy 处理当前行
             let line_str = String::from_utf8_lossy(line);
-            
             // 使用 graphemes 处理 Unicode 字符
             let graphemes: Vec<&str> = line_str.graphemes(true).collect();
-            
             // 处理每个范围
             let mut print_delim = false;
             for &CtRange { low, high } in ranges {
                 let start = low.saturating_sub(1);
                 let end = high.min(graphemes.len());
-                
                 if start >= graphemes.len() {
                     break;
                 }
-                
                 // 处理分隔符
                 if print_delim {
                     out.write_all(opts.out_delimiter.unwrap_or(b"\t"))?;
                 } else if opts.out_delimiter.is_some() {
                     print_delim = true;
                 }
-                
                 // 连接并写入选中的字素簇
                 let selected = graphemes[start..end].join("");
                 out.write_all(selected.as_bytes())?;
             }
-            
             // 写入换行符（如果不是最后一个字节）
             if next_newline.is_some() {
                 out.write_all(b"\n")?;
             }
-            
             // 更新位置
             position += line_length + next_newline.map_or(0, |_| 1);
         }
     }
-    
     Ok(())
 }
 

@@ -46,6 +46,7 @@ use numeric_str_cmp::{
 };
 
 use crate::tmp_dir::TmpDirWrapper;
+use ctcore::Tool;
 
 mod check;
 mod chunks;
@@ -1054,8 +1055,23 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Ar
     arg
 }
 
+#[derive(Default)]
+pub struct Sort;
+impl Tool for Sort {
+    fn name(&self) -> &'static str {
+        "sort"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        sort_main(args.iter().cloned())
+    }
+}
+
 #[ctcore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     sort_main(args)
 }

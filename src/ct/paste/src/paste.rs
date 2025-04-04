@@ -16,9 +16,11 @@
 //! 如果指定了 -z 选项，则使用 NUL 字符代替换行符作为行分隔符。
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write, stdin, stdout};
 use std::path::Path;
@@ -296,6 +298,23 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Paste;
+impl Tool for Paste {
+    fn name(&self) -> &'static str {
+        "paste"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let mut stdout = stdout().lock();
+        paste_main(&mut stdout, args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

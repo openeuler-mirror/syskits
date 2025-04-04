@@ -65,6 +65,8 @@ use std::path::Path;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
+use ctcore::Tool;
+
 const EXPAND_ABOUT: &str = ct_help_about!("expand.md");
 const EXPAND_USAGE: &str = ct_help_usage!("expand.md");
 
@@ -630,6 +632,23 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
     }
     // 如果成功处理所有文件，返回成功结果。
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Expand;
+impl Tool for Expand {
+    fn name(&self) -> &'static str {
+        "expand"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        expand_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

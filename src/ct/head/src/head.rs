@@ -12,6 +12,7 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
@@ -631,6 +632,22 @@ fn handle_stdin(options: &HeadOptions) -> std::io::Result<()> {
         Mode::AllButLastLines(n) => {
             read_but_last_n_lines(&mut stdin, n, options.line_ending.into(), None)
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Head;
+impl Tool for Head {
+    fn name(&self) -> &'static str {
+        "head"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        head_main(args.iter().cloned())
     }
 }
 

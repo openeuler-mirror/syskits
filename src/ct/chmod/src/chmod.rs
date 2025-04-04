@@ -11,6 +11,7 @@
  */
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, ExitCode, set_ct_exit_code};
 use ctcore::ct_fs::display_permissions_unix;
@@ -52,8 +53,8 @@ mod chmod_flags {
 /// Therefore it might be possible that a pseudo MODE is inserted to pass clap parsing.
 /// The pseudo MODE is later replaced by the extracted (and joined) negative modes.
 fn extract_negative_modes(mut extr_args: impl ctcore::Args) -> (Option<String>, Vec<OsString>) {
-    // 我们查找参数直到找到“--”
-    // “-mode”将被提取到parsed_cmode_vec中
+    // 我们查找参数直到找到"--"
+    // "-mode"将被提取到parsed_cmode_vec中
     let (parsed_chmod_vec, pre_double_hyphen_args): (Vec<OsString>, Vec<OsString>) = extr_args
         .by_ref()
         .take_while(|a| a != "--")
@@ -74,13 +75,13 @@ fn extract_negative_modes(mut extr_args: impl ctcore::Args) -> (Option<String>, 
     let mut clean_chmod_args = Vec::new();
     if !parsed_chmod_vec.is_empty() {
         // 我们需要为clap提供一个伪cmode，后续不会使用它。
-        // 这是因为clap需要遵循默认的“chmod MODE FILE”模式。
+        // 这是因为clap需要遵循默认的"chmod MODE FILE"模式。
         clean_chmod_args.push("w".into());
     }
     clean_chmod_args.extend(pre_double_hyphen_args);
 
     if let Some(arg) = extr_args.next() {
-        // 由于迭代器中仍有剩余项，我们先前已消费了“--”
+        // 由于迭代器中仍有剩余项，我们先前已消费了"--"
         // -> 将其再次添加到args中
         clean_chmod_args.push("--".into());
         clean_chmod_args.push(arg);
@@ -96,6 +97,22 @@ fn extract_negative_modes(mut extr_args: impl ctcore::Args) -> (Option<String>, 
     )
     .filter(|s| !s.is_empty());
     (parsed_chmod, clean_chmod_args)
+}
+
+#[derive(Default)]
+pub struct Chmod;
+impl Tool for Chmod {
+    fn name(&self) -> &'static str {
+        "chmod"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        chmod_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

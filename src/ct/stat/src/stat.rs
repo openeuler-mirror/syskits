@@ -9,16 +9,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use chrono::{DateTime, Local};
 use clap::builder::ValueParser;
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
 use ctcore::libc::mode_t;
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
-
-use chrono::{DateTime, Local};
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -956,6 +956,22 @@ impl Stater {
     }
 }
 
+#[derive(Default)]
+pub struct Stat;
+impl Tool for Stat {
+    fn name(&self) -> &'static str {
+        "stat"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        stat_main(args.iter().cloned())
+    }
+}
+
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     stat_main(args)
@@ -1042,7 +1058,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{StatFlags, ScanUtil, StatToken, Stater, group_num};
+    use super::{ScanUtil, StatFlags, StatToken, Stater, group_num};
 
     #[test]
     fn test_scanners() {

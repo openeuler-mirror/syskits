@@ -16,6 +16,7 @@
 use clap::builder::ValueParser;
 use clap::{Arg, Command, crate_version};
 use ctcore::{
+    Tool,
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, FromIo},
     ct_format_usage, ct_help_about, ct_help_usage,
@@ -98,6 +99,23 @@ pub fn ct_app() -> Command {
         .override_usage(ct_format_usage(LINK_USAGE))
         .infer_long_args(true)
         .arg(arg)
+}
+
+#[derive(Default)]
+pub struct Link;
+impl Tool for Link {
+    fn name(&self) -> &'static str {
+        "link"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        link_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

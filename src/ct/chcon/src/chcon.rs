@@ -30,6 +30,7 @@ use std::{fs, io};
 mod errors;
 mod fts;
 
+use ctcore::Tool;
 use errors::*;
 
 const CHCON_ABOUT: &str = ct_help_about!("chcon.md");
@@ -67,6 +68,10 @@ pub mod opt_flags {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    chcon_main(args)
+}
+
+pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
     let config_info = ct_app();
 
     let opt_flags = match chcon_parse_command_line(config_info, args) {
@@ -804,7 +809,7 @@ fn chcon_root_dev_ino_warn(directory_name: &Path) {
 
 // 当fts_read返回FTS_DC表示目录循环时，这可能表示一个实际问题，也可能并非如此。
 // 对于像chgrp这样的程序，如果在进行递归遍历过程中需要遍历符号链接，出现目录循环并不构成问题。
-// 然而，当以“-P -R”选项调用时，这种情况应发出警告。
+// 然而，当以"-P -R"选项调用时，这种情况应发出警告。
 // fts_options参数记录了控制fts行为这一方面的选项，因此需要对此进行测试。
 fn chcon_cycle_warning_required(fts_opts: c_int, entry: &fts::EntryRef) -> bool {
     // 当不解析任何符号链接，或者仅解析命令行上列出的符号链接且当前未处理命令行参数时，遇到循环则是严重的问题。
@@ -837,6 +842,22 @@ impl ChconSELinuxSecurityContext<'_> {
 
             Self::String(context) => Ok(context.as_deref().map(Cow::Borrowed)),
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Chcon;
+impl Tool for Chcon {
+    fn name(&self) -> &'static str {
+        "chcon"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        chcon_main(args.iter().cloned())
     }
 }
 

@@ -12,15 +12,16 @@
 //! readlink命令是Linux中用于读取符号链接（symlink）并显示其指向的文件或目录的命令。
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_error};
+use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-
 const READLINK_ABOUT: &str = ct_help_about!("readlink.md");
 const READLINK_USAGE: &str = ct_help_usage!("readlink.md");
 mod readlink_flags {
@@ -34,6 +35,22 @@ mod readlink_flags {
     pub const READLINK_ZERO: &str = "zero";
 
     pub const READLINK_ARG_FILES: &str = "files";
+}
+
+#[derive(Default)]
+pub struct Readlink;
+impl Tool for Readlink {
+    fn name(&self) -> &'static str {
+        "readlink"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        readlink_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

@@ -17,11 +17,13 @@
 // 命名管道的使用通常涉及到两个或多个进程，其中一个进程将数据写入管道，另一个或多个进程从管道中读取数据。它们在文件系统中有一个名称，因此可以被多个进程引用。
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
 use libc::mkfifo;
 use std::ffi::CString;
+use std::ffi::OsString;
 
 // 定义了用于创建FIFO（命名管道）的命令行工具的主逻辑。
 
@@ -121,6 +123,23 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .infer_long_args(true)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Mkfifo;
+impl Tool for Mkfifo {
+    fn name(&self) -> &'static str {
+        "mkfifo"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        mkfifo_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

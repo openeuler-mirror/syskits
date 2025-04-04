@@ -14,6 +14,7 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::libc::{self, setgid, setgroups, setuid};
@@ -21,9 +22,11 @@ use ctcore::{ct_entries, ct_format_usage, ct_help_about, ct_help_usage};
 
 use std::io::Error;
 
+use std::ffi::OsString;
 use std::path::Path;
 use std::process;
 use std::process::ExitStatus;
+
 static CHROOT_ABOUT: &str = ct_help_about!("chroot.md");
 static CHROOT_USAGE: &str = ct_help_usage!("chroot.md");
 
@@ -39,6 +42,12 @@ mod opt_flags {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    // 收集参数到Vec中
+    let args_vec: Vec<OsString> = args.collect();
+    chroot_main(&args_vec)
+}
+
+pub fn chroot_main(args: &[OsString]) -> CTResult<()> {
     // 尝试从 args 中获取匹配项，并在匹配失败时返回错误代码 125
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
@@ -360,6 +369,22 @@ fn chroot_set_user(username: &str) -> CTResult<()> {
         }
     }
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Chroot;
+impl Tool for Chroot {
+    fn name(&self) -> &'static str {
+        "chroot"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        chroot_main(args)
+    }
 }
 
 #[cfg(test)]

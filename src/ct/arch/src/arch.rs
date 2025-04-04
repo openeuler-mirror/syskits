@@ -105,7 +105,8 @@ mod tests {
     fn test_arch_hh_ctmain() {
         {
             let args = ["-h", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let mut args_iter = args.iter().map(|s| OsString::from(*s));
+            let result = ctmain(&mut args_iter);
 
             assert_eq!(result, 1);
         }
@@ -124,7 +125,8 @@ mod tests {
     fn test_arch_v_ctmain() {
         {
             let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let mut args_iter = args.iter().map(|s| OsString::from(*s));
+            let result = ctmain(&mut args_iter);
 
             assert_eq!(result, 1);
         }
@@ -143,7 +145,8 @@ mod tests {
     fn test_arch_vv_ctmain() {
         {
             let args = ["-V", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let mut args_iter = args.iter().map(|s| OsString::from(*s));
+            let result = ctmain(&mut args_iter);
 
             assert_eq!(result, 1);
         }
@@ -163,7 +166,8 @@ mod tests {
         // println!("当前操作系统架构：{}", expected_arch);
 
         let args = vec![ctcore::ct_util_name()];
-        let result = arch_main(args.iter().map(|s| OsString::from(s)));
+        let mut args_iter = args.iter().map(|s| OsString::from(s));
+        let result = arch_main(&mut args_iter);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -185,7 +189,8 @@ mod tests {
     #[test]
     fn test_arch_ctmain_help() {
         let args = vec![ctcore::ct_util_name(), "--help"];
-        let result = arch_main(args.iter().map(|s| OsString::from(s)));
+        let mut args_iter = args.iter().map(|s| OsString::from(s));
+        let result = arch_main(&mut args_iter);
 
         assert!(result.is_err());
     }

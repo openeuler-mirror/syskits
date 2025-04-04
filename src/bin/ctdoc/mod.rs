@@ -16,13 +16,16 @@
 // 该程序还使用一个名为"./util/show-utils.sh"的外部脚本来获取一些命令行工具的信息，并将这些信息写入Markdown文件中。
 
 use clap::Command;
+use ctcore::Tool;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Seek, Write};
 use zip::ZipArchive;
-
-include!(concat!(env!("OUT_DIR"), "/syskits_app_map.rs"));
+extern crate tool_derive;
+#[derive(tool_derive::Tools)]
+struct Ctdoc;
 
 fn main() -> io::Result<()> {
     let mut tldr_zip = File::open("docs/tldr.zip")
@@ -39,7 +42,7 @@ fn main() -> io::Result<()> {
         println!();
     }
 
-    let ct_utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
+    let ct_utils = ALL_COMMANDS.iter().collect();
     match std::fs::create_dir("docs/src/utils/") {
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
         x => x,

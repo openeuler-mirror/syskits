@@ -12,58 +12,11 @@
 //! tty 命令行工具，用于打印当前终端设备的文件名
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use ctcore::{Tool, ct_format_usage, ct_help_about, ct_help_usage};
-use std::error::Error;
 use std::ffi::OsString;
 use std::io::IsTerminal;
-use std::path::PathBuf;
-
-/// TTY错误类型
-#[derive(Debug)]
-enum TtyError {
-    NotATerminal,
-}
-
-impl CTError for TtyError {
-    fn code(&self) -> i32 {
-        match self {
-            TtyError::NotATerminal => 1,
-        }
-    }
-
-    fn usage(&self) -> bool {
-        false
-    }
-}
-
-impl std::fmt::Display for TtyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TtyError::NotATerminal => write!(f, "not a tty"),
-        }
-    }
-}
-
-impl Error for TtyError {}
-
-/// 获取当前终端的名称
-fn tty_name() -> Result<PathBuf, std::io::Error> {
-    #[cfg(unix)]
-    {
-        // 在 Unix 系统上使用 nix crate 的 ttyname 函数
-        nix::unistd::ttyname(std::io::stdin())
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Failed to get tty name"))
-    }
-    #[cfg(not(unix))]
-    {
-        // 在非 Unix 系统上返回一个简单的错误
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "ttyname is not supported on this platform",
-        ))
-    }
-}
+use std::io::Write;
 
 const TTY_ABOUT: &str = ct_help_about!("tty.md");
 const TTY_USAGE: &str = ct_help_usage!("tty.md");
@@ -84,16 +37,25 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
         return value;
     }
 
-    if std::io::stdin().is_terminal() {
-        // 如果标准输入是一个终端，则获取其名称并打印
-        let tty_path = tty_name().unwrap_or_else(|_| PathBuf::from("not a tty"));
-        println!("{}", tty_path.display());
-        return Ok(());
-    }
+    let mut stdout = std::io::stdout();
 
-    // 如果标准输入不是一个终端，则返回错误
-    set_ct_exit_code(1);
-    Err(TtyError::NotATerminal.into())
+    let tty_name = nix::unistd::ttyname(std::io::stdin());
+
+    let tty_write_result = match tty_name {
+        Ok(name) => writeln!(stdout, "{}", name.display()),
+        Err(_) => {
+            set_ct_exit_code(1);
+            writeln!(stdout, "not a tty")
+        }
+    };
+
+    if tty_write_result.is_err() || stdout.flush().is_err() {
+        // 避免返回以防止稍后在尝试另一次刷新时引发panic
+        // 因为`ctcore_procs::main`宏在每个实用程序执行后都会插入一次刷新。
+        std::process::exit(3);
+    };
+
+    Ok(())
 }
 
 fn tty_handle_silent(matches: ArgMatches) -> Option<CTResult<()>> {

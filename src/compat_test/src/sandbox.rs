@@ -460,24 +460,45 @@ impl IsolatedSandbox {
             self.current_dir
         ));
 
-        let mut command = Command::new(cmd)
+        let mut command = Command::new(cmd);
+        command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .args(args)
             .current_dir(&self.current_dir)
-            .envs(&self.current_env)
-            .spawn()
-            .expect("Failed to create command");
+            .envs(&self.current_env);
 
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("Failed to execute command: {}", e),
+                    exit_code: 127, // Common error code for command not found
+                });
+            }
+        };
+    
         // 启动命令
         if let Some(content) = stdin_content {
-            command.stdin.as_mut().unwrap()
-                .write_all(content.as_bytes())
-                .expect("Failed to write to stdin");
+            if !content.is_empty() {
+                if let Some(stdin) = child.stdin.as_mut() {
+                    if let Err(e) = stdin.write_all(content.as_bytes()) {
+                        self.debug_fmt(format_args!("Failed to write to stdin: {}", e));
+                        return Ok(CommandResult {
+                            stdout: String::new(),
+                            stderr: format!("Failed to write to stdin: {}", e),
+                            exit_code: 1,
+                        });
+                    }
+                }
+            }
         }
 
         // 等待命令执行完成并获取输出
-        let output = match command.wait_with_output() {
+        let output = match child.wait_with_output() {
             Ok(output) => {
                 self.debug_fmt(format_args!("Command executed successfully"));
                 output

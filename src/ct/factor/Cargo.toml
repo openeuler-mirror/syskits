@@ -40,4 +40,4 @@ name = "generate_prime_table"
 path = "tools/generate_prime_table.rs"
 
 [lib]
-path = "src/cli.rs"
+path = "src/factor.rs"

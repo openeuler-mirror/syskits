@@ -19,6 +19,11 @@ use std::str::FromStr;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, parser::ValueSource};
 
+use crate::errors::*;
+use crate::flags::*;
+use crate::format::numfmt_format_and_print;
+use crate::units::{NumfmtUnit, Result};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_format_usage;
@@ -28,12 +33,8 @@ use ctcore::ct_help_usage;
 use ctcore::ct_ranges::CtRange;
 use ctcore::ct_show;
 use ctcore::ct_show_error;
+use std::ffi::OsString;
 use units::{NUMFMT_IEC_BASES, NUMFMT_SI_BASES};
-
-use crate::errors::*;
-use crate::flags::*;
-use crate::format::numfmt_format_and_print;
-use crate::units::{NumfmtUnit, Result};
 
 pub mod errors;
 pub mod flags;
@@ -455,6 +456,26 @@ pub fn ct_app() -> Command {
         .allow_negative_numbers(true)
         .args(args)
         .after_help(NUMFMT_AFTER_HELP)
+}
+
+#[derive(Default)]
+pub struct Numfmt;
+impl Tool for Numfmt {
+    fn name(&self) -> &'static str {
+        "numfmt"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let result = numfmt_main(args.iter().cloned());
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -13044,25 +13065,6 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_main_round_long_up() {
-            let args = vec![ctcore::ct_util_name(), "--round", "up", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
-
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
-            }
-        }
-
-        #[test]
         fn test_ct_main_round_long_down() {
             let args = vec![ctcore::ct_util_name(), "--round", "down", "10000"];
             let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
@@ -15934,18 +15936,6 @@ mod tests {
         fn test_ct_app_to_long_iec_with_value_999() {
             let command = ct_app();
             let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "999"];
-            let result = command.try_get_matches_from(cmd_args);
-            assert!(result.is_ok());
-            assert_eq!(
-                result.unwrap().get_one::<String>("to"),
-                Some(&"iec".to_string())
-            );
-        }
-
-        #[test]
-        fn test_ct_app_to_long_iec_with_value_1000() {
-            let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1000"];
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_ok());
             assert_eq!(

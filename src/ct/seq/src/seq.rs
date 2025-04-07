@@ -13,9 +13,11 @@ use std::io::{ErrorKind, Write, stdout};
 use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
 
+use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_format::{Format, num_format};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 
 mod error;
 mod extendedbigdecimal;
@@ -89,7 +91,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let numbers = parse_number_args(&matches)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
-    
+
     let padding = calculate_padding(&first, &increment, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
     let format = parse_format_option(options.format)?;
@@ -236,14 +238,16 @@ fn write_value_float(
 }
 
 /// Floating point based code path
-fn print_seq(
-    range: RangeFloat,
-    config: PrintConfig,
-) -> std::io::Result<()> {
+fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
     let (first, increment, last) = range;
     let mut value = first;
     let padding = if config.pad {
-        config.padding + if config.largest_dec > 0 { config.largest_dec + 1 } else { 0 }
+        config.padding
+            + if config.largest_dec > 0 {
+                config.largest_dec + 1
+            } else {
+                0
+            }
     } else {
         0
     };
@@ -279,6 +283,22 @@ fn print_seq(
         write!(writer, "{}", config.terminator)?;
     }
     writer.flush()
+}
+
+#[derive(Default)]
+pub struct Seq;
+impl Tool for Seq {
+    fn name(&self) -> &'static str {
+        "seq"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        seq_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]
@@ -375,15 +395,19 @@ mod tests {
             "1".parse::<PreciseNumber>().unwrap().number,
             "3".parse::<PreciseNumber>().unwrap().number,
         );
-        print_seq(range, PrintConfig {
-            largest_dec: 0,
-            separator: ",",
-            terminator: "\n",
-            pad: false,
-            padding: 1,
-            format: &None,
-            buffer: Some(&mut output),
-        }).unwrap();
+        print_seq(
+            range,
+            PrintConfig {
+                largest_dec: 0,
+                separator: ",",
+                terminator: "\n",
+                pad: false,
+                padding: 1,
+                format: &None,
+                buffer: Some(&mut output),
+            },
+        )
+        .unwrap();
         assert_eq!(String::from_utf8(output.clone()).unwrap(), "1,2,3\n");
 
         output.clear();
@@ -394,15 +418,19 @@ mod tests {
             "1".parse::<PreciseNumber>().unwrap().number,
             "10".parse::<PreciseNumber>().unwrap().number,
         );
-        print_seq(range, PrintConfig {
-            largest_dec: 0,
-            separator: "\n",
-            terminator: "\n",
-            pad: true,
-            padding: 2,
-            format: &None,
-            buffer: Some(&mut output),
-        }).unwrap();
+        print_seq(
+            range,
+            PrintConfig {
+                largest_dec: 0,
+                separator: "\n",
+                terminator: "\n",
+                pad: true,
+                padding: 2,
+                format: &None,
+                buffer: Some(&mut output),
+            },
+        )
+        .unwrap();
         assert_eq!(
             String::from_utf8(output.clone()).unwrap(),
             "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n"

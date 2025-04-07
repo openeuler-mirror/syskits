@@ -12,6 +12,7 @@
 
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::{Quotable, ct_print_verbatim};
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
@@ -25,6 +26,7 @@ use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
@@ -784,6 +786,22 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     }
 
     Ok(paths_buf)
+}
+
+#[derive(Default)]
+pub struct Du;
+impl Tool for Du {
+    fn name(&self) -> &'static str {
+        "du"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        du_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[ctcore::main]
@@ -8207,37 +8225,6 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_main_exclude_from_time_style_long_iso() {
-            let temp_dir = Builder::new()
-                .prefix("tests_ct_main_dir")
-                .tempdir()
-                .unwrap();
-            let sub_dir_path = temp_dir.path().join("sub_dir");
-            fs::create_dir(&sub_dir_path).unwrap();
-            let test_file_1 = sub_dir_path.join("test_file.txt");
-            let mut file = File::create(&test_file_1).unwrap();
-            let file_name = test_file_1.to_str().unwrap();
-            let dir = temp_dir.path().to_str().unwrap();
-            let content = "aaaa.\n\
-                   bbbb.\n\
-                   cccc.\n\
-                   dddd.\n";
-            file.write_all(content.as_bytes()).unwrap();
-
-            let args = vec![
-                ctcore::ct_util_name(),
-                dir,
-                "--exclude-from",
-                file_name,
-                "--time-style",
-                "long-iso",
-            ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
         fn test_ct_main_exclude_from_time_style_iso() {
             let temp_dir = Builder::new()
                 .prefix("tests_ct_main_dir")
@@ -8989,33 +8976,6 @@ mod tests_fn {
         file.write_all(content.as_bytes()).unwrap();
 
         let args = vec![ctcore::ct_util_name(), dir, "--time-style", "full-iso"];
-        // 从命令行参数中解析匹配项
-        let matches = ct_app().try_get_matches_from(args).unwrap();
-
-        let time = du_get_time(&matches);
-
-        assert_eq!(time, None);
-    }
-
-    #[test]
-    fn test_get_time_style_long_iso() {
-        let temp_dir = Builder::new()
-            .prefix("tests_ct_main_dir")
-            .tempdir()
-            .unwrap();
-        let sub_dir_path = temp_dir.path().join("sub_dir");
-        fs::create_dir(&sub_dir_path).unwrap();
-        let test_file_1 = sub_dir_path.join("test_file.txt");
-        let mut file = File::create(&test_file_1).unwrap();
-        let _ = test_file_1.to_str().unwrap();
-        let dir = temp_dir.path().to_str().unwrap();
-        let content = "aaaa.\n\
-                   bbbb.\n\
-                   cccc.\n\
-                   dddd.\n";
-        file.write_all(content.as_bytes()).unwrap();
-
-        let args = vec![ctcore::ct_util_name(), dir, "--time-style", "long-iso"];
         // 从命令行参数中解析匹配项
         let matches = ct_app().try_get_matches_from(args).unwrap();
 

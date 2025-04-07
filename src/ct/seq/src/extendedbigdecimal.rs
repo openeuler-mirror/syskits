@@ -64,9 +64,10 @@ impl Display for ExtendedBigDecimal {
         match self {
             Self::BigDecimal(x) => {
                 let (n, p) = x.as_bigint_and_exponent();
-                match p {
-                    0 => Self::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
-                    _ => x.fmt(f),
+                if p == 0 {
+                    write!(f, "{}.0", n)
+                } else {
+                    x.fmt(f)
                 }
             }
             Self::Infinity => {

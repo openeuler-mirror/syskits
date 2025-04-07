@@ -209,6 +209,24 @@ fn readlink_show(path: &Path, line_ending: Option<CtLineEnding>) -> std::io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Readlink::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "readlink");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("readlink"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("readlink"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     #[cfg(test)]
     mod show_tests {

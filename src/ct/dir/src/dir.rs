@@ -97,6 +97,22 @@ impl Tool for Dir {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Dir::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "dir");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("dir"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("dir")];
+        assert!(tool.execute(&args).is_ok());
+    }
+
     #[cfg(test)]
     mod ct_main_tests {
         use std::fs::File;

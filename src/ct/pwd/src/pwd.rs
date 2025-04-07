@@ -191,6 +191,23 @@ impl Tool for Pwd {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Pwd;
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "pwd");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("pwd"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("pwd")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     #[cfg(test)]
     mod ct_main_tests {

@@ -511,6 +511,25 @@ fn args_init() -> Vec<Arg> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Cksum::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "cksum");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("cksum"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("cksum"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     #[cfg(test)]
     mod tests_ct_app {
         use crate::ct_app;

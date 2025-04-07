@@ -10,7 +10,7 @@
  */
 
 use cpp::cpp;
-use libc::{c_char, c_int, fileno, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
+use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
 use std::env;
 use std::ptr;
 
@@ -97,7 +97,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 /// # 安全性
 /// 此函数与 C FFI 交互以修改标准 IO 缓冲。
 /// 它应该只在 stdbuf 实用程序预期的上下文中调用。
-/// 
+///
 /// # Safety
 /// 此函数使用 unsafe 代码与 C 标准库进行交互，修改标准 IO 流的缓冲设置。
 /// 调用此函数可能导致未定义行为，如果：
@@ -126,7 +126,6 @@ pub unsafe extern "C" fn __stdbuf() {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,7 +145,7 @@ mod tests {
                 (_IOFBF, buff_size)
             }
         };
-        
+
         assert_eq!(mode, _IONBF);
         assert_eq!(size, 0);
     }
@@ -163,7 +162,7 @@ mod tests {
                 (_IOFBF, buff_size)
             }
         };
-        
+
         assert_eq!(mode, _IOLBF);
         assert_eq!(size, 0);
     }
@@ -180,28 +179,26 @@ mod tests {
                 (_IOFBF, buff_size)
             }
         };
-        
+
         assert_eq!(mode, _IOFBF);
         assert_eq!(size, 1024);
     }
-    
+
     #[test]
     fn test_buffer_mode_invalid_size() {
         // 测试无效缓冲区大小的处理
         let value = "invalid";
-        
+
         // 使用panic::catch_unwind捕获函数的panic，因为set_buffer会调用std::process::exit
-        let result = std::panic::catch_unwind(|| {
-            match value {
-                "0" => (_IONBF, 0_usize),
-                "L" => (_IOLBF, 0_usize),
-                input => {
-                    let buff_size: usize = input.parse().expect("无法解析缓冲区大小");
-                    (_IOFBF, buff_size)
-                }
+        let result = std::panic::catch_unwind(|| match value {
+            "0" => (_IONBF, 0_usize),
+            "L" => (_IOLBF, 0_usize),
+            input => {
+                let buff_size: usize = input.parse().expect("无法解析缓冲区大小");
+                (_IOFBF, buff_size)
             }
         });
-        
+
         // 验证函数是否如预期般panic
         assert!(result.is_err(), "应该在无效大小上panic");
     }
@@ -210,7 +207,7 @@ mod tests {
     fn test_env_var_parsing() {
         // 测试环境变量解析逻辑（不实际设置环境变量）
         // 这仅测试if let语法的有效性
-        
+
         // 模拟环境变量存在的情况
         let mock_var: Result<String, env::VarError> = Ok(String::from("L"));
         if let Ok(val) = mock_var {
@@ -218,7 +215,7 @@ mod tests {
         } else {
             panic!("应该找到环境变量");
         }
-        
+
         // 模拟环境变量不存在的情况
         let mock_none: Result<String, env::VarError> = Err(env::VarError::NotPresent);
         if let Ok(_) = mock_none {

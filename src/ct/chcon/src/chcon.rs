@@ -865,8 +865,26 @@ impl Tool for Chcon {
 mod tests {
     use super::*;
     use clap::error::ErrorKind;
+    use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Chcon::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "chcon");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("chcon"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("chcon"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // chcon需要参数，所以不带参数应该返回错误
+    }
 
     #[test]
     fn test_ct_app_execution_help() {

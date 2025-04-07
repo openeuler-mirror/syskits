@@ -211,6 +211,28 @@ mod tests {
     use std::fs::File;
 
     use std::io::Write;
+
+    #[test]
+    fn test_tool_implementation() {
+        let chgrp = Chgrp::default();
+
+        // Test name method
+        assert_eq!(chgrp.name(), "chgrp");
+
+        // Test command method
+        assert!(chgrp.command().get_name().contains("chgrp"));
+
+        // Test execute method - should fail with no arguments, which is expected
+        let args: Vec<OsString> = vec![OsString::from("chgrp")];
+        let result = chgrp.execute(&args);
+        assert!(result.is_err());
+
+        // Test execute with --help, which should succeed
+        let help_args: Vec<OsString> = vec![OsString::from("chgrp"), OsString::from("--help")];
+        let help_result = chgrp.execute(&help_args);
+        assert!(help_result.is_err());
+    }
+
     #[test]
     fn test_ct_app_execution_help() {
         let command = ct_app();

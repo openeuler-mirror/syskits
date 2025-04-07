@@ -706,9 +706,25 @@ impl Default for LnSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::fs;
     use tempfile::tempdir;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Ln::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "ln");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("ln"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("ln"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
     #[test]
     fn test_link_files_in_dir() {
         let temp = tempdir().unwrap();

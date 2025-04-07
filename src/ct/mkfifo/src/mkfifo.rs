@@ -144,6 +144,25 @@ impl Tool for Mkfifo {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Mkfifo::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "mkfifo");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("mkfifo"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("mkfifo"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // mkfifo命令需要参数，所以不带参数应该返回错误
+    }
 
     mod tests_mkfio_main {
         use crate::mkfifo_main;

@@ -1258,10 +1258,28 @@ impl Tool for Install {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Install;
+
+        // Test name method
+        assert_eq!(tool.name(), "install");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("install"));
+
+        // Test execute method - help command should work
+        let args: Vec<OsString> = vec![OsString::from("install"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_need_copy() {

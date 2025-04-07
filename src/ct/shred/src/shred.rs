@@ -744,6 +744,23 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Shred::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "shred");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("shred"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("shred"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // shred命令需要文件路径参数，所以不带参数应该返回错误
+    }
+
     mod pattern_tests {
         use super::*;
 

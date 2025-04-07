@@ -951,6 +951,29 @@ impl Tool for Mv {
     }
 }
 
+#[cfg(test)]
+mod tests_tool_implementation {
+    use crate::Mv;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Mv::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "mv");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("mv"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("mv"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+    }
+}
+
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {

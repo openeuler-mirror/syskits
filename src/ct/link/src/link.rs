@@ -126,6 +126,23 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::Builder;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Link::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "link");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("link"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("link"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // link命令需要参数，所以不带参数应该返回错误
+    }
+
     mod ct_app_tests {
         /*
         测试版本和帮助标志

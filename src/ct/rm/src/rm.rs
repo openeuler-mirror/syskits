@@ -664,7 +664,37 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let rm = Rm::default();
+
+        // Test name method
+        assert_eq!(rm.name(), "rm");
+
+        // Test command method
+        let command = rm.command();
+        assert!(command.get_name().contains("rm"));
+
+        // Test execute method with no arguments
+        let args = vec![OsString::from("rm")];
+        let result = rm.execute(&args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 1);
+
+        // Test execute method with help flag
+        let args = vec![OsString::from("rm"), OsString::from("--help")];
+        let result = rm.execute(&args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 0);
+
+        // Test execute method with version flag
+        let args = vec![OsString::from("rm"), OsString::from("--version")];
+        let result = rm.execute(&args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 0);
+    }
 
     #[test]
     fn test_remove_dir() {

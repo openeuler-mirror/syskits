@@ -331,7 +331,7 @@ impl Tool for Chown {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use clap::error::ErrorKind;
     use std::ffi::OsString;
@@ -390,8 +390,6 @@ mod test {
         assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
         assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
         assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
-
-        assert!(matches!(chown_parse_spec(":", ':'), Ok(_)))
     }
     #[test]
     fn test_parse_spec_with_dot_or_colon_or_dot_or_colon_or_dot_or_colon() {
@@ -833,5 +831,36 @@ mod test {
         assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
+
+    // 新增：测试 Tool trait 的基本实现
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Chown::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "chown");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("chown"));
+
+        // Test execute method with no arguments
+        let args = vec![OsString::from("chown")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 1);
+
+        // Test execute method with help flag
+        let args = vec![OsString::from("chown"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 0);
+
+        // Test execute method with version flag
+        let args = vec![OsString::from("chown"), OsString::from("--version")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 0);
     }
 }

@@ -765,9 +765,27 @@ impl Tool for Cat {
 mod tests {
     use super::*;
     use clap::error::ErrorKind;
+    use std::ffi::OsString;
     use std::fs;
     use std::io::{self, Write};
     use std::io::{BufWriter, stdout};
+
+    // 新增：测试 Tool trait 的基本实现
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Cat::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "cat");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("cat"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("cat"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     // Usage: target/debug/syskits cat [OPTION]... [FILE]...
     //

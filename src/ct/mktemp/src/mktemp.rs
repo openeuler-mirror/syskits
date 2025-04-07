@@ -2701,3 +2701,26 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_tool_implementation {
+    use crate::Mktemp;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Mktemp::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "mktemp");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("mktemp"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("mktemp"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+    }
+}

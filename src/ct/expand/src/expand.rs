@@ -653,6 +653,25 @@ impl Tool for Expand {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Expand::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "expand");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("expand"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("expand"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     mod tests_echo_main {
         use crate::expand_main;

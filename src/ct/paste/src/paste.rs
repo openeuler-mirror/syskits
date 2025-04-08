@@ -802,4 +802,20 @@ mod tests {
         std::fs::write(&file_path, content).unwrap();
         (temp_dir, file_path.to_str().unwrap().to_string())
     }
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Paste::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "paste");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("paste"));
+
+        // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
+        let args = vec![OsString::from("paste"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
 }

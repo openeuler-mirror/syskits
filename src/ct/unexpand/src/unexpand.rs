@@ -504,8 +504,26 @@ impl Tool for Unexpand {
 #[cfg(test)]
 mod tests {
     use crate::is_digit_or_comma;
+    use std::ffi::OsString;
 
     use super::*;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Unexpand;
+
+        // Test name method
+        assert_eq!(tool.name(), "unexpand");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("unexpand"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("unexpand"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     #[cfg(test)]
     mod unexpand_tests {

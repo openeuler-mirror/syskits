@@ -1044,8 +1044,25 @@ impl Tool for Ptx {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Ptx::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "ptx");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("ptx"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("ptx"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     mod config_tests {
         use super::*;

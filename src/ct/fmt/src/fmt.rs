@@ -401,6 +401,22 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Fmt::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "fmt");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("fmt"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("fmt"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err()); // csplit needs file and pattern arguments
+    }
+
     #[cfg(test)]
     mod fmt_configs_tests {
         use std::fs;

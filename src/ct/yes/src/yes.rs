@@ -176,12 +176,25 @@ pub fn yes_exec(bytes_data: &[u8]) -> io::Result<()> {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
     use std::ffi::OsString;
 
-    use clap::error::ErrorKind;
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Yes::default();
 
-    use super::*;
+        // 测试 name 方法
+        assert_eq!(tool.name(), "yes");
 
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("yes"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("yes"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
     // yes 接口: yes [STRING]...
     //     or:  yes OPTION
     //       --help     display this help and exit

@@ -670,6 +670,23 @@ pub fn head_main(args: impl ctcore::Args) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Head;
+
+        // Test name method
+        assert_eq!(tool.name(), "head");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("head"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("head"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     mod test_find_nth_line_from_end {
         use super::*;

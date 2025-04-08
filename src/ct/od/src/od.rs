@@ -780,6 +780,23 @@ impl Tool for Od {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Od::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "od");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("od"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("od"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     mod od_settings_tests {
         use super::*;

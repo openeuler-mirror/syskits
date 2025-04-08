@@ -13331,4 +13331,26 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+    #[cfg(test)]
+    mod tests_tool_implementation {
+        use super::*;
+        use ctcore::Tool;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_tool_implementation() {
+            let tool = Split::default();
+
+            // 测试 name 方法
+            assert_eq!(tool.name(), "split");
+
+            // 测试 command 方法
+            let command = tool.command();
+            assert!(command.get_name().contains("split"));
+
+            // 测试 execute 方法
+            let args = vec![OsString::from("split"), OsString::from("--help")];
+            assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+        }
+    }
 }

@@ -1380,10 +1380,26 @@ fn parse_field_number_option(value: Option<&str>) -> CTResult<Option<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Join::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "join");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("join"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("join"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
     #[test]
     fn test_parse_settings_basic() {
         // 创建基本的命令行参数

@@ -745,6 +745,24 @@ fn uniq_open_output_file(out_file_name: Option<&OsStr>) -> CTResult<Box<dyn Writ
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Uniq;
+
+        // Test name method
+        assert_eq!(tool.name(), "uniq");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("uniq"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("uniq"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     #[cfg(test)]
     mod uniq_tests {

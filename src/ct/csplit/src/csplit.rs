@@ -711,8 +711,23 @@ impl Tool for Csplit {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use std::path::Path;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Csplit::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "csplit");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("csplit"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("csplit"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err()); // csplit needs file and pattern arguments
+    }
 
     mod tests_ct_app {
         use super::*;

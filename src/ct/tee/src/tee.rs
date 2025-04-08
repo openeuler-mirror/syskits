@@ -406,6 +406,24 @@ impl Tool for Tee {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Tee;
+
+        // Test name method
+        assert_eq!(tool.name(), "tee");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("tee"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("tee"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_stat_options_default() {

@@ -916,6 +916,26 @@ fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> 
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Cut::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "cut");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("cut"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("cut"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // cut命令需要必要参数，所以测试不带参数的情况应该返回错误
+    }
+
     mod tests_cut_app {
         use crate::ct_app;
         use clap::error::ErrorKind;

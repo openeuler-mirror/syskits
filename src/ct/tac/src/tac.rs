@@ -502,6 +502,22 @@ impl Tool for Tac {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Tac::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "tac");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("tac"));
+
+        // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
+        let args = vec![OsString::from("tac"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     #[cfg(test)]
     mod tac_flags_tests {
         use super::*;

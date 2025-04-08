@@ -97,6 +97,24 @@ impl Tool for Vdir {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Vdir;
+
+        // Test name method
+        assert_eq!(tool.name(), "vdir");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("vdir"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("vdir"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_ok());
+    }
 
     #[cfg(test)]
     mod ct_main_tests {

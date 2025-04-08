@@ -297,6 +297,59 @@ impl Tool for Nproc {
 
 #[cfg(test)]
 mod tests {
+    mod tests_tool_implementation {
+        use crate::Nproc;
+        use ctcore::Tool;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_tool_implementation() {
+            let tool = Nproc::default();
+
+            // 测试 name 方法
+            assert_eq!(tool.name(), "nproc");
+
+            // 测试 command 方法
+            let command = tool.command();
+            assert!(command.get_name().contains("nproc"));
+
+            // 测试 execute 方法
+            let args = vec![OsString::from("nproc")];
+            assert!(tool.execute(&args).is_ok()); // nproc不需要参数
+        }
+    }
+
+    mod tests_nproc_process {
+        use crate::nproc_cores_num_process;
+
+        #[test]
+        fn test_nproc_cores_num_process_normal() {
+            // 正常情况：系统有4个核心，忽略1个，限制100个
+            let result = nproc_cores_num_process(1, 100, 4);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 3);
+        }
+
+        #[test]
+        fn test_nproc_cores_num_process_limit() {
+            // 限制生效：系统有8个核心，忽略0个，限制6个
+            let result = nproc_cores_num_process(0, 6, 8);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 6);
+        }
+
+        #[test]
+        fn test_nproc_cores_num_process_ignore_all() {
+            // 忽略所有核心：系统有4个核心，忽略4个或更多
+            let result = nproc_cores_num_process(4, 100, 4);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 1); // 返回最少1个核心
+
+            let result = nproc_cores_num_process(5, 100, 4);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 1); // 返回最少1个核心
+        }
+    }
 
     mod tests_nproc_main {
         use crate::nproc_main;

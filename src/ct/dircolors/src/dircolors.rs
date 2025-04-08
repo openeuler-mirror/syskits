@@ -552,13 +552,8 @@ where
                         result.push_str(format!("{s}={value}:").as_str());
                     }
                 } else {
-                    // 如果遇到未识别的关键词，则报错。
-                    return Err(format!(
-                        "{}:{}: unrecognized keyword {}",
-                        fp.maybe_quote(),
-                        num,
-                        key
-                    ));
+                    // 如果遇到未识别的关键词，则忽略该行。
+                    continue;
                 }
             }
         }

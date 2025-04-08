@@ -477,6 +477,23 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Id::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "id");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("id"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("id")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     #[cfg(test)]
     mod id_handle_users_tests {

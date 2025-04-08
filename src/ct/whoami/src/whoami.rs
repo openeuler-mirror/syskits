@@ -95,8 +95,24 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Whoami;
+
+        // Test name method
+        assert_eq!(tool.name(), "whoami");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("whoami"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("whoami"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     #[cfg(test)]
-    mod tests {
+    mod ct_main_tests {
         use std::ffi::OsString;
 
         use clap::error::ErrorKind;

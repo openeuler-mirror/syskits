@@ -128,6 +128,23 @@ impl Tool for Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Sync::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "sync");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("sync"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("sync"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     #[cfg(test)]
     mod ct_main_tests {

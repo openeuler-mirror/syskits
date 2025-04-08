@@ -389,6 +389,25 @@ impl Tool for Chroot {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Chroot::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "chroot");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("chroot"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("chroot"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // 因为chroot需要root权限和必要参数，所以测试不带参数的情况应该返回错误
+    }
+
     #[cfg(test)]
     mod tests_ct_app {
         use crate::{ct_app, ctmain, opt_flags};

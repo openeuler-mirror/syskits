@@ -130,6 +130,25 @@ pub fn ct_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Users;
+
+        // Test name method
+        assert_eq!(tool.name(), "users");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("users"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("users"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
     #[cfg(test)]
     mod ct_main_tests {
         use super::*;

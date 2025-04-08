@@ -585,3 +585,26 @@ mod tests_all {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_tool_implementation {
+    use crate::Pinky;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Pinky::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "pinky");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("pinky"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("pinky"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+    }
+}

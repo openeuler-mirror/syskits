@@ -155,8 +155,26 @@ impl Tool for Who {
 #[cfg(test)]
 mod tests {
     use clap::error::ErrorKind;
+    use ctcore::Tool;
+    use std::ffi::OsString;
 
     use super::*;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Who::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "who");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("who"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("who"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     // who 接口: who [OPTION]... [ FILE | ARG1 ARG2 ]
     //   -a, --all         same as -b -d --login -p -r -t -T -u

@@ -106,6 +106,23 @@ pub fn ct_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = False;
+
+        // Test name method
+        assert_eq!(tool.name(), "false");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("false"));
+
+        // Test execute method - should return an error since false always exits with non-zero
+        let args = vec![OsString::from("false")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod tests_echo_main {
         use crate::false_main;

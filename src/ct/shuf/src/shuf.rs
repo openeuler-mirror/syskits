@@ -863,6 +863,22 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Shuf::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "shuf");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("shuf"));
+
+        // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
+        let args = vec![OsString::from("shuf"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     mod settings_tests {
         use super::*;
 

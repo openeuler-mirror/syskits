@@ -227,7 +227,27 @@ pub fn ct_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::BufWriter;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Factor::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "factor");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("factor"));
+
+        // Test execute method - should work with default arguments
+        let args = vec![OsString::from("factor"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+
+        // Test with specific number
+        let args = vec![OsString::from("factor"), OsString::from("42")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     /// 测试 FactorFlags 的默认值
     #[test]
@@ -262,6 +282,8 @@ mod tests {
         assert!(flags.print_exponents);
         assert_eq!(flags.numbers, vec!["12", "24"]);
     }
+
+    use std::io::BufWriter;
 
     /// 测试 factors_print_str 函数 - 普通格式
     #[test]

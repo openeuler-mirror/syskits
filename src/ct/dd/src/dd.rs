@@ -1328,9 +1328,31 @@ pub fn ct_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{DdOutput, Parser, calc_bsize};
-
     use std::path::Path;
+
+    #[test]
+    fn test_tool_implementation() {
+        let dd = Dd;
+
+        // Test name method
+        assert_eq!(dd.name(), "dd");
+
+        // Test command method
+        assert!(dd.command().get_name().contains("dd"));
+
+        // Test execute method with help argument (should succeed)
+        let args: Vec<OsString> = vec![OsString::from("dd"), OsString::from("--help")];
+        let result = dd.execute(&args);
+        assert!(result.is_err());
+
+        // Test execute with invalid arguments (should fail gracefully)
+        let invalid_args: Vec<OsString> =
+            vec![OsString::from("dd"), OsString::from("invalid=argument")];
+        let invalid_result = dd.execute(&invalid_args);
+        assert!(invalid_result.is_err());
+    }
 
     #[test]
     fn bsize_test_primes() {

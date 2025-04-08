@@ -304,7 +304,24 @@ impl Tool for Seq {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::Tool;
     use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Seq::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "seq");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("seq"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("seq"), OsString::from("1")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     #[test]
     fn test_seq_options_default() {

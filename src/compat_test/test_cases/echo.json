@@ -1,0 +1,501 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "echo",
+          "description": "基本功能测试",
+          "setup_commands": [
+            ""
+          ],
+          "args": ["Hello World"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+        },
+        {
+            "tstdin": "",
+            "command": "echo",
+            "description": "不追加末尾换行",
+            "setup_commands": [
+              ""
+            ],
+            "args": ["-n","Hello World"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+          },
+          {
+              "tstdin": "",
+              "command": "echo",
+              "description": "启用下列反斜杠转义的解释",
+              "setup_commands": [
+                ""
+              ],
+              "args": ["-e","Line 1\nLine 2\tTabbed"],
+              "expectation": {
+                "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+                },
+                "verifications": [
+                  {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                  }
+                ]
+              },
+              "cleanup_commands": [
+                ""
+              ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "显式地抑制对于反斜杠转义的解释",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-E","Text with \n escape"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "显式地抑制对于反斜杠转义的解释",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-E","Text with \n escape"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "响铃字符测试",
+                "setup_commands": [
+                  "echo -e '\\a' > /tmp/test.txt"
+                ],
+                "args": [""],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "cat /tmp/test.txt",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试退格字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "ab\bc"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试终止输出字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\c world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试转义字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\e world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试换页符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\f world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试换行符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\n world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试回车符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\r world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试横向制表符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\t world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试纵向制表符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\v world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试反斜杠",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "hello\\ world"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试八进制字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "\\0101"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试十六进制字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "\\x41"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试unicode 4位字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "\u0041"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ]
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            },
+            {
+                "tstdin": "",
+                "command": "echo",
+                "description": "测试unicode 8位字符",
+                "setup_commands": [
+                  ""
+                ],
+                "args": ["-e", "\\U00000041"],
+                "expectation": {
+                  "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                  },
+                  "verifications": [
+                    {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                    }
+                  ],
+                  "ignore_fields": {
+                    "ignore_stdout": true
+                  }
+                },
+                "cleanup_commands": [
+                  ""
+                ]
+            }
+    ]
+  }

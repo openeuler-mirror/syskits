@@ -1,0 +1,136 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "dirname",
+          "description": "基本功能测试",
+          "setup_commands": [
+            "touch /root/test.txt"
+          ],
+          "args": ["/root/test.txt"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "\n/root\n\n",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            "rm -f /root/test.txt"
+          ]
+        },
+        {
+            "tstdin": "",
+            "command": "dirname",
+            "description": "处理多个路径",
+            "setup_commands": [
+              "touch /root/test.txt",
+              "touch /root/test2.txt",
+              "touch /root/test3.txt"
+            ],
+            "args": ["/root/test.txt", "/root/test2.txt", "/root/test3.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "\n/root\n/root\n/root\n\n",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f /root/test.txt",
+              "rm -f /root/test2.txt",
+              "rm -f /root/test3.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dirname",
+            "description": "输出以空字符结尾",
+            "setup_commands": [
+              "touch /root/test.txt"
+            ],
+            "args": ["-z","/root/test.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "\n/root\n",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f /root/test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dirname",
+            "description": "处理相对路径",
+            "setup_commands": [
+              "touch ../test.txt"
+            ],
+            "args": ["../test.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "\n..\n\n",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f ../test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dirname",
+            "description": "处理空字符串",
+            "setup_commands": [
+            ],
+            "args": [""],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "\n.\n\n",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+            ]
+        }
+    ]
+  }

@@ -81,6 +81,28 @@ fn echo_parse_code(input: &mut Peekable<Chars>, base: EchoBase) -> Option<char> 
     Some(ret.into())
 }
 
+/// 解析Unicode转义序列
+fn parse_unicode_escape(input: &mut Peekable<Chars>, max_digits: usize) -> Option<char> {
+    let mut value = 0u32;
+    let mut count = 0;
+
+    while let Some(&c) = input.peek() {
+        if count >= max_digits {
+            break;
+        }
+
+        if let Some(digit) = c.to_digit(16) {
+            value = value * 16 + digit;
+            input.next();
+            count += 1;
+        } else {
+            break;
+        }
+    }
+
+    char::from_u32(value)
+}
+
 /// 将转义序列写入给定的输出流
 fn echo_print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<()>> {
     let mut iter = input.chars().peekable();
@@ -119,6 +141,24 @@ fn echo_print_escaped(input: &str, mut output: impl Write) -> io::Result<Control
                     }
                 }
                 '0' => echo_parse_code(&mut iter, EchoBase::Oct).unwrap_or('\0'),
+                'u' => {
+                    // 处理 \uHHHH
+                    if let Some(c) = parse_unicode_escape(&mut iter, 4) {
+                        c
+                    } else {
+                        write!(output, "\\u")?;
+                        continue;
+                    }
+                }
+                'U' => {
+                    // 处理 \UHHHHHHHH
+                    if let Some(c) = parse_unicode_escape(&mut iter, 8) {
+                        c
+                    } else {
+                        write!(output, "\\U")?;
+                        continue;
+                    }
+                }
                 c => {
                     write!(output, "\\")?;
                     c

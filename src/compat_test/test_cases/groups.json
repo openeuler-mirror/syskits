@@ -1,0 +1,52 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "groups",
+          "description": "基本功能测试",
+          "setup_commands": [
+          ],
+          "args": [],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+          ]
+        },
+        {
+            "tstdin": "",
+            "command": "groups",
+            "description": "指定用户名参数",
+            "setup_commands": [
+            ],
+            "args": ["root"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+            ]
+          }
+    ]
+}

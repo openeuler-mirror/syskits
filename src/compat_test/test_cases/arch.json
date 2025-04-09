@@ -1,0 +1,29 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "arch",
+          "description": "",
+          "setup_commands": [
+          ],
+          "args": [],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+        }
+    ]
+  }

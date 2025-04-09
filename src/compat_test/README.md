@@ -3,9 +3,11 @@
 一个全面的测试框架，用于确保 Syskits 与 GNU Coreutils 实现的完全兼容性。
 
 # Syskits 兼容性测试框架
+
 ## 整体设计框架
 
 总体思想，通过执行syskits 和 coreutils 的相同命令，比较它们的执行结果，来确保syskits 和 coreutils 的兼容性。结果比较主要从4个维度：
+
 1. 命令执行结果的退出码
 2. 命令执行结果的标准输出
 3. 命令执行结果的标准错误
@@ -14,8 +16,11 @@
 为了保证测试的准确性，设计了命令行沙箱，来模拟执行环境，并限制执行资源。
 为了保证测试的全面性，设计了多种测试模式，支持单个命令测试，也支持多个命令组合测试。
 这里解决了两个问题：
-1. 就是命令执行结果的基准问题，在测试中，需要以coreutils 的执行结果作为基准，但是不能每次都执行coreutils 命令，这样会降低测试效率。所以设计了基准模式，在第一次执行命令时，将执行结果作为基准，后续执行命令时，可以直接使用基准结果作为期望结果，来比较执行结果。
-2. 命令执行功能性验证逻辑可观测思考，命令的不同，他们可能不能使用标准输出和标准错误输出来观察，例如 chmod，所以在设计单元测试用例参数时，添加了verifications功能验证字段来完成功能验证，也就是在这个字段，可以添加其他命令来辅助验证功能是不是生效，来综合判断。
+
+1. 就是命令执行结果的基准问题，在测试中，需要以coreutils 的执行结果作为基准，但是不能每次都执行coreutils
+   命令，这样会降低测试效率。所以设计了基准模式，在第一次执行命令时，将执行结果作为基准，后续执行命令时，可以直接使用基准结果作为期望结果，来比较执行结果。
+2. 命令执行功能性验证逻辑可观测思考，命令的不同，他们可能不能使用标准输出和标准错误输出来观察，例如
+   chmod，所以在设计单元测试用例参数时，添加了verifications功能验证字段来完成功能验证，也就是在这个字段，可以添加其他命令来辅助验证功能是不是生效，来综合判断。
 
 ## 命令执行结果环境变量
 
@@ -41,15 +46,15 @@
 框架支持两种工作模式，通过配置 `coreutils_path` 自动确定：
 
 1. **基准模式**：配置了 GNU Coreutils 路径时自动启用
-   - 首先执行 GNU Coreutils 命令获取基准结果
-   - 将基准结果自动作为当前测试用例的期望结果
-   - 执行 Syskits 命令并与基准结果比对
-   - 适用于确保与 GNU Coreutils 的完全兼容性
+    - 首先执行 GNU Coreutils 命令获取基准结果
+    - 将基准结果自动作为当前测试用例的期望结果
+    - 执行 Syskits 命令并与基准结果比对
+    - 适用于确保与 GNU Coreutils 的完全兼容性
 
 2. **标准模式**：未配置 GNU Coreutils 路径时使用
-   - 直接使用测试用例中定义的期望结果
-   - 执行 Syskits 命令并与期望结果比对
-   - 适用于特定场景测试或环境不具备 GNU Coreutils 时
+    - 直接使用测试用例中定义的期望结果
+    - 执行 Syskits 命令并与期望结果比对
+    - 适用于特定场景测试或环境不具备 GNU Coreutils 时
 
 ## 目录结构
 
@@ -82,6 +87,7 @@ pub struct TestRunner {
 ```
 
 主要职责：
+
 - 加载和管理测试配置
 - 协调测试用例的执行
 - 支持串行和并行测试执行
@@ -100,6 +106,7 @@ pub struct ParallelTestExecutor {
 ```
 
 主要职责：
+
 - 在沙箱环境中执行命令
 - 比较 Syskits 和 GNU Coreutils 的执行结果
 - 支持资源限制和超时控制
@@ -126,6 +133,7 @@ pub struct TestCase {
 ```
 
 主要职责：
+
 - 加载和解析测试用例
 - 管理测试用例的生命周期
 - 提供测试用例的元数据
@@ -144,6 +152,7 @@ pub struct ResourceLimiter {
 ```
 
 主要职责：
+
 - 提供隔离的测试环境
 - 管理临时文件和目录
 - 控制资源使用限制
@@ -174,6 +183,7 @@ pub struct TestConfig {
 ```
 
 主要职责：
+
 - 管理框架配置
 - 支持命令行参数和配置文件
 - 提供默认配置值
@@ -188,6 +198,7 @@ pub struct Reporter {
 ```
 
 支持的格式：
+
 - 文本格式（人类可读）
 - JSON 格式（机器可读）
 - HTML 格式（网页展示）
@@ -262,47 +273,48 @@ pub struct Reporter {
 ### 字段说明
 
 1. **基本信息（必填）**
-   - `command`: 要测试的命令名称
-   - `description`: 测试用例描述
-   - `args`: 命令参数数组
+    - `command`: 要测试的命令名称
+    - `description`: 测试用例描述
+    - `args`: 命令参数数组
 
 2. **期望结果（必填）**
-   - `expectation.execution`: 命令执行结果
-     * `exit_code`: 预期的命令退出码，设置为null则忽略比较
-     * `stdout`: 预期的标准输出内容，设置为null则忽略比较
-     * `stderr`: 预期的标准错误内容，设置为null则忽略比较
-   - `expectation.verifications`: 功能验证命令列表
-     * `command`: 要执行的验证命令
-     * `expected_exit`: 验证命令的预期退出码
-     * `expected_stdout`: 验证命令的预期标准输出
-     * `expected_stderr`: 验证命令的预期标准错误
-   - `expectation.ignore_fields`: 结果比较的忽略配置
-     * `ignore_exit_code`: 忽略退出码比较
-     * `ignore_stdout`: 忽略标准输出比较
-     * `ignore_stderr`: 忽略标准错误比较
-     * `ignore_function`: 忽略功能验证比较
+    - `expectation.execution`: 命令执行结果
+        * `exit_code`: 预期的命令退出码，设置为null则忽略比较
+        * `stdout`: 预期的标准输出内容，设置为null则忽略比较
+        * `stderr`: 预期的标准错误内容，设置为null则忽略比较
+    - `expectation.verifications`: 功能验证命令列表
+        * `command`: 要执行的验证命令
+        * `expected_exit`: 验证命令的预期退出码
+        * `expected_stdout`: 验证命令的预期标准输出
+        * `expected_stderr`: 验证命令的预期标准错误
+    - `expectation.ignore_fields`: 结果比较的忽略配置
+        * `ignore_exit_code`: 忽略退出码比较
+        * `ignore_stdout`: 忽略标准输出比较
+        * `ignore_stderr`: 忽略标准错误比较
+        * `ignore_function`: 忽略功能验证比较
 
 3. **测试控制（可选）**
-   - `setup_commands`: 环境准备命令列表
-     * 用于设置测试环境
-     * 可以包含环境变量设置
-     * 可以创建必要的文件和目录
-   - `cleanup_commands`: 环境清理命令列表
-     * 用于清理测试环境
-     * 确保测试前后环境一致
-   - `requires_root`: 是否需要 root 权限
-   - `timeout`: 命令执行超时时间（秒）
-   - `tags`: 测试标签列表
+    - `setup_commands`: 环境准备命令列表
+        * 用于设置测试环境
+        * 可以包含环境变量设置
+        * 可以创建必要的文件和目录
+    - `cleanup_commands`: 环境清理命令列表
+        * 用于清理测试环境
+        * 确保测试前后环境一致
+    - `requires_root`: 是否需要 root 权限
+    - `timeout`: 命令执行超时时间（秒）
+    - `tags`: 测试标签列表
 
 4. **沙箱环境（可选）**
-   - `environment.resource_limits`: 资源限制配置
-     * `cpu_time`: CPU 时间限制（秒）
-     * `memory_size`: 内存使用限制（字节）
-     * `open_files`: 最大打开文件数限制
+    - `environment.resource_limits`: 资源限制配置
+        * `cpu_time`: CPU 时间限制（秒）
+        * `memory_size`: 内存使用限制（字节）
+        * `open_files`: 最大打开文件数限制
 
 ### 示例
 
 1. 基本命令测试：
+
 ```json
 {
   "tests": [
@@ -323,6 +335,7 @@ pub struct Reporter {
 ```
 
 2. 带环境准备和验证的测试：
+
 ```json
 {
   "tests": [
@@ -358,6 +371,7 @@ pub struct Reporter {
 ```
 
 3. 带资源限制的测试：
+
 ```json
 {
   "tests": [
@@ -391,16 +405,19 @@ pub struct Reporter {
 ## 使用方法
 
 1. 基本用法：
+
 ```bash
 cargo run -p compat_test -- --syskits-path target/debug/syskits <command>
 ```
 
 2. 详细模式：
+
 ```bash
 cargo run -p compat_test -- --syskits-path target/debug/syskits <command> -v
 ```
 
 3. 指定 GNU Coreutils 路径：
+
 ```bash
 cargo run -p compat_test -- --syskits-path target/debug/syskits --coreutils-path /usr/bin <command>
 ```
@@ -433,19 +450,19 @@ verbose = false
 ## 开发指南
 
 1. 添加新的测试用例：
-   - 在 `test_cases` 目录下创建对应的 JSON 文件
-   - 遵循测试用例格式规范
-   - 包含必要的环境准备和清理命令
+    - 在 `test_cases` 目录下创建对应的 JSON 文件
+    - 遵循测试用例格式规范
+    - 包含必要的环境准备和清理命令
 
 2. 扩展测试框架：
-   - 遵循模块化设计原则
-   - 保持向后兼容性
-   - 添加适当的单元测试
+    - 遵循模块化设计原则
+    - 保持向后兼容性
+    - 添加适当的单元测试
 
 3. 调试技巧：
-   - 使用 `-v` 参数查看详细输出
-   - 设置 `cleanup = false` 保留测试文件
-   - 查看测试报告了解失败原因
+    - 使用 `-v` 参数查看详细输出
+    - 设置 `cleanup = false` 保留测试文件
+    - 查看测试报告了解失败原因
 
 ## 许可证
 

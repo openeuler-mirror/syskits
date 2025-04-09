@@ -90,7 +90,6 @@ pub fn ct_from_str(string: &str) -> Result<Duration, String> {
 
 #[cfg(test)]
 mod tests {
-
     use crate::ct_parse_time::ct_from_str;
     use std::time::Duration;
 

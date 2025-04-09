@@ -219,7 +219,6 @@ pub fn strip_minus_from_mode(args: &mut [String]) -> bool {
 
 #[cfg(test)]
 mod test {
-
     #[test]
     fn symbolic_modes() {
         assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);

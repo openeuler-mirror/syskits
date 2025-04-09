@@ -18,10 +18,7 @@ pub const MODERN: usize = 200809;
 pub fn ct_posix_version() -> Option<usize> {
     let ct_posix = "_POSIX2_VERSION";
     match env::var(ct_posix) {
-        Ok(var) => match var.parse::<usize>() {
-            Ok(size) => Some(size), // Successful parse returns Some(usize)
-            Err(_) => None,         // Parse error returns None
-        },
+        Ok(var) => var.parse::<usize>().ok(),
         Err(_) => None, // Variable not found returns None
     }
 }

@@ -1,0 +1,479 @@
+{
+    "tests": [
+        {
+          "tstdin": "hello,world",
+          "command": "basenc",
+          "description": "基本编码功能-1",
+          "setup_commands": [
+          ],
+          "args": ["--base64"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+          ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "basenc",
+            "description": "基本编码功能-2",
+            "setup_commands": [
+              ""
+            ],
+            "args": ["--base32"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "basenc",
+            "description": "基本编码功能-3",
+            "setup_commands": [
+            ],
+            "args": ["--base16"],
+            "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+                }
+            ]
+            },
+            "cleanup_commands": [
+                ""
+            ]
+        },
+        {
+            "tstdin": "hellowd\n",
+            "command": "basenc",
+            "description": "基本编码功能-4",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--z85"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "basenc",
+            "description": "基本编码功能-5",
+            "setup_commands": [
+            ],
+            "args": ["--base64url"],
+            "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+                }
+            ]
+            },
+            "cleanup_commands": [
+                ""
+            ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "basenc",
+            "description": "基本编码功能-6",
+            "setup_commands": [
+            ],
+            "args": ["--base32hex"],
+            "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+                }
+            ]
+            },
+            "cleanup_commands": [
+                ""
+            ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "basenc",
+            "description": "基本编码功能-7",
+            "setup_commands": [
+            ],
+            "args": ["--base2msbf"],
+            "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+                }
+            ]
+            },
+            "cleanup_commands": [
+                ""
+            ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "basenc",
+            "description": "基本编码功能-8",
+            "setup_commands": [
+            ],
+            "args": ["--base2lsbf"],
+            "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+                }
+            ]
+            },
+            "cleanup_commands": [
+                ""
+            ]
+        },
+        {
+            "tstdin": "aGVsbG8sd29ybGQ=",
+            "command": "basenc",
+            "description": "基本解码功能-1",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base64"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "NBSWY3DPFR3W64TMMQ======",
+            "command": "basenc",
+            "description": "基本解码功能-2",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base32"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "68656C6C6F2C776F726C64",
+            "command": "basenc",
+            "description": "基本解码功能-3",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base16"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "68656C6C6F2C776F726C64",
+            "command": "basenc",
+            "description": "基本解码功能-4",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base16"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "xK#0@z*b.0\n",
+            "command": "basenc",
+            "description": "基本解码功能-5",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--z85"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "aGVsbG8_Cg==",
+            "command": "basenc",
+            "description": "基本解码功能-6",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base64url"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "D1IMOR3F7S50====",
+            "command": "basenc",
+            "description": "基本解码功能-7",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base32hex"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "01101000011001010110110001101100011011110011111100001010",
+            "command": "basenc",
+            "description": "基本解码功能-8",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base2msbf"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "00010110101001100011011000110110111101101111110001010000",
+            "command": "basenc",
+            "description": "基本解码功能-9",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base2lsbf"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "aGVsbG8K;',?",
+            "command": "basenc",
+            "description": "解码时忽略非字母字符",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--decode", "--base64", "--ignore-garbage"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "1234567890",
+            "command": "basenc",
+            "description": "在指定的字符数后自动换行",
+            "setup_commands": [
+                ""
+            ],
+            "args": ["--base64", "-w8"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+                "cleanup_commands": [
+            ]
+        }
+    ]
+}

@@ -1,0 +1,4 @@
+logname:
+  clap: { }
+  usage: logname
+  about: '打印用户的登录名'

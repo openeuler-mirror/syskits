@@ -1,0 +1,11 @@
+seq:
+  clap:
+    seq_separator: Separator character (defaults to \\n)
+    seq_terminator: Terminator character (defaults to \\n)
+    seq_equal_width: Equalize widths of all numbers by padding with zeros
+    seq_format: use printf style floating-point FORMAT
+  usage: |-
+    seq [OPTION]... LAST
+    seq [OPTION]... FIRST LAST
+    seq [OPTION]... FIRST INCREMENT LAST
+  about: Display numbers from FIRST to LAST, in steps of INCREMENT.

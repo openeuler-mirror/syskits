@@ -1,0 +1,4 @@
+hostid:
+  clap: { }
+  usage: hostid [选项]
+  about: '打印当前主机的数字标识符（十六进制）'

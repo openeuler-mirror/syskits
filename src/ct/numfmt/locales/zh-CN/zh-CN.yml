@@ -1,0 +1,36 @@
+numfmt:
+  clap:
+    numfmt_delimiter: 使用X代替空格作为字段分隔符
+    numfmt_field: 替换这些输入字段中的数字；参见下面的FIELDS
+    numfmt_format: 使用printf风格的浮点数FORMAT；详情参见下面的FORMAT
+    numfmt_from: 自动缩放输入数字到UNITS；参见下面的UNIT
+    numfmt_from_unit: 指定输入单位大小
+    numfmt_to: 自动缩放输出数字到UNITS；参见下面的UNIT
+    numfmt_to_unit: 输出单位大小
+    numfmt_round: 缩放时使用METHOD进行舍入
+    numfmt_invalid: 设置无效输入的失败模式
+  usage: numfmt [选项]... [数字]...
+  about: '将数字转换为/从人类可读字符串'
+  after_help: |-
+    `UNIT` 选项:
+    - `none`: 不进行自动缩放；后缀将触发错误
+    - `auto`: 接受可选的单/双字母后缀:
+    1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
+    - `si`: a接受可选的单字母后缀:
+    1K = 1000, 1M = 1000000, ...
+    - `iec`: 接受可选的单字母后缀:
+    1K = 1024, 1M = 1048576, ...
+    - `iec-i`: 接受可选的双字母后缀:
+    1Ki = 1024, 1Mi = 1048576, ...
+    - `FIELDS` 支持 `cut(1)` 风格的字段范围:
+    N    第N个字段，从1开始计数
+    N-   从第N个字段到行尾
+    N-M  从第N个到第M个字段（包含两端）
+    -M   从第一个到第M个字段（包含两端）
+    -    所有字段
+    多个字段/范围可以用逗号分隔
+    `FORMAT` 必须适合打印一个浮点参数 `%f`。
+    可选的引号（`%'f`）将启用 --grouping（如果当前区域设置支持）。
+    可选的宽度值（`%10f`）将填充输出。可选的零（`%010f`）宽度
+    将用零填充数字。可选的负值（`%-10f`）将左对齐。
+    可选的精度（`%.1f`）将覆盖输入确定的精度。

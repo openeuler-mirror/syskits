@@ -1,0 +1,8 @@
+timeout:
+  clap:
+    timeout_preserve_status: exit with the same status as COMMAND, even when the command times out
+    timeout_verbose: diagnose to stderr any signal sent upon timeout
+    timeout_duration: maximum time to wait for COMMAND to finish
+    timeout_command: command to run and its arguments
+  usage: timeout [OPTION] DURATION COMMAND...
+  about: Start `COMMAND`, and kill it if still running after `DURATION`.

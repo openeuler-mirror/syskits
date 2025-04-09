@@ -1,0 +1,8 @@
+tr:
+  clap:
+    tr_complement: 使用SET1的补集
+    tr_delete: 删除SET1中的字符，不进行转换
+    tr_truncate_set1: 首先将SET1截断为SET2的长度
+  usage: tr [选项]... 集合1 [集合2]
+  about: '转换或删除字符'
+  after_help: '转换、压缩和/或删除标准输入中的字符，写入到标准输出。'

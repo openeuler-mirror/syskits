@@ -1,0 +1,12 @@
+uname:
+  clap:
+    uname_all: 表现得好像所有标志-mnrsvo都被指定。
+    uname_kernel_version: 打印操作系统版本。
+    uname_machine: 打印机器硬件名称。
+    uname_os: 打印操作系统名称。
+    uname_processor: 打印处理器类型（非可移植）
+    uname_hardware_platform: 打印硬件平台（非可移植）
+  usage: uname [选项]...
+  about: |-
+    打印特定的系统信息。
+    没有选项时，与-s相同。

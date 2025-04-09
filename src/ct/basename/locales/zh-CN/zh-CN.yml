@@ -1,0 +1,12 @@
+basename:
+  about: "打印去除前导目录组件的NAME"
+  usage: "basename [-z] NAME [SUFFIX]\nbasename 选项... NAME..."
+  clap:
+    multiple: "支持多个参数并将每个参数视为NAME"
+    suffix: "移除尾随的SUFFIX；隐含-a选项"
+    zero: "以NUL结束每行输出，而不是换行符"
+    help: "显示帮助信息"
+    version: "显示版本信息"
+  errors:
+    missing_operand: "缺少操作数"
+    extra_operand: "多余的操作数 %s"

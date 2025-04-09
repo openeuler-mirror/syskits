@@ -1,0 +1,14 @@
+hashsum:
+  clap:
+    check: 从文件中读取哈希值并检查它们
+    tag: 创建BSD风格的校验和
+    quiet: 对于每个成功验证的文件不打印OK
+    status: 不输出任何内容，状态码显示成功
+    strict: 对于格式不正确的校验和行以非零值退出
+    warn: 警告格式不正确的校验和行
+    zero: 以NUL结束每个输出行，而不是换行符
+    length: 摘要长度（以位为单位）；不得超过blake2算法的最大值（512），且必须是8的倍数
+    bits: 设置输出大小（仅适用于SHAKE）
+    no-names: 在输出中省略文件名（此选项不存在于GNU/Coreutils中）
+  usage: hashsum [选项] [文件]...
+  about: '计算和检查消息摘要。'

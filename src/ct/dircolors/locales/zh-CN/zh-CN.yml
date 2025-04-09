@@ -1,0 +1,12 @@
+dircolors:
+  clap:
+    bourne_shell: 输出Bourne shell代码来设置LS_COLORS
+    c_shell: 输出C shell代码来设置LS_COLORS
+    print_database: 打印字节计数
+    print_ls_colors: 输出完全转义的颜色以供显示
+  usage: dircolors [选项]... [文件]
+  about: '输出设置LS_COLORS环境变量的命令。'
+  after_help: |-
+    如果指定了文件，则读取它来确定为哪些文件类型和扩展名使用哪些颜色。
+    否则，将使用预编译的数据库。
+    有关这些文件格式的详细信息，请运行'dircolors --print-database'

@@ -1,0 +1,6 @@
+pathchk:
+  clap:
+    pathchk_posix: check for most POSIX systems
+    pathchk_portability: check for all POSIX systems (equivalent to -p -P)
+  usage: pathchk [OPTION]... NAME...
+  about: Check whether file names are valid or portable

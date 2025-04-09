@@ -1,0 +1,20 @@
+cat:
+  about: "Concatenate files and print to standard output"
+  usage: "Usage: cat [OPTION]... [FILE]..."
+  clap:
+    file: "Files to read"
+    show-all: "equivalent to -vET"
+    number-nonblank: "number nonempty output lines"
+    show-ends: "display $ at end of each line"
+    number: "number all output lines"
+    squeeze-blank: "suppress repeated empty output lines"
+    show-tabs: "display TAB characters as ^I"
+    show-nonprinting: "use ^ and M- notation, except for LFD and TAB"
+    ignored-u: "(ignored)"
+    help: "display this help and exit"
+    version: "output version information and exit"
+  errors:
+    unknown_filetype: "unknown filetype: {}"
+    is_directory: "Is a directory"
+    output_is_input: "input file is output file"
+    too_many_symlinks: "Too many levels of symbolic links"

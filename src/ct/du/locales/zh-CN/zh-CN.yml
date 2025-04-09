@@ -1,0 +1,38 @@
+du:
+  clap:
+    help: 打印帮助信息。
+    all: 为所有文件写入计数，而不仅仅是目录
+    bytes: 等同于'--apparent-size --block-size=1'
+    total: 生成总计
+    human_readable: 以人类可读格式打印大小（例如1K 234M 2G）
+    block_size_1k: 类似于--block-size=1K
+    count_links: 如果硬链接，多次计算大小
+    dereference: 跟踪所有符号链接
+    dereference_args: 仅跟踪命令行中列出的符号链接
+    no_dereference: 不跟踪任何符号链接（这是默认值）
+    block_size_1m: 类似于--block-size=1M
+    'null': 以0字节而不是换行符结束每个输出行
+    separate_dirs: 不包括子目录的大小
+    summarize: 仅显示每个参数的总计
+    si: 类似于-h，但使用1000而不是1024的幂
+    one_file_system: 跳过不同文件系统上的目录
+    threshold: |-
+      排除小于SIZE的条目（如果为正值），\
+                            或大于SIZE的条目（如果为负值）
+    verbose: 详细模式（该选项不存在于GNU/Coreutils中）
+    exclude: 排除匹配PATTERN的文件
+    exclude_from: 排除匹配FILE中任何模式的文件
+    files0_from: 汇总文件F中指定的以NUL结尾的文件名的设备使用情况；如果F是-，则从标准输入读取名称
+  usage: |-
+    du [选项]... [文件]...
+    du [选项]... --files0-from=F
+  about: '估计文件空间使用情况'
+  after_help: |-
+    显示值的单位为--block-size、DU_BLOCK_SIZE、BLOCK_SIZE和BLOCKSIZE环境变量中
+    首先可用的SIZE。否则，单位默认为1024字节（如果设置了POSIXLY_CORRECT，则为512）。
+    SIZE是一个整数和可选单位（例如：10M表示10*1024*1024）。
+    单位有K、M、G、T、P、E、Z、Y（1024的幂）或KB、MB...（1000的幂）。
+    PATTERN允许一些高级排除。例如，支持以下语法：
+    `?` 将仅匹配一个字符
+    `*` 将匹配零个或多个字符
+    `{a,b}` 将匹配a或b

@@ -1,0 +1,6 @@
+sync:
+  clap:
+    sync_file_system: 同步包含文件的文件系统
+    sync_data: 仅同步文件数据，不同步不必要的元数据（仅限Linux）
+  usage: sync [选项]... 文件...
+  about: '将缓存的写入同步到持久存储设备'

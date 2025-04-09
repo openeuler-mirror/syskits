@@ -1,0 +1,11 @@
+nohup:
+  clap: { }
+  usage: |-
+    nohup 命令 [参数]...
+    nohup 选项
+  about: '运行命令，忽略挂起信号。'
+  after_help: |-
+    如果标准输入是终端，它将被替换为/dev/null。
+    如果标准输出是终端，它将被追加到nohup.out，
+    或者如果nohup.out打开失败，则追加到$HOME/nohup.out。
+    如果标准错误是终端，它将被重定向到标准输出。

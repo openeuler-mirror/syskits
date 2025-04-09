@@ -1,0 +1,7 @@
+fmt:
+  clap:
+    fmt_split_only: 仅分割行，不重新排版。
+    fmt_width: 填充输出行最大宽度为WIDTH列，默认75。
+    fmt_goal: 目标宽度，默认为WIDTH的93%。必须小于或等于WIDTH。
+  usage: fmt [选项]... [文件]...
+  about: '从输入文件（或标准输入）重新格式化段落到标准输出。'

@@ -1,0 +1,6 @@
+pwd:
+  clap:
+    pwd_logical: use PWD from environment, even if it contains symlinks
+    pwd_physical: avoid all symlinks
+  usage: pwd [OPTION]...
+  about: Display the full filename of the current working directory.

@@ -1,0 +1,11 @@
+whoami:
+  about: "显示当前有效用户ID对应的用户名"
+  usage: "whoami [选项]..."
+  after_help: "显示当前用户名。"
+  clap:
+    help: "显示此帮助信息并退出"
+    version: "输出版本信息并退出"
+  errors:
+    failed_get_username: "获取用户名失败"
+    failed_print_username: "打印用户名失败"
+    stdout_flush_error: "刷新标准输出时出错：%{error}" 

@@ -1,0 +1,23 @@
+chgrp:
+  about: "更改文件的组所有权"
+  usage: "用法：chgrp [选项]... 组 文件...
+       chgrp [选项]... --reference=参考文件 文件..."
+  clap:
+    help: "显示帮助信息"
+    version: "显示版本信息"
+    changes: "类似verbose，但仅在进行更改时报告"
+    silent: "抑制大多数错误消息"
+    quiet: "抑制大多数错误消息"
+    verbose: "为每个处理的文件输出诊断信息"
+    dereference: "影响每个符号链接而不是任何引用的文件"
+    no_dereference: "影响符号链接而不是任何引用的文件"
+    preserve: "递归操作'/'时失败"
+    no_preserve: "不特殊处理'/'（默认）"
+    reference: "使用参考文件的组而不是指定组值"
+    recursive: "递归操作文件和目录"
+    traverse: "如果命令行参数是目录的符号链接，则遍历它"
+    no_traverse: "不遍历任何符号链接（默认）"
+    every: "遍历遇到的每个指向目录的符号链接"
+  errors:
+    invalid_group: "无效的组：{}"
+    failed_attributes: "无法获取{}的属性"

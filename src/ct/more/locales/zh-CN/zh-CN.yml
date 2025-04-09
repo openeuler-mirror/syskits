@@ -1,0 +1,10 @@
+more:
+  clap:
+    more_print_over: 不滚动，显示文本并清除行尾
+    more_silent: 显示帮助而不是响铃
+    more_clean_print: 不滚动，清屏并显示文本
+    more_squeeze: 将多个空行压缩为一行
+    more_pattern: 从匹配模式的位置开始显示文件
+    more_files: 要读取的文件路径
+  usage: more [选项] 文件...
+  about: '显示文本文件的内容'

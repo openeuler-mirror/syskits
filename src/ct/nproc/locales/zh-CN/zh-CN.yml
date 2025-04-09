@@ -1,0 +1,9 @@
+nproc:
+  clap:
+    opt_all: 打印系统可用的核心数
+    opt_ignore: 忽略最多N个核心
+  usage: nproc [选项]...
+  about: |-
+    打印当前进程可用的核心数。
+    如果设置了环境变量`OMP_NUM_THREADS`或`OMP_THREAD_LIMIT`，则
+    它们将分别决定返回值的最小值和最大值。

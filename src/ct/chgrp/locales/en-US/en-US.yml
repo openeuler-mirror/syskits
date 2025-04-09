@@ -1,0 +1,23 @@
+chgrp:
+  about: "Change group ownership of files"
+  usage: "Usage: chgrp [OPTION]... GROUP FILE...
+       chgrp [OPTION]... --reference=RFILE FILE..."
+  clap:
+    help: "Print help information"
+    version: "Print version information"
+    changes: "Like verbose but report only when a change is made"
+    silent: "Suppress most error messages"
+    quiet: "Suppress most error messages"
+    verbose: "Output a diagnostic for every file processed"
+    dereference: "Affect each symbolic link instead of any referenced file"
+    no_dereference: "Affect symbolic links instead of any referenced file"
+    preserve: "Fail to operate recursively on '/'"
+    no_preserve: "Do not treat '/' specially (the default)"
+    reference: "Use RFILE's group rather than specifying GROUP values"
+    recursive: "Operate on files and directories recursively"
+    traverse: "If a command line argument is a symbolic link to a directory, traverse it"
+    no_traverse: "Do not traverse any symbolic links (default)"
+    every: "Traverse every symbolic link to a directory encountered"
+  errors:
+    invalid_group: "Invalid group: {}"
+    failed_attributes: "Failed to get attributes of {}"

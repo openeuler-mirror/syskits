@@ -1,0 +1,23 @@
+base32:
+  about: "base32 encode/decode data and print to standard output"
+  usage: "base32 [OPTION]... [FILE]..."
+  after_help: "With no FILE, or when FILE is -, read standard input."
+  clap:
+    help: "Show this help message"
+    version: "Show version information"
+  errors:
+    system: "System error"
+    unknown: "Unknown error"
+    invalid_input: "Invalid input"
+    invalid_output: "Invalid output"
+    file_not_found: "File not found"
+    permission_denied: "Permission denied"
+    io_error: "Input/output error"
+    invalid_wrap: "Invalid wrap value"
+  options:
+    decode: "Decode data"
+    ignore_garbage: "When decoding, ignore non-alphabet characters"
+    wrap: "Wrap encoded lines after COLS character (default 76, 0 to disable)"
+  flags:
+    help: "Display this help and exit"
+    version: "Output version information and exit" 

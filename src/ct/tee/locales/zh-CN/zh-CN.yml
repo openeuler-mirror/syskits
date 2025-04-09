@@ -1,0 +1,9 @@
+tee:
+  clap:
+    tee_append: 追加到给定的文件，不覆盖
+    tee_ignore_interrupts: 忽略中断信号（在非Unix平台上被忽略）
+    tee_ignore_pipe_errors: 设置写入错误行为（在非Unix平台上被忽略）
+    tee_output_error: 对任何输出的写入错误产生警告
+  usage: tee [选项]... [文件]...
+  about: '将标准输入复制到每个文件，同时也复制到标准输出。'
+  after_help: '如果文件是-，则它指的是一个名为-的文件。'

@@ -1,0 +1,11 @@
+date:
+  clap:
+    date_opt_date: 显示STRING描述的时间，而不是"现在"
+    date_opt_file: 与--date类似；对DATEFILE的每一行执行一次
+    date_opt_debug: 注释解析的日期，并向stderr警告有疑问的用法
+    date_opt_reference: 显示FILE的最后修改时间
+    date_opt_universal: 打印或设置协调世界时（UTC）
+  usage: |-
+    date [选项]... [+格式]...
+    date [选项]... [MMDDhhmm[[CC]YY][.ss]]
+  about: '打印或设置系统日期和时间'

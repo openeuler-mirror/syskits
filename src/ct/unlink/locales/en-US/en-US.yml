@@ -1,0 +1,6 @@
+unlink:
+  clap: { }
+  usage: |-
+    unlink [FILE]
+    unlink OPTION
+  about: Unlink the file at `FILE`.

@@ -1,0 +1,12 @@
+csplit:
+  clap:
+    suffix_format: 使用sprintf格式而不是%02d
+    prefix: 使用前缀代替'xx'
+    keep_files: 出错时不删除输出文件
+    suppress_matched: 抑制匹配模式的行
+    digits: 使用指定的位数而不是2
+    quiet: 不打印输出文件大小的计数
+    elide_empty_files: 删除空输出文件
+  usage: csplit [选项]... 文件 模式...
+  about: '根据上下文行将文件分割成多个部分'
+  after_help: '将文件按模式分割成片段输出到"xx00"、"xx01"、...等文件，并将每个片段的字节计数输出到标准输出。'

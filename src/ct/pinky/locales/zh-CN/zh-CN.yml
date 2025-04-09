@@ -1,0 +1,14 @@
+pinky:
+  clap:
+    pinky_long_format: 为指定用户生成长格式输出
+    pinky_omit_home_dir: 在长格式中省略用户的主目录和shell
+    pinky_omit_project_file: 在长格式中省略用户的项目文件
+    pinky_omit_plan_file: 在长格式中省略用户的计划文件
+    pinky_short_format: 执行短格式输出，这是默认设置
+    pinky_omit_headings: 在短格式中省略列标题行
+    pinky_omit_name: 在短格式中省略用户的全名
+    pinky_omit_name_host: 在短格式中省略用户的全名和远程主机
+    pinky_omit_name_host_time: 在短格式中省略用户的全名、远程主机和空闲时间
+    pinky_help: 打印帮助信息
+  usage: pinky [选项]... [用户]...
+  about: '在基于Unix的系统上显示简要用户信息'

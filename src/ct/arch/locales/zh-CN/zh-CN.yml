@@ -1,0 +1,10 @@
+arch:
+  about: 显示机器架构
+  usage: "arch [选项]..."
+  after_help: 确定当前机器的架构名称
+  clap:
+    help: 显示此帮助信息
+    version: 显示版本信息
+  errors:
+    system: 系统错误
+    unknown: 未知错误 

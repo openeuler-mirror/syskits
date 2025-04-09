@@ -1,0 +1,11 @@
+whoami:
+  about: "display user name of current effective user ID"
+  usage: "whoami [OPTION]..."
+  after_help: "Print the current username."
+  clap:
+    help: "display this help and exit"
+    version: "output version information and exit"
+  errors:
+    failed_get_username: "failed to get username"
+    failed_print_username: "failed to print username"
+    stdout_flush_error: "Error flushing stdout: %{error}" 

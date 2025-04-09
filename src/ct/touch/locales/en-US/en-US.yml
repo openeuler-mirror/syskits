@@ -1,0 +1,11 @@
+touch:
+  clap:
+    touch_help: Print help information.
+    touch_access: change only the access time
+    touch_timestamp: use [[CC]YY]MMDDhhmm[.ss] instead of the current time
+    touch_date: parse argument and use it instead of current time
+    touch_modification: change only the modification time
+    touch_no_create: do not create any files
+    touch_reference: use this file's times instead of the current time
+  usage: touch [OPTION]... FILE...
+  about: Update the access and modification times of each `FILE` to the current time.

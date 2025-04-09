@@ -1,0 +1,10 @@
+ct_yes:
+  about: "Repeatedly display a line with STRING (or 'y')"
+  usage: "yes [STRING]..."
+  errors:
+    system: "System error"
+    invalid_utf8: "Arguments contain invalid UTF-8"
+    stdout: "Standard output error: %{error}"
+  clap:
+    help: "Display this help and exit"
+    version: "Output version information and exit" 

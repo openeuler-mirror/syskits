@@ -1,0 +1,10 @@
+arch:
+  about: Display machine architecture
+  usage: "arch [OPTION]..."
+  after_help: Determine architecture name for current machine
+  clap:
+    help: Show this help message
+    version: Show version information
+  errors:
+    system: System error
+    unknown: Unknown error 

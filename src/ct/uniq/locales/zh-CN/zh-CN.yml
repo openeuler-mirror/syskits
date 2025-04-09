@@ -1,0 +1,19 @@
+uniq:
+  clap:
+    all_repeated: '打印所有重复的行。分隔是用空行完成的。[默认: none]'
+    group: '显示所有项目，用空行分隔组。[默认: separate]'
+    check_chars: 在行中比较不超过N个字符
+    count: 在行前加上出现次数
+    ignore_case: 比较时忽略大小写差异
+    repeated: 只打印重复的行
+    skip_chars: 避免比较前N个字符
+    skip_fields: 避免比较前N个字段
+    unique: 只打印唯一的行
+    zero_terminated: 以0字节结束行，而不是换行符
+  usage: uniq [选项]... [输入 [输出]]
+  about: '报告或忽略重复的行。'
+  after_help: |-
+    从输入（或标准输入）中过滤相邻的匹配行，
+    写入输出（或标准输出）。
+    注意：uniq不会检测到重复的行，除非它们相邻。
+    您可能希望首先对输入进行排序，或者使用不带uniq的sort -u命令。

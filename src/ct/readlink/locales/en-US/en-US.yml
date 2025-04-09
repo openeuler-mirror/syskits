@@ -1,0 +1,9 @@
+readlink:
+  clap:
+    readlink_no_newline: do not output the trailing delimiter
+    readlink_quiet: suppress most error messages
+    readlink_silent: suppress most error messages
+    readlink_verbose: report error message
+    readlink_zero: separate output with NUL rather than newline
+  usage: readlink [OPTION]... FILE...
+  about: Print value of a symbolic link or canonical file name.

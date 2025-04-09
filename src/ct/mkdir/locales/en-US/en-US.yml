@@ -1,0 +1,8 @@
+mkdir:
+  clap:
+    mode: set file mode (not implemented on windows)
+    parents: make parent directories as needed
+    verbose: print a message for each printed directory
+  usage: mkdir [OPTION]... DIRECTORY...
+  about: Create the given DIRECTORY(ies) if they do not exist
+  after_help: Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.

@@ -1,0 +1,7 @@
+tac:
+  clap:
+    tac_before: 在前面而非后面附加分隔符
+    tac_regex: 将序列解释为正则表达式
+    tac_separator: 使用字符串作为分隔符，而不是换行符
+  usage: tac [选项]... [文件]...
+  about: '将每个文件写入标准输出，最后一行最先显示。'

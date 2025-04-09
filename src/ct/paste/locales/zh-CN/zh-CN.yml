@@ -1,0 +1,9 @@
+paste:
+  clap:
+    paste_serial: 一次粘贴一个文件，而不是并行处理
+    paste_delimiter: 使用列表中的字符代替制表符
+    paste_zero_terminated: 行分隔符为NUL，而不是换行符
+  usage: paste [选项] [文件]...
+  about: |-
+    将每个`文件`中按顺序对应的行组合成行，用`制表符`分隔，
+    输出到标准输出。

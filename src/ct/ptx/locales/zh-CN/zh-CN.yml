@@ -1,0 +1,26 @@
+ptx:
+  clap:
+    ptx_auto_reference: 输出自动生成的引用
+    ptx_traditional: 行为更像System V的'ptx'
+    ptx_flag_truncation: 使用字符串标记行截断
+    ptx_macro_name: 使用的宏名称，而不是'xx'
+    ptx_format_roff: 生成roff指令格式的输出
+    ptx_right_side_refs: 将引用放在右侧，不计入-w
+    ptx_sentence_regexp: 用于行尾或句子结尾
+    ptx_format_tex: 生成TeX指令格式的输出
+    ptx_word_regexp: 使用正则表达式匹配每个关键词
+    ptx_break_file: 此文件中的单词分隔字符
+    ptx_ignore_case: 将小写折叠为大写进行排序
+    ptx_gap_size: 输出字段之间的列间距大小
+    ptx_ignore_file: 从文件读取忽略单词列表
+    ptx_only_file: 仅从此文件读取单词列表
+    ptx_references: 每行的第一个字段是引用
+    ptx_width: 输出宽度（列数），不包括引用
+  usage: |-
+    ptx [选项]... [输入]...
+    ptx -G [选项]... [输入 [输出]]
+  about: |-
+    生成文件内容的置换索引
+    输出输入文件中单词的置换索引，包括上下文。
+    长选项的必选参数对短选项也是必需的。
+    如果没有文件，或者文件是-，则从标准输入读取。默认为'-F /'。

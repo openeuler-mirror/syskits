@@ -1,0 +1,11 @@
+seq:
+  clap:
+    seq_separator: 分隔符字符（默认为\\n）
+    seq_terminator: 终止符字符（默认为\\n）
+    seq_equal_width: 通过用零填充使所有数字的宽度相等
+    seq_format: 使用printf风格的浮点格式
+  usage: |-
+    seq [选项]... 最后值
+    seq [选项]... 第一值 最后值
+    seq [选项]... 第一值 增量 最后值
+  about: '以增量步长显示从第一值到最后值的数字。'

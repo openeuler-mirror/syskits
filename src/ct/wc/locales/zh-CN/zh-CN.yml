@@ -1,0 +1,21 @@
+wc:
+  about: "显示每个文件的行数、单词数和字节数"
+  usage: "wc [选项]... [文件]..."
+  after_help: "如果没有指定文件，或者文件为 -，则从标准输入读取"
+  clap:
+    help: "显示帮助信息"
+    version: "显示版本信息"
+    bytes: "显示字节数"
+    chars: "显示字符数"
+    lines: "显示行数"
+    words: "显示单词数"
+    max_line_length: "显示最大显示宽度"
+    files0_from: "从文件F中读取以NUL结尾的文件名作为输入"
+    total: "控制何时打印总计（never/auto/always/only）"
+  errors:
+    system: "系统错误"
+    unknown: "未知错误"
+    disabled_files: "多余的操作数 '{extra}'\n文件操作数不能与 --files0-from 组合使用"
+    stdin_repr_not_allowed: "从标准输入读取文件名时，不允许使用文件名 '-'"
+    zero_length: "无效的零长度文件名"
+    zero_length_ctx: "{path}:{idx}: 无效的零长度文件名" 

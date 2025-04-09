@@ -1,0 +1,45 @@
+expr:
+  clap:
+    version: 输出版本信息并退出
+    help: 显示此帮助信息并退出
+  usage: |-
+    expr [表达式]
+    expr [选项]
+  about: '将表达式的值打印到标准输出'
+  after_help: |-
+    将表达式的值打印到标准输出。下面的空行
+    分隔优先级递增的组。
+    表达式可以是：
+    - `ARG1 | ARG2`: 如果ARG1既不为null也不为0，则为ARG1，否则为ARG2
+    - `ARG1 & ARG2`: 如果两个参数都不为null或0，则为ARG1，否则为0
+    - `ARG1 < ARG2`: ARG1小于ARG2
+    - `ARG1 <= ARG2`: ARG1小于或等于ARG2
+    - `ARG1 = ARG2`: ARG1等于ARG2
+    - `ARG1 != ARG2`: ARG1不等于ARG2
+    - `ARG1 >= ARG2`: ARG1大于或等于ARG2
+    - `ARG1 > ARG2`: ARG1大于ARG2
+    - `ARG1 + ARG2`: ARG1和ARG2的算术和
+    - `ARG1 - ARG2`: ARG1和ARG2的算术差
+    - `ARG1 * ARG2`: ARG1和ARG2的算术积
+    - `ARG1 / ARG2`: ARG1除以ARG2的算术商
+    - `ARG1 % ARG2`: ARG1除以ARG2的算术余数
+    - `STRING : REGEXP`: REGEXP在STRING中的锚定模式匹配
+    - `match STRING REGEXP`: 与`STRING : REGEXP`相同
+    - `substr STRING POS LENGTH`: STRING的子字符串，POS从1开始计数
+    - `index STRING CHARS`: STRING中找到任何CHARS的索引，如果未找到则为0
+    - `length STRING`: STRING的长度
+    - `+ TOKEN`: 将TOKEN解释为字符串，即使它是关键字（如`match`）
+    或运算符（如`/`）
+    - `( EXPRESSION )`: EXPRESSION的值
+    注意，许多运算符需要在shell中转义或加引号。
+    如果两个参数都是数字，则比较是算术比较，否则是字典序比较。
+    模式匹配返回\(和\)之间匹配的字符串或null；如果
+    未使用\(和\)，则返回匹配的字符数或0。
+    退出状态为`0`，如果EXPRESSION既不为null也不为`0`；`1`，如果EXPRESSION
+    为null或`0`；`2`，如果EXPRESSION在语法上无效；`3`，如果出现
+    错误。
+    环境变量：
+    - `EXPR_DEBUG_TOKENS=1`: 转储表达式的标记
+    - `EXPR_DEBUG_RPN=1`: 转储以逆波兰表示法表示的表达式
+    - `EXPR_DEBUG_SYA_STEP=1`: 转储每个解析器步骤
+    - `EXPR_DEBUG_AST=1`: 转储表示为抽象语法树的表达式

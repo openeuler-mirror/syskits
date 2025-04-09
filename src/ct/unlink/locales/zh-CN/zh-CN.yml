@@ -1,0 +1,6 @@
+unlink:
+  clap: { }
+  usage: |-
+    unlink [文件]
+    unlink 选项
+  about: '删除指定的文件链接。'

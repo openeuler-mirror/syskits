@@ -1,0 +1,17 @@
+join:
+  clap:
+    v: like -a FILENUM, but suppress joined output lines
+    e: replace missing input fields with EMPTY
+    i: ignore differences in case when comparing fields
+    j: equivalent to '-1 FIELD -2 FIELD'
+    o: obey FORMAT while constructing output line
+    1: join on this FIELD of file 1
+    2: join on this FIELD of file 2
+    nocheck-order: do not check that the input is correctly sorted
+    z: line delimiter is NUL, not newline
+  usage: join [OPTION]... FILE1 FILE2
+  about: |-
+    For each pair of input lines with identical join fields, write a line to
+    standard output. The default join field is the first, delimited by blanks.
+
+    When `FILE1` or `FILE2` (not both) is `-`, read standard input.

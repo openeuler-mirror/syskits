@@ -1,0 +1,8 @@
+timeout:
+  clap:
+    timeout_preserve_status: 即使命令超时，也以与命令相同的状态退出
+    timeout_verbose: 在超时时向标准错误诊断发送的任何信号
+    timeout_duration: 等待命令完成的最长时间
+    timeout_command: 要运行的命令及其参数
+  usage: timeout [选项] 持续时间 命令...
+  about: '启动命令，如果在指定持续时间后仍在运行则终止它。'

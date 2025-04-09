@@ -1,0 +1,13 @@
+csplit:
+  clap:
+    suffix_format: use sprintf FORMAT instead of %02d
+    prefix: use PREFIX instead of 'xx'
+    keep_files: do not remove output files on errors
+    suppress_matched: suppress the lines matching PATTERN
+    digits: use specified number of digits instead of 2
+    quiet: do not print counts of output file sizes
+    elide_empty_files: remove empty output files
+  usage: csplit [OPTION]... FILE PATTERN...
+  about: Split a file into sections determined by context lines
+  after_help: Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece
+    to standard output.

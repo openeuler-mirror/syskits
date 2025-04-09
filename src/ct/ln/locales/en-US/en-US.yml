@@ -1,0 +1,26 @@
+ln:
+  clap:
+    ln_force: remove existing destination files
+    ln_interactive: prompt whether to remove existing destination files
+    ln_logical: follow TARGETs that are symbolic links
+    ln_physical: make hard links directly to symbolic links
+    ln_symbolic: make symbolic links instead of hard links
+    ln_target_directory: specify the DIRECTORY in which to create the links
+    ln_no_target_directory: treat LINK_NAME as a normal file always
+    ln_relative: create symbolic links relative to link location
+    ln_verbose: print name of each linked file
+  usage: |-
+    ln [OPTION]... [-T] TARGET LINK_NAME
+    ln [OPTION]... TARGET
+    ln [OPTION]... TARGET... DIRECTORY
+    ln [OPTION]... -t DIRECTORY TARGET...
+  about: Make links between files.
+  after_help: |-
+    In the 1st form, create a link to TARGET with the name LINK_NAME.
+    In the 2nd form, create a link to TARGET in the current directory.
+    In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
+    Create hard links by default, symbolic links with --symbolic.
+    By default, each destination (name of new link) should not already exist.
+    When creating hard links, each TARGET must exist.  Symbolic links
+    can hold arbitrary text; if later resolved, a relative link is
+    interpreted in relation to its parent directory.

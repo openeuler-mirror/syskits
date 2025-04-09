@@ -1,0 +1,22 @@
+cksum:
+  clap:
+    algorithm: select the digest type to use. See DIGEST below
+    untagged: create a reversed style checksum, without digest type
+    tag: create a BSD style checksum, undo --untagged (default)
+    raw: emit a raw binary digest, not hexadecimal
+    base64: emit a base64 digest, not hexadecimal
+  usage: cksum [OPTIONS] [FILE]...
+  about: Print CRC and size for each file
+  after_help: |-
+    DIGEST determines the digest algorithm and default output format:
+    - `sysv`:    (equivalent to sum -s)
+    - `bsd`:     (equivalent to sum -r)
+    - `crc`:     (equivalent to cksum)
+    - `md5`:     (equivalent to md5sum)
+    - `sha1`:    (equivalent to sha1sum)
+    - `sha224`:  (equivalent to sha224sum)
+    - `sha256`:  (equivalent to sha256sum)
+    - `sha384`:  (equivalent to sha384sum)
+    - `sha512`:  (equivalent to sha512sum)
+    - `blake2b`: (equivalent to b2sum)
+    - `sm3`:     (only available through cksum)

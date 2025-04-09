@@ -1,0 +1,17 @@
+chmod:
+  clap:
+    changes: 类似详细模式，但仅在进行更改时报告
+    quiet: 抑制大多数错误消息
+    verbose: 为处理的每个文件输出诊断信息
+    no_preserve_root: 不特殊对待'/'（默认）
+    preserve_root: 对'/'递归操作时失败
+    recursive: 递归更改文件和目录
+    reference: 使用RFILE的模式而不是MODE值
+  usage: |-
+    chmod [选项]... 模式[,模式]... 文件...
+    chmod [选项]... 八进制模式 文件...
+    chmod [选项]... --reference=参考文件 文件...
+  about: |-
+    更改每个文件的模式（权限）为指定模式。
+    使用--reference，将每个文件的模式更改为与参考文件相同。
+  after_help: '每个模式的格式为''[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+''.'

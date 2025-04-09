@@ -1,0 +1,8 @@
+tr:
+  clap:
+    tr_complement: use the complement of SET1
+    tr_delete: delete characters in SET1, do not translate
+    tr_truncate_set1: first truncate SET1 to length of SET2
+  usage: tr [OPTION]... SET1 [SET2]
+  about: Translate or delete characters
+  after_help: Translate, squeeze, and/or delete characters from standard input, writing to standard output.

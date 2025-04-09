@@ -1,0 +1,10 @@
+ct_yes:
+  about: "重复显示一行字符串（默认为'y'）"
+  usage: "yes [字符串]..."
+  errors:
+    system: "系统错误"
+    invalid_utf8: "参数包含无效的UTF-8字符"
+    stdout: "标准输出错误: %{error}"
+  clap:
+    help: "显示帮助信息并退出"
+    version: "显示版本信息并退出" 

@@ -1,0 +1,38 @@
+cp:
+  clap:
+    no_target_directory: 将目标视为普通文件而非目录
+    interactive: 覆盖文件前询问
+    link: 创建硬链接而非复制
+    no_clobber: 不覆盖已存在的文件
+    strip_trailing_slashes: 删除每个源参数末尾的所有斜杠
+    debug: 解释文件如何被复制。包含-v的功能
+    verbose: 明确说明正在做什么
+    symbolic_link: 创建符号链接而非复制
+    reflink: 控制克隆/CoW复制。详见下文
+    attributes_only: 只复制文件属性，不复制数据
+    preserve_default_attributes: 等同于--preserve=mode,ownership(仅限unix),timestamps
+    no_preserve: 不保留指定的属性
+    parents: 在目录下使用完整的源文件名
+    dereference: 始终跟随源中的符号链接
+    cli_symbolic_links: 跟随源中的命令行符号链接
+    archive: 等同于-dR --preserve=all
+    no_dereference_preserve_links: 等同于--no-dereference --preserve=links
+    one_file_system: 保持在当前文件系统中
+    sparse: 控制稀疏文件的创建。详见下文
+    copy_contents: '未实现：递归时复制特殊文件的内容'
+  usage: |-
+    cp [选项]... [-T] 源文件 目标文件
+    cp [选项]... 源文件... 目录
+    cp [选项]... -t 目录 源文件...
+  about: '将源文件复制到目标文件，或将多个源文件复制到目录。'
+  after_help: |-
+    对于修改时间与目标文件相同或更新的非目录文件，不进行复制；
+    而是静默跳过该文件而不报错。如果保留时间戳，则比较的是源时间戳截断到目标文件系统
+    分辨率和用于更新时间戳的系统调用分辨率；这避免了使用相同源和目标执行多个
+    `cp -pu`命令时重复工作。如果同时指定了`-n`或`--no-clobber`选项，则忽略此选项。
+    此外，如果同时指定了`--preserve=links`（例如使用`cp -au`），则将优先考虑该选项；
+    因此，根据从源处理文件的顺序，目标中较新的文件可能会被替换，以镜像源中的硬链接。
+    这提供了更多控制替换目标中现有文件的选项，其值可以是以下之一：
+    * `all`    这是未指定`--update`选项时的默认操作，会导致目标中所有现有文件被替换。
+    * `none`   这类似于`--no-clobber`选项，不会替换目标中的任何文件，但跳过文件也不会导致失败。
+    * `older`  这是指定`--update`时的默认操作，如果目标文件比相应的源文件旧，则会被替换。

@@ -1,0 +1,17 @@
+shuf:
+  clap:
+    shuf_echo: treat each ARG as an input line
+    shuf_input_range: treat each number LO through HI as an input line
+    shuf_head_count: output at most COUNT lines
+    shuf_output: write result to FILE instead of standard output
+    shuf_random_source: get random bytes from FILE
+    shuf_repeat: output lines can be repeated
+    shuf_zero_terminated: line delimiter is NUL, not newline
+  usage: |-
+    shuf [OPTION]... [FILE]
+    shuf -e [OPTION]... [ARG]...
+    shuf -i LO-HI [OPTION]...
+  about: |-
+    Shuffle the input by outputting a random permutation of input lines.
+    Each output permutation is equally likely.
+    With no FILE, or when FILE is -, read standard input.

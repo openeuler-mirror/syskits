@@ -1,0 +1,14 @@
+chown:
+  clap:
+    help: 打印帮助信息。
+    changes: 类似详细模式，但仅在进行更改时报告
+    preserve: 对'/'递归操作时失败
+    no_preserve: 不特殊对待'/'（默认）
+    quiet: 抑制大多数错误消息
+    recursive: 递归操作文件和目录
+    reference: 使用RFILE的所有者和组，而不是指定所有者:组值
+    verbose: 为处理的每个文件输出诊断信息
+  usage: |-
+    chown [选项]... [所有者][:[组]] 文件...
+    chown [选项]... --reference=参考文件 文件...
+  about: '更改文件所有者和组'

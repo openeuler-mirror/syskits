@@ -1,0 +1,8 @@
+hostname:
+  clap:
+    opt_domain: Display the name of the DNS domain if possible
+    opt_ip_address: Display the network address(es) of the host
+    opt_fqdn: Display the FQDN (Fully Qualified Domain Name) (default)
+    opt_short: Display the short hostname (the portion before the first dot) if possible
+  usage: hostname [OPTION]... [HOSTNAME]
+  about: Display or set the system's host name.

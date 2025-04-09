@@ -1,0 +1,38 @@
+sort:
+  clap:
+    sort_help: 打印帮助信息。
+    sort_version: 打印版本信息。
+    sort_dictionary_order: 只考虑空格和字母数字字符
+    sort_merge: 合并已排序文件；不排序
+    sort_check: 检查输入是否已排序；不排序
+    sort_ignore_case: 将小写字母折叠为大写字母
+    sort_ignore_nonprinting: 忽略非打印字符
+    sort_ignore_leading_blanks: 在每行查找排序键时忽略前导空格
+    sort_output: 将输出写入到文件名而不是标准输出
+    sort_reverse: 反转输出
+    sort_stable: 通过禁用最后手段比较来稳定排序
+    sort_unique: 只输出相同内容的第一个
+    sort_key: 按键排序
+    sort_separator: -k的自定义分隔符
+    sort_zero_terminated: 行分隔符是NUL，不是换行符
+    sort_parallel: 将同时运行的线程数更改为NUM_THREADS
+    sort_buf_size: 设置每个段中排序项的最大大小
+    sort_tmp_dir: 使用DIR作为临时目录，而不是$TMPDIR或/tmp
+    sort_compress_prog: 使用PROG压缩临时文件，使用PROG -d解压缩；PROG必须从标准输入接收输入并
+      输出到标准输出
+    sort_batch_size: 一次最多合并N_MERGE个输入。
+    sort_files0_from: 从由NUL终止的NUL_FILES指定的文件读取输入
+    sort_debug: 下划线标出实际用于排序的行部分
+  usage: sort [选项]... [文件]...
+  about: '显示所有文件的排序连接。如果没有文件，或者文件是-，则从标准输入读取。'
+  after_help: |-
+    键格式是`FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS]`。
+    默认情况下，字段由非空白字符后的第一个空白分隔。使用`-t`指定自定义
+    分隔符。
+    在默认情况下，每个字段的开头都会附加空白。然而，自定义分隔符不包含在
+    字段中。
+    `FIELD`和`CHAR`都从1开始（即它们是1索引的）。如果逗号后没有指定结束，结束将
+    是行的结尾。
+    如果`CHAR`设置为0，表示字段的结尾。`CHAR`对于起始位置默认为1，对于结束
+    位置默认为0。
+    有效选项有：`MbdfhnRrV`。它们会覆盖此键的全局选项。

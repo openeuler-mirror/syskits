@@ -1,0 +1,7 @@
+fmt:
+  clap:
+    fmt_split_only: Split lines only, do not reflow.
+    fmt_width: Fill output lines up to a maximum of WIDTH columns, default 75.
+    fmt_goal: Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.
+  usage: fmt [OPTION]... [FILE]...
+  about: Reformat paragraphs from input files (or stdin) to stdout.

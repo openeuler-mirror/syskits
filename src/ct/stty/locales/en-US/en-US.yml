@@ -1,0 +1,11 @@
+stty:
+  clap:
+    stty_all: print all current settings in human-readable form
+    stty_save: print all current settings in a stty-readable form
+    stty_file: open and use the specified DEVICE instead of stdin
+    stty_settings: settings to change
+  usage: |-
+    stty [-F DEVICE | --file=DEVICE] [SETTING]...
+    stty [-F DEVICE | --file=DEVICE] [-a|--all]
+    stty [-F DEVICE | --file=DEVICE] [-g|--save]
+  about: Print or change terminal characteristics.

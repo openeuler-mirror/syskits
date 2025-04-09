@@ -1,0 +1,17 @@
+shuf:
+  clap:
+    shuf_echo: 将每个参数视为输入行
+    shuf_input_range: 将从LO到HI的每个数字视为输入行
+    shuf_head_count: 最多输出COUNT行
+    shuf_output: 将结果写入文件而不是标准输出
+    shuf_random_source: 从文件获取随机字节
+    shuf_repeat: 输出行可以重复
+    shuf_zero_terminated: 行分隔符是NUL，不是换行符
+  usage: |-
+    shuf [选项]... [文件]
+    shuf -e [选项]... [参数]...
+    shuf -i 最小值-最大值 [选项]...
+  about: |-
+    通过输出输入行的随机排列来打乱输入。
+    每种输出排列的可能性相等。
+    如果没有文件，或者文件是-，则从标准输入读取。

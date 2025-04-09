@@ -1,0 +1,6 @@
+printenv:
+  clap:
+    printenv_opt_null: end each output line with 0 byte rather than newline
+  usage: printenv [OPTION]... [VARIABLE]...
+  about: Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for
+    them all.

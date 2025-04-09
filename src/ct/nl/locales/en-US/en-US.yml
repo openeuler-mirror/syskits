@@ -1,0 +1,27 @@
+nl:
+  clap:
+    nl_help: Print help information.
+    nl_body_numbering: use STYLE for numbering body lines
+    nl_section_delimiter: use CC for separating logical pages
+    nl_footer_numbering: use STYLE for numbering footer lines
+    nl_header_numbering: use STYLE for numbering header lines
+    nl_line_increment: line number increment at each line
+    nl_join_blank_lines: group of NUMBER empty lines counted as one
+    nl_number_format: insert line numbers according to FORMAT
+    nl_no_renumber: do not reset line numbers at logical pages
+    nl_number_separator: add STRING after (possible) line number
+    nl_starting_line_number: first line number on each logical page
+    nl_number_width: use NUMBER columns for line numbers
+  usage: nl [OPTION]... [FILE]...
+  about: Number lines of files
+  after_help: |-
+    `STYLE` is one of:
+    * `a`     number all lines
+    * `t`     number only nonempty lines
+    * `n`     number no lines
+    * `pBRE`  number only lines that contain a match for the basic regular
+    expression, `BRE`
+    `FORMAT` is one of:
+    * `ln`    left justified, no leading zeros
+    * `rn`    right justified, no leading zeros
+    * `rz`    right justified, leading zeros

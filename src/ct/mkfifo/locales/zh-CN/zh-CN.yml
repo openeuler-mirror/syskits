@@ -1,0 +1,6 @@
+mkfifo:
+  clap:
+    mode: FIFO的文件权限
+    se_linux_security_context: 将SELinux安全上下文设置为默认类型
+  usage: mkfifo [选项]... 名称...
+  about: '创建具有给定名称的FIFO。'

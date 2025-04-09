@@ -1,0 +1,108 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "expand",
+          "description": "基本功能测试",
+          "setup_commands": [
+            "echo 'a\tb' > tmp_test2.txt"
+          ],
+          "args": ["tmp_test2.txt"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            "rm -f tmp_test2.txt"
+          ]
+        },
+        {
+            "tstdin": "",
+            "command": "expand",
+            "description": "测试制表符宽度功能",
+            "setup_commands": [
+              "echo 'a\tb' > tmp_test1.txt"
+            ],
+            "args": ["-t 4", "tmp_test1.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f tmp_test1.txt"
+            ]
+          },
+          {
+              "tstdin": "",
+              "command": "expand",
+              "description": "测试多个制表位",
+              "setup_commands": [
+                "echo 'a\tb\tc' > tmp_test.txt"    
+              ],
+              "args": ["-t 2,6", "tmp_test.txt"],
+              "expectation": {
+                "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+                },
+                "verifications": [
+                  {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                  }
+                ]
+              },
+              "cleanup_commands": [
+                "rm -f tmp_test.txt"
+              ]
+          },
+          {
+              "tstdin": "",
+              "command": "expand",
+              "description": "不转换非空白字符后的制表符功能",
+              "setup_commands": [
+                "echo '\ta\tb' > tmp_test3.txt"    
+              ],
+              "args": ["-i", "-t", "4", "tmp_test3.txt"],
+              "expectation": {
+                "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+                },
+                "verifications": [
+                  {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                  }
+                ]
+              },
+              "cleanup_commands": [
+                "rm -f tmp_test3.txt"
+              ]
+          }
+    ]
+  }

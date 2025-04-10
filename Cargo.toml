@@ -38,7 +38,7 @@ windows = ["feat_os_windows"]
 nightly = []
 test_unimplemented = []
 # * 仅在启用了 `--feature ctdoc` 时构建 `ctdoc`
-ctdoc = ["zip", "dep:cthelp_parser"]
+ctdoc = ["zip"]
 ## features
 # "feat_acl" == 启用对ACLs（访问控制列表）的支持；使用 `--features feat_acl`
 # 注意：
@@ -307,8 +307,6 @@ selinux = { workspace = true, optional = true }
 textwrap = { workspace = true }
 zip = { workspace = true, optional = true }
 tool_derive = { path = "src/tool_derive" }
-
-cthelp_parser = { optional = true, version = ">=0.0.1", path = "src/cthelp_parser" }
 
 arch = { optional = true, package = "ct_arch", path = "src/ct/arch" }
 base32 = { optional = true, package = "ct_base32", path = "src/ct/base32" }

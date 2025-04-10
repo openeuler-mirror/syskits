@@ -1,9 +1,0 @@
-[package]
-name = "cthelp_parser"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-homepage.workspace = true
-
-description = "A collection of functions to parse the markdown code of help files"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/cthelp_parser"

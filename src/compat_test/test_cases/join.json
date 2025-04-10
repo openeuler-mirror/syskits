@@ -1,0 +1,284 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "基本功能测试 - 默认合并第一列",
+            "setup_commands": [
+                "echo -e '1 a\\n2 b\\n3 c' > file1.txt",
+                "echo -e '1 x\\n2 y\\n3 z' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a x\n2 b y\n3 c z\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -a 选项 - 显示未配对的行（文件1）",
+            "setup_commands": [
+                "echo -e '1 a\\n2 b\\n3 c\\n4 d' > file1.txt",
+                "echo -e '1 x\\n2 y\\n3 z' > file2.txt"
+            ],
+            "args": ["-a", "1", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a x\n2 b y\n3 c z\n4 d\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -e 选项 - 替换缺失字段",
+            "setup_commands": [
+                "echo -e '1 a\\n2 b' > file1.txt",
+                "echo -e '1 x\\n3 z' > file2.txt"
+            ],
+            "args": ["-a", "1", "-a", "2", "-e", "EMPTY", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a x\n2 b EMPTY\n3 EMPTY z\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -i 选项 - 忽略大小写",
+            "setup_commands": [
+                "echo -e 'A x\\nB y' > file1.txt",
+                "echo -e 'a 1\\nb 2' > file2.txt"
+            ],
+            "args": ["-i", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "A x 1\nB y 2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -j 选项 - 指定合并字段",
+            "setup_commands": [
+                "echo -e 'x 1 a\\ny 2 b' > file1.txt",
+                "echo -e 'x 3 c\\ny 4 d' > file2.txt"
+            ],
+            "args": ["-j", "1", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "x 1 a 3 c\ny 2 b 4 d\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -o 选项 - 自定义输出格式",
+            "setup_commands": [
+                "echo -e '1 a b\\n2 c d' > file1.txt",
+                "echo -e '1 x y\\n2 z w' > file2.txt"
+            ],
+            "args": ["-o", "1.2,2.2,1.1", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a x 1\nc z 2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -t 选项 - 自定义分隔符",
+            "setup_commands": [
+                "echo -e '1:a:b\\n2:c:d' > file1.txt",
+                "echo -e '1:x:y\\n2:z:w' > file2.txt"
+            ],
+            "args": ["-t", ":", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1:a:b:x:y\n2:c:d:z:w\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -v 选项 - 只显示未配对的行",
+            "setup_commands": [
+                "echo -e '1 a\\n2 b\\n3 c' > file1.txt",
+                "echo -e '1 x\\n2 y\\n4 z' > file2.txt"
+            ],
+            "args": ["-v", "1", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3 c\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -1 和 -2 选项 - 指定不同的合并字段",
+            "setup_commands": [
+                "echo -e 'a 1 x\\nb 2 y' > file1.txt",
+                "echo -e 'x 1 a\\ny 2 b' > file2.txt"
+            ],
+            "args": ["-1", "3", "-2", "1", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a 1 x 1 a\nb 2 y 2 b\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 --check-order 选项",
+            "setup_commands": [
+                "echo -e '1 a\\n2 b\\n3 c' > file1.txt",
+                "echo -e '1 x\\n2 y\\n3 z' > file2.txt"
+            ],
+            "args": ["--check-order", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a x\n2 b y\n3 c z\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 --header 选项",
+            "setup_commands": [
+                "echo -e 'ID Name\\n1 Alice\\n2 Bob' > file1.txt",
+                "echo -e 'ID Age\\n1 20\\n2 25' > file2.txt"
+            ],
+            "args": ["--header", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ID Name Age\n1 Alice 20\n2 Bob 25\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 -z 选项 - 使用 NUL 字符作为行分隔符",
+            "setup_commands": [
+                "printf '1 a\\0002 b\\000' > file1.txt",
+                "printf '1 x\\0002 y\\000' > file2.txt"
+            ],
+            "args": ["-z", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a x\u00002 b y\u0000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试未排序输入",
+            "setup_commands": [
+                "echo -e '2 b\\n1 a\\n3 c' > file1.txt",
+                "echo -e '1 x\\n2 y\\n3 z' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "join: file1.txt:2: is not sorted: 1 a\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试标准输入",
+            "setup_commands": [
+                "echo -e '1 x\\n2 y' > file2.txt"
+            ],
+            "args": ["-", "file2.txt"], 
+            "input": "1 a\n2 b\n",
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a x\n2 b y\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file2.txt"
+            ]
+        }
+    ]
+}

@@ -11,7 +11,10 @@
 
 //! 因式分解的命令行接口
 
+extern crate rust_i18n;
 use ctcore::Tool;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::ffi::OsString;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
@@ -19,16 +22,14 @@ mod factor_algorithm;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo, set_ct_exit_code};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_error, ct_show_warning};
+use ctcore::{ct_show_error, ct_show_warning};
 pub use factor_algorithm::*;
+use sys_locale::get_locale;
 
 pub mod miller_rabin;
 pub mod numeric;
 pub mod rho;
 pub mod table;
-
-const FACTOR_ABOUT: &str = ct_help_about!("factor.md");
-const FACTOR_USAGE: &str = ct_help_usage!("factor.md");
 
 /// 定义配置标志常量
 pub mod factor_flags {
@@ -170,6 +171,8 @@ impl Tool for Factor {
 /// - 写入输出时发生 I/O 错误
 /// - 处理输入数字时发生错误
 pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write>) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 1. 解析命令行参数
     let matches = ct_app().try_get_matches_from(args)?;
 
@@ -198,18 +201,18 @@ pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = FACTOR_ABOUT;
-    let usage_description = ct_format_usage(FACTOR_USAGE);
+    let application_info = t!("factor.about");
+    let usage_description = t!("factor.usage");
     let args = vec![
         Arg::new(factor_flags::NUMBER).action(ArgAction::Append),
         Arg::new(factor_flags::EXPONENTS)
             .short('h')
             .long(factor_flags::EXPONENTS)
-            .help("Print factors in the form p^e")
+            .help(t!("factor.clap.exponents"))
             .action(ArgAction::SetTrue),
         Arg::new(factor_flags::HELP)
             .long(factor_flags::HELP)
-            .help("Print help information.")
+            .help(t!("factor.clap.help"))
             .action(ArgAction::Help),
     ];
 

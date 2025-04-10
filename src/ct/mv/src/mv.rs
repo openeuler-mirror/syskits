@@ -9,10 +9,13 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 /// mv 是 GNU 工具集中的一个命令，用于在类 Unix 系统（如 Linux 和 macOS）中移动文件和目录，或者重命名它们。
 mod error;
 
 use crate::opt_flags::ARG_FILES;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use crate::opt_flags::OPT_CONTEXT;
 use crate::opt_flags::OPT_FORCE;
 use crate::opt_flags::OPT_INTERACTIVE;
@@ -22,7 +25,6 @@ use crate::opt_flags::OPT_PROGRESS;
 use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
-
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
 use ctcore::Tool;
@@ -47,12 +49,11 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 // 这些枚举（enums）被暴露出来是为了让其他项目（例如 nushell）能够创建一个 Options 值，这需要这些枚举。
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_prompt_yes, ct_show,
-};
+use ctcore::{ct_prompt_yes, ct_show};
 
 use fs_extra::dir::{
     CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
@@ -122,10 +123,6 @@ pub enum MvOverwriteMode {
     Force,
 }
 
-const MV_ABOUT: &str = ct_help_about!("mv.md");
-const MV_USAGE: &str = ct_help_usage!("mv.md");
-const MV_AFTER_HELP: &str = ct_help_section!("after help", "mv.md");
-
 mod opt_flags {
     pub const OPT_FORCE: &str = "force";
     pub const OPT_INTERACTIVE: &str = "interactive";
@@ -145,6 +142,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let mut command = ct_app();
     let args_match = command.try_get_matches_from_mut(args)?;
 
@@ -161,7 +160,7 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
                 "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
             ),
         )
-        .exit();
+            .exit();
     }
 
     let (mv_overwrite_mode, ct_backup_mode, ct_update_mode) = mv_modes_process(&args_match)?;
@@ -213,10 +212,11 @@ fn mv_modes_process(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = MV_ABOUT;
-    let usage_description = ct_format_usage(MV_USAGE);
+    let application_info = t!("mv.about");
+    let usage_description = t!("mv.usage");
     let after_help = format!(
-        "{MV_AFTER_HELP}\n\n{}",
+        "{}\n\n{}",
+        t!("mv.after_help"),
         ct_backup_control::CT_BACKUP_CONTROL_LONG_HELP
     );
 
@@ -236,24 +236,24 @@ fn mv_args_init() -> Vec<Arg> {
         Arg::new(OPT_FORCE)
             .short('f')
             .long(OPT_FORCE)
-            .help("do not prompt before overwriting")
+            .help(t!("mv.clap.opt_force"))
             .overrides_with_all([OPT_INTERACTIVE, OPT_NO_CLOBBER])
             .action(ArgAction::SetTrue),
         Arg::new(OPT_INTERACTIVE)
             .short('i')
             .long(OPT_INTERACTIVE)
-            .help("prompt before override")
+            .help(t!("mv.clap.opt_interactive"))
             .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
             .action(ArgAction::SetTrue),
         Arg::new(OPT_NO_CLOBBER)
             .short('n')
             .long(OPT_NO_CLOBBER)
-            .help("do not overwrite an existing file")
+            .help(t!("mv.clap.opt_no_clobber"))
             .overrides_with_all([OPT_FORCE, OPT_INTERACTIVE])
             .action(ArgAction::SetTrue),
         Arg::new(OPT_STRIP_TRAILING_SLASHES)
             .long(OPT_STRIP_TRAILING_SLASHES)
-            .help("remove any trailing slashes from each SOURCE argument")
+            .help(t!("mv.clap.opt_strip_trailing_slashes"))
             .action(ArgAction::SetTrue),
         ct_backup_control::arguments::backup(),
         ct_backup_control::arguments::backup_no_args(),
@@ -263,7 +263,7 @@ fn mv_args_init() -> Vec<Arg> {
         Arg::new(OPT_TARGET_DIRECTORY)
             .short('t')
             .long(OPT_TARGET_DIRECTORY)
-            .help("move all SOURCE arguments into DIRECTORY")
+            .help(t!("mv.clap.opt_target_directory"))
             .value_name("DIRECTORY")
             .value_hint(clap::ValueHint::DirPath)
             .conflicts_with(OPT_NO_TARGET_DIRECTORY)
@@ -271,12 +271,12 @@ fn mv_args_init() -> Vec<Arg> {
         Arg::new(OPT_NO_TARGET_DIRECTORY)
             .short('T')
             .long(OPT_NO_TARGET_DIRECTORY)
-            .help("treat DEST as a normal file")
+            .help(t!("mv.clap.opt_no_target_directory"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_VERBOSE)
             .short('v')
             .long(OPT_VERBOSE)
-            .help("explain what is being done")
+            .help(t!("mv.clap.opt_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_PROGRESS)
             .short('g')
@@ -289,7 +289,7 @@ fn mv_args_init() -> Vec<Arg> {
         Arg::new(OPT_CONTEXT)
             .short('Z')
             .long(OPT_CONTEXT)
-            .help("set SELinux security context of destination file to default type")
+            .help(t!("mv.clap.opt_context"))
             .action(ArgAction::SetTrue),
         Arg::new(ARG_FILES)
             .action(ArgAction::Append)
@@ -592,10 +592,13 @@ fn move_files_into_dir(
                         "cannot move '{}' to a subdirectory of itself, '{}/{}'",
                         source_path.display(),
                         target_directory.display(),
-                        canonicalize_target_dir.components().last().map_or_else(
-                            || target_directory.display().to_string(),
-                            |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
-                        )
+                        canonicalize_target_dir
+                            .components()
+                            .next_back()
+                            .map_or_else(
+                                || target_directory.display().to_string(),
+                                |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
+                            )
                     )
                 ));
                 continue;
@@ -976,7 +979,6 @@ mod tests_tool_implementation {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
-
     #[cfg(test)]
     mod tests_mv_main {
         use crate::mv_main;

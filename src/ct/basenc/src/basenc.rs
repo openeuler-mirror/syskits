@@ -9,10 +9,14 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::Arg;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::ArgAction;
 use clap::Command;
 use ct_base32::base_common::{self, BASE_CMD_PARSE_ERROR, BaseConfig};
+use sys_locale::get_locale;
 
 use ctcore::{
     ct_encoding::Format,
@@ -21,14 +25,9 @@ use ctcore::{
 
 use ctcore::Tool;
 use ctcore::ct_error::UClapError;
-use ctcore::ct_help_about;
-use ctcore::ct_help_usage;
 use std::ffi::OsString;
 use std::io::Read;
 use std::io::stdin;
-
-const BASE64_ABOUT: &str = ct_help_about!("basenc.md");
-const BASE64_USAGE: &str = ct_help_usage!("basenc.md");
 
 const BASE64_ENCODINGS: &[(&str, Format, &str)] = &[
     ("base64", Format::Base64, "same as 'base64' program"),
@@ -60,7 +59,9 @@ const BASE64_ENCODINGS: &[(&str, Format, &str)] = &[
 ];
 
 pub fn ct_app() -> Command {
-    let mut ct_cmd = base_common::base_common_app(BASE64_ABOUT, BASE64_USAGE);
+    let base64_about = t!("basenc.about");
+    let base64_usage = t!("basenc.usage");
+    let mut ct_cmd = base_common::base_common_app(base64_about, base64_usage);
     for encoding in BASE64_ENCODINGS {
         let raw = Arg::new(encoding.0)
             .long(encoding.0)
@@ -109,6 +110,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn basenc_main(args: impl ctcore::Args) -> CTResult<String> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let (config_mod, format_mod) = basenc_parse_cmd_args(args)?;
 
     // 创建对stdin的引用，以便我们能从parse_base_cmd_args返回锁定的stdin

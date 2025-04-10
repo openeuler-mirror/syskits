@@ -9,18 +9,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::Arg;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
 
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
-
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_section;
-use ctcore::ct_help_usage;
 
 use ctcore::Tool;
 use std::ffi::OsString;
@@ -29,10 +27,7 @@ use std::io::Write;
 use std::iter::Peekable;
 use std::ops::ControlFlow;
 use std::str::Chars;
-
-const ECHO_ABOUT: &str = ct_help_about!("echo.md");
-const ECHO_USAGE: &str = ct_help_usage!("echo.md");
-const ECHO_AFTER_HELP: &str = ct_help_section!("after help", "echo.md");
+use sys_locale::get_locale;
 
 mod opt_flags {
     pub const STRING: &str = "STRING";
@@ -195,8 +190,10 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app()
-        .after_help(ECHO_AFTER_HELP)
+        .after_help(t!("echo.after_help"))
         .try_get_matches_from(args)?;
 
     let no_newline = args_match.get_flag(opt_flags::NO_NEWLINE);
@@ -213,22 +210,22 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = ECHO_ABOUT;
-    let usage_description = ct_format_usage(ECHO_USAGE);
+    let application_info = t!("echo.about");
+    let usage_description = t!("echo.usage");
 
     let args = vec![
         Arg::new(opt_flags::NO_NEWLINE)
             .short('n')
-            .help("do not output the trailing newline")
+            .help(t!("echo.clap.no_newline"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::ENABLE_BACKSLASH_ESCAPE)
             .short('e')
-            .help("enable interpretation of backslash escapes")
+            .help(t!("echo.clap.enable_backslash_escape"))
             .action(ArgAction::SetTrue)
             .overrides_with(opt_flags::DISABLE_BACKSLASH_ESCAPE),
         Arg::new(opt_flags::DISABLE_BACKSLASH_ESCAPE)
             .short('E')
-            .help("disable interpretation of backslash escapes (default)")
+            .help(t!("echo.clap.disable_backslash_escape"))
             .action(ArgAction::SetTrue)
             .overrides_with(opt_flags::ENABLE_BACKSLASH_ESCAPE),
         Arg::new(opt_flags::STRING).action(ArgAction::Append),
@@ -240,7 +237,7 @@ pub fn ct_app() -> Command {
         .allow_hyphen_values(true)
         .version(command_version)
         .about(application_info)
-        .after_help(ECHO_AFTER_HELP)
+        .after_help(t!("echo.after_help"))
         .override_usage(usage_description)
         .args(&args)
 }

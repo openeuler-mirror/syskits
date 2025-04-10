@@ -11,25 +11,25 @@
 
 //! unexpand命令通常用于将行首的空格转换为制表符，这样可以使得文本在显示时按照固定的列对齐，尤其是在处理纯文本表格时。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::error::Error;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
-
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::{ct_crash_if_err, ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::{ct_crash_if_err, ct_show};
 use std::ffi::OsString;
-
-const UNEXPAND_USAGE: &str = ct_help_usage!("unexpand.md");
-const UNEXPAND_ABOUT: &str = ct_help_about!("unexpand.md");
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
 
@@ -192,6 +192,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
 
     let matches = ct_app().try_get_matches_from(expand_shortcuts(&args))?;
@@ -202,8 +204,8 @@ pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = UNEXPAND_ABOUT;
-    let usage_description = ct_format_usage(UNEXPAND_USAGE);
+    let application_info = t!("unexpand.about");
+    let usage_description = t!("unexpand.usage");
     let args = vec![
         Arg::new(unexpand_flags::FILE)
             .hide(true)
@@ -212,11 +214,11 @@ pub fn ct_app() -> Command {
         Arg::new(unexpand_flags::ALL)
             .short('a')
             .long(unexpand_flags::ALL)
-            .help("convert all blanks, instead of just initial blanks")
+            .help(t!("unexpand.clap.all"))
             .action(ArgAction::SetTrue),
         Arg::new(unexpand_flags::FIRST_ONLY)
             .long(unexpand_flags::FIRST_ONLY)
-            .help("convert only leading sequences of blanks (overrides -a)")
+            .help(t!("unexpand.clap.first_only"))
             .action(ArgAction::SetTrue),
         Arg::new(unexpand_flags::TABS)
             .short('t')
@@ -230,7 +232,7 @@ pub fn ct_app() -> Command {
         Arg::new(unexpand_flags::NO_UTF8)
             .short('U')
             .long(unexpand_flags::NO_UTF8)
-            .help("interpret input file as 8-bit ASCII rather than UTF-8")
+            .help(t!("unexpand.clap.no_utf8"))
             .action(ArgAction::SetTrue),
     ];
 

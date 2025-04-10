@@ -9,13 +9,14 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::{Tool, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use ctcore::{Tool, ct_error::CTResult};
 use std::env;
 use std::ffi::OsString;
-
-const PRINTENV_ABOUT: &str = ct_help_about!("printenv.md");
-const PRINTENV_SAGE: &str = ct_help_usage!("printenv.md");
+use sys_locale::get_locale;
 
 static PRINTENV_OPT_NULL: &str = "null";
 
@@ -33,6 +34,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回值
 /// 返回一个 `CTResult<()>`，成功则为 `Ok(())`，失败则为 `Err(1.into())`。
 pub fn printenv_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从命令行参数中获取匹配项
     let args_match = ct_app().get_matches_from(args);
 
@@ -86,14 +89,14 @@ fn printenv_processing(var: Vec<String>, separator: &str, error_found: &mut bool
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = PRINTENV_ABOUT;
-    let usage_description = ct_format_usage(PRINTENV_SAGE);
+    let application_info = t!("printenv.about");
+    let usage_description = t!("printenv.usage");
 
     let args = vec![
         Arg::new(PRINTENV_OPT_NULL)
             .short('0')
             .long(PRINTENV_OPT_NULL)
-            .help("end each output line with 0 byte rather than newline")
+            .help(t!("printenv.clap.printenv_opt_null"))
             .action(ArgAction::SetTrue),
         Arg::new(PRINTENV_ARG_VARIABLES)
             .action(ArgAction::Append)

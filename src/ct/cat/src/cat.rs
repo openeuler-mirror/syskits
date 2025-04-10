@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
@@ -18,11 +19,14 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_fs::CtFileInformation;
+use rust_i18n::t;
 use std::ffi::OsString;
 use std::fs::File;
 use std::fs::metadata;
 use std::io::{self, IsTerminal, Read, Write};
+use sys_locale::get_locale;
 use thiserror::Error;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -31,7 +35,6 @@ use std::os::unix::io::AsRawFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -39,9 +42,6 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-
-const CAT_USAGE: &str = ct_help_usage!("cat.md");
-const CAT_ABOUT: &str = ct_help_about!("cat.md");
 
 #[derive(Error, Debug)]
 enum CatError {
@@ -183,6 +183,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args)?;
 
     let cat_num_mode = if args_match.get_flag(opt_flags::CAT_NUMBER_NO_NBLANK) {
@@ -237,8 +239,8 @@ pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CAT_ABOUT;
-    let usage_description = ct_format_usage(CAT_USAGE);
+    let application_info = t!("cat.about");
+    let usage_description = t!("cat.usage");
 
     let args = args_init();
     Command::new(utility_name)
@@ -246,6 +248,8 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
@@ -258,52 +262,62 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::CAT_SHOW_ALL)
             .short('A')
             .long(opt_flags::CAT_SHOW_ALL)
-            .help("equivalent to -vET")
+            .help(t!("cat.clap.show-all"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_NUMBER_NO_NBLANK)
             .short('b')
             .long(opt_flags::CAT_NUMBER_NO_NBLANK)
-            .help("number nonempty output lines, overrides -n")
+            .help(t!("cat.clap.number-nonblank"))
             // 注意：这绝对不能overrides_with(options::NUMBER)！在clap中，覆盖操作是对称的，
             // 因此"-b -n"被视为"-n"，这不是我们想要的。
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SHOW_NON_PRINTING_ENDS)
             .short('e')
-            .help("equivalent to -vE")
+            .help(t!("cat.clap.show-nonprinting"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SHOW_ENDS)
             .short('E')
             .long(opt_flags::CAT_SHOW_ENDS)
-            .help("display $ at end of each line")
+            .help(t!("cat.clap.show-ends"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_NUMBER)
             .short('n')
             .long(opt_flags::CAT_NUMBER)
-            .help("number all output lines")
+            .help(t!("cat.clap.number"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SQUEEZE_BLANK)
             .short('s')
             .long(opt_flags::CAT_SQUEEZE_BLANK)
-            .help("suppress repeated empty output lines")
+            .help(t!("cat.clap.squeeze-blank"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SHOW_NON_PRINTING_TABS)
             .short('t')
-            .help("equivalent to -vT")
+            .help(t!("cat.clap.show-nonprinting"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SHOW_TABS)
             .short('T')
             .long(opt_flags::CAT_SHOW_TABS)
-            .help("display TAB characters at ^I")
+            .help(t!("cat.clap.show-tabs"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_SHOW_NON_PRINTING)
             .short('v')
             .long(opt_flags::CAT_SHOW_NON_PRINTING)
-            .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+            .help(t!("cat.clap.show-nonprinting"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CAT_IGNORED_U)
             .short('u')
-            .help("(ignored)")
+            .help(t!("cat.clap.ignored-u"))
             .action(ArgAction::SetTrue),
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("cat.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("cat.clap.version"))
+            .action(ArgAction::Version),
     ];
     args
 }

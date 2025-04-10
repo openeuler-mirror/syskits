@@ -16,6 +16,8 @@ name = "ct_mknod"
 path = "src/mknod.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 clap = { workspace = true }
 libc = { workspace = true }
 ctcore = { workspace = true, features = ["mode"] }

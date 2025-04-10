@@ -659,7 +659,6 @@ impl Default for Parser {
 
 #[cfg(test)]
 mod tests {
-
     use crate::Num;
     use crate::parseargs::{Parser, parse_bytes_with_opt_multiplier};
     use std::matches;

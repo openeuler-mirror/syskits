@@ -15,6 +15,8 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 path = "src/ls.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
 unicode-width = { workspace = true }
@@ -39,8 +41,6 @@ hostname = { workspace = true }
 exacl = { workspace = true, optional = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
-users = "0.11"
 
 [[bin]]
 name = "ls"

@@ -15,19 +15,20 @@
 //
 // 命名管道的使用通常涉及到两个或多个进程，其中一个进程将数据写入管道，另一个或多个进程从管道中读取数据。它们在文件系统中有一个名称，因此可以被多个进程引用。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::ct_show;
 use libc::mkfifo;
 use std::ffi::CString;
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 // 定义了用于创建FIFO（命名管道）的命令行工具的主逻辑。
-
-static MKFIFO_USAGE: &str = ct_help_usage!("mkfifo.md"); // 命令使用说明
-static MKFIFO_ABOUT: &str = ct_help_about!("mkfifo.md"); // 命令简介
 
 // 用于命令行选项的常量模块
 mod opt_flags {
@@ -44,6 +45,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args)?;
 
     // 检查不支持的选项
@@ -90,18 +93,28 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = MKFIFO_ABOUT;
-    let usage_description = ct_format_usage(MKFIFO_USAGE);
+    let application_info = t!("mkfifo.about");
+    let usage_description = t!("mkfifo.usage");
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("mkfifo.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("mkfifo.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::MODE)
             .short('m')
             .long(opt_flags::MODE)
-            .help("file permissions for the fifo")
+            .help(t!("mkfifo.clap.mode"))
             .default_value("0666")
             .value_name("MODE"),
         Arg::new(opt_flags::SE_LINUX_SECURITY_CONTEXT)
             .short('Z')
-            .help("set the SELinux security context to default type")
+            .help(t!("mkfifo.clap.se_linux_security_context"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CONTEXT)
             .long(opt_flags::CONTEXT)
@@ -121,6 +134,8 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .about(application_info)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 

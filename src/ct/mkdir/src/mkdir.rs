@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::builder::ValueParser;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
@@ -18,16 +21,13 @@ use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_mode;
+use ctcore::ct_show_if_err;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_if_err};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 const MKDIR_DEFAULT_PERM: u32 = 0o777;
-
-const MKDIR_ABOUT: &str = ct_help_about!("mkdir.md");
-const MKDIR_USAGE: &str = ct_help_usage!("mkdir.md");
-const MKDIR_AFTER_HELP: &str = ct_help_section!("after help", "mkdir.md");
 
 mod mkdir_flags {
     pub const MODE: &str = "mode";
@@ -103,6 +103,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let mut args = args.collect_lossy();
 
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
@@ -129,22 +131,32 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = MKDIR_ABOUT;
-    let usage_description = ct_format_usage(MKDIR_USAGE);
+    let application_info = t!("mkdir.about");
+    let usage_description = t!("mkdir.usage");
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("mkdir.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("mkdir.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(mkdir_flags::MODE)
             .short('m')
             .long(mkdir_flags::MODE)
-            .help("set file mode (not implemented on windows)"),
+            .help(t!("mkdir.clap.mode")),
         Arg::new(mkdir_flags::PARENTS)
             .short('p')
             .long(mkdir_flags::PARENTS)
-            .help("make parent directories as needed")
+            .help(t!("mkdir.clap.parents"))
             .action(ArgAction::SetTrue),
         Arg::new(mkdir_flags::VERBOSE)
             .short('v')
             .long(mkdir_flags::VERBOSE)
-            .help("print a message for each printed directory")
+            .help(t!("mkdir.clap.verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(mkdir_flags::DIRS)
             .action(ArgAction::Append)
@@ -158,8 +170,10 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
-        .after_help(MKDIR_AFTER_HELP)
+        .after_help(t!("mkdir.after_help"))
 }
 
 /**

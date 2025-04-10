@@ -17,9 +17,12 @@
 //! 杀死进程。对于另一些进程可能需要使用 KILL (9)信号。因此信号无法被捕获，
 //! 退出返回值将为 128+9 而非 124。
 
+extern crate rust_i18n;
 mod exit_status;
 
 use crate::exit_status::ExitStatus;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -30,17 +33,15 @@ use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
+use sys_locale::get_locale;
 
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
 
 use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_usage, ct_show_error,
+    ct_show_error,
     ct_signals::{get_ct_signal_by_name_or_value, get_ct_signal_name_by_value},
 };
-
-const TIMEOUT_ABOUT: &str = ct_help_about!("timeout.md");
-const TIMEOUT_USAGE: &str = ct_help_usage!("timeout.md");
 
 pub mod timeout_flags {
     pub static TIMEOUT_FOREGROUND: &str = "foreground";
@@ -143,6 +144,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn timeout_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 尝试解析命令行参数，如果失败则返回错误码125
     let matches = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
@@ -156,8 +159,8 @@ pub fn timeout_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TIMEOUT_ABOUT;
-    let usage_description = ct_format_usage(TIMEOUT_USAGE);
+    let application_info = t!("timeout.about");
+    let usage_description = t!("timeout.usage");
     let args = vec![
         Arg::new(timeout_flags::TIMEOUT_FOREGROUND)
             .long(timeout_flags::TIMEOUT_FOREGROUND)
@@ -177,7 +180,7 @@ pub fn ct_app() -> Command {
             ),
         Arg::new(timeout_flags::TIMEOUT_PRESERVE_STATUS)
             .long(timeout_flags::TIMEOUT_PRESERVE_STATUS)
-            .help("exit with the same status as COMMAND, even when the command times out")
+            .help(t!("timeout.clap.timeout_preserve_status"))
             .action(ArgAction::SetTrue),
         Arg::new(timeout_flags::TIMEOUT_SIGNAL)
             .short('s')
@@ -190,18 +193,18 @@ pub fn ct_app() -> Command {
         Arg::new(timeout_flags::TIMEOUT_VERBOSE)
             .short('v')
             .long(timeout_flags::TIMEOUT_VERBOSE)
-            .help("diagnose to stderr any signal sent upon timeout")
+            .help(t!("timeout.clap.timeout_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(timeout_flags::TIMEOUT_DURATION)
             .value_name("DURATION")
             .required(true)
-            .help("maximum time to wait for COMMAND to finish"),
+            .help(t!("timeout.clap.timeout_duration")),
         Arg::new(timeout_flags::TIMEOUT_COMMAND)
             .value_name("COMMAND [ARGS]")
             .required(true)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::CommandName)
-            .help("command to run and its arguments"),
+            .help(t!("timeout.clap.timeout_command")),
     ];
 
     Command::new(utility_name)

@@ -9,14 +9,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use std::ffi::OsString;
-use std::path::Path;
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::Command;
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
+use std::path::Path;
+use sys_locale::get_locale;
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
@@ -24,6 +26,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let command = ct_app();
     let matches = command.get_matches_from(args);
 

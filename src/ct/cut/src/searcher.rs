@@ -55,7 +55,6 @@ impl<M: Matcher> Iterator for Searcher<'_, '_, M> {
 
 #[cfg(test)]
 mod tests_searcher {
-
     use super::super::matcher::ExactMatcher;
     use super::*;
 
@@ -126,7 +125,6 @@ mod tests_searcher {
 
 #[cfg(test)]
 mod whitespace_searcher_tests {
-
     use super::super::matcher::WhitespaceMatcher;
     use super::*;
 

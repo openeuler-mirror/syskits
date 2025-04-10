@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::net::ToSocketAddrs;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::str;
 
 use std::collections::hash_set::HashSet;
@@ -23,17 +26,11 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
-
-use ctcore::{
-    ct_error::{CTResult, FromIo},
-    ct_format_usage, ct_help_about, ct_help_usage,
-};
+use ctcore::ct_error::{CTResult, FromIo};
+use sys_locale::get_locale;
 
 use ctcore::Tool;
 use nix::sys::socket::{AddressFamily, SockaddrLike};
-
-const HOSTNAME_ABOUT: &str = ct_help_about!("hostname.md");
-const HOSTNAME_USAGE: &str = ct_help_usage!("hostname.md");
 
 static OPT_DOMAIN: &str = "domain";
 static OPT_IP_ADDRESS: &str = "ip-address";
@@ -83,6 +80,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn hostname_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
 
     #[cfg(windows)]
@@ -97,33 +96,33 @@ pub fn hostname_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = HOSTNAME_ABOUT;
-    let usage_description = ct_format_usage(HOSTNAME_USAGE);
+    let application_info = t!("hostname.about");
+    let usage_description = t!("hostname.usage");
 
     let args = vec![
         Arg::new(OPT_DOMAIN)
             .short('d')
             .long("domain")
             .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help("Display the name of the DNS domain if possible")
+            .help(t!("hostname.clap.opt_domain"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_IP_ADDRESS)
             .short('i')
             .long("ip-address")
             .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help("Display the network address(es) of the host")
+            .help(t!("hostname.clap.opt_ip_address"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_FQDN)
             .short('f')
             .long("fqdn")
             .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help("Display the FQDN (Fully Qualified Domain Name) (default)")
+            .help(t!("hostname.clap.opt_fqdn"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_SHORT)
             .short('s')
             .long("short")
             .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help("Display the short hostname (the portion before the first dot) if possible")
+            .help(t!("hostname.clap.opt_short"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_HOST)
             .value_parser(ValueParser::os_string())

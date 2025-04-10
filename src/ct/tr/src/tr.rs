@@ -11,10 +11,13 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
+extern crate rust_i18n;
 mod operation;
 
 use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use ctcore::ct_show;
 use operation::{
     Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
@@ -25,10 +28,6 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::OsString;
-
-const TR_ABOUT: &str = ct_help_about!("tr.md");
-const TR_USAGE: &str = ct_help_usage!("tr.md");
-const TR_AFTER_HELP: &str = ct_help_section!("after help", "tr.md");
 
 // 1. 定义配置标志常量
 pub mod tr_flags {
@@ -249,22 +248,22 @@ fn tr_process<R: BufRead, W: Write>(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TR_ABOUT;
-    let usage_description = ct_format_usage(TR_USAGE);
-    let after_help = TR_AFTER_HELP;
+    let application_info = t!("tr.about");
+    let usage_description = t!("tr.usage");
+    let after_help = t!("tr.after_help");
 
     let args = vec![
         Arg::new(tr_flags::TR_COMPLEMENT)
             .visible_short_alias('C')
             .short('c')
             .long(tr_flags::TR_COMPLEMENT)
-            .help("use the complement of SET1")
+            .help(t!("tr.clap.tr_complement"))
             .action(ArgAction::SetTrue)
             .overrides_with(tr_flags::TR_COMPLEMENT),
         Arg::new(tr_flags::TR_DELETE)
             .short('d')
             .long(tr_flags::TR_DELETE)
-            .help("delete characters in SET1, do not translate")
+            .help(t!("tr.clap.tr_delete"))
             .action(ArgAction::SetTrue)
             .overrides_with(tr_flags::TR_DELETE),
         Arg::new(tr_flags::TR_SQUEEZE)
@@ -280,7 +279,7 @@ pub fn ct_app() -> Command {
         Arg::new(tr_flags::TR_TRUNCATE_SET1)
             .long(tr_flags::TR_TRUNCATE_SET1)
             .short('t')
-            .help("first truncate SET1 to length of SET2")
+            .help(t!("tr.clap.tr_truncate_set1"))
             .action(ArgAction::SetTrue)
             .overrides_with(tr_flags::TR_TRUNCATE_SET1),
         Arg::new(tr_flags::TR_SETS)

@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
@@ -18,6 +19,8 @@ mod parseargs;
 mod progress;
 
 use crate::bufferedoutput::DDBufferedOutput;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use blocks::conv_block_unblock_helper;
 use ctcore::ct_io::CtOwnedFileDescriptorOrHandle;
 use datastructures::*;
@@ -28,6 +31,21 @@ use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 
+use clap::{Arg, Command, crate_version};
+use ctcore::Tool;
+use ctcore::ct_display::Quotable;
+#[cfg(unix)]
+use ctcore::ct_error::set_ct_exit_code;
+use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_show_error;
+#[cfg(target_os = "linux")]
+use ctcore::ct_show_if_err;
+use gcd::Gcd;
+#[cfg(target_os = "linux")]
+use nix::{
+    errno::Errno,
+    fcntl::{PosixFadviseAdvice, posix_fadvise},
+};
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
@@ -50,26 +68,8 @@ use std::sync::{
 };
 use std::thread;
 use std::time::{Duration, Instant};
+use sys_locale::get_locale;
 
-use clap::{Arg, Command, crate_version};
-use ctcore::Tool;
-use ctcore::ct_display::Quotable;
-#[cfg(unix)]
-use ctcore::ct_error::set_ct_exit_code;
-use ctcore::ct_error::{CTResult, FromIo};
-#[cfg(target_os = "linux")]
-use ctcore::ct_show_if_err;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
-use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use nix::{
-    errno::Errno,
-    fcntl::{PosixFadviseAdvice, posix_fadvise},
-};
-
-const DD_ABOUT: &str = ct_help_about!("dd.md");
-const DD_AFTER_HELP: &str = ct_help_section!("after help", "dd.md");
-const DD_USAGE: &str = ct_help_usage!("dd.md");
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
@@ -1288,6 +1288,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let options: DdOptions = Parser::new().parse(
@@ -1319,9 +1321,9 @@ fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(DD_ABOUT)
-        .override_usage(ct_format_usage(DD_USAGE))
-        .after_help(DD_AFTER_HELP)
+        .about(t!("dd.about"))
+        .override_usage(t!("dd.usage"))
+        .after_help(t!("dd.after_help"))
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
 }

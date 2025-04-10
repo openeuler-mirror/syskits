@@ -11,20 +11,21 @@
 
 //! unlink 命令用于删除一个文件或者一个文件的硬链接
 
+extern crate rust_i18n;
 use clap::builder::ValueParser;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, Command, crate_version};
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 
 use std::ffi::OsString;
 use std::fs::remove_file;
 use std::path::Path;
+use sys_locale::get_locale;
 
-const UNLINK_ABOUT: &str = ct_help_about!("unlink.md");
-const UNLINK_USAGE: &str = ct_help_usage!("unlink.md");
 static OPT_PATH: &str = "FILE";
 
 #[ctcore::main]
@@ -33,6 +34,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn unlink_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let path: &Path = matches.get_one::<OsString>(OPT_PATH).unwrap().as_ref();
@@ -43,8 +46,8 @@ pub fn unlink_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = UNLINK_ABOUT;
-    let usage_description = ct_format_usage(UNLINK_USAGE);
+    let application_info = t!("unlink.about");
+    let usage_description = t!("unlink.usage");
     let arg = Arg::new(OPT_PATH)
         .required(true)
         .hide(true)

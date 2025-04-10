@@ -126,7 +126,6 @@ pub(crate) fn conv_block_unblock_helper(
 
 #[cfg(test)]
 mod tests {
-
     use crate::blocks::{block, unblock};
     use crate::progress::ReadStat;
 

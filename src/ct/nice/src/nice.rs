@@ -11,7 +11,10 @@
 
 // 在GNU/Linux系统中，nice命令的主要作用是调整程序的执行优先级，从而影响其对CPU资源的访问
 
+extern crate rust_i18n;
 use libc::{PRIO_PROCESS, c_char, c_int, execvp};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
@@ -20,16 +23,14 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::{
     Tool,
     ct_error::{CTResult, CTsageError, CtSimpleError, UClapError, set_ct_exit_code},
-    ct_format_usage, ct_help_about, ct_help_usage, ct_show_error,
+    ct_show_error,
 };
+use sys_locale::get_locale;
 
 pub mod opt_flags {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
-
-const NICE_ABOUT: &str = ct_help_about!("nice.md");
-const NICE_USAGE: &str = ct_help_usage!("nice.md");
 
 fn is_prefix_of(prefix: &str, target: &str, min_match: usize) -> bool {
     if prefix.len() < min_match || prefix.len() > target.len() {
@@ -138,6 +139,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
  * 会返回相应的错误代码和错误信息。
  */
 pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 标准化命令行参数
     let args = standardize_nice_args(args);
 
@@ -249,14 +252,14 @@ fn nice_adjustment(args_match: &ArgMatches, nice_ness: &mut c_int) -> Result<i32
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = NICE_ABOUT;
-    let usage_description = ct_format_usage(NICE_USAGE);
+    let application_info = t!("nice.about");
+    let usage_description = t!("nice.usage");
 
     let args = vec![
         Arg::new(opt_flags::ADJUSTMENT)
             .short('n')
             .long(opt_flags::ADJUSTMENT)
-            .help("add N to the niceness (default is 10)")
+            .help(t!("nice.clap.adjustment"))
             .action(ArgAction::Set)
             .overrides_with(opt_flags::ADJUSTMENT)
             .allow_hyphen_values(true),

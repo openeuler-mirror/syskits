@@ -10,30 +10,28 @@
  */
 #![allow(clippy::upper_case_acronyms)]
 
+extern crate rust_i18n;
 use clap::builder::ValueParser;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::{
-    ct_display::Quotable, ct_format_usage, ct_help_about, ct_help_usage, ct_show_error,
-    ct_show_warning,
-};
+use ctcore::{ct_display::Quotable, ct_show_error, ct_show_warning};
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
+use rust_i18n::t;
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
+use sys_locale::get_locale;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 mod errors;
 mod fts;
 
 use ctcore::Tool;
 use errors::*;
-
-const CHCON_ABOUT: &str = ct_help_about!("chcon.md");
-const CHCON_USAGE: &str = ct_help_usage!("chcon.md");
 
 pub mod opt_flags {
     pub static HELP: &str = "help";
@@ -71,6 +69,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
     let config_info = ct_app();
 
     let opt_flags = match chcon_parse_command_line(config_info, args) {
@@ -163,8 +164,8 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CHCON_ABOUT;
-    let usage_description = ct_format_usage(CHCON_USAGE);
+    let application_info = t!("chcon.about");
+    let usage_description = t!("chcon.usage");
 
     let args = chcon_args_init();
 
@@ -174,6 +175,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .disable_version_flag(true)
         .args_override_self(true)
         .args(&args)
 }
@@ -182,29 +184,31 @@ fn chcon_args_init() -> Vec<Arg> {
     let args = vec![
         Arg::new(opt_flags::HELP)
             .long(opt_flags::HELP)
-            .help("Print help information.")
+            .help(t!("chcon.clap.help"))
             .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("chcon.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::dereference::DEREFERENCE)
             .long(opt_flags::dereference::DEREFERENCE)
             .overrides_with(opt_flags::dereference::NO_DEREFERENCE)
-            .help(
-                "Affect the referent of each symbolic link (this is the default), \
-                     rather than the symbolic link itself.",
-            )
+            .help(t!("chcon.clap.dereference"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::NO_DEREFERENCE)
             .short('h')
             .long(opt_flags::dereference::NO_DEREFERENCE)
-            .help("Affect symbolic links instead of any referenced file.")
+            .help(t!("chcon.clap.no_dereference"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::PRESERVE_ROOT)
             .long(opt_flags::preserve_root::PRESERVE_ROOT)
             .overrides_with(opt_flags::preserve_root::NO_PRESERVE_ROOT)
-            .help("Fail to operate recursively on '/'.")
+            .help(t!("chcon.clap.preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::NO_PRESERVE_ROOT)
             .long(opt_flags::preserve_root::NO_PRESERVE_ROOT)
-            .help("Do not treat '/' specially (the default).")
+            .help(t!("chcon.clap.no_preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::REFERENCE)
             .long(opt_flags::REFERENCE)
@@ -216,40 +220,37 @@ fn chcon_args_init() -> Vec<Arg> {
                 opt_flags::TYPE,
                 opt_flags::RANGE,
             ])
-            .help(
-                "Use security context of RFILE, rather than specifying \
-                     a CONTEXT value.",
-            )
+            .help(t!("chcon.clap.reference"))
             .value_parser(ValueParser::os_string()),
         Arg::new(opt_flags::USER)
             .short('u')
             .long(opt_flags::USER)
             .value_name("USER")
             .value_hint(clap::ValueHint::Username)
-            .help("Set user USER in the target security context.")
+            .help(t!("chcon.clap.user"))
             .value_parser(ValueParser::os_string()),
         Arg::new(opt_flags::ROLE)
             .short('r')
             .long(opt_flags::ROLE)
             .value_name("ROLE")
-            .help("Set role ROLE in the target security context.")
+            .help(t!("chcon.clap.role"))
             .value_parser(ValueParser::os_string()),
         Arg::new(opt_flags::TYPE)
             .short('t')
             .long(opt_flags::TYPE)
             .value_name("TYPE")
-            .help("Set type TYPE in the target security context.")
+            .help(t!("chcon.clap.type"))
             .value_parser(ValueParser::os_string()),
         Arg::new(opt_flags::RANGE)
             .short('l')
             .long(opt_flags::RANGE)
             .value_name("RANGE")
-            .help("Set range RANGE in the target security context.")
+            .help(t!("chcon.clap.range"))
             .value_parser(ValueParser::os_string()),
         Arg::new(opt_flags::RECURSIVE)
             .short('R')
             .long(opt_flags::RECURSIVE)
-            .help("Operate on files and directories recursively.")
+            .help(t!("chcon.clap.recursive"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
             .short('H')
@@ -258,10 +259,7 @@ fn chcon_args_init() -> Vec<Arg> {
                 opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS,
                 opt_flags::sym_links::NO_FOLLOW_SYM_LINKS,
             ])
-            .help(
-                "If a command line argument is a symbolic link to a directory, \
-                     traverse it. Only valid when -R is specified.",
-            )
+            .help(t!("chcon.clap.follow_arg_dir_sym_link"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS)
             .short('L')
@@ -270,10 +268,7 @@ fn chcon_args_init() -> Vec<Arg> {
                 opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                 opt_flags::sym_links::NO_FOLLOW_SYM_LINKS,
             ])
-            .help(
-                "Traverse every symbolic link to a directory encountered. \
-                     Only valid when -R is specified.",
-            )
+            .help(t!("chcon.clap.follow_dir_sym_links"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::sym_links::NO_FOLLOW_SYM_LINKS)
             .short('P')
@@ -282,15 +277,12 @@ fn chcon_args_init() -> Vec<Arg> {
                 opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                 opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS,
             ])
-            .help(
-                "Do not traverse any symbolic links (default). \
-                     Only valid when -R is specified.",
-            )
+            .help(t!("chcon.clap.no_follow_sym_links"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::VERBOSE)
             .short('v')
             .long(opt_flags::VERBOSE)
-            .help("Output a diagnostic for every file processed.")
+            .help(t!("chcon.clap.verbose"))
             .action(ArgAction::SetTrue),
         Arg::new("FILE")
             .action(ArgAction::Append)

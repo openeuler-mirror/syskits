@@ -32,18 +32,18 @@ OFFSET and LABEL are octal by default, hexadecimal if prefixed with "0x" or
 decimal if a "." suffix is added. The "b" suffix will multiply with 512.
 
 TYPE contains one or more format specifications consisting of:
-    a       for printable 7-bits ASCII
-    c       for utf-8 characters or octal for undefined characters
-    d[SIZE] for signed decimal
-    f[SIZE] for floating point
-    o[SIZE] for octal
-    u[SIZE] for unsigned decimal
-    x[SIZE] for hexadecimal
+a for printable 7-bits ASCII
+c for utf-8 characters or octal for undefined characters
+d[SIZE] for signed decimal
+f[SIZE] for floating point
+o[SIZE] for octal
+u[SIZE] for unsigned decimal
+x[SIZE] for hexadecimal
 SIZE is the number of bytes which can be the number 1, 2, 4, 8 or 16,
-    or C, I, S, L for 1, 2, 4, 8 bytes for integer types,
-    or F, D, L for 4, 8, 16 bytes for floating point.
+or C, I, S, L for 1, 2, 4, 8 bytes for integer types,
+or F, D, L for 4, 8, 16 bytes for floating point.
 Any type specification can have a "z" suffix, which will add a ASCII dump at
-    the end of the line.
+the end of the line.
 
 If an error occurred, a diagnostic message will be printed to stderr, and the
 exit code will be non-zero.

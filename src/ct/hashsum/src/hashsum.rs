@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::ArgAction;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::{Arg, ArgMatches, Command};
@@ -21,11 +24,11 @@ use ctcore::ct_sum::{
     Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256,
 };
 use ctcore::{ct_display::Quotable, ct_show_warning};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use hex::encode;
 use regex::Captures;
 use regex::Regex;
 use std::cmp::Ordering;
+use sys_locale::get_locale;
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -36,8 +39,6 @@ use std::num::ParseIntError;
 use std::path::Path;
 
 const NAME: &str = "hashsum";
-const HASHSUM_ABOUT: &str = ct_help_about!("hashsum.md");
-const HASHSUM_USAGE: &str = ct_help_usage!("hashsum.md");
 
 /// 定义 hashsum 命令行标志的常量
 pub mod hashsum_flags {
@@ -772,6 +773,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// * `args` - 命令行参数
 ///
 pub fn hashsum_main<W: Write>(writer: &mut W, mut args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 如果由于某些原因没有程序名称，默认为 "hashsum"
     let program = args.next().unwrap_or_else(|| OsString::from(NAME));
     // 从完整程序路径中提取基本名称（如 "md5sum"、"sha1sum" 等）
@@ -875,8 +879,8 @@ fn create_common_command() -> Command {
 
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = HASHSUM_ABOUT;
-    let usage_description = ct_format_usage(HASHSUM_USAGE);
+    let application_info = t!("hashsum.about");
+    let usage_description = t!("hashsum.usage");
     let args = vec![
         Arg::new(hashsum_flags::BINARY)
             .short('b')
@@ -886,12 +890,12 @@ fn create_common_command() -> Command {
         Arg::new(hashsum_flags::CHECK)
             .short('c')
             .long(hashsum_flags::CHECK)
-            .help("read hashsums from the FILEs and check them")
+            .help(t!("hashsum.clap.check"))
             .action(ArgAction::SetTrue)
             .conflicts_with(hashsum_flags::TAG),
         Arg::new(hashsum_flags::TAG)
             .long(hashsum_flags::TAG)
-            .help("create a BSD-style checksum")
+            .help(t!("hashsum.clap.tag"))
             .action(ArgAction::SetTrue)
             .conflicts_with(hashsum_flags::TEXT),
         Arg::new(hashsum_flags::TEXT)
@@ -903,26 +907,26 @@ fn create_common_command() -> Command {
         Arg::new(hashsum_flags::QUIET)
             .short('q')
             .long(hashsum_flags::QUIET)
-            .help("don't print OK for each successfully verified file")
+            .help(t!("hashsum.clap.quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::STATUS)
             .short('s')
             .long(hashsum_flags::STATUS)
-            .help("don't output anything, status code shows success")
+            .help(t!("hashsum.clap.status"))
             .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::STRICT)
             .long(hashsum_flags::STRICT)
-            .help("exit non-zero for improperly formatted checksum lines")
+            .help(t!("hashsum.clap.strict"))
             .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::WARN)
             .short('w')
             .long(hashsum_flags::WARN)
-            .help("warn about improperly formatted checksum lines")
+            .help(t!("hashsum.clap.warn"))
             .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::ZERO)
             .short('z')
             .long(hashsum_flags::ZERO)
-            .help("end each output line with NUL, not newline")
+            .help(t!("hashsum.clap.zero"))
             .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::FILE)
             .index(1)
@@ -954,7 +958,7 @@ fn add_length_option(command: Command) -> Command {
         Arg::new("length")
             .short('l')
             .long("length")
-            .help("digest length in bits; must not exceed the max for the blake2 algorithm (512) and must be a multiple of 8")
+            .help(t!("hashsum.clap.length"))
             .value_name("BITS")
             .value_parser(parse_bit_num),
     )
@@ -973,7 +977,7 @@ fn add_bits_option(command: Command) -> Command {
     command.arg(
         Arg::new("bits")
             .long("bits")
-            .help("set the size of the output (only for SHAKE)")
+            .help(t!("hashsum.clap.bits"))
             .value_name("BITS")
             .value_parser(parse_bit_num),
     )
@@ -992,7 +996,7 @@ fn add_b3sum_options(command: Command) -> Command {
     command.arg(
         Arg::new("no-names")
             .long("no-names")
-            .help("Omits filenames in the output (option not present in GNU/Coreutils)")
+            .help(t!("hashsum.clap.no - names"))
             .action(ArgAction::SetTrue),
     )
 }
@@ -1467,8 +1471,7 @@ fn digest_reader<T: Read>(
     if digest.output_bits() > 0 {
         Ok(digest.result_str())
     } else {
-        // 假设它是 SHAKE。result_str() 不适用于 shake（截至 2016/8/30）
-        let mut bytes = vec![0; (output_bits + 7) / 8];
+        let mut bytes = vec![0; output_bits.div_ceil(8)];
         digest.hash_finalize(&mut bytes);
         Ok(encode(bytes))
     }

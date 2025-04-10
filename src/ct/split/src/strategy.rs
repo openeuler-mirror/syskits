@@ -294,7 +294,6 @@ impl Strategy {
 
 #[cfg(test)]
 mod tests {
-
     use crate::strategy::StrategyNumberType;
     use crate::strategy::StrategyNumberTypeError;
     #[test]

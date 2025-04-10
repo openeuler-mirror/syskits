@@ -17,6 +17,8 @@ path = "src/who.rs"
 [dependencies]
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["utmpx"] }
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
 
 [[bin]]
 name = "who"

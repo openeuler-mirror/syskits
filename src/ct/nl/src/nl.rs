@@ -11,19 +11,18 @@
 
 //! nl - 向指定的各个 <文件> 添加行号，并写到标准输出。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
-use ctcore::{Args, ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
+use ctcore::{Args, ct_show_error};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, stdin, stdout};
 use std::path::Path;
-
-const NL_ABOUT: &str = ct_help_about!("nl.md");
-const NL_AFTER_HELP: &str = ct_help_section!("after help", "nl.md");
-const NL_USAGE: &str = ct_help_usage!("nl.md");
-
+use sys_locale::get_locale;
 /// 行号格式化工具的标志和选项
 pub mod nl_flags {
     // 帮助信息标志
@@ -405,6 +404,9 @@ pub fn nl_main<W>(writer: &mut W, args: impl Args) -> CTResult<()>
 where
     W: std::io::Write,
 {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 使用标准化参数处理函数预处理参数
     let processed_args = standardize_nl_args(args);
 
@@ -556,12 +558,12 @@ where
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = NL_USAGE;
-    let usage_description = ct_format_usage(NL_ABOUT);
+    let application_info = t!("nl.usage");
+    let usage_description = t!("nl.about");
     let args = vec![
         Arg::new(nl_flags::NL_HELP)
             .long(nl_flags::NL_HELP)
-            .help("Print help information.")
+            .help(t!("nl.clap.nl_help"))
             .action(ArgAction::Help),
         Arg::new(nl_flags::NL_FILE)
             .hide(true)
@@ -570,61 +572,61 @@ pub fn ct_app() -> Command {
         Arg::new(nl_flags::NL_BODY_NUMBERING)
             .short('b')
             .long(nl_flags::NL_BODY_NUMBERING)
-            .help("use STYLE for numbering body lines")
+            .help(t!("nl.clap.nl_body_numbering"))
             .value_name("STYLE"),
         Arg::new(nl_flags::NL_SECTION_DELIMITER)
             .short('d')
             .long(nl_flags::NL_SECTION_DELIMITER)
-            .help("use CC for separating logical pages")
+            .help(t!("nl.clap.nl_section_delimiter"))
             .value_name("CC"),
         Arg::new(nl_flags::NL_FOOTER_NUMBERING)
             .short('f')
             .long(nl_flags::NL_FOOTER_NUMBERING)
-            .help("use STYLE for numbering footer lines")
+            .help(t!("nl.clap.nl_footer_numbering"))
             .value_name("STYLE"),
         Arg::new(nl_flags::NL_HEADER_NUMBERING)
             .short('h')
             .long(nl_flags::NL_HEADER_NUMBERING)
-            .help("use STYLE for numbering header lines")
+            .help(t!("nl.clap.nl_header_numbering"))
             .value_name("STYLE"),
         Arg::new(nl_flags::NL_LINE_INCREMENT)
             .short('i')
             .long(nl_flags::NL_LINE_INCREMENT)
-            .help("line number increment at each line")
+            .help(t!("nl.clap.nl_line_increment"))
             .value_name("NUMBER")
             .value_parser(clap::value_parser!(i64)),
         Arg::new(nl_flags::NL_JOIN_BLANK_LINES)
             .short('l')
             .long(nl_flags::NL_JOIN_BLANK_LINES)
-            .help("group of NUMBER empty lines counted as one")
+            .help(t!("nl.clap.nl_join_blank_lines"))
             .value_name("NUMBER")
             .value_parser(clap::value_parser!(u64)),
         Arg::new(nl_flags::NL_NUMBER_FORMAT)
             .short('n')
             .long(nl_flags::NL_NUMBER_FORMAT)
-            .help("insert line numbers according to FORMAT")
+            .help(t!("nl.clap.nl_number_format"))
             .value_name("FORMAT")
             .value_parser(["ln", "rn", "rz"]),
         Arg::new(nl_flags::NL_NO_RENUMBER)
             .short('p')
             .long(nl_flags::NL_NO_RENUMBER)
-            .help("do not reset line numbers at logical pages")
+            .help(t!("nl.clap.nl_no_renumber"))
             .action(ArgAction::SetFalse),
         Arg::new(nl_flags::NL_NUMBER_SEPARATOR)
             .short('s')
             .long(nl_flags::NL_NUMBER_SEPARATOR)
-            .help("add STRING after (possible) line number")
+            .help(t!("nl.clap.nl_number_separator"))
             .value_name("STRING"),
         Arg::new(nl_flags::NL_STARTING_LINE_NUMBER)
             .short('v')
             .long(nl_flags::NL_STARTING_LINE_NUMBER)
-            .help("first line number on each logical page")
+            .help(t!("nl.clap.nl_starting_line_number"))
             .value_name("STRING")
             .num_args(1),
         Arg::new(nl_flags::NL_NUMBER_WIDTH)
             .short('w')
             .long(nl_flags::NL_NUMBER_WIDTH)
-            .help("use NUMBER columns for line numbers")
+            .help(t!("nl.clap.nl_number_width"))
             .value_name("NUMBER")
             .value_parser(clap::value_parser!(usize)),
     ];
@@ -634,7 +636,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
-        .after_help(NL_AFTER_HELP)
+        .after_help(t!("nl.after_help"))
         .disable_help_flag(true)
         .args(&args)
 }

@@ -12,27 +12,26 @@
 //! tac 是一个非常有用的 Linux 命令，它的功能是反向读取和输出文件的内容。
 //! 这个命令的名字是 cat（concatenate，连接）的反向拼写，因此它以相反的顺序显示文件的行。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
+use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::ct_show;
 use memchr::memmem;
 use memmap2::Mmap;
+use std::error::Error;
+use std::ffi::OsString;
+use std::fmt::Display;
 use std::io::{Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
     path::Path,
 };
-
-use ctcore::Tool;
-use ctcore::ct_error::CTError;
-use std::error::Error;
-use std::ffi::OsString;
-use std::fmt::Display;
-
-// 定义about和usage
-static TAC_USAGE: &str = ct_help_usage!("tac.md");
-static TAC_ABOUT: &str = ct_help_about!("tac.md");
+use sys_locale::get_locale;
 
 // 定义配置标志常量
 pub mod tac_flags {
@@ -187,6 +186,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示命令执行的结果
 pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 解析命令行参数
     let matches = ct_app().try_get_matches_from(args)?;
 
@@ -204,24 +206,24 @@ pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TAC_ABOUT;
-    let usage_description = ct_format_usage(TAC_USAGE);
+    let application_info = t!("tac.about");
+    let usage_description = t!("tac.usage");
 
     let args = vec![
         Arg::new(tac_flags::TAC_BEFORE)
             .short('b')
             .long(tac_flags::TAC_BEFORE)
-            .help("attach the separator before instead of after")
+            .help(t!("tac.clap.tac_before"))
             .action(ArgAction::SetTrue),
         Arg::new(tac_flags::TAC_REGEX)
             .short('r')
             .long(tac_flags::TAC_REGEX)
-            .help("interpret the sequence as a regular expression")
+            .help(t!("tac.clap.tac_regex"))
             .action(ArgAction::SetTrue),
         Arg::new(tac_flags::TAC_SEPARATOR)
             .short('s')
             .long(tac_flags::TAC_SEPARATOR)
-            .help("use STRING as the separator instead of newline")
+            .help(t!("tac.clap.tac_separator"))
             .value_name("STRING"),
         Arg::new(tac_flags::TAC_FILE)
             .hide(true)

@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::ffi::OsString;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::io::Read;
 use std::io::stdin;
 
@@ -19,15 +22,10 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
-
-use ctcore::{
-    Tool, ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,
-};
+use ctcore::{Tool, ct_encoding::Format, ct_error::CTResult};
+use sys_locale::get_locale;
 
 pub mod base_common;
-
-const BASE32_ABOUT: &str = ct_help_about!("base32.md");
-const BASE32_USAGE: &str = ct_help_usage!("base32.md");
 
 #[derive(Default)]
 pub struct Base32;
@@ -51,10 +49,14 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn base32_main(args: impl ctcore::Args) -> CTResult<String> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let format_mod = Format::Base32;
+    let base32_about = t!("base32.about");
+    let base32_usage = t!("base32.usage");
 
     let config_info: base_common::BaseConfig =
-        base_common::base_parsing_command_args(args, BASE32_ABOUT, BASE32_USAGE)?;
+        base_common::base_parsing_command_args(args, base32_about, base32_usage)?;
 
     let stdin_info = stdin();
     let mut input_info: Box<dyn Read> = base_common::get_base_input(&config_info, &stdin_info)?;
@@ -71,8 +73,8 @@ pub fn base32_main(args: impl ctcore::Args) -> CTResult<String> {
 pub fn ct_app() -> Command {
     let util_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = BASE32_ABOUT;
-    let usage_description = ct_format_usage(BASE32_USAGE);
+    let application_info = t!("base32.about");
+    let usage_description = t!("base32.usage");
 
     let args = base32_args_init();
 

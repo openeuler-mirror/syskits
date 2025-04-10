@@ -11,9 +11,11 @@
 
 // spell-checker:ignore (ToDO) delim mkdelim
 
+extern crate rust_i18n;
 use ctcore::ct_error::{CTResult, FromIo};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Stdin, stdin};
@@ -22,9 +24,7 @@ use std::path::Path;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use std::ffi::OsString;
-
-const COMM_ABOUT: &str = ct_help_about!("comm.md");
-const COMM_USAGE: &str = ct_help_usage!("comm.md");
+use sys_locale::get_locale;
 
 mod opt_flags {
     pub const COLUMN_1: &str = "1";
@@ -181,6 +181,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
@@ -195,8 +197,8 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = COMM_ABOUT;
-    let usage_description = ct_format_usage(COMM_USAGE);
+    let application_info = t!("comm.about");
+    let usage_description = t!("comm.usage");
 
     let args = args_init();
 
@@ -205,26 +207,38 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
 fn args_init() -> Vec<Arg> {
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("comm.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("comm.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::COLUMN_1)
             .short('1')
-            .help("suppress column 1 (lines unique to FILE1)")
+            .help(t!("comm.clap.column_1"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::COLUMN_2)
             .short('2')
-            .help("suppress column 2 (lines unique to FILE2)")
+            .help(t!("comm.clap.column_2"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::COLUMN_3)
             .short('3')
-            .help("suppress column 3 (lines that appear in both files)")
+            .help(t!("comm.clap.column_3"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DELIMITER)
             .long(opt_flags::DELIMITER)
-            .help("separate columns with STR")
+            .help(t!("comm.clap.delimiter"))
             .value_name("STR")
             .default_value(opt_flags::DELIMITER_DEFAULT)
             .hide_default_value(true),
@@ -232,7 +246,7 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::ZERO_TERMINATED)
             .short('z')
             .overrides_with(opt_flags::ZERO_TERMINATED)
-            .help("line delimiter is NUL, not newline")
+            .help(t!("comm.clap.zero_terminated"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILE_1)
             .required(true)
@@ -242,7 +256,7 @@ fn args_init() -> Vec<Arg> {
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::TOTAL)
             .long(opt_flags::TOTAL)
-            .help("output a summary")
+            .help(t!("comm.clap.total"))
             .action(ArgAction::SetTrue),
     ];
     args

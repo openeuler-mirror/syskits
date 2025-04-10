@@ -31,7 +31,10 @@
 //     可以通过重定向（>）将转换后的输出保存到文件。
 //     可以与其他命令组合，例如 cat file.txt | expand -t 4 | less 会显示制表符被转换为4个空格的文本内容。
 
+extern crate rust_i18n;
 use clap::Arg;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
@@ -42,16 +45,12 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::set_ct_exit_code;
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_usage;
 use ctcore::ct_show_error;
 
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
-
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::BufWriter;
@@ -62,12 +61,10 @@ use std::io::stdout;
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
+use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::Tool;
-
-const EXPAND_ABOUT: &str = ct_help_about!("expand.md");
-const EXPAND_USAGE: &str = ct_help_usage!("expand.md");
 
 pub mod opt_flags {
     pub static TABS: &str = "tabs";
@@ -220,6 +217,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
 
     expand(&ExpandOptions::new(&args_match)?)
@@ -228,14 +227,14 @@ pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = EXPAND_ABOUT;
-    let usage_description = ct_format_usage(EXPAND_USAGE);
+    let application_info = t!("expand.about");
+    let usage_description = t!("expand.usage");
 
     let args = vec![
         Arg::new(opt_flags::INITIAL)
             .long(opt_flags::INITIAL)
             .short('i')
-            .help("do not convert tabs after non blanks")
+            .help(t!("expand.clap.initial"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::TABS)
             .long(opt_flags::TABS)
@@ -249,7 +248,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::NO_UTF8)
             .long(opt_flags::NO_UTF8)
             .short('U')
-            .help("interpret input file as 8-bit ASCII rather than UTF-8")
+            .help(t!("expand.clap.no_utf8"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILES)
             .action(ArgAction::Append)
@@ -546,7 +545,7 @@ fn expand_line(
                 // 根据选项扩展制表符为空格或保留制表符。
                 if is_init || !opts.iflag {
                     if nts <= opts.tspaces.len() {
-                        output.write_all(opts.tspaces[..nts].as_bytes())?;
+                        output.write_all(&opts.tspaces.as_bytes()[..nts])?;
                     } else {
                         output.write_all(" ".repeat(nts).as_bytes())?;
                     };
@@ -953,7 +952,6 @@ mod tests {
     }
 
     mod tests_expand_functions {
-
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
             DEFAULT_TABSTOP, ExpandParseError, RemainingMode, expand_next_tabstop, expand_open,

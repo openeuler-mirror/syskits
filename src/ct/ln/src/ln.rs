@@ -11,6 +11,7 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
+extern crate rust_i18n;
 /// ln 命令的实现 - 创建文件链接
 ///
 /// 此模块实现了 ln 命令的功能,支持创建硬链接和符号链接。
@@ -31,19 +32,20 @@
 /// - `ln_link()`: 创建单个链接
 /// - `link_files_in_dir()`: 在目录中创建多个链接
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_fs::{make_path_relative_to, paths_refer_to_same_file};
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_prompt_yes, ct_show_error,
-};
-
+use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
+use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
@@ -148,10 +150,6 @@ impl CTError for LnError {
     }
 }
 
-const LN_ABOUT: &str = ct_help_about!("ln.md");
-const LN_USAGE: &str = ct_help_usage!("ln.md");
-const LN_AFTER_HELP: &str = ct_help_section!("after help", "ln.md");
-
 mod lnoptions {
     /// 强制覆盖已存在的目标文件
     pub const LN_FORCE: &str = "force";
@@ -198,9 +196,11 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     ln_main(args)
 }
 pub fn ln_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let after_help = format!(
         "{}\n\n{}",
-        LN_AFTER_HELP,
+        t!("ln.after_help"),
         ct_backup_control::CT_BACKUP_CONTROL_LONG_HELP
     );
 
@@ -224,12 +224,12 @@ pub fn ct_app() -> Command {
         Arg::new(lnoptions::LN_FORCE)
             .short('f')
             .long(lnoptions::LN_FORCE)
-            .help("remove existing destination files")
+            .help(t!("ln.clap.ln_force"))
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_INTERACTIVE)
             .short('i')
             .long(lnoptions::LN_INTERACTIVE)
-            .help("prompt whether to remove existing destination files")
+            .help(t!("ln.clap.ln_interactive"))
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_NO_DEREFERENCE)
             .short('n')
@@ -242,44 +242,44 @@ pub fn ct_app() -> Command {
         Arg::new(lnoptions::LN_LOGICAL)
             .short('L')
             .long(lnoptions::LN_LOGICAL)
-            .help("follow TARGETs that are symbolic links")
+            .help(t!("ln.clap.ln_logical"))
             .overrides_with(lnoptions::LN_PHYSICAL)
             .action(ArgAction::SetTrue),
         // Not implemented yet
         Arg::new(lnoptions::LN_PHYSICAL)
             .short('P')
             .long(lnoptions::LN_PHYSICAL)
-            .help("make hard links directly to symbolic links")
+            .help(t!("ln.clap.ln_physical"))
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_SYMBOLIC)
             .short('s')
             .long(lnoptions::LN_SYMBOLIC)
-            .help("make symbolic links instead of hard links")
+            .help(t!("ln.clap.ln_symbolic"))
             // override added for https://github.com/ctutils/coreutils/issues/2359
             .overrides_with(lnoptions::LN_SYMBOLIC)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_TARGET_DIRECTORY)
             .short('t')
             .long(lnoptions::LN_TARGET_DIRECTORY)
-            .help("specify the DIRECTORY in which to create the links")
+            .help(t!("ln.clap.ln_target_directory"))
             .value_name("DIRECTORY")
             .value_hint(clap::ValueHint::DirPath)
             .conflicts_with(lnoptions::LN_NO_TARGET_DIRECTORY),
         Arg::new(lnoptions::LN_NO_TARGET_DIRECTORY)
             .short('T')
             .long(lnoptions::LN_NO_TARGET_DIRECTORY)
-            .help("treat LINK_NAME as a normal file always")
+            .help(t!("ln.clap.ln_no_target_directory"))
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_RELATIVE)
             .short('r')
             .long(lnoptions::LN_RELATIVE)
-            .help("create symbolic links relative to link location")
+            .help(t!("ln.clap.ln_relative"))
             .requires(lnoptions::LN_SYMBOLIC)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_VERBOSE)
             .short('v')
             .long(lnoptions::LN_VERBOSE)
-            .help("print name of each linked file")
+            .help(t!("ln.clap.ln_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(LN_ARG_FILES)
             .action(ArgAction::Append)
@@ -290,8 +290,8 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(LN_ABOUT)
-        .override_usage(ct_format_usage(LN_USAGE))
+        .about(t!("ln.about"))
+        .override_usage(t!("ln.usage"))
         .infer_long_args(true)
         .arg(ct_backup_control::arguments::backup())
         .arg(ct_backup_control::arguments::backup_no_args())

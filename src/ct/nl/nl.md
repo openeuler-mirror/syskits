@@ -14,7 +14,7 @@ Number lines of files
 * `t`     number only nonempty lines
 * `n`     number no lines
 * `pBRE`  number only lines that contain a match for the basic regular
-        expression, `BRE`
+  expression, `BRE`
 
 `FORMAT` is one of:
 

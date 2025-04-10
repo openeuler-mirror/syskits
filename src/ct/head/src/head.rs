@@ -11,23 +11,24 @@
 
 // spell-checker:ignore (vars) BUFWRITER seekable
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::ct_show;
 use std::ffi::OsString;
 use std::io::{BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use sys_locale::get_locale;
 
 const BUF_SIZE: usize = 65536;
 
 /// The capacity in bytes for buffered writers.
 const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
-
-const HEAD_ABOUT: &str = ct_help_about!("head.md");
-const HEAD_USAGE: &str = ct_help_usage!("head.md");
 
 mod head_flags {
     pub const BYTES_NAME: &str = "BYTES";
@@ -76,13 +77,13 @@ pub fn ct_app() -> Command {
             .short('q')
             .long("quiet")
             .visible_alias("silent")
-            .help("never print headers giving file names")
+            .help(t!("head.clap.quiet_name"))
             .overrides_with_all([head_flags::VERBOSE_NAME, head_flags::QUIET_NAME])
             .action(ArgAction::SetTrue),
         Arg::new(head_flags::VERBOSE_NAME)
             .short('v')
             .long("verbose")
-            .help("always print headers giving file names")
+            .help(t!("head.clap.verbose_name"))
             .overrides_with_all([head_flags::QUIET_NAME, head_flags::VERBOSE_NAME])
             .action(ArgAction::SetTrue),
         Arg::new(head_flags::PRESUME_INPUT_PIPE)
@@ -93,7 +94,7 @@ pub fn ct_app() -> Command {
         Arg::new(head_flags::ZERO_NAME)
             .short('z')
             .long("zero-terminated")
-            .help("line delimiter is NUL, not newline")
+            .help(t!("head.clap.zero_name"))
             .overrides_with(head_flags::ZERO_NAME)
             .action(ArgAction::SetTrue),
         Arg::new(head_flags::FILES_NAME)
@@ -103,8 +104,8 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(HEAD_ABOUT)
-        .override_usage(ct_format_usage(HEAD_USAGE))
+        .about(t!("head.about"))
+        .override_usage(t!("head.usage"))
         .infer_long_args(true)
         .args(args)
 }
@@ -657,6 +658,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn head_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(arg_iterate(args)?)?;
     let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,

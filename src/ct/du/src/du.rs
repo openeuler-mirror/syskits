@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use chrono::{DateTime, Local};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, ct_print_verbatim};
@@ -17,10 +20,7 @@ use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_cod
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show, ct_show_error,
-    ct_show_warning,
-};
+use ctcore::{ct_show, ct_show_error, ct_show_warning};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -42,6 +42,7 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
+use sys_locale::get_locale;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -49,7 +50,6 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
     GetFileInformationByHandleEx,
 };
-
 mod opt_flags {
     pub const HELP: &str = "help";
     pub const NULL: &str = "0";
@@ -80,10 +80,6 @@ mod opt_flags {
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
-
-const DU_ABOUT: &str = ct_help_about!("du.md");
-const AFTER_HELP: &str = ct_help_section!("after help", "du.md");
-const DU_USAGE: &str = ct_help_usage!("du.md");
 
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
@@ -810,6 +806,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从命令行参数中解析匹配项
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -1065,20 +1063,18 @@ fn du_parse_depth(du_max_depth_str: Option<&str>, summarize: bool) -> CTResult<O
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = DU_ABOUT;
-    let usage_description = ct_format_usage(DU_USAGE);
+    let application_info = t!("du.about");
+    let usage_description = t!("du.usage");
     let args = vec![
         Arg::new(opt_flags::HELP)
             .long(opt_flags::HELP)
-            .help("Print help information.")
+            .help(t!("du.clap.help"))
             .action(ArgAction::Help),
-
         Arg::new(opt_flags::ALL)
             .short('a')
             .long(opt_flags::ALL)
-            .help("write counts for all files, not just directories")
+            .help(t!("du.clap.all"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::APPARENT_SIZE)
             .long(opt_flags::APPARENT_SIZE)
             .help(
@@ -1087,7 +1083,6 @@ pub fn ct_app() -> Command {
                 in ('sparse') files, internal fragmentation, indirect blocks, and the like"
             )
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::BLOCK_SIZE)
             .short('B')
             .long(opt_flags::BLOCK_SIZE)
@@ -1096,19 +1091,16 @@ pub fn ct_app() -> Command {
                 "scale sizes by SIZE before printing them. \
                 E.g., '-BM' prints sizes in units of 1,048,576 bytes. See SIZE format below."
             ),
-
         Arg::new(opt_flags::BYTES)
             .short('b')
             .long("bytes")
-            .help("equivalent to '--apparent-size --block-size=1'")
+            .help(t!("du.clap.bytes"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::TOTAL)
             .long("total")
             .short('c')
-            .help("produce a grand total")
+            .help(t!("du.clap.total"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::MAX_DEPTH)
             .short('d')
             .long("max-depth")
@@ -1118,121 +1110,101 @@ pub fn ct_app() -> Command {
                 only if it is N or fewer levels below the command \
                 line argument;  --max-depth=0 is the same as --summarize"
             ),
-
         Arg::new(opt_flags::HUMAN_READABLE)
             .long("human-readable")
             .short('h')
-            .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+            .help(t!("du.clap.human_readable"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::INODES)
             .long(opt_flags::INODES)
             .help(
                 "list inode usage information instead of block usage like --block-size=1K"
             )
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::BLOCK_SIZE_1K)
             .short('k')
-            .help("like --block-size=1K")
+            .help(t!("du.clap.block_size_1k"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::COUNT_LINKS)
             .short('l')
             .long("count-links")
-            .help("count sizes many times if hard linked")
+            .help(t!("du.clap.count_links"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::DEREFERENCE)
             .short('L')
             .long(opt_flags::DEREFERENCE)
-            .help("follow all symbolic links")
+            .help(t!("du.clap.dereference"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::DEREFERENCE_ARGS)
             .short('D')
             .visible_short_alias('H')
             .long(opt_flags::DEREFERENCE_ARGS)
-            .help("follow only symlinks that are listed on the command line")
+            .help(t!("du.clap.dereference_args"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::NO_DEREFERENCE)
             .short('P')
             .long(opt_flags::NO_DEREFERENCE)
-            .help("don't follow any symbolic links (this is the default)")
+            .help(t!("du.clap.no_dereference"))
             .overrides_with(opt_flags::DEREFERENCE)
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::BLOCK_SIZE_1M)
             .short('m')
-            .help("like --block-size=1M")
+            .help(t!("du.clap.block_size_1m"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::NULL)
             .short('0')
             .long("null")
-            .help("end each output line with 0 byte rather than newline")
+            .help(t!("du.clap.null"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::SEPARATE_DIRS)
             .short('S')
             .long("separate-dirs")
-            .help("do not include size of subdirectories")
+            .help(t!("du.clap.separate_dirs"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::SUMMARIZE)
             .short('s')
             .long("summarize")
-            .help("display only a total for each argument")
+            .help(t!("du.clap.summarize"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::SI)
             .long(opt_flags::SI)
-            .help("like -h, but use powers of 1000 not 1024")
+            .help(t!("du.clap.si"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::ONE_FILE_SYSTEM)
             .short('x')
             .long(opt_flags::ONE_FILE_SYSTEM)
-            .help("skip directories on different file systems")
+            .help(t!("du.clap.one_file_system"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::THRESHOLD)
             .short('t')
             .long(opt_flags::THRESHOLD)
             .value_name("SIZE")
             .num_args(1)
             .allow_hyphen_values(true)
-            .help("exclude entries smaller than SIZE if positive, \
-                      or entries greater than SIZE if negative"),
-
+            .help(t!("du.clap.threshold")),
         Arg::new(opt_flags::VERBOSE)
             .short('v')
             .long("verbose")
-            .help("verbose mode (option not present in GNU/Coreutils)")
+            .help(t!("du.clap.verbose"))
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::EXCLUDE)
             .long(opt_flags::EXCLUDE)
             .value_name("PATTERN")
-            .help("exclude files that match PATTERN")
+            .help(t!("du.clap.exclude"))
             .action(ArgAction::Append),
-
         Arg::new(opt_flags::EXCLUDE_FROM)
             .short('X')
             .long("exclude-from")
             .value_name("FILE")
             .value_hint(clap::ValueHint::FilePath)
-            .help("exclude files that match any pattern in FILE")
+            .help(t!("du.clap.exclude_from"))
             .action(ArgAction::Append),
-
         Arg::new(opt_flags::FILES0_FROM)
             .long("files0-from")
             .value_name("FILE")
             .value_hint(clap::ValueHint::FilePath)
-            .help("summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input")
+            .help(t!("du.clap.files0_from"))
             .action(ArgAction::Append),
-
         Arg::new(opt_flags::TIME)
             .long(opt_flags::TIME)
             .value_name("WORD")
@@ -1244,7 +1216,6 @@ pub fn ct_app() -> Command {
                 directory, or any of its subdirectories. If WORD is given, show time as WORD instead \
                 of modification time: atime, access, use, ctime, status, birth or creation"
             ),
-
         Arg::new(opt_flags::TIME_STYLE)
             .long(opt_flags::TIME_STYLE)
             .value_name("STYLE")
@@ -1252,18 +1223,16 @@ pub fn ct_app() -> Command {
                 "show times using style STYLE: \
                 full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
             ),
-
         Arg::new(opt_flags::FILE)
             .hide(true)
             .value_hint(clap::ValueHint::AnyPath)
             .action(ArgAction::Append),
-
     ];
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
-        .after_help(AFTER_HELP)
+        .after_help(t!("du.after_help"))
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)

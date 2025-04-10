@@ -16,17 +16,18 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 path = "src/install.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 clap = { workspace = true }
 filetime = { workspace = true }
 file_diff = { workspace = true }
-libc = { workspace = true }
 ctcore = { workspace = true, features = [
-  "backup-control",
-  "fs",
-  "mode",
-  "perms",
-  "entries",
-  "process",
+    "backup-control",
+    "fs",
+    "mode",
+    "perms",
+    "entries",
+    "process",
 ] }
 tempfile = { workspace = true }
 

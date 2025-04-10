@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::env;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -28,11 +31,8 @@ use tempfile::Builder;
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, ct_println_verbatim};
 use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
-
-const MKTEMP_ABOUT: &str = ct_help_about!("mktemp.md");
-const MKTEMP_USAGE: &str = ct_help_usage!("mktemp.md");
+use sys_locale::get_locale;
 
 const MKTEMP_DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 mod mktemp_flags {
@@ -316,6 +316,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     use clap::error::{ContextKind, ContextValue, ErrorKind};
     let args_vec: Vec<_> = args.collect();
     let matches = match ct_app().try_get_matches_from(&args_vec) {
@@ -378,23 +380,33 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = MKTEMP_ABOUT;
-    let usage_description = ct_format_usage(MKTEMP_USAGE);
+    let application_info = t!("mktemp.about");
+    let usage_description = t!("mktemp.usage");
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("mktemp.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("mktemp.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(mktemp_flags::MKTEMP_DIRECTORY)
             .short('d')
             .long(mktemp_flags::MKTEMP_DIRECTORY)
-            .help("Make a directory instead of a file")
+            .help(t!("mktemp.clap.mktemp_directory"))
             .action(ArgAction::SetTrue),
         Arg::new(mktemp_flags::MKTEMP_DRY_RUN)
             .short('u')
             .long(mktemp_flags::MKTEMP_DRY_RUN)
-            .help("do not create anything; merely print a name (unsafe)")
+            .help(t!("mktemp.clap.mktemp_dry_run"))
             .action(ArgAction::SetTrue),
         Arg::new(mktemp_flags::MKTEMP_QUIET)
             .short('q')
             .long("quiet")
-            .help("Fail silently if an error occurs.")
+            .help(t!("mktemp.clap.mktemp_quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(mktemp_flags::MKTEMP_SUFFIX)
             .long(mktemp_flags::MKTEMP_SUFFIX)
@@ -405,7 +417,7 @@ pub fn ct_app() -> Command {
             .value_name("SUFFIX"),
         Arg::new(mktemp_flags::MKTEMP_P)
             .short('p')
-            .help("short form of --tmpdir")
+            .help(t!("mktemp.clap.mktemp_p"))
             .value_name("DIR")
             .num_args(1)
             .value_parser(ValueParser::path_buf())
@@ -442,6 +454,8 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
 }
 
@@ -449,7 +463,7 @@ fn mktemp_dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> CT
     let len = prefix.len() + suffix.len() + rand;
     let mut buffer = Vec::with_capacity(len);
     buffer.extend(prefix.as_bytes());
-    buffer.extend(iter::repeat(b'X').take(rand));
+    buffer.extend(iter::repeat_n(b'X', rand));
     buffer.extend(suffix.as_bytes());
 
     // 随机化。

@@ -13,10 +13,13 @@
 //! Numfmt 命令将数字与人类可读格式相互转换。它读取各种表示形式的数字，并根据指定的选项以人类可读的格式重新格式化它们。
 //! 如果没有给出数字，它将从标准输入中读取数字。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::io::{BufRead, Write};
-use std::str::FromStr;
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, parser::ValueSource};
+use std::str::FromStr;
+use sys_locale::get_locale;
 
 use crate::errors::*;
 use crate::flags::*;
@@ -25,10 +28,6 @@ use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_section;
-use ctcore::ct_help_usage;
 use ctcore::ct_ranges::CtRange;
 use ctcore::ct_show;
 use ctcore::ct_show_error;
@@ -39,10 +38,6 @@ pub mod errors;
 pub mod flags;
 pub mod format;
 mod units;
-
-const NUMFMT_ABOUT: &str = ct_help_about!("numfmt.md");
-const NUMFMT_AFTER_HELP: &str = ct_help_section!("after help", "numfmt.md");
-const NUMFMT_USAGE: &str = ct_help_usage!("numfmt.md");
 
 pub mod numfmt_flags {
     pub const NUMFMT_DELIMITER: &str = "delimiter";
@@ -343,6 +338,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let options = numfmt_parse_options(&matches).map_err(NumfmtError::NumfmtIllegalArgument)?;
 
@@ -366,43 +363,43 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = NUMFMT_ABOUT;
-    let usage_description = ct_format_usage(NUMFMT_USAGE);
+    let application_info = t!("numfmt.about");
+    let usage_description = t!("numfmt.usage");
     let args = vec![
         Arg::new(numfmt_flags::NUMFMT_DELIMITER)
             .short('d')
             .long(numfmt_flags::NUMFMT_DELIMITER)
             .value_name("X")
-            .help("use X instead of whitespace for field delimiter"),
+            .help(t!("numfmt.clap.numfmt_delimiter")),
         Arg::new(numfmt_flags::NUMFMT_FIELD)
             .long(numfmt_flags::NUMFMT_FIELD)
-            .help("replace the numbers in these input fields; see FIELDS below")
+            .help(t!("numfmt.clap.numfmt_field"))
             .value_name("FIELDS")
             .allow_hyphen_values(true)
             .default_value(numfmt_flags::NUMFMT_FIELD_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_FORMAT)
             .long(numfmt_flags::NUMFMT_FORMAT)
-            .help("use printf style floating-point FORMAT; see FORMAT below for details")
+            .help(t!("numfmt.clap.numfmt_format"))
             .value_name("FORMAT")
             .allow_hyphen_values(true),
         Arg::new(numfmt_flags::NUMFMT_FROM)
             .long(numfmt_flags::NUMFMT_FROM)
-            .help("auto-scale input numbers to UNITs; see UNIT below")
+            .help(t!("numfmt.clap.numfmt_from"))
             .value_name("UNIT")
             .default_value(numfmt_flags::NUMFMT_FROM_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_FROM_UNIT)
             .long(numfmt_flags::NUMFMT_FROM_UNIT)
-            .help("specify the input unit size")
+            .help(t!("numfmt.clap.numfmt_from_unit"))
             .value_name("N")
             .default_value(numfmt_flags::NUMFMT_FROM_UNIT_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_TO)
             .long(numfmt_flags::NUMFMT_TO)
-            .help("auto-scale output numbers to UNITs; see UNIT below")
+            .help(t!("numfmt.clap.numfmt_to"))
             .value_name("UNIT")
             .default_value(numfmt_flags::NUMFMT_TO_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_TO_UNIT)
             .long(numfmt_flags::NUMFMT_TO_UNIT)
-            .help("the output unit size")
+            .help(t!("numfmt.clap.numfmt_to_unit"))
             .value_name("N")
             .default_value(numfmt_flags::NUMFMT_TO_UNIT_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_PADDING)
@@ -426,7 +423,7 @@ pub fn ct_app() -> Command {
             .hide_default_value(true),
         Arg::new(numfmt_flags::NUMFMT_ROUND)
             .long(numfmt_flags::NUMFMT_ROUND)
-            .help("use METHOD for rounding when scaling")
+            .help(t!("numfmt.clap.numfmt_round"))
             .value_name("METHOD")
             .default_value("from-zero")
             .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"]),
@@ -439,7 +436,7 @@ pub fn ct_app() -> Command {
             .value_name("SUFFIX"),
         Arg::new(numfmt_flags::NUMFMT_INVALID)
             .long(numfmt_flags::NUMFMT_INVALID)
-            .help("set the failure mode for invalid input")
+            .help(t!("numfmt.clap.numfmt_invalid"))
             .default_value("abort")
             .value_parser(["abort", "fail", "warn", "ignore"])
             .value_name("INVALID"),
@@ -454,7 +451,7 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .allow_negative_numbers(true)
         .args(args)
-        .after_help(NUMFMT_AFTER_HELP)
+        .after_help(t!("numfmt.after_help"))
 }
 
 #[derive(Default)]
@@ -479,16 +476,16 @@ impl Tool for Numfmt {
 
 #[cfg(test)]
 mod tests {
-    use ctcore::Tool;
-    use ctcore::ct_error::get_ct_exit_code;
-    use std::ffi::OsString;
-    use std::io::{BufReader, Error, ErrorKind, Read};
     // use super::*;
     use super::{
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
         NumfmtTransformOptions, NumfmtUnit, numfmt_handle_args, numfmt_handle_buffer,
         numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
+    use ctcore::Tool;
+    use ctcore::ct_error::get_ct_exit_code;
+    use std::ffi::OsString;
+    use std::io::{BufReader, Error, ErrorKind, Read};
 
     #[test]
     fn test_tool_implementation() {

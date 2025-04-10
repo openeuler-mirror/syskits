@@ -11,11 +11,14 @@
 
 //! 向一个任务发送一个信号
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_show;
 use ctcore::ct_signals::{ALL_SIGNALS, get_ct_signal_by_name_or_value};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::convert::TryInto;
@@ -24,8 +27,7 @@ use std::io::Write;
 
 use ctcore::Tool;
 use std::ffi::OsString;
-const KILL_ABOUT: &str = ct_help_about!("kill.md");
-const KILL_USAGE: &str = ct_help_usage!("kill.md");
+use sys_locale::get_locale;
 
 pub mod kill_flags {
     pub static KILL_PIDS_OR_SIGNALS: &str = "pids_or_signals";
@@ -37,26 +39,26 @@ pub mod kill_flags {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = KILL_ABOUT;
-    let usage_description = ct_format_usage(KILL_USAGE);
+    let application_info = t!("kill.about");
+    let usage_description = t!("kill.usage");
     let args = vec![
         Arg::new(kill_flags::LIST)
             .short('l')
             .long(kill_flags::LIST)
-            .help("Lists signals")
+            .help(t!("kill.clap.list"))
             .conflicts_with(kill_flags::TABLE)
             .action(ArgAction::SetTrue),
         Arg::new(kill_flags::TABLE)
             .short('t')
             .short_alias('L')
             .long(kill_flags::TABLE)
-            .help("Lists table of signals")
+            .help(t!("kill.clap.table"))
             .action(ArgAction::SetTrue),
         Arg::new(kill_flags::SIGNAL)
             .short('s')
             .long(kill_flags::SIGNAL)
             .value_name("signal")
-            .help("Sends given signal instead of SIGTERM"),
+            .help(t!("kill.clap.signal")),
         Arg::new(kill_flags::KILL_PIDS_OR_SIGNALS)
             .hide(true)
             .action(ArgAction::Append),
@@ -87,6 +89,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回
 /// 返回一个结果，表示操作是否成功
 pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 收集并忽略不相关的参数
     let mut args = args.collect_ignore();
     // 处理过时的kill命令参数

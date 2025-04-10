@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
+extern crate rust_i18n; // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
 /// install 命令的实现 - 复制文件并设置属性
 ///
 /// 此模块实现了 install 命令的功能,用于复制文件并设置其属性。
@@ -33,6 +33,8 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
@@ -42,7 +44,7 @@ use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_mode::get_umask;
 use ctcore::ct_perms::{CtVerbosityLevel, Verbosity, wrap_chown};
 use ctcore::ct_process::{getegid, geteuid};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show, ct_show_error, uio_error};
+use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 use std::error::Error;
@@ -54,6 +56,7 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
 use std::process;
+use sys_locale::get_locale;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -677,9 +680,6 @@ impl Installer {
     }
 }
 
-const INSTALL_ABOUT: &str = ct_help_about!("install.md");
-const INSTALL_USAGE: &str = ct_help_usage!("install.md");
-
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
@@ -690,6 +690,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn install_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let paths: Vec<String> = matches
@@ -711,7 +713,7 @@ pub fn ct_app() -> Command {
     let args = vec![
         Arg::new(install_options::INSTALL_IGNORED)
             .short('c')
-            .help("ignored")
+            .help(t!("install.clap.install_ignored"))
             .action(ArgAction::SetTrue),
         Arg::new(install_options::INSTALL_COMPARE)
             .short('C')
@@ -740,17 +742,17 @@ pub fn ct_app() -> Command {
         Arg::new(install_options::INSTALL_GROUP)
             .short('g')
             .long(install_options::INSTALL_GROUP)
-            .help("set group ownership, instead of process's current group")
+            .help(t!("install.clap.install_group"))
             .value_name("GROUP"),
         Arg::new(install_options::INSTALL_MODE)
             .short('m')
             .long(install_options::INSTALL_MODE)
-            .help("set permission mode (as in chmod), instead of rwxr-xr-x")
+            .help(t!("install.clap.install_mode"))
             .value_name("MODE"),
         Arg::new(install_options::INSTALL_OWNER)
             .short('o')
             .long(install_options::INSTALL_OWNER)
-            .help("set ownership (super-user only)")
+            .help(t!("install.clap.install_owner"))
             .value_name("OWNER")
             .value_hint(clap::ValueHint::Username),
         Arg::new(install_options::INSTALL_PRESERVE_TIMESTAMPS)
@@ -764,42 +766,42 @@ pub fn ct_app() -> Command {
         Arg::new(install_options::INSTALL_STRIP)
             .short('s')
             .long(install_options::INSTALL_STRIP)
-            .help("strip symbol tables (no action Windows)")
+            .help(t!("install.clap.install_strip"))
             .action(ArgAction::SetTrue),
         Arg::new(install_options::INSTALL_STRIP_PROGRAM)
             .long(install_options::INSTALL_STRIP_PROGRAM)
-            .help("program used to strip binaries (no action Windows)")
+            .help(t!("install.clap.install_strip_program"))
             .value_name("PROGRAM")
             .value_hint(clap::ValueHint::CommandName),
         // TODO implement flag
         Arg::new(install_options::INSTALL_TARGET_DIRECTORY)
             .short('t')
             .long(install_options::INSTALL_TARGET_DIRECTORY)
-            .help("move all SOURCE arguments into DIRECTORY")
+            .help(t!("install.clap.install_target_directory"))
             .value_name("DIRECTORY")
             .value_hint(clap::ValueHint::DirPath),
         // TODO implement flag
         Arg::new(install_options::INSTALL_NO_TARGET_DIRECTORY)
             .short('T')
             .long(install_options::INSTALL_NO_TARGET_DIRECTORY)
-            .help("(unimplemented) treat DEST as a normal file")
+            .help(t!("install.clap.install_no_target_directory"))
             .action(ArgAction::SetTrue),
         Arg::new(install_options::INSTALL_VERBOSE)
             .short('v')
             .long(install_options::INSTALL_VERBOSE)
-            .help("explain what is being done")
+            .help(t!("install.clap.install_verbose"))
             .action(ArgAction::SetTrue),
         // TODO implement flag
         Arg::new(install_options::INSTALL_PRESERVE_CONTEXT)
             .short('P')
             .long(install_options::INSTALL_PRESERVE_CONTEXT)
-            .help("(unimplemented) preserve security context")
+            .help(t!("install.clap.install_preserve_context"))
             .action(ArgAction::SetTrue),
         // TODO implement flag
         Arg::new(install_options::INSTALL_CONTEXT)
             .short('Z')
             .long(install_options::INSTALL_CONTEXT)
-            .help("(unimplemented) set security context of files and directories")
+            .help(t!("install.clap.install_context"))
             .value_name("CONTEXT")
             .action(ArgAction::SetTrue),
         Arg::new(install_options::INSTALL_FILES)
@@ -810,8 +812,8 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(INSTALL_ABOUT)
-        .override_usage(ct_format_usage(INSTALL_USAGE))
+        .about(t!("install.about"))
+        .override_usage(t!("install.usage"))
         .infer_long_args(true)
         .arg(ct_backup_control::arguments::backup())
         .arg(ct_backup_control::arguments::backup_no_args())

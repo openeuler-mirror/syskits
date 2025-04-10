@@ -30,24 +30,23 @@
 
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_entries::{CtPasswd, Locate};
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::S_IWGRP;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
+use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
-
-use std::fs::File;
 use std::os::unix::fs::MetadataExt;
+use sys_locale::get_locale;
 
 use std::path::PathBuf;
-
-const PINKY_ABOUT: &str = ct_help_about!("pinky.md");
-const PINKY_USAGE: &str = ct_help_usage!("pinky.md");
 
 mod pinky_options {
     pub const PINKY_LONG_FORMAT: &str = "long_format";
@@ -68,39 +67,39 @@ pub fn ct_app() -> Command {
         Arg::new(pinky_options::PINKY_LONG_FORMAT)
             .short('l')
             .requires(pinky_options::PINKY_USER)
-            .help("produce long ct_format output for the specified USERs")
+            .help(t!("pinky.clap.pinky_long_format"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_HOME_DIR)
             .short('b')
-            .help("omit the user's home directory and shell in long ct_format")
+            .help(t!("pinky.clap.pinky_omit_home_dir"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_PROJECT_FILE)
             .short('h')
-            .help("omit the user's project file in long ct_format")
+            .help(t!("pinky.clap.pinky_omit_project_file"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_PLAN_FILE)
             .short('p')
-            .help("omit the user's plan file in long ct_format")
+            .help(t!("pinky.clap.pinky_omit_plan_file"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_SHORT_FORMAT)
             .short('s')
-            .help("do short ct_format output, this is the default")
+            .help(t!("pinky.clap.pinky_short_format"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_HEADINGS)
             .short('f')
-            .help("omit the line of column headings in short ct_format")
+            .help(t!("pinky.clap.pinky_omit_headings"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_NAME)
             .short('w')
-            .help("omit the user's full name in short ct_format")
+            .help(t!("pinky.clap.pinky_omit_name"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_NAME_HOST)
             .short('i')
-            .help("omit the user's full name and remote host in short ct_format")
+            .help(t!("pinky.clap.pinky_omit_name_host"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_NAME_HOST_TIME)
             .short('q')
-            .help("omit the user's full name, remote host and idle time in short ct_format")
+            .help(t!("pinky.clap.pinky_omit_name_host_time"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_USER)
             .action(ArgAction::Append)
@@ -109,14 +108,14 @@ pub fn ct_app() -> Command {
         // since that conflicts with omit_project_file.
         Arg::new(pinky_options::PINKY_HELP)
             .long(pinky_options::PINKY_HELP)
-            .help("Print help information")
+            .help(t!("pinky.clap.pinky_help"))
             .action(ArgAction::Help),
     ];
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(PINKY_ABOUT)
-        .override_usage(ct_format_usage(PINKY_USAGE))
+        .about(t!("pinky.about"))
+        .override_usage(t!("pinky.usage"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args(args)
@@ -152,6 +151,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn pinky_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;

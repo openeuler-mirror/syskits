@@ -15,14 +15,16 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 path = "src/mv.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
 ctcore = { workspace = true, features = [
-  "backup-control",
-  "fs",
-  "fsxattr",
-  "update-control",
+    "backup-control",
+    "fs",
+    "fsxattr",
+    "update-control",
 ] }
 tempfile = { workspace = true }
 selinux = { workspace = true, optional = true }

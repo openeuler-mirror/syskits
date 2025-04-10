@@ -9,14 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::{Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
-use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage};
+use ctcore::ct_error::CTResult;
 use libc::c_long;
 use std::ffi::OsString;
-
-const HOSTID_USAGE: &str = ct_help_usage!("hostid.md");
-const HOSTID_ABOUT: &str = ct_help_about!("hostid.md");
+use sys_locale::get_locale;
 
 // currently rust libc interface doesn't include gethostid
 unsafe extern "C" {
@@ -45,6 +46,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     ct_app().try_get_matches_from(args)?;
     hostid();
     Ok(())
@@ -53,8 +56,8 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = HOSTID_ABOUT;
-    let usage_description = ct_format_usage(HOSTID_USAGE);
+    let application_info = t!("hostid.about");
+    let usage_description = t!("hostid.usage");
 
     Command::new(utility_name)
         .version(command_version)

@@ -15,9 +15,12 @@
 //!  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //!  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::io::{self, Write};
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
+use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -26,12 +29,8 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_error::{CtSimpleError, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
+use ctcore::ct_show_error;
 use std::ffi::OsString;
-
-const ID_ABOUT: &str = ct_help_about!("id.md");
-const ID_USAGE: &str = ct_help_usage!("id.md");
-const ID_AFTER_HELP: &str = ct_help_section!("after help", "id.md");
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
@@ -103,6 +102,9 @@ impl Tool for Id {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let stdout_info = io::stdout();
     let mut stdout_writer = stdout_info.lock();
     id_main(&mut stdout_writer, args)
@@ -110,7 +112,7 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 
 pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app()
-        .after_help(ID_AFTER_HELP)
+        .after_help(t!("id.after_help"))
         .try_get_matches_from(args)?;
 
     let users: Vec<String> = matches
@@ -333,20 +335,20 @@ fn id_get_state(matches: &clap::ArgMatches, users: &[String]) -> IdState {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = ID_ABOUT;
-    let usage_description = ct_format_usage(ID_USAGE);
+    let application_info = t!("id.about");
+    let usage_description = t!("id.usage");
     let args = vec![
         Arg::new(id_flags::ID_EFFECTIVE_USER)
             .short('u')
             .long(id_flags::ID_EFFECTIVE_USER)
             .conflicts_with(id_flags::ID_GROUP)
-            .help("Display only the effective user ID as a number.")
+            .help(t!("id.clap.id_effective_user"))
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_GROUP)
             .short('g')
             .long(id_flags::ID_GROUP)
             .conflicts_with(id_flags::ID_EFFECTIVE_USER)
-            .help("Display only the effective group ID as a number")
+            .help(t!("id.clap.id_group"))
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_GROUPS)
             .short('G')

@@ -11,19 +11,22 @@
 
 //! truncate 是一个 Linux 命令，用于修改文件的大小，它可以将文件的大小缩小或扩展到指定的大小。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::fs::{OpenOptions, metadata};
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
-
-use clap::{Arg, ArgAction, Command, crate_version};
+use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+
 use std::ffi::OsString;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -80,10 +83,6 @@ impl TruncateMode {
     }
 }
 
-const TRUNCATE_ABOUT: &str = ct_help_about!("truncate.md");
-const TRUNCATE_AFTER_HELP: &str = ct_help_section!("after help", "truncate.md");
-const TRUNCATE_USAGE: &str = ct_help_usage!("truncate.md");
-
 pub mod truncate_flags {
     pub const TRUNCATE_IO_BLOCKS: &str = "io-blocks";
     pub const TRUNCATE_NO_CREATE: &str = "no-create";
@@ -113,6 +112,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     truncate_main(args)
 }
 pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args).map_err(|e| {
         e.print().expect("Error writing clap::Error");
         match e.kind() {
@@ -144,8 +145,8 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TRUNCATE_ABOUT;
-    let usage_description = ct_format_usage(TRUNCATE_USAGE);
+    let application_info = t!("truncate.about");
+    let usage_description = t!("truncate.usage");
     let args = vec![
         Arg::new(truncate_flags::TRUNCATE_IO_BLOCKS)
             .short('o')
@@ -158,13 +159,13 @@ pub fn ct_app() -> Command {
         Arg::new(truncate_flags::TRUNCATE_NO_CREATE)
             .short('c')
             .long(truncate_flags::TRUNCATE_NO_CREATE)
-            .help("do not create files that do not exist")
+            .help(t!("truncate.clap.truncate_no_create"))
             .action(ArgAction::SetTrue),
         Arg::new(truncate_flags::TRUNCATE_REFERENCE)
             .short('r')
             .long(truncate_flags::TRUNCATE_REFERENCE)
             .required_unless_present(truncate_flags::TRUNCATE_SIZE)
-            .help("base the size of each file on the size of RFILE")
+            .help(t!("truncate.clap.truncate_reference"))
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(truncate_flags::TRUNCATE_SIZE)
@@ -188,7 +189,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
-        .after_help(TRUNCATE_AFTER_HELP)
+        .after_help(t!("truncate.after_help"))
         .args(args)
 }
 

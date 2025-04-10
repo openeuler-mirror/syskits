@@ -55,11 +55,6 @@ mod tests {
     use ctcore::ct_error::CTError;
     use std::fs;
     use std::fs::File;
-    use std::fs::OpenOptions;
-    use std::fs::Permissions;
-    use std::fs::create_dir_all;
-    use std::fs::set_permissions;
-    use std::path::Path;
     use tempfile::Builder;
     #[test]
     fn test_copy_on_write_never_always() {

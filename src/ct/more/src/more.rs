@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 /// more 命令的实现 - 分页显示文件内容
 ///
 /// 此模块实现了 more 命令的功能,提供文本文件的分页显示。
@@ -35,6 +36,8 @@ use std::{
     path::Path,
 };
 
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, value_parser};
 use crossterm::event::KeyEventKind;
 use crossterm::{
@@ -47,13 +50,12 @@ use crossterm::{
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::{ct_display::Quotable, ct_show};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
 use std::ffi::OsString;
+use sys_locale::get_locale;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-const MORE_ABOUT: &str = ct_help_about!("more.md");
-const MORE_USAGE: &str = ct_help_usage!("more.md");
 const MORE_BELL: &str = "\x07";
 
 pub mod more_options {
@@ -136,6 +138,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示命令执行的结果
 pub fn more_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 设置 panic 处理
     setup_panic_handler();
 
@@ -298,22 +302,22 @@ pub fn ct_app() -> Command {
         Arg::new(more_options::MORE_PRINT_OVER)
             .short('c')
             .long(more_options::MORE_PRINT_OVER)
-            .help("Do not scroll, display text and clean line ends")
+            .help(t!("more.clap.more_print_over"))
             .action(ArgAction::SetTrue),
         Arg::new(more_options::MORE_SILENT)
             .short('d')
             .long(more_options::MORE_SILENT)
-            .help("Display help instead of ringing bell")
+            .help(t!("more.clap.more_silent"))
             .action(ArgAction::SetTrue),
         Arg::new(more_options::MORE_CLEAN_PRINT)
             .short('p')
             .long(more_options::MORE_CLEAN_PRINT)
-            .help("Do not scroll, clean screen and display text")
+            .help(t!("more.clap.more_clean_print"))
             .action(ArgAction::SetTrue),
         Arg::new(more_options::MORE_SQUEEZE)
             .short('s')
             .long(more_options::MORE_SQUEEZE)
-            .help("Squeeze multiple blank lines into one")
+            .help(t!("more.clap.more_squeeze"))
             .action(ArgAction::SetTrue),
         Arg::new(more_options::MORE_PLAIN)
             .short('u')
@@ -326,7 +330,7 @@ pub fn ct_app() -> Command {
             .allow_hyphen_values(true)
             .required(false)
             .value_name("pattern")
-            .help("Display file beginning from pattern match"),
+            .help(t!("more.clap.more_pattern")),
         Arg::new(more_options::MORE_FROM_LINE)
             .short('F')
             .long(more_options::MORE_FROM_LINE)
@@ -349,14 +353,16 @@ pub fn ct_app() -> Command {
         Arg::new(more_options::MORE_FILES)
             .required(false)
             .action(ArgAction::Append)
-            .help("Path to the files to be read")
+            .help(t!("more.clap.more_files"))
             .value_hint(clap::ValueHint::FilePath),
     ];
     Command::new(ctcore::ct_util_name())
-        .about(MORE_ABOUT)
-        .override_usage(ct_format_usage(MORE_USAGE))
+        .about(t!("more.about"))
+        .override_usage(t!("more.usage"))
         .version(crate_version!())
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
 }
 

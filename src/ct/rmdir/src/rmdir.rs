@@ -11,20 +11,21 @@
 
 //! rmdir命令在Linux和其他类Unix系统中用于删除空目录, 如果目录非空，rmdir命令将会失败.
 
+extern crate rust_i18n;
 use clap::builder::ValueParser;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+use ctcore::{ct_show_error, ct_util_name};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
+use sys_locale::get_locale;
 
-use ctcore::Tool;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_error, ct_util_name};
-
-const RMDIR_ABOUT: &str = ct_help_about!("rmdir.md");
-const RMDIR_USAGE: &str = ct_help_usage!("rmdir.md");
 pub mod rmdir_flags {
     pub const RMDIR_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
     pub const RMDIR_PARENTS: &str = "parents";
@@ -38,6 +39,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let configs = RmdirConfigs {
@@ -169,12 +172,12 @@ struct RmdirConfigs {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = RMDIR_ABOUT;
-    let usage_description = ct_format_usage(RMDIR_USAGE);
+    let application_info = t!("rmdir.about");
+    let usage_description = t!("rmdir.usage");
     let args = vec![
         Arg::new(rmdir_flags::RMDIR_IGNORE_FAIL_NON_EMPTY)
             .long(rmdir_flags::RMDIR_IGNORE_FAIL_NON_EMPTY)
-            .help("ignore each failure that is solely because a directory is non-empty")
+            .help(t!("rmdir.clap.rmdir_ignore_fail_non_empty"))
             .action(ArgAction::SetTrue),
         Arg::new(rmdir_flags::RMDIR_PARENTS)
             .short('p')
@@ -187,7 +190,7 @@ pub fn ct_app() -> Command {
         Arg::new(rmdir_flags::RMDIR_VERBOSE)
             .short('v')
             .long(rmdir_flags::RMDIR_VERBOSE)
-            .help("output a diagnostic for every directory processed")
+            .help(t!("rmdir.clap.rmdir_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(rmdir_flags::RMDIR_ARG_DIRS)
             .action(ArgAction::Append)

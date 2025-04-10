@@ -12,19 +12,16 @@
 //! uname 是一个 Linux 系统命令，用于显示系统的基本信息。
 //! 它提供了关于操作系统的内核名称、版本、主机名、硬件平台（体系结构）和操作系统发行版等信息。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use ctcore::ct_error::{CTResult, CtSimpleError};
 use platform_info::*;
-
-use ctcore::{
-    ct_error::{CTResult, CtSimpleError},
-    ct_format_usage, ct_help_about, ct_help_usage,
-};
+use sys_locale::get_locale;
 
 use ctcore::Tool;
 use std::ffi::OsString;
-
-const UNAME_ABOUT: &str = ct_help_about!("uname.md");
-const UNAME_USAGE: &str = ct_help_usage!("uname.md");
 
 pub mod uname_flags {
     pub static UNAME_ALL: &str = "all";
@@ -152,6 +149,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let flags = UnameFlags {
@@ -173,13 +172,13 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = UNAME_ABOUT;
-    let usage_description = ct_format_usage(UNAME_USAGE);
+    let application_info = t!("uname.about");
+    let usage_description = t!("uname.usage");
     let args = vec![
         Arg::new(uname_flags::UNAME_ALL)
             .short('a')
             .long(uname_flags::UNAME_ALL)
-            .help("Behave as though all of the flags -mnrsvo were specified.")
+            .help(t!("uname.clap.uname_all"))
             .action(ArgAction::SetTrue),
         Arg::new(uname_flags::UNAME_KERNEL_NAME)
             .short('s')
@@ -204,28 +203,28 @@ pub fn ct_app() -> Command {
         Arg::new(uname_flags::UNAME_KERNEL_VERSION)
             .short('v')
             .long(uname_flags::UNAME_KERNEL_VERSION)
-            .help("print the operating system version.")
+            .help(t!("uname.clap.uname_kernel_version"))
             .action(ArgAction::SetTrue),
         Arg::new(uname_flags::UNAME_MACHINE)
             .short('m')
             .long(uname_flags::UNAME_MACHINE)
-            .help("print the machine hardware name.")
+            .help(t!("uname.clap.uname_machine"))
             .action(ArgAction::SetTrue),
         Arg::new(uname_flags::UNAME_OS)
             .short('o')
             .long(uname_flags::UNAME_OS)
-            .help("print the operating system name.")
+            .help(t!("uname.clap.uname_os"))
             .action(ArgAction::SetTrue),
         Arg::new(uname_flags::UNAME_PROCESSOR)
             .short('p')
             .long(uname_flags::UNAME_PROCESSOR)
-            .help("print the processor type (non-portable)")
+            .help(t!("uname.clap.uname_processor"))
             .action(ArgAction::SetTrue)
             .hide(true),
         Arg::new(uname_flags::UNAME_HARDWARE_PLATFORM)
             .short('i')
             .long(uname_flags::UNAME_HARDWARE_PLATFORM)
-            .help("print the hardware platform (non-portable)")
+            .help(t!("uname.clap.uname_hardware_platform"))
             .action(ArgAction::SetTrue)
             .hide(true),
     ];

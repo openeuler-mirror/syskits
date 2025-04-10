@@ -11,11 +11,15 @@
 
 //! logname指令，它会显示目前用户的名称。
 
+extern crate rust_i18n;
 use clap::{Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
-use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage, ct_show_error};
+use ctcore::{ct_error::CTResult, ct_show_error};
 use std::ffi::CStr;
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 unsafe extern "C" {
     // POSIX 要求使用 getlogin（或同等代码）
@@ -33,9 +37,6 @@ fn get_user_login() -> Option<String> {
         }
     }
 }
-
-const LOGNAME_ABOUT: &str = ct_help_about!("logname.md");
-const LOGNAME_USAGE: &str = ct_help_usage!("logname.md");
 
 #[derive(Default)]
 pub struct Logname;
@@ -59,6 +60,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let _ = ct_app().try_get_matches_from(args)?;
 
     match get_user_login() {
@@ -72,8 +75,8 @@ pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = LOGNAME_ABOUT;
-    let usage_description = ct_format_usage(LOGNAME_USAGE);
+    let application_info = t!("logname.about");
+    let usage_description = t!("logname.usage");
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)

@@ -11,19 +11,21 @@
 
 // spell-checker:ignore (path) eacces inacc
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version, parser::ValueSource};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_prompt_yes, ct_show_error,
-};
+use ctcore::{ct_prompt_yes, ct_show_error};
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -92,10 +94,6 @@ impl RMOptions {
     }
 }
 
-const RM_ABOUT: &str = ct_help_about!("rm.md");
-const RM_USAGE: &str = ct_help_usage!("rm.md");
-const RM_AFTER_HELP: &str = ct_help_section!("after help", "rm.md");
-
 mod rm_flags {
     pub const RM_DIR: &str = "dir";
     pub const RM_INTERACTIVE: &str = "interactive";
@@ -134,8 +132,10 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn rm_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
-        .after_help(RM_AFTER_HELP)
+        .after_help(t!("rm.after_help"))
         .try_get_matches_from(args)?;
 
     let files = extract_files(&matches);
@@ -242,17 +242,17 @@ fn should_prompt_user(options: &RMOptions, files: &[&OsStr]) -> bool {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = RM_ABOUT;
-    let usage_description = ct_format_usage(RM_USAGE);
+    let application_info = t!("rm.about");
+    let usage_description = t!("rm.usage");
     let args = vec![
         Arg::new(rm_flags::RM_FORCE)
             .short('f')
             .long(rm_flags::RM_FORCE)
-            .help("ignore nonexistent files and arguments, never prompt")
+            .help(t!("rm.clap.rm_force"))
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_PROMPT)
             .short('i')
-            .help("prompt before every removal")
+            .help(t!("rm.clap.rm_prompt"))
             .overrides_with_all([rm_flags::RM_PROMPT_MORE, rm_flags::RM_INTERACTIVE])
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_PROMPT_MORE)
@@ -284,27 +284,27 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_NO_PRESERVE_ROOT)
             .long(rm_flags::RM_NO_PRESERVE_ROOT)
-            .help("do not treat '/' specially")
+            .help(t!("rm.clap.rm_no_preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_PRESERVE_ROOT)
             .long(rm_flags::RM_PRESERVE_ROOT)
-            .help("do not remove '/' (default)")
+            .help(t!("rm.clap.rm_preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_RECURSIVE)
             .short('r')
             .visible_short_alias('R')
             .long(rm_flags::RM_RECURSIVE)
-            .help("remove directories and their contents recursively")
+            .help(t!("rm.clap.rm_recursive"))
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_DIR)
             .short('d')
             .long(rm_flags::RM_DIR)
-            .help("remove empty directories")
+            .help(t!("rm.clap.rm_dir"))
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_VERBOSE)
             .short('v')
             .long(rm_flags::RM_VERBOSE)
-            .help("explain what is being done")
+            .help(t!("rm.clap.rm_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(rm_flags::RM_PRESUME_INPUT_TTY)
             .long("presume-input-tty")

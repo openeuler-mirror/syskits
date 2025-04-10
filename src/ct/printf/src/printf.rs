@@ -12,21 +12,21 @@
 // 在Linux或类Unix系统中，printf 是一个内置的命令，它基于C语言的printf 函数，用于格式化输出数据。
 // printf 命令允许你控制输出的布局，包括数值的宽度、精度、对齐方式等
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::io::stdout;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::ops::ControlFlow;
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_format::{FormatArgument, FormatItem, parse_spec_and_escape};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 const PRINTF_VERSION: &str = "version";
 const PRINTF_HELP: &str = "help";
-const PRINTF_USAGE: &str = ct_help_usage!("printf.md");
-const PRINTF_ABOUT: &str = ct_help_about!("printf.md");
-const PRINTF_AFTER_HELP: &str = ct_help_section!("after help", "printf.md");
 
 mod opt_flags {
     pub const PRINTF_FORMATSTRING: &str = "FORMATSTRING";
@@ -62,6 +62,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回值
 /// 返回一个 `CTResult<()>`，成功时为 `Ok(())`，错误时为 `Err(CTsageError)`。
 pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从命令行参数中获取匹配项
     let args_match = ct_app().get_matches_from(args);
 
@@ -115,18 +117,18 @@ pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = PRINTF_ABOUT;
-    let usage_description = ct_format_usage(PRINTF_USAGE);
-    let after_help = PRINTF_AFTER_HELP;
+    let application_info = t!("printf.about");
+    let usage_description = t!("printf.usage");
+    let after_help = t!("printf.after_help");
 
     let args = vec![
         Arg::new(PRINTF_HELP)
             .long(PRINTF_HELP)
-            .help("Print help information")
+            .help(t!("printf.clap.printf_help"))
             .action(ArgAction::Help),
         Arg::new(PRINTF_VERSION)
             .long(PRINTF_VERSION)
-            .help("Print version information")
+            .help(t!("printf.clap.printf_version"))
             .action(ArgAction::Version),
         Arg::new(opt_flags::PRINTF_FORMATSTRING),
         Arg::new(opt_flags::PRINTF_ARGUMENT).action(ArgAction::Append),

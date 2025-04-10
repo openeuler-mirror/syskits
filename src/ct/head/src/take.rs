@@ -122,7 +122,6 @@ pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
 
 #[cfg(test)]
 mod tests {
-
     use std::io::BufRead;
     use std::io::BufReader;
 

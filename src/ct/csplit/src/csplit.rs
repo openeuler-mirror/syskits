@@ -10,12 +10,13 @@
  */
 #![allow(rustdoc::private_intra_doc_links)]
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::{
-    Tool, ct_crash_if_err, ct_format_usage, ct_help_about, ct_help_section, ct_help_usage,
-};
+use ctcore::{Tool, ct_crash_if_err};
 use regex::Regex;
 use std::cmp::Ordering;
 use std::ffi::OsString;
@@ -24,6 +25,7 @@ use std::{
     fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
+use sys_locale::get_locale;
 
 mod csplit_error;
 mod patterns;
@@ -31,10 +33,6 @@ mod split_name;
 
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
-
-const CSPLIT_ABOUT: &str = ct_help_about!("csplit.md");
-const AFTER_HELP: &str = ct_help_section!("after help", "csplit.md");
-const CSPLIT_USAGE: &str = ct_help_usage!("csplit.md");
 
 mod opt_flags {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -581,6 +579,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -628,8 +628,8 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CSPLIT_ABOUT;
-    let usage_description = ct_format_usage(CSPLIT_USAGE);
+    let application_info = t!("csplit.about");
+    let usage_description = t!("csplit.usage");
 
     let args = csplit_args_init();
 
@@ -638,46 +638,58 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
-        .after_help(AFTER_HELP)
+        .after_help(t!("csplit.after_help"))
 }
 
 fn csplit_args_init() -> Vec<Arg> {
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("csplit.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("csplit.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::SUFFIX_FORMAT)
             .short('b')
             .long(opt_flags::SUFFIX_FORMAT)
             .value_name("FORMAT")
-            .help("use sprintf FORMAT instead of %02d"),
+            .help(t!("csplit.clap.suffix_format")),
         Arg::new(opt_flags::PREFIX)
             .short('f')
             .long(opt_flags::PREFIX)
             .value_name("PREFIX")
-            .help("use PREFIX instead of 'xx'"),
+            .help(t!("csplit.clap.prefix")),
         Arg::new(opt_flags::KEEP_FILES)
             .short('k')
             .long(opt_flags::KEEP_FILES)
-            .help("do not remove output files on errors")
+            .help(t!("csplit.clap.keep_files"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::SUPPRESS_MATCHED)
             .long(opt_flags::SUPPRESS_MATCHED)
-            .help("suppress the lines matching PATTERN")
+            .help(t!("csplit.clap.suppress_matched"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DIGITS)
             .short('n')
             .long(opt_flags::DIGITS)
             .value_name("DIGITS")
-            .help("use specified number of digits instead of 2"),
+            .help(t!("csplit.clap.digits")),
         Arg::new(opt_flags::QUIET)
             .short('s')
             .long(opt_flags::QUIET)
             .visible_alias("silent")
-            .help("do not print counts of output file sizes")
+            .help(t!("csplit.clap.quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::ELIDE_EMPTY_FILES)
             .short('z')
             .long(opt_flags::ELIDE_EMPTY_FILES)
-            .help("remove empty output files")
+            .help(t!("csplit.clap.elide_empty_files"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILE)
             .hide(true)
@@ -711,6 +723,19 @@ impl Tool for Csplit {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    /// Removes a temporary file and handles any error during removal
+    fn remove_tem_file(name: String) {
+        let file_path = std::path::Path::new(&name);
+        match std::fs::remove_file(file_path) {
+            Ok(()) => {
+                // File successfully removed
+            }
+            Err(e) => {
+                eprintln!("File remove fail: {}", e);
+            }
+        }
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -9476,7 +9501,6 @@ mod tests {
     }
 
     mod tests_fn_do_csplit {
-
         use super::*;
 
         use std::ffi::OsString;
@@ -10492,17 +10516,6 @@ mod tests {
             assert!(ret.is_ok());
         }
 
-        fn remove_tem_file(name: String) {
-            let file_path = Path::new(&name);
-            match fs::remove_file(file_path) {
-                Ok(()) => {
-                    // println!("文件删除成功");
-                }
-                Err(_e) => {
-                    // eprintln!("File remove fail: {}", e)
-                }
-            }
-        }
         #[test]
         fn test_do_csplit_suffix_format_1s() {
             let temp_dir = Builder::new()

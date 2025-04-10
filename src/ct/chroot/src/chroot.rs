@@ -9,25 +9,25 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 mod error;
 
 use crate::error::ChrootError;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
+use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::libc::{self, setgid, setgroups, setuid};
-use ctcore::{ct_entries, ct_format_usage, ct_help_about, ct_help_usage};
-
 use std::io::Error;
+use sys_locale::get_locale;
 
 use std::ffi::OsString;
 use std::path::Path;
 use std::process;
 use std::process::ExitStatus;
-
-static CHROOT_ABOUT: &str = ct_help_about!("chroot.md");
-static CHROOT_USAGE: &str = ct_help_usage!("chroot.md");
 
 mod opt_flags {
     pub const NEWROOT: &str = "newroot";
@@ -47,6 +47,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn chroot_main(args: &[OsString]) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 尝试从 args 中获取匹配项，并在匹配失败时返回错误代码 125
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
@@ -143,8 +145,8 @@ fn chroot_process_status_code(pstatus: ExitStatus) -> i32 {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CHROOT_ABOUT;
-    let usage_description = ct_format_usage(CHROOT_USAGE);
+    let application_info = t!("chroot.about");
+    let usage_description = t!("chroot.usage");
 
     let args = args_init();
 
@@ -154,6 +156,8 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .trailing_var_arg(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
@@ -167,17 +171,17 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::USER)
             .short('u')
             .long(opt_flags::USER)
-            .help("User (ID or name) to switch before running the program")
+            .help(t!("chroot.clap.user"))
             .value_name("USER"),
         Arg::new(opt_flags::GROUP)
             .short('g')
             .long(opt_flags::GROUP)
-            .help("Group (ID or name) to switch to")
+            .help(t!("chroot.clap.group"))
             .value_name("GROUP"),
         Arg::new(opt_flags::GROUPS)
             .short('G')
             .long(opt_flags::GROUPS)
-            .help("Comma-separated list of groups to switch to")
+            .help(t!("chroot.clap.groups"))
             .value_name("GROUP1,GROUP2..."),
         Arg::new(opt_flags::USERSPEC)
             .long(opt_flags::USERSPEC)
@@ -200,6 +204,16 @@ fn args_init() -> Vec<Arg> {
             .value_hint(clap::ValueHint::CommandName)
             .hide(true)
             .index(2),
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("chroot.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("chroot.clap.version"))
+            .action(ArgAction::Version),
     ];
     args
 }

@@ -9,16 +9,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_utmpx::{self, CtUtmpx, time};
+use ctcore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::ct_utmpx::{self, CtUtmpx, time};
-use ctcore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use sys_locale::get_locale;
 
 use crate::ct_app;
 use crate::who_flags;
@@ -36,6 +36,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches: clap::ArgMatches = ct_app()
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;

@@ -469,7 +469,6 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-
     use super::ends_with_slash_dot;
     use super::path_has_prefix;
 

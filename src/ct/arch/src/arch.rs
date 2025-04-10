@@ -1,7 +1,7 @@
 /*
  * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
  *  syskits is licensed under Mulan PSL v2.
- * You can use this software according to the terms and conditions of the Mulan PSL V2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
  * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
@@ -9,23 +9,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+
+// 声明 i18n 宏和初始化函数
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use sys_locale::get_locale;
+
+use clap::Arg;
+use clap::ArgAction;
+use clap::Command;
+use clap::crate_version;
 use platform_info::*;
 
-use clap::Command;
-#[warn(unused_imports)]
-use clap::crate_version;
-
+use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
-
-use ctcore::Tool;
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_usage;
+use rust_i18n::t;
 use std::ffi::OsString;
-
-const ARCH_ABOUT: &str = ct_help_about!("arch.md");
-const ARCH_SUMMARY: &str = ct_help_usage!("arch.md");
 
 #[derive(Default)]
 pub struct Arch;
@@ -39,39 +39,34 @@ impl Tool for Arch {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        // 直接调用原有的 arch_main 函数
         let result = arch_main(args.iter().cloned());
         match result {
             Ok(s) => {
                 println!("{}", s);
                 Ok(())
             }
-            Err(e) => {
-                // println!("{}", e);
-                Err(e)
-            }
+            Err(e) => Err(e),
         }
     }
 }
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    // 调用新的arch_main函数
     let result = arch_main(args);
-
     match result {
         Ok(s) => {
             println!("{}", s);
             Ok(())
         }
-        Err(e) => {
-            // println!("{}", e);
-            Err(e)
-        }
+        Err(e) => Err(e),
     }
 }
 
 pub fn arch_main(args: impl ctcore::Args) -> CTResult<String> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
     ct_app().try_get_matches_from(args)?;
 
     let platform_info =
@@ -86,15 +81,32 @@ pub fn arch_main(args: impl ctcore::Args) -> CTResult<String> {
 pub fn ct_app() -> Command {
     let util_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = ARCH_ABOUT;
-    let usage_description = ct_format_usage(ARCH_SUMMARY);
+    let application_info = t!("arch.about");
+    let usage_description = t!("arch.usage");
 
     Command::new(util_name)
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .help(t!("arch.clap.help"))
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .help(t!("arch.clap.version"))
+                .action(ArgAction::Version),
+        )
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,15 +152,13 @@ mod tests {
         {
             let args = ["-h", ""];
             let mut args_iter = args.iter().map(|s| OsString::from(*s));
-            let result = ctmain(&mut args_iter);
-
-            assert_eq!(result, 1);
+            let result = arch_main(&mut args_iter);
+            assert!(result.is_err());
         }
 
         {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-h"];
-
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
@@ -160,14 +170,12 @@ mod tests {
         {
             let args = ["--version", ""];
             let mut args_iter = args.iter().map(|s| OsString::from(*s));
-            let result = ctmain(&mut args_iter);
-
-            assert_eq!(result, 1);
+            let result = arch_main(&mut args_iter);
+            assert!(result.is_err());
         }
         {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "--version"];
-
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
@@ -179,14 +187,12 @@ mod tests {
         {
             let args = ["-V", ""];
             let mut args_iter = args.iter().map(|s| OsString::from(*s));
-            let result = ctmain(&mut args_iter);
-
-            assert_eq!(result, 1);
+            let result = arch_main(&mut args_iter);
+            assert!(result.is_err());
         }
         {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-V"];
-
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
@@ -220,7 +226,6 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), "--help"];
         let mut args_iter = args.iter().map(|s| OsString::from(s));
         let result = arch_main(&mut args_iter);
-
         assert!(result.is_err());
     }
 }

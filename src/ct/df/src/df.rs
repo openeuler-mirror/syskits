@@ -8,32 +8,28 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+extern crate rust_i18n;
 mod blocks;
 mod columns;
 mod filesystem;
 mod table;
 
 use blocks::BlocksHumanReadable;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use clap::ArgAction;
 use clap::builder::ValueParser;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
-
-use ctcore::ct_format_usage;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::read_fs_list;
-use ctcore::ct_help_about;
-use ctcore::ct_help_section;
-use ctcore::ct_help_usage;
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::ct_show;
 
-use table::TableHeaderMode;
-
 use clap::Arg;
-use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
@@ -43,16 +39,14 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
+use sys_locale::get_locale;
+use table::TableHeaderMode;
 
 use crate::blocks::BlockSize;
 use crate::blocks::block_size_read;
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
-
-const DF_ABOUT: &str = ct_help_about!("df.md");
-const DF_USAGE: &str = ct_help_usage!("df.md");
-const DF_AFTER_HELP: &str = ct_help_section!("after help", "df.md");
 
 static DF_OPT_HELP: &str = "help";
 static DF_OPT_ALL: &str = "all";
@@ -471,6 +465,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从args解析命令行匹配项。
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -533,8 +529,8 @@ fn get_filesystem(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = DF_ABOUT;
-    let usage_description = ct_format_usage(DF_USAGE);
+    let application_info = t!("df.about");
+    let usage_description = t!("df.usage");
 
     let args = df_args_init();
 
@@ -542,23 +538,29 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
-        .after_help(DF_AFTER_HELP)
+        .after_help(t!("df.after_help"))
         .infer_long_args(true)
         .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
 fn df_args_init() -> Vec<Arg> {
     let args = vec![
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("df.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(DF_OPT_HELP)
             .long(DF_OPT_HELP)
-            .help("Print help information.")
+            .help(t!("df.clap.df_opt_help"))
             .action(ArgAction::Help),
         Arg::new(DF_OPT_ALL)
             .short('a')
             .long("all")
             .overrides_with(DF_OPT_ALL)
-            .help("include dummy file systems")
+            .help(t!("df.clap.df_opt_all"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_BLOCKSIZE)
             .short('B')
@@ -567,46 +569,46 @@ fn df_args_init() -> Vec<Arg> {
             .overrides_with_all([DF_OPT_KILO, DF_OPT_BLOCKSIZE])
             .help(
                 "scale sizes by SIZE before printing them; e.g.\
-                    '-BM' prints sizes in units of 1,048,576 bytes",
+                        '-BM' prints sizes in units of 1,048,576 bytes",
             ),
         Arg::new(DF_OPT_TOTAL)
             .long("total")
             .overrides_with(DF_OPT_TOTAL)
-            .help("produce a grand total")
+            .help(t!("df.clap.df_opt_total"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_HUMAN_READABLE_BINARY)
             .short('h')
             .long("human-readable")
             .overrides_with_all([DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_HUMAN_READABLE_BINARY])
-            .help("print sizes in human readable ct_format (e.g., 1K 234M 2G)")
+            .help(t!("df.clap.df_opt_human_readable_binary"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_HUMAN_READABLE_DECIMAL)
             .short('H')
             .long("si")
             .overrides_with_all([DF_OPT_HUMAN_READABLE_BINARY, DF_OPT_HUMAN_READABLE_DECIMAL])
-            .help("likewise, but use powers of 1000 not 1024")
+            .help(t!("df.clap.df_opt_human_readable_decimal"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_INODES)
             .short('i')
             .long("inodes")
             .overrides_with(DF_OPT_INODES)
-            .help("list inode information instead of block usage")
+            .help(t!("df.clap.df_opt_inodes"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_KILO)
             .short('k')
-            .help("like --block-size=1K")
+            .help(t!("df.clap.df_opt_kilo"))
             .overrides_with_all([DF_OPT_BLOCKSIZE, DF_OPT_KILO])
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_LOCAL)
             .short('l')
             .long("local")
             .overrides_with(DF_OPT_LOCAL)
-            .help("limit listing to local file systems")
+            .help(t!("df.clap.df_opt_local"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_NO_SYNC)
             .long("no-sync")
             .overrides_with_all([DF_OPT_SYNC, DF_OPT_NO_SYNC])
-            .help("do not invoke sync before getting usage info (default)")
+            .help(t!("df.clap.df_opt_no_sync"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_OUTPUT)
             .long("output")
@@ -621,18 +623,18 @@ fn df_args_init() -> Vec<Arg> {
             .conflicts_with_all([DF_OPT_INODES, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE])
             .help(
                 "use the output ct_format defined by FIELD_LIST, \
-                     or print all fields if FIELD_LIST is omitted.",
+                         or print all fields if FIELD_LIST is omitted.",
             ),
         Arg::new(DF_OPT_PORTABILITY)
             .short('P')
             .long("portability")
             .overrides_with(DF_OPT_PORTABILITY)
-            .help("use the POSIX output ct_format")
+            .help(t!("df.clap.df_opt_portability"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_SYNC)
             .long("sync")
             .overrides_with_all([DF_OPT_NO_SYNC, DF_OPT_SYNC])
-            .help("invoke sync before getting usage info (non-windows only)")
+            .help(t!("df.clap.df_opt_sync"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_TYPE)
             .short('t')
@@ -645,7 +647,7 @@ fn df_args_init() -> Vec<Arg> {
             .short('T')
             .long("print-type")
             .overrides_with(DF_OPT_PRINT_TYPE)
-            .help("print file system type")
+            .help(t!("df.clap.df_opt_print_type"))
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_EXCLUDE_TYPE)
             .short('x')
@@ -5295,7 +5297,6 @@ mod tests {
     }
 
     mod tests_df_main {
-
         use crate::df_main;
         use std::ffi::OsString;
         use std::fs;
@@ -8615,7 +8616,6 @@ mod tests {
         }
     }
     mod mount_info_lt {
-
         use crate::mount_info_lt;
         use ctcore::ct_fsext::CtMountInfo;
 
@@ -8665,7 +8665,6 @@ mod tests {
     }
 
     mod is_best {
-
         use crate::is_best;
         use ctcore::ct_fsext::CtMountInfo;
 
@@ -8710,7 +8709,6 @@ mod tests {
     }
 
     mod is_included {
-
         use crate::{DfOptions, is_included};
         use ctcore::ct_fsext::CtMountInfo;
 
@@ -8847,7 +8845,6 @@ mod tests {
     }
 
     mod filter_mount_list {
-
         use crate::{DfOptions, filter_mount_list};
 
         #[test]

@@ -152,7 +152,7 @@ impl FromStr for NumfmtFormatOptions {
                 _ => {
                     return Err(format!(
                         "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
-                    ))
+                    ));
                 }
             }
         }
@@ -264,12 +264,16 @@ mod tests {
         assert!("%%%%f".parse::<NumfmtFormatOptions>().is_err());
         assert!("%.-1f".parse::<NumfmtFormatOptions>().is_err());
         assert!("%. 1f".parse::<NumfmtFormatOptions>().is_err());
-        assert!("%18446744073709551616f"
-            .parse::<NumfmtFormatOptions>()
-            .is_err());
-        assert!("%.18446744073709551616f"
-            .parse::<NumfmtFormatOptions>()
-            .is_err());
+        assert!(
+            "%18446744073709551616f"
+                .parse::<NumfmtFormatOptions>()
+                .is_err()
+        );
+        assert!(
+            "%.18446744073709551616f"
+                .parse::<NumfmtFormatOptions>()
+                .is_err()
+        );
     }
 
     #[test]

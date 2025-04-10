@@ -14,32 +14,32 @@ Copy, and optionally convert, a file system resource
 ### Operands
 
 - `bs=BYTES` : read and write up to BYTES bytes at a time (default: 512);
-   overwrites `ibs` and `obs`.
+  overwrites `ibs` and `obs`.
 - `cbs=BYTES` : the 'conversion block size' in bytes. Applies to the
-   `conv=block`, and `conv=unblock` operations.
+  `conv=block`, and `conv=unblock` operations.
 - `conv=CONVS` : a comma-separated list of conversion options or (for legacy
-   reasons) file flags.
+  reasons) file flags.
 - `count=N` : stop reading input after N ibs-sized read operations rather
-   than proceeding until EOF. See `iflag=count_bytes` if stopping after N bytes
-   is preferred
+  than proceeding until EOF. See `iflag=count_bytes` if stopping after N bytes
+  is preferred
 - `ibs=N` : the size of buffer used for reads (default: 512)
 - `if=FILE` : the file used for input. When not specified, stdin is used instead
 - `iflag=FLAGS` : a comma-separated list of input flags which specify how the
-   input source is treated. FLAGS may be any of the input-flags or general-flags
-   specified below.
+  input source is treated. FLAGS may be any of the input-flags or general-flags
+  specified below.
 - `skip=N` (or `iseek=N`) : skip N ibs-sized records into input before beginning
-   copy/convert operations. See iflag=seek_bytes if seeking N bytes is preferred.
+  copy/convert operations. See iflag=seek_bytes if seeking N bytes is preferred.
 - `obs=N` : the size of buffer used for writes (default: 512)
 - `of=FILE` : the file used for output. When not specified, stdout is used
-   instead
+  instead
 - `oflag=FLAGS` : comma separated list of output flags which specify how the
-   output source is treated. FLAGS may be any of the output flags or general
-   flags specified below
+  output source is treated. FLAGS may be any of the output flags or general
+  flags specified below
 - `seek=N` (or `oseek=N`) : seeks N obs-sized records into output before
-   beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is
-   preferred
+  beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is
+  preferred
 - `status=LEVEL` : controls whether volume and performance stats are written to
-   stderr.
+  stderr.
 
   When unspecified, dd will print stats upon completion. An example is below.
 
@@ -58,9 +58,9 @@ Copy, and optionally convert, a file system resource
   `conv=block`), the volume stats will contain the number of truncated records.
 
   Possible LEVEL values are:
-  - `progress` : Print periodic performance stats as the copy proceeds.
-  - `noxfer` : Print final volume stats, but not performance stats.
-  - `none` : Do not print any stats.
+    - `progress` : Print periodic performance stats as the copy proceeds.
+    - `noxfer` : Print final volume stats, but not performance stats.
+    - `none` : Do not print any stats.
 
   Printing performance stats is also triggered by the INFO signal (where supported),
   or the USR1 signal. Setting the POSIXLY_CORRECT environment variable to any value

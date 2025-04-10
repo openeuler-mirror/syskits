@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 pub mod native_int_str;
 pub mod parse_error;
 pub mod split_iterator;
@@ -17,11 +18,13 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
+use sys_locale::get_locale;
 
 use ini::Ini;
 use native_int_str::{
@@ -46,20 +49,12 @@ use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::ExitCode;
 
 use ctcore::Tool;
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_section;
-use ctcore::ct_help_usage;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_show_warning;
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self};
-
-const ENV_ABOUT: &str = ct_help_about!("env.md");
-const ENV_USAGE: &str = ct_help_usage!("env.md");
-const ENV_AFTER_HELP: &str = ct_help_section!("after help", "env.md");
 
 const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
@@ -148,15 +143,15 @@ fn env_load_config_file(options: &mut EnvOptions) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = ENV_ABOUT;
-    let usage_description = ct_format_usage(ENV_USAGE);
+    let application_info = t!("env.about");
+    let usage_description = t!("env.usage");
     let args = env_args_init();
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
-        .after_help(ENV_AFTER_HELP)
+        .after_help(t!("env.after_help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .args(&args)
@@ -167,7 +162,7 @@ fn env_args_init() -> Vec<Arg> {
         Arg::new("ignore-environment")
             .short('i')
             .long("ignore-environment")
-            .help("start with an empty environment")
+            .help(t!("env.clap.ignore-environment"))
             .action(ArgAction::SetTrue),
         Arg::new("chdir")
             .short('C') // GNU env compatibility
@@ -207,7 +202,7 @@ fn env_args_init() -> Vec<Arg> {
             .short('v')
             .long("debug")
             .action(ArgAction::SetTrue)
-            .help("print verbose information for each processing step"),
+            .help(t!("env.clap.debug")),
         Arg::new("split-string") // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
             .short('S')
             .long("split-string")
@@ -636,6 +631,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn env_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 使用默认的环境应用数据执行环境设置
     EnvAppData::default().run_env(args)
 }
@@ -3172,7 +3169,6 @@ mod tests {
     }
 
     mod tests_make_options {
-
         use crate::EnvAppData;
         use crate::EnvOptions;
         use crate::env_make_options;

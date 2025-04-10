@@ -22,7 +22,6 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
-use ctcore::ct_format_usage;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -102,18 +101,18 @@ impl BaseConfig {
 
 pub fn base_parsing_command_args(
     base_args: impl ctcore::Args,
-    base_about: &'static str,
-    base_usage: &str,
+    base_about: String,
+    base_usage: String,
 ) -> CTResult<BaseConfig> {
     let command = base_common_app(base_about, base_usage);
     BaseConfig::from(&command.try_get_matches_from(base_args)?)
 }
 
-pub fn base_common_app(about: &'static str, usage: &str) -> Command {
+pub fn base_common_app(about: String, usage: String) -> Command {
     let util_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = about;
-    let usage_description = ct_format_usage(usage);
+    let usage_description = usage;
 
     let args = base_args_init();
 
@@ -228,13 +227,17 @@ pub fn handle_base_input<R: Read>(
 mod test {
     use super::*;
 
-    use crate::{BASE32_ABOUT, BASE32_USAGE, base_common};
+    use crate::base_common;
     use ctcore::ct_encoding::Format;
     use std::ffi::OsString;
     use std::fs;
     use std::fs::File;
     use std::io::stdin;
     use std::io::{self, Write};
+
+    // Add the missing constants
+    const BASE32_ABOUT: &str = "base32 encode or decode data";
+    const BASE32_USAGE: &str = "base32 [OPTION]... [FILE]";
 
     // 创建文件并写入内容
     fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
@@ -266,8 +269,8 @@ mod test {
         let format = Format::Base16;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -322,8 +325,8 @@ mod test {
         let format = Format::Base32;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -378,8 +381,8 @@ mod test {
         let format = Format::Base32Hex;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -434,8 +437,8 @@ mod test {
         let format = Format::Base64;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -489,8 +492,8 @@ mod test {
         let format = Format::Base64Url;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -545,8 +548,8 @@ mod test {
         let format = Format::Base16;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -600,8 +603,8 @@ mod test {
         let format = Format::Base16;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -657,8 +660,8 @@ mod test {
         let format = Format::Base32;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -714,8 +717,8 @@ mod test {
         let format = Format::Base32;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -770,8 +773,8 @@ mod test {
         let format = Format::Base32Hex;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -827,8 +830,8 @@ mod test {
         let format = Format::Base32Hex;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -883,8 +886,8 @@ mod test {
         let format = Format::Base64;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -939,8 +942,8 @@ mod test {
         let format = Format::Base64;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -996,8 +999,8 @@ mod test {
         let format = Format::Base64Url;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1053,8 +1056,8 @@ mod test {
         let format = Format::Base64Url;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1110,8 +1113,8 @@ mod test {
         let format = Format::Base2Lsbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1167,8 +1170,8 @@ mod test {
         let format = Format::Base2Msbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1224,8 +1227,8 @@ mod test {
         let format = Format::Base2Lsbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1281,8 +1284,8 @@ mod test {
         let format = Format::Base2Msbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1338,8 +1341,8 @@ mod test {
         let format = Format::Base2Lsbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1395,8 +1398,8 @@ mod test {
         let format = Format::Base2Msbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1452,8 +1455,8 @@ mod test {
         let format = Format::Base2Lsbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1509,8 +1512,8 @@ mod test {
         let format = Format::Base2Msbf;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1566,8 +1569,8 @@ mod test {
         let format = Format::Z85;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1623,8 +1626,8 @@ mod test {
         let format = Format::Z85;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1680,8 +1683,8 @@ mod test {
         let format = Format::Z85;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 
@@ -1737,8 +1740,8 @@ mod test {
         let format = Format::Z85;
         let config: base_common::BaseConfig = base_common::base_parsing_command_args(
             args.iter().map(|s| OsString::from(s)),
-            BASE32_ABOUT,
-            BASE32_USAGE,
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
         )
         .expect("parse_base_cmd_args Failed");
 

@@ -1,0 +1,252 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "基本功能测试 - 读取符号链接",
+            "setup_commands": [
+                "echo 'test content' > source_file",
+                "ln -s source_file symlink"
+            ],
+            "args": ["symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "source_file\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -f 选项进行规范化",
+            "setup_commands": [
+                "mkdir -p dir1/dir2",
+                "echo 'test' > dir1/dir2/source_file",
+                "ln -sr dir1/dir2/source_file dir1/link1",
+                "ln -sr dir1/link1 dir1/link2"
+            ],
+            "args": ["-f", "dir1/link2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*/dir1/dir2/source_file\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf dir1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -e 选项进行规范化（要求所有组件存在）",
+            "setup_commands": [
+                "mkdir -p dir1/dir2",
+                "echo 'test' > dir1/dir2/source_file",
+                "ln -sr dir1/dir2/source_file dir1/link1",
+                "ln -sr dir1/link1 dir1/link2"
+            ],
+            "args": ["-e", "dir1/link2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*/dir1/dir2/source_file\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf dir1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -m 选项进行规范化（不要求组件存在）",
+            "setup_commands": [
+                "mkdir -p dir1",
+                "ln -s dir1/nonexistent/file dir1/link"
+            ],
+            "args": ["-m", "dir1/link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*/dir1/nonexistent/file\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf dir1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -n 选项不输出换行符",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "ln -s source_file symlink"
+            ],
+            "args": ["-n", "symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "source_file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -q 选项静默模式",
+            "setup_commands": [
+                "ln -s nonexistent broken_link"
+            ],
+            "args": ["-q", "broken_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f broken_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -v 选项详细模式",
+            "setup_commands": [
+                "ln -s nonexistent broken_link"
+            ],
+            "args": ["-v", "broken_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: broken_link: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f broken_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 -z 选项以空字符结束输出",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "ln -s source_file symlink"
+            ],
+            "args": ["-z", "symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "处理不存在的符号链接",
+            "setup_commands": [
+                "ln -s nonexistent broken_link"
+            ],
+            "args": ["broken_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: broken_link: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f broken_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "处理循环符号链接",
+            "setup_commands": [
+                "ln -s link1 link2",
+                "ln -s link2 link1"
+            ],
+            "args": ["-f", "link1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: link1: Too many levels of symbolic links\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f link1 link2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "使用 --silent 长选项静默模式",
+            "setup_commands": [
+                "ln -s nonexistent broken_link"
+            ],
+            "args": ["--silent", "broken_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f broken_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "组合使用 -s 和 -v 选项（-v 应该覆盖 -s）",
+            "setup_commands": [
+                "ln -s nonexistent broken_link"
+            ],
+            "args": ["-s", "-v", "broken_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: broken_link: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f broken_link"
+            ]
+        }
+    ]
+}

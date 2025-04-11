@@ -1,0 +1,244 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "基本功能测试 - 格式化字符串",
+            "args": ["%s\\n", "hello"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "hello\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "格式化多个参数",
+            "args": ["%s %d\\n", "test", "123"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test 123\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "格式化浮点数",
+            "args": ["%.2f\\n", "3.14159"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3.14\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "使用转义序列",
+            "args": ["\\t%s\\n", "tabbed"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\ttabbed\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "格式化字符",
+            "args": ["%c\\n", "A"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "A\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "格式化八进制数",
+            "args": ["%o\\n", "10"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "格式化十六进制数",
+            "args": ["%x\\n", "255"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "字段宽度和对齐",
+            "args": ["%10s\\n", "right"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "     right\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "重复使用格式字符串",
+            "args": ["%s\\n", "a", "b", "c"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "无效格式说明符",
+            "args": ["%z", "test"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: invalid format specification '%z'\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "使用 -v 选项将输出赋值给变量",
+            "setup_commands": [
+                "unset VAR"
+            ],
+            "args": ["-v", "VAR", "%s", "hello"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "environment": {
+                    "VAR": "hello"
+                }
+            },
+            "cleanup_commands": [
+                "unset VAR"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "使用 %b 扩展反斜杠转义序列",
+            "args": ["%b", "hello\\nworld\\t\\t\\t\\n"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "hello\nworld\t\t\t\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "使用 %q 引用参数作为shell输入",
+            "args": ["%q", "hello world"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'hello world'\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "使用 %q 引用包含特殊字符的参数",
+            "args": ["%q", "hello$world"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'hello$world'\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "组合使用 %b 和 %q",
+            "args": ["%b %q", "hello\\n", "world"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "hello\n 'world'\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "使用 -v 选项和 %b 组合",
+            "setup_commands": [
+                "unset VAR"
+            ],
+            "args": ["-v", "VAR", "%b", "hello\\nworld"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "environment": {
+                    "VAR": "hello\nworld"
+                }
+            },
+            "cleanup_commands": [
+                "unset VAR"
+            ]
+        }
+    ]
+} 

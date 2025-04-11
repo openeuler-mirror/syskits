@@ -1,0 +1,209 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "基本功能测试",
+            "setup_commands": [
+                "mkdir test_dir"
+            ],
+            "args": ["test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "删除多个目录",
+            "setup_commands": [
+                "mkdir dir1 dir2 dir3"
+            ],
+            "args": ["dir1", "dir2", "dir3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "递归删除父目录",
+            "setup_commands": [
+                "mkdir -p a/b/c"
+            ],
+            "args": ["-p", "a/b/c"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "删除非空目录测试",
+            "setup_commands": [
+                "mkdir test_dir",
+                "touch test_dir/file"
+            ],
+            "args": ["test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove 'test_dir': Directory not empty\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "目录不存在测试",
+            "args": ["nonexistent_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove 'nonexistent_dir': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "删除文件测试",
+            "setup_commands": [
+                "touch test_file"
+            ],
+            "args": ["test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove 'test_file': Not a directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "详细输出测试",
+            "setup_commands": [
+                "mkdir verbose_dir"
+            ],
+            "args": ["-v", "verbose_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "rmdir: removing directory, 'verbose_dir'\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "使用 --ignore-fail-on-non-empty 选项删除非空目录",
+            "setup_commands": [
+                "mkdir test_dir",
+                "touch test_dir/file"
+            ],
+            "args": ["--ignore-fail-on-non-empty", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d test_dir && echo 'directory still exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "directory still exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "使用 --ignore-fail-on-non-empty 选项删除多个目录（部分非空）",
+            "setup_commands": [
+                "mkdir dir1 dir2 dir3",
+                "touch dir2/file"
+            ],
+            "args": ["--ignore-fail-on-non-empty", "dir1", "dir2", "dir3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -d dir1 && test -d dir2 && test ! -d dir3 && echo 'mixed result'",
+                        "expected_exit": 0,
+                        "expected_stdout": "mixed result"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf dir1 dir2 dir3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "使用 --ignore-fail-on-non-empty 选项和 -p 选项组合",
+            "setup_commands": [
+                "mkdir -p a/b/c",
+                "touch a/b/file"
+            ],
+            "args": ["-p", "--ignore-fail-on-non-empty", "a/b/c"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d a/b && test ! -d a/b/c && echo 'partial removal'",
+                        "expected_exit": 0,
+                        "expected_stdout": "partial removal"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf a"
+            ]
+        }
+    ]
+} 

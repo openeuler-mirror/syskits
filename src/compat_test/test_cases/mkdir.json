@@ -1,0 +1,153 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "基本功能测试 - 创建单个目录",
+            "args": ["test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d test_dir && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "创建多个目录",
+            "args": ["dir1", "dir2", "dir3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d dir1 && test -d dir2 && test -d dir3 && echo 'all exist'",
+                        "expected_exit": 0,
+                        "expected_stdout": "all exist"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf dir1 dir2 dir3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "递归创建目录",
+            "args": ["-p", "parent/child/grandchild"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d parent/child/grandchild && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf parent"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "设置目录权限",
+            "args": ["-m", "700", "private_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %a private_dir",
+                        "expected_exit": 0,
+                        "expected_stdout": "700"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf private_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "创建已存在目录（不使用-p）",
+            "setup_commands": [
+                "mkdir existing_dir"
+            ],
+            "args": ["existing_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ".*cannot create directory.*File exists.*"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf existing_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "创建已存在目录（使用-p）",
+            "setup_commands": [
+                "mkdir existing_dir"
+            ],
+            "args": ["-p", "existing_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf existing_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkdir",
+            "description": "verbose模式",
+            "args": ["-v", "verbose_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*created directory.*verbose_dir.*",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf verbose_dir"
+            ]
+        }
+    ]
+} 

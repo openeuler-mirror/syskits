@@ -1,0 +1,402 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "基本功能测试 - 创建硬链接",
+            "setup_commands": [
+                "echo 'test content' > source_file"
+            ],
+            "args": ["source_file", "hard_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f hard_link && cat hard_link",
+                        "expected_exit": 0,
+                        "expected_stdout": "test content"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source_file hard_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "创建符号链接",
+            "setup_commands": [
+                "echo 'test content' > source_file"
+            ],
+            "args": ["-s", "source_file", "symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -L symlink && cat symlink",
+                        "expected_exit": 0,
+                        "expected_stdout": "test content"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source_file symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "强制创建链接",
+            "setup_commands": [
+                "echo 'source' > source_file",
+                "echo 'target' > existing_file"
+            ],
+            "args": ["-f", "source_file", "existing_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat existing_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "source"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source_file existing_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "创建相对符号链接",
+            "setup_commands": [
+                "mkdir -p dir1/subdir",
+                "echo 'test' > dir1/source_file"
+            ],
+            "args": ["-sr", "source_file", "dir1/subdir/symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "readlink dir1/subdir/symlink",
+                        "expected_exit": 0,
+                        "expected_stdout": "../source_file"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf dir1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "创建多个链接到目录",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "mkdir target_dir"
+            ],
+            "args": ["source_file", "source_file2", "target_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target_dir/source_file && test -f target_dir/source_file2 && echo 'OK'",
+                        "expected_exit": 0,
+                        "expected_stdout": "OK"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source_file source_file2",
+                "rm -rf target_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "创建备份",
+            "setup_commands": [
+                "echo 'source' > source_file1",
+                "echo 'target' > target_file1"
+            ],
+            "args": ["-b", "source_file1", "target_file1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target_file1~ && cat target_file1~",
+                        "expected_exit": 0,
+                        "expected_stdout": "target"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source_file target_file1 target_file1~"
+            ]
+        },
+        {
+            "tstdin": "y",
+            "command": "ln",
+            "description": "交互式创建",
+            "setup_commands": [
+                "echo 'source' > source_file2",
+                "echo 'target' > target_file2"
+            ],
+            "args": ["-i", "source_file2", "target_file2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*replace.*target_file2.*"
+                },
+                "verifications": [
+                    {
+                        "command": "cat target_file2",
+                        "expected_exit": 0,
+                        "expected_stdout": "source"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source_file2 target_file2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "verbose模式",
+            "setup_commands": [
+                "echo 'test' > source_file"
+            ],
+            "args": ["-v", "source_file", "verbose_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^'source_file' -> 'verbose_link'\\n$",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_exit_code": false,
+                  "ignore_stdout": true,
+                  "ignore_stderr": false
+                }
+      
+            },
+            "cleanup_commands": [
+                "rm -f source_file verbose_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "目标存在且不使用-f",
+            "setup_commands": [
+                "echo 'source' > source_file3",
+                "echo 'target' > target_file3"
+            ],
+            "args": ["source_file3", "target_file3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "^ln: failed to create (hard link|link) ['']target_file3['']: File exists\\n$"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file3 target_file3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -d 选项 - 允许创建指向目录的硬链接",
+            "setup_commands": [
+                "mkdir test_dir",
+                "touch test_dir/file"
+            ],
+            "args": ["-d", "test_dir", "dir_link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "^ln: hard link 'dir_link' to 'test_dir' not allowed for directory\\n$"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir dir_link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -L 选项 - 解引用符号链接",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "ln -s source_file symlink",
+                "mkdir target_dir"
+            ],
+            "args": ["-L", "symlink", "target_dir/"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file symlink",
+                "rm -rf target_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -n 选项 - 将符号链接当作普通文件",
+            "setup_commands": [
+                "mkdir test_dir1",
+                "ln -s test_dir1 dir_symlink"
+            ],
+            "args": ["-sn", "dir_symlink", "source"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir1 dir_symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -P 选项 - 直接创建指向符号链接的硬链接",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "ln -s source_file symlink"
+            ],
+            "args": ["-P", "symlink", "hardlink_to_symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file symlink hardlink_to_symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -r 选项 - 创建相对符号链接",
+            "setup_commands": [
+                "mkdir -p dir1/subdir",
+                "echo 'test' > dir1/source_file"
+            ],
+            "args": ["-sr", "dir1/source_file", "dir1/subdir/symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf dir1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -S 选项 - 自定义备份后缀",
+            "setup_commands": [
+                "echo 'source' > source_file4",
+                "echo 'target' > target_file4"
+            ],
+            "args": ["-b", "-S", ".bak", "source_file4", "target_file4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file4 target_file4 target_file4.bak"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -t 选项 - 在指定目录创建链接",
+            "setup_commands": [
+                "echo 'test1' > source1",
+                "echo 'test2' > source2",
+                "mkdir target_dir"
+            ],
+            "args": ["-t", "target_dir", "source1", "source2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source1 source2",
+                "rm -rf target_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试 -T 选项 - 将目标当作普通文件",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "mkdir link_name"
+            ],
+            "args": ["-T", "source_file", "link_name"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "^ln: failed to create (hard link|link) 'link_name': File exists\\n$"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file",
+                "rm -rf link_name"
+            ]
+        }
+    ]
+} 

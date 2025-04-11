@@ -1,0 +1,143 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "基本功能测试 - 显示所有环境变量",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "显示指定的环境变量",
+            "args": ["TEST_VAR"],
+            "setup_commands": [
+                "export TEST_VAR=test_value"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_value\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset TEST_VAR"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "显示多个环境变量",
+            "args": ["VAR1", "VAR2"],
+            "setup_commands": [
+                "export VAR1=value1",
+                "export VAR2=value2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "value1\nvalue2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset VAR1",
+                "unset VAR2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "使用 -0 参数输出所有环境变量",
+            "args": ["-0"],
+            "setup_commands": [
+                "export TEST_VAR1=test_value1",
+                "export TEST_VAR2=test_value2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout_pattern": ".*TEST_VAR1=test_value1\\0.*TEST_VAR2=test_value2\\0.*",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset TEST_VAR1",
+                "unset TEST_VAR2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "使用 --null 参数输出所有环境变量",
+            "args": ["--null"],
+            "setup_commands": [
+                "export TEST_VAR1=test_value1",
+                "export TEST_VAR2=test_value2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout_pattern": ".*TEST_VAR1=test_value1\\0.*TEST_VAR2=test_value2\\0.*",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset TEST_VAR1",
+                "unset TEST_VAR2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "使用 -0 参数输出指定环境变量",
+            "args": ["-0", "TEST_VAR"],
+            "setup_commands": [
+                "export TEST_VAR=test_value"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset TEST_VAR"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "使用 -0 参数输出多个环境变量",
+            "args": ["-0", "VAR1", "VAR2"],
+            "setup_commands": [
+                "export VAR1=value1",
+                "export VAR2=value2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset VAR1",
+                "unset VAR2"
+            ]
+        }
+    ]
+} 

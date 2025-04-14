@@ -1,0 +1,251 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "基本功能测试 - 创建新文件",
+            "args": ["new_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f new_file && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f new_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "更新已存在文件的时间戳",
+            "setup_commands": [
+                "touch -d '2000-01-01' old_file"
+            ],
+            "args": ["old_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(date -r old_file +%Y) -gt 2000 && echo 'updated'",
+                        "expected_exit": 0,
+                        "expected_stdout": "updated"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f old_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "创建多个文件",
+            "args": ["file1", "file2", "file3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f file1 && test -f file2 && test -f file3 && echo 'all exist'",
+                        "expected_exit": 0,
+                        "expected_stdout": "all exist"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f file1 file2 file3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "设置特定时间",
+            "args": ["-t", "202001010000.00", "dated_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "date -r dated_file '+%Y%m%d%H%M.%S'",
+                        "expected_exit": 0,
+                        "expected_stdout": "202001010000.00"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f dated_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "只更改访问时间",
+            "setup_commands": [
+                "touch test_file",
+                "sleep 1"
+            ],
+            "args": ["-a", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "只更改修改时间",
+            "setup_commands": [
+                "touch test_file",
+                "sleep 1"
+            ],
+            "args": ["-m", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "不创建不存在的文件",
+            "args": ["-c", "nonexistent_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e nonexistent_file && echo 'not created'",
+                        "expected_exit": 0,
+                        "expected_stdout": "not created"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "参考文件时间",
+            "setup_commands": [
+                "touch -t 202001010000.00 reference_file",
+                "touch test_file"
+            ],
+            "args": ["-r", "reference_file", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(date -r test_file '+%Y%m%d%H%M.%S') = '202001010000.00' && echo 'matched'",
+                        "expected_exit": 0,
+                        "expected_stdout": "matched"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f reference_file test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "更新符号链接本身的时间戳",
+            "setup_commands": [
+                "touch -t 202001010000.00 target_file",
+                "ln -s target_file symlink"
+            ],
+            "args": ["-h", "symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(date -r symlink '+%Y%m%d%H%M.%S') -gt 202001010000.00 && echo 'updated'",
+                        "expected_exit": 0,
+                        "expected_stdout": "updated"
+                    },
+                    {
+                        "command": "test $(date -r target_file '+%Y%m%d%H%M.%S') = 202001010000.00 && echo 'unchanged'",
+                        "expected_exit": 0,
+                        "expected_stdout": "unchanged"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f target_file symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "使用 --no-dereference 更新符号链接本身的时间戳",
+            "setup_commands": [
+                "touch -t 202001010000.00 target_file",
+                "ln -s target_file symlink"
+            ],
+            "args": ["--no-dereference", "symlink"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(date -r symlink '+%Y%m%d%H%M.%S') -gt 202001010000.00 && echo 'updated'",
+                        "expected_exit": 0,
+                        "expected_stdout": "updated"
+                    },
+                    {
+                        "command": "test $(date -r target_file '+%Y%m%d%H%M.%S') = 202001010000.00 && echo 'unchanged'",
+                        "expected_exit": 0,
+                        "expected_stdout": "unchanged"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f target_file symlink"
+            ]
+        }
+    ]
+} 

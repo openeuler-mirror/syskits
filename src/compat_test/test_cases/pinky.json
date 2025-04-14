@@ -1,0 +1,270 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "基本功能测试 - 默认短格式",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "长格式输出但省略主目录和登录shell",
+            "setup_commands": [],
+            "args": ["-b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "长格式输出但省略项目文件",
+            "setup_commands": [],
+            "args": ["-h"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "长格式输出但省略计划文件",
+            "setup_commands": [],
+            "args": ["-p"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "短格式输出（显式指定）",
+            "setup_commands": [],
+            "args": ["-s"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "短格式输出但省略列栏报头",
+            "setup_commands": [],
+            "args": ["-f"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "短格式输出但省略用户全名",
+            "setup_commands": [],
+            "args": ["-w"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "短格式输出但省略用户全名和远程主机",
+            "setup_commands": [],
+            "args": ["-i"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "短格式输出但省略用户全名、远程主机和空闲时间",
+            "setup_commands": [],
+            "args": ["-q"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "查询指定用户",
+            "setup_commands": [],
+            "args": ["root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "查询多个指定用户",
+            "setup_commands": [],
+            "args": ["root", "nobody"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "长格式查询指定用户",
+            "setup_commands": [],
+            "args": ["-l", "root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "组合参数测试",
+            "setup_commands": [],
+            "args": ["-lbhp", "root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "非法用户名测试",
+            "setup_commands": [],
+            "args": ["nonexistentuser123"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pinky: 用户 nonexistentuser123 不存在\n"
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        }
+    ]
+}

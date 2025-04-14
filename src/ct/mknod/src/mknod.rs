@@ -16,7 +16,7 @@
 // 使用的库：clap用于命令行参数解析，libc提供Unix系统调用的接口。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgMatches, Command, crate_version, value_parser};
+use clap::{Arg, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::ArgAction;
@@ -32,6 +32,22 @@ use sys_locale::get_locale;
 // 常量：用于设置文件模式的权限位。
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
+// 函数：解析设备号，支持十进制、十六进制和八进制格式
+fn parse_device_number(s: &str) -> Result<u64, String> {
+    if s.starts_with("0x") || s.starts_with("0X") {
+        // 十六进制格式
+        u64::from_str_radix(&s[2..], 16)
+            .map_err(|e| format!("invalid hexadecimal device number: {}", e))
+    } else if let Some(stripped) = s.strip_prefix('0') {
+        // 八进制格式
+        u64::from_str_radix(stripped, 8).map_err(|e| format!("invalid octal device number: {}", e))
+    } else {
+        // 十进制格式
+        s.parse::<u64>()
+            .map_err(|e| format!("invalid decimal device number: {}", e))
+    }
+}
+
 // 函数：根据给定的主、次设备号构造一个dev_t值。
 #[inline(always)]
 fn make_dev(maj: u64, min: u64) -> dev_t {
@@ -46,7 +62,7 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
 }
 
 // 枚举：文件类型，包括块设备、字符设备和FIFO。
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum MknodFileType {
     Block,
     Character,
@@ -186,11 +202,11 @@ pub fn ct_app() -> Command {
         Arg::new("major")
             .value_name("MAJOR")
             .help(t!("mknod.clap.major"))
-            .value_parser(value_parser!(u64)),
+            .value_parser(parse_device_number),
         Arg::new("minor")
             .value_name("MINOR")
             .help(t!("mknod.clap.minor"))
-            .value_parser(value_parser!(u64)),
+            .value_parser(parse_device_number),
     ];
 
     Command::new(utility_name)

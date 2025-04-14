@@ -1,0 +1,125 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "基本功能测试 - 运行命令并忽略挂起信号",
+            "setup_commands": [
+            ],
+            "args": ["echo", "hello"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "nohup: 忽略输入并把输出追加到'nohup.out'\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "hello\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f nohup.out"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "输出重定向到指定文件",
+            "setup_commands": [
+                "mkdir -p test_dir"
+            ],
+            "args": ["sh", "-c", "echo hello > test_dir/output.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "nohup: 忽略输入并把输出追加到'nohup.out'\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dir/output.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "hello\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f nohup.out",
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "执行多命令",
+            "setup_commands": [
+            ],
+            "args": ["sh", "-c", "echo hello && echo world"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "nohup: 忽略输入并把输出追加到'nohup.out'\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "hello\nworld\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f nohup.out"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "执行不存在的命令",
+            "setup_commands": [],
+            "args": ["nonexistentcommand123"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "nohup: 忽略输入并把输出追加到'nohup.out'\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "nohup: failed to run command 'nonexistentcommand123': No such file or directory\n"
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": true,
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f nohup.out"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "不带参数运行",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nohup: 缺少操作数\n请尝试执行 'nohup --help' 来获取更多信息。\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

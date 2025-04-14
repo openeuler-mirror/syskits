@@ -1,0 +1,110 @@
+{
+  "tests": [
+      {
+          "tstdin": "",
+          "command": "tee",
+          "description": "基本用法，无参数，验证标准输入输出",
+          "setup_commands": [],
+          "args": [],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+              },
+              "verifications": [
+                  {
+                      "command": "",
+                      "expected_exit": 0,
+                      "expected_stdout": ""
+                  }
+              ]
+          },
+          "cleanup_commands": [""]
+      },
+      {
+          "tstdin": "Hello, World!\n",
+          "command": "tee",
+          "description": "将标准输入写入文件并输出到标准输出",
+          "setup_commands": [],
+          "args": ["test_file.txt"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "Hello, World!\n",
+                  "stderr": ""
+              },
+              "file_checks": {
+                  "test_file.txt": {
+                      "content": "Hello, World!\n"
+                  }
+              }
+          },
+          "cleanup_commands": ["rm -f test_file.txt"]
+      },
+      {
+          "tstdin": "Append this text.\n",
+          "command": "tee",
+          "description": "使用 -a 选项追加内容到现有文件",
+          "setup_commands": [
+              "echo 'Initial content.' > test_file.txt"
+          ],
+          "args": ["-a", "test_file.txt"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "Append this text.\n",
+                  "stderr": ""
+              },
+              "file_checks": {
+                  "test_file.txt": {
+                      "content": "Initial content.\nAppend this text.\n"
+                  }
+              }
+          },
+          "cleanup_commands": ["rm -f test_file.txt"]
+      },
+      {
+          "tstdin": "Write to multiple files.\n",
+          "command": "tee",
+          "description": "将输入写入多个文件",
+          "setup_commands": [],
+          "args": ["file1.txt", "file2.txt"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "Write to multiple files.\n",
+                  "stderr": ""
+              },
+              "file_checks": {
+                  "file1.txt": {
+                      "content": "Write to multiple files.\n"
+                  },
+                  "file2.txt": {
+                      "content": "Write to multiple files.\n"
+                  }
+              }
+          },
+          "cleanup_commands": ["rm -f file1.txt file2.txt"]
+      },
+      {
+          "tstdin": "Attempt to write to non-writable file.\n",
+          "command": "tee",
+          "description": "尝试写入不可写文件，验证错误处理",
+          "setup_commands": [
+              "mkdir -p test_dir",
+              "chmod 555 test_dir",
+              "touch test_dir/non_writable.txt"
+          ],
+          "args": ["test_dir/non_writable.txt"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "Attempt to write to non-writable file.\n",
+                  "stderr": ".*Permission denied.*"
+              }
+          },
+          "cleanup_commands": ["rm -rf test_dir"]
+      }
+  ]
+}

@@ -154,6 +154,110 @@
             "cleanup_commands": [
                 "rm -f size.txt"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE前缀测试 - + (扩展)",
+            "setup_commands": [
+                "dd if=/dev/zero of=extend.txt bs=1024 count=1"
+            ],
+            "args": ["-s", "+1024", "extend.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s extend.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "2048"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f extend.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE前缀测试 - - (缩减)",
+            "setup_commands": [
+                "dd if=/dev/zero of=reduce.txt bs=1024 count=2"
+            ],
+            "args": ["-s", "-1024", "reduce.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s reduce.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f reduce.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE前缀测试 - < (最大值)",
+            "setup_commands": [
+                "dd if=/dev/zero of=max.txt bs=1024 count=2"
+            ],
+            "args": ["-s", "<1024", "max.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s max.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f max.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE前缀测试 - > (最小值)",
+            "setup_commands": [
+                "dd if=/dev/zero of=min.txt bs=512 count=1"
+            ],
+            "args": ["-s", ">1024", "min.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s min.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f min.txt"
+            ]
         }
     ]
 }

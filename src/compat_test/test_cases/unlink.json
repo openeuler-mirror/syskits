@@ -16,6 +16,53 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "文件不存在测试",
+            "args": ["nonexistent_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: cannot unlink 'nonexistent_file': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "目录测试",
+            "setup_commands": [
+                "mkdir test_dir"
+            ],
+            "args": ["test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: cannot unlink 'test_dir': Is a directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "缺少参数测试",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: missing operand\nTry 'unlink --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-}
+} 

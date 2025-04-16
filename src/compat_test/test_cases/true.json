@@ -1,0 +1,18 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "基本功能测试",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

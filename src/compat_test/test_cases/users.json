@@ -1,0 +1,18 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "基本功能测试",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "root root\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+}

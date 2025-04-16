@@ -13,6 +13,20 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "无效选项测试",
+            "args": ["--invalid-option"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: unrecognized option '--invalid-option'\nTry 'users --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-}
+} 

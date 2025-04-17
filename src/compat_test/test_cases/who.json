@@ -1,0 +1,99 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "基本功能测试 - 默认输出",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-a 参数测试 - 显示所有信息",
+            "setup_commands": [],
+            "args": ["-a"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-b 参数测试 - 显示系统启动时间",
+            "setup_commands": [],
+            "args": ["-b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-d 参数测试 - 显示死进程",
+            "setup_commands": [],
+            "args": ["-d"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-H 参数测试 - 显示列标题",
+            "setup_commands": [],
+            "args": ["-H"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "NAME     LINE         TIME             COMMENT",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+}

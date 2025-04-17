@@ -161,6 +161,117 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-q 参数测试 - 显示登录名和用户数",
+            "setup_commands": [],
+            "args": ["-q"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-r 参数测试 - 显示当前运行级别",
+            "setup_commands": [],
+            "args": ["-r"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-s 参数测试 - 显示名称、行和时间",
+            "setup_commands": [],
+            "args": ["-s"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-t 参数测试 - 显示最后系统时钟更改",
+            "setup_commands": [],
+            "args": ["-t"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-T 参数测试 - 显示用户消息状态",
+            "setup_commands": [],
+            "args": ["-T"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "-u 参数测试 - 列出已登录用户",
+            "setup_commands": [],
+            "args": ["-u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

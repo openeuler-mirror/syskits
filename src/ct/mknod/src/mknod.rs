@@ -25,9 +25,12 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
-use std::ffi::CString;
-use std::ffi::OsString;
 use sys_locale::get_locale;
+use clap::builder::ValueParser;
+use std::ffi::{CString, OsStr, OsString};
+use selinux::{self, SecurityContext};
+use std::os::unix::ffi::OsStrExt;
+
 
 // 常量：用于设置文件模式的权限位。
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
@@ -99,6 +102,22 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     }
 }
 
+fn set_security_context(context: Option<&OsString>) -> Result<(), String> {
+
+    if let Some(ctx) = context {
+        let c_context = os_str_to_c_string(ctx);
+        // 如果提供了具体的上下文，使用它
+        let _ = SecurityContext::from_c_str(&c_context, false)
+                    .set_for_new_file_system_objects(false)
+                    .map_err(|e| format!("set SecurityContext failed: {}", e));
+    }
+    Ok(())
+}
+
+pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
+    CString::new(os_str.as_bytes())
+        .expect("Failed to convert OsStr to CString")
+}
 // ctmain函数：程序的入口点。
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
@@ -129,6 +148,14 @@ fn mknod_processing(
     file_name: &str,
     file_type: &MknodFileType,
 ) -> CTResult<()> {
+    // 处理安全上下文
+    if args_match.contains_id("context") {
+        let context = args_match.get_one::<OsString>("context");
+
+        set_security_context(context)
+            .map_err(|e| CtSimpleError::new(1, e))?;
+    }
+
     if *file_type == MknodFileType::Fifo {
         // FIFO文件不需要主、次设备号
         if args_match.contains_id("major") || args_match.contains_id("minor") {
@@ -189,6 +216,13 @@ pub fn ct_app() -> Command {
             .long("mode")
             .value_name("MODE")
             .help(t!("mknod.clap.mode")),
+        Arg::new("context")
+            .short('Z')
+            .long("context")
+            .value_name("CTX")
+            .help("if CTX is specified then set the SELinux security context to CTX")
+            .value_parser(ValueParser::os_string())
+            .num_args(0..=1),
         Arg::new("name")
             .value_name("NAME")
             .help(t!("mknod.clap.name"))

@@ -161,6 +161,10 @@ fn mknod_processing(
 
         set_security_context(context)
             .map_err(|e| CtSimpleError::new(1, e))?;
+    } else if args_match.contains_id("ctx") {
+        //使用默认安全上下文
+        set_security_context(None)
+            .map_err(|e| CtSimpleError::new(1, e))?;
     }
 
     if *file_type == MknodFileType::Fifo {
@@ -223,8 +227,11 @@ pub fn ct_app() -> Command {
             .long("mode")
             .value_name("MODE")
             .help(t!("mknod.clap.mode")),
-        Arg::new("context")
+        Arg::new("ctx")
             .short('Z')
+            .num_args(0)
+            .help("set the default SELinux security context"),
+        Arg::new("context")
             .long("context")
             .value_name("CTX")
             .help("if CTX is specified then set the SELinux security context to CTX")

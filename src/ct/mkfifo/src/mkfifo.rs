@@ -58,7 +58,8 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
             .map_err(|e| CtSimpleError::new(1, e))?;
     }
     if args_match.get_flag(opt_flags::SE_LINUX_SECURITY_CONTEXT) {
-        return Err(CtSimpleError::new(1, "-Z is not implemented"));
+        set_security_context(None)
+            .map_err(|e| CtSimpleError::new(1, e))?;
     }
 
     // 解析文件权限模式

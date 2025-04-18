@@ -17,7 +17,6 @@
 
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
-use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
@@ -25,10 +24,12 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
 use libc::mkfifo;
-use selinux::SecurityContext;
-use std::ffi::{CString, OsStr, OsString};
-use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
+use std::ffi::{CString, OsStr, OsString};
+use selinux::SecurityContext;
+use std::os::unix::ffi::OsStrExt;
+use clap::builder::ValueParser;
+
 
 // 定义了用于创建FIFO（命名管道）的命令行工具的主逻辑。
 

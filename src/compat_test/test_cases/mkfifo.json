@@ -110,6 +110,29 @@
             "cleanup_commands": [
                 "rm -f selinux_fifo"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "使用指定的SELinux安全上下文",
+            "args": ["--context=system_u:object_r:tmp_t:s0", "context_fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -Z context_fifo",
+                        "expected_exit": 0,
+                        "expected_stdout": "system_u:object_r:tmp_t:s0.*context_fifo$"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f context_fifo"
+            ]
         }
     ]
-}
+} 

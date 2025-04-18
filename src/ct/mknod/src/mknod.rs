@@ -103,15 +103,22 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
 }
 
 fn set_security_context(context: Option<&OsString>) -> Result<(), String> {
-
-    if let Some(ctx) = context {
-        let c_context = os_str_to_c_string(ctx);
-        // 如果提供了具体的上下文，使用它
-        let _ = SecurityContext::from_c_str(&c_context, false)
-                    .set_for_new_file_system_objects(false)
-                    .map_err(|e| format!("set SecurityContext failed: {}", e));
+    match context {
+        Some(ctx) => {
+            let c_context = os_str_to_c_string(ctx);
+            // 如果提供了具体的上下文，使用它
+            SecurityContext::from_c_str(&c_context, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| format!("Failed to set security context: {}", e))
+        }
+        None => {
+            // 使用空字符串来触发默认安全上下文
+            let empty_ctx = CString::new("").unwrap();
+            SecurityContext::from_c_str(&empty_ctx, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| format!("Failed to set default security context: {}", e))
+        }
     }
-    Ok(())
 }
 
 pub fn os_str_to_c_string(os_str: &OsStr) -> CString {

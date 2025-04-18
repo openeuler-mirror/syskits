@@ -680,9 +680,9 @@ mod tests {
         use crate::hostname_main;
 
         use std::ffi::OsString;
-        use std::fs::File;
-        use std::io::Write;
-        use tempfile::tempdir;
+        //use std::fs::File;
+        //use std::io::Write;
+        //use tempfile::tempdir;
 
         #[test]
         fn test_hostname_main_version() {

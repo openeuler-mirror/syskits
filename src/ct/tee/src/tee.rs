@@ -39,14 +39,14 @@ mod stat_flags {
 
 #[allow(dead_code)]
 #[derive(Default)]
-struct StatOptions {
+struct TeeOptions {
     is_append: bool,
     is_ignore_interrupts: bool,
     files: Vec<String>,
     output_error: Option<OutputErrorMode>,
 }
 
-impl StatOptions {
+impl TeeOptions {
     fn new(matches: &clap::ArgMatches) -> Self {
         Self {
             is_append: matches.get_flag(stat_flags::TEE_APPEND),
@@ -74,7 +74,7 @@ pub fn tee_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
-    let options = StatOptions::new(&matches);
+    let options = TeeOptions::new(&matches);
 
     match run_tee(&options) {
         Ok(_) => Ok(()),
@@ -107,7 +107,7 @@ fn get_output_error_mode(matches: &clap::ArgMatches) -> Option<OutputErrorMode> 
         })
 }
 
-fn run_tee(options: &StatOptions) -> Result<()> {
+fn run_tee(options: &TeeOptions) -> Result<()> {
     #[cfg(unix)]
     setup_signal_handlers(options)?;
 
@@ -130,7 +130,7 @@ fn run_tee(options: &StatOptions) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn setup_signal_handlers(options: &StatOptions) -> Result<()> {
+fn setup_signal_handlers(options: &TeeOptions) -> Result<()> {
     if options.is_ignore_interrupts {
         ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
     }
@@ -140,7 +140,7 @@ fn setup_signal_handlers(options: &StatOptions) -> Result<()> {
     Ok(())
 }
 
-fn create_writers(options: &StatOptions) -> Result<Vec<NamedWriter>> {
+fn create_writers(options: &TeeOptions) -> Result<Vec<NamedWriter>> {
     let mut writers = options
         .files
         .iter()
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_stat_options_default() {
-        let options = StatOptions::default();
+        let options = TeeOptions::default();
         assert!(!options.is_append);
         assert!(!options.is_ignore_interrupts);
         assert!(options.files.is_empty());
@@ -434,7 +434,7 @@ mod tests {
         let matches = ct_app()
             .try_get_matches_from(["tee", "-a", "file.txt"])
             .unwrap();
-        let options = StatOptions::new(&matches);
+        let options = TeeOptions::new(&matches);
 
         assert!(options.is_append);
         assert!(!options.is_ignore_interrupts);

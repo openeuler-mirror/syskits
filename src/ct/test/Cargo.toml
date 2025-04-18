@@ -1,0 +1,27 @@
+[package]
+name = "ct_test"
+
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+description = "test ~ (ctutils) evaluate comparison and file type expressions"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/test"
+
+
+[lib]
+path = "src/test.rs"
+
+[dependencies]
+clap = { workspace = true }
+libc = { workspace = true }
+ctcore = { workspace = true, features = ["process"] }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "test"
+path = "src/main.rs"

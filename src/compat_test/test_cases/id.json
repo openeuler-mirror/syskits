@@ -13,19 +13,19 @@
                 },
                 "verifications": [
                     {
-                        "command": "echo \"$CMD_STDOUT\" | grep -q \"uid=\"",
+                        "command": "echo \"$CMD_STDOUT\" | egrep -q \"uid=|用户id\"",
                         "expected_exit": 0,
                         "expected_stdout": "",
                         "expected_stderr": ""
                     },
                     {
-                        "command": "echo \"$CMD_STDOUT\" | grep -q \"gid=\"",
+                        "command": "echo \"$CMD_STDOUT\" | egrep -q \"gid=|组id\"",
                         "expected_exit": 0,
                         "expected_stdout": "",
                         "expected_stderr": ""
                     },
                     {
-                        "command": "echo \"$CMD_STDOUT\" | grep -q \"groups=\"",
+                        "command": "echo \"$CMD_STDOUT\" | egrep -q \"groups=|组\"",
                         "expected_exit": 0,
                         "expected_stdout": "",
                         "expected_stderr": ""

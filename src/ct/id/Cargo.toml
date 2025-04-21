@@ -19,11 +19,8 @@ sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["entries", "process"] }
-selinux = { workspace = true, optional = true }
+selinux = { workspace = true }
 
 [[bin]]
 name = "id"
 path = "src/main.rs"
-
-[features]
-feat_selinux = ["selinux"]

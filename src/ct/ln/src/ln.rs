@@ -46,7 +46,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 use sys_locale::get_locale;
-
+use ctcore::libc;
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
@@ -78,6 +78,8 @@ pub struct LnSettings {
     is_no_dereference: bool,
     /// 是否显示详细信息
     is_verbose: bool,
+    /// 是否允许创建目录硬链接
+    is_directory: bool,
 }
 
 /// 目标文件存在时的处理方式
@@ -110,6 +112,9 @@ enum LnError {
     /// 提供了多余的操作数
     /// 参数: 多余的操作数
     ExtraOperand(OsString),
+
+    ///非root用户权限
+    NonRootPermission,
 }
 
 impl Display for LnError {
@@ -138,6 +143,11 @@ impl Display for LnError {
                 s.quote(),
                 ctcore::ct_execute_phrase()
             ),
+
+            //使用-d，-F，--directory 参数时，非root用户报错信息
+            Self::NonRootPermission => {
+                write!(f, "non root premission")
+            }
         }
     }
 }
@@ -171,6 +181,8 @@ mod lnoptions {
     pub const LN_RELATIVE: &str = "relative";
     /// 显示详细操作信息
     pub const LN_VERBOSE: &str = "verbose";
+    /// 允许超级用户创建目录硬链接
+    pub const LN_DIRECTORY: &str = "directory";
 }
 
 static LN_ARG_FILES: &str = "files";
@@ -281,6 +293,13 @@ pub fn ct_app() -> Command {
             .long(lnoptions::LN_VERBOSE)
             .help(t!("ln.clap.ln_verbose"))
             .action(ArgAction::SetTrue),
+        Arg::new(lnoptions::LN_DIRECTORY)
+            .short('d')
+            .short_alias('F')
+            .long(lnoptions::LN_DIRECTORY)
+            .help("allow the superuser to try to hard link directories")
+            .action(ArgAction::SetTrue)
+            .conflicts_with(lnoptions::LN_SYMBOLIC),
         Arg::new(LN_ARG_FILES)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
@@ -574,6 +593,18 @@ fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResul
         source.to_path_buf()
     };
 
+    // 检查是否是目录硬链接请求
+    if resolved_source.is_dir() {
+        if !settings.is_directory {
+            return Err(LnError::TargetIsDirectory(resolved_source.to_owned()).into());
+        }
+
+        // 检查是否具有root权限
+        if !is_root() {
+            return Err(LnError::NonRootPermission.into());
+        }
+    }
+
     fs::hard_link(&resolved_source, dst).map_err_context(|| {
         format!(
             "failed to create hard link {} => {}",
@@ -581,6 +612,18 @@ fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResul
             dst.quote()
         )
     })
+}
+
+/// 检查当前用户是否为root
+fn is_root() -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
 }
 
 /// 打印链接详细信息。
@@ -669,6 +712,7 @@ impl LnSettings {
             is_no_target_dir: matches.get_flag(lnoptions::LN_NO_TARGET_DIRECTORY),
             is_no_dereference: matches.get_flag(lnoptions::LN_NO_DEREFERENCE),
             is_verbose: matches.get_flag(lnoptions::LN_VERBOSE),
+            is_directory: matches.get_flag(lnoptions::LN_DIRECTORY),
         })
     }
 }
@@ -687,6 +731,7 @@ impl Default for LnSettings {
     /// - is_no_target_dir: false - 正常处理目标目录
     /// - is_no_dereference: false - 正常解引用符号链接
     /// - is_verbose: false - 不显示详细信息
+    /// - is_directory: false - 不允许创建目录硬链接
     fn default() -> Self {
         Self {
             overwrite: OverwriteMode::NoClobber,
@@ -699,6 +744,7 @@ impl Default for LnSettings {
             is_no_target_dir: false,
             is_no_dereference: false,
             is_verbose: false,
+            is_directory: false,
         }
     }
 }
@@ -748,6 +794,7 @@ mod tests {
             is_no_target_dir: false,
             is_no_dereference: false,
             is_verbose: true,
+            is_directory: false,
         };
 
         // 测试基本链接创建
@@ -805,6 +852,7 @@ mod tests {
             is_no_target_dir: false,
             is_no_dereference: false,
             is_verbose: true,
+            is_directory: false,
         };
 
         // 测试基本链接
@@ -881,6 +929,7 @@ mod tests {
             is_no_target_dir: false,
             is_no_dereference: false,
             is_verbose: false,
+            is_directory: false,
         };
 
         // 测试第一种形式：直接链接到文件

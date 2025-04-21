@@ -454,6 +454,25 @@
             "cleanup_commands": [
                 "rm -rf test_dir3 dir_link3"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试目录硬链接 - 使用--directory选项",
+            "setup_commands": [
+                "mkdir test_dir4"
+            ],
+            "args": ["--directory", "test_dir4", "dir_link4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "ln: only root can create directory hard links\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir4 dir_link4"
+            ]
         }
     ]
 } 

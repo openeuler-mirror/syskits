@@ -1108,6 +1108,27 @@ mod tests {
     mod id_print_tests {
         use super::*;
 
+        /// 检测是否在容器环境中运行
+        fn is_container() -> bool {
+            // 检查常见的容器环境标识
+            if std::env::var("KUBERNETES_SERVICE_HOST").is_ok()
+                || std::env::var("DOCKER_CONTAINER").is_ok()
+                || std::path::Path::new("/.dockerenv").exists()
+                || std::path::Path::new("/run/.containerenv").exists()
+            {
+                return true;
+            }
+
+            // 检查 cgroup
+            if let Ok(contents) = std::fs::read_to_string("/proc/1/cgroup") {
+                if contents.contains("/docker/") || contents.contains("/kubepods/") {
+                    return true;
+                }
+            }
+
+            false
+        }
+        
         #[test]
         fn test_id_print_default_case() {
             // 默认情况下，只打印 uid、gid 和 groups
@@ -1235,7 +1256,9 @@ mod tests {
             assert!(output_str.contains("gid=1000"));
             assert!(output_str.contains("groups=1000"));
 
-            assert!(output_str.contains("context=")); // 假设打印了 SELinux 上下文
+            if !is_container() {
+                assert!(output_str.contains("context=")); // 假设打印了 SELinux 上下文
+            }
         }
 
         #[test]

@@ -736,8 +736,8 @@ mod tests {
 
             // 测试相对调整大小：RoundUp
             truncate_size_only("%3", &target_files, true, false).unwrap();
-            assert_eq!(metadata(&target_file1_path).unwrap().len(), 22); // next multiple of 3
-            assert_eq!(metadata(&target_file2_path).unwrap().len(), 22); // next multiple of 3
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 21); // next multiple of 3
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 21); // next multiple of 3
         }
 
         #[test]
@@ -997,8 +997,8 @@ mod tests {
             // 测试相对调整大小：RoundUp
             truncate_reference_and_size(&reference_file_path, "%3", &target_files, true, false)
                 .unwrap();
-            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 16);
-            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 16);
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 15);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 15);
         }
 
         #[test]
@@ -1238,7 +1238,7 @@ mod tests {
             assert_eq!(TruncateMode::RoundDown(1).to_size(123), 123); // Edge case
 
             // RoundUp mode
-            assert_eq!(TruncateMode::RoundUp(50).to_size(123), 146);
+            assert_eq!(TruncateMode::RoundUp(50).to_size(123), 150);
             assert_eq!(TruncateMode::RoundUp(1).to_size(123), 123); // Edge case
         }
 

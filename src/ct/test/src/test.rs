@@ -19,11 +19,10 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_process::{getegid, geteuid};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use clap::crate_version;
 use ctcore::Tool;
-
-const CT_ABOUT: &str = ct_help_about!("test.md");
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 // The help_usage method replaces util name (the first word) with {}.
 // And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
@@ -36,10 +35,8 @@ const CT_ABOUT: &str = ct_help_about!("test.md");
 //[ ]
 //[ OPTION
 //]";
-const CT_USAGE: &str = ct_help_usage!("test.md");
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
-const CT_AFTER_HELP: &str = ct_help_section!("after help", "test.md");
 
 #[derive(Default)]
 pub struct Test;
@@ -62,9 +59,9 @@ pub fn ct_app() -> Command {
     // since we don't recognize -h and -v as help/version flags.
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(CT_ABOUT)
-        .override_usage(ct_format_usage(CT_USAGE))
-        .after_help(CT_AFTER_HELP)
+        .about(t!("test.about"))
+        .override_usage(t!("test.usage"))
+        .after_help(t!("test.after_help"))
 }
 
 #[ctcore::main]

@@ -61,7 +61,12 @@ default_commands = [
     "paste",
     "nproc",
     "nohup",
-    "pinky"
+    "pinky",
+    "touch",
+    "link",
+    "join",
+    "logname",
+
 ]
 
 # 测试环境配置

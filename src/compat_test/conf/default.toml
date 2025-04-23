@@ -47,7 +47,15 @@ default_commands = [
     "true",
     "users",
     "whoami",
-    "uname"
+    "uname",
+    "unlink",
+    "tee",
+    "shred",
+    "uniq",
+    "rmdir",
+    "rm",
+    "readlink",
+    "printf"
 ]
 
 # 测试环境配置

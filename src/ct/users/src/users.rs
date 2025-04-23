@@ -50,7 +50,9 @@ impl Tool for Users {
         let result = users_main(args.iter().cloned());
         match result {
             Ok(s) => {
-                println!("{}", s);
+                if !s.is_empty() {
+                    println!("{}", s);
+                }
                 Ok(())
             }
             Err(e) => Err(e),

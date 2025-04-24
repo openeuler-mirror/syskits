@@ -44,7 +44,7 @@ enum CloneFallback {
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
 /// `fallback` controls what to do if the system call fails.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -65,7 +65,7 @@ where
 }
 
 /// Perform a sparse copy from one file to another.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -1058,7 +1058,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     mod tests_sparse_copy {
         use super::*;
         use crate::platform::linux::sparse_copy;
@@ -1253,7 +1253,7 @@ mod tests {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     mod tests_clone {
         use super::*;
         use crate::platform::linux::{clone, sparse_copy};

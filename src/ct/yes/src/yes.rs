@@ -127,8 +127,6 @@ fn yes_args_into_buff<'a>(
     {
         #[cfg(unix)]
         use std::os::unix::ffi::OsStrExt;
-        #[cfg(target_os = "wasi")]
-        use std::os::wasi::ffi::OsStrExt;
 
         for part in itertools::intersperse(iter.map(|a| a.as_bytes()), b" ") {
             buffer.extend_from_slice(part);

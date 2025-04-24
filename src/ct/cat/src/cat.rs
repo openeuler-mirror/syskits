@@ -32,7 +32,7 @@ rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::os::unix::io::AsRawFd;
 
 /// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 mod splice;
 
 /// Unix domain socket support
@@ -49,7 +49,7 @@ enum CatError {
     #[error("{0}")]
     Io(#[from] io::Error),
     /// Wrapper around `nix::Error`
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
@@ -458,10 +458,8 @@ fn cat_get_input_type(input_path: &str) -> CatResult<CatInputType> {
             if let Some(raw_error_msg) = e.raw_os_error() {
                 // 在类Unix系统中，"符号链接层数过多"的错误代码为40（ELOOP）。
                 // 在此情况下，我们希望提供一个恰当的错误消息。
-                #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+                #[cfg(target_os = "linux")]
                 let ct_symlink_code = 40;
-                #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-                let too_many_symlink_code = 62;
                 if raw_error_msg == ct_symlink_code {
                     return Err(CatError::TooManySymlinks);
                 }
@@ -492,7 +490,7 @@ fn cat_get_input_type(input_path: &str) -> CatResult<CatInputType> {
 fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> CatResult<()> {
     let stdout_info = io::stdout();
     let mut cat_stdout_lock = stdout_info.lock();
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     {
         // 在类Unix系统中，表示"符号链接层数过多"的错误代码为40（即ELOOP）。
         // 在此情况下，我们希望提供一个恰当的错误消息。

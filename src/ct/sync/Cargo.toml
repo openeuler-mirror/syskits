@@ -21,7 +21,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 ctcore = { workspace = true, features = ["wide"] }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 nix = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

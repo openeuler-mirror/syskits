@@ -23,7 +23,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
 use sys_locale::get_locale;
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -70,12 +70,8 @@ static DATE_RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
  for date and time to the indicated precision.
  Example: 2006-08-14 02:34:56-06:00";
 
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
+#[cfg(target_os = "linux")]
 static DATE_OPT_SET_HELP_STRING: &str = "set time described by STRING";
-#[cfg(target_os = "macos")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
-#[cfg(target_os = "redox")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on redox yet)";
 
 /// Settings for this program, parsed from the command line
 struct DateSettings {
@@ -503,28 +499,7 @@ fn parse_date<S: AsRef<str> + Clone>(
     }
 }
 
-#[cfg(not(any(unix, windows)))]
-fn set_system_datetime(_date: DateTime<Utc>) -> CTResult<()> {
-    unimplemented!("setting date not implemented (unsupported target)");
-}
-
-#[cfg(target_os = "macos")]
-fn set_system_datetime(_date: DateTime<Utc>) -> CTResult<()> {
-    Err(CtSimpleError::new(
-        1,
-        "setting the date is not supported by macOS".to_string(),
-    ))
-}
-
-#[cfg(target_os = "redox")]
-fn set_system_datetime(_date: DateTime<Utc>) -> CTResult<()> {
-    Err(CtSimpleError::new(
-        1,
-        "setting the date is not supported by Redox".to_string(),
-    ))
-}
-
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`

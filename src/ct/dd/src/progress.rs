@@ -431,7 +431,7 @@ pub(crate) enum StatusLevel {
 /// This function returns a closure that receives [`ProgUpdate`]
 /// instances sent through `rx`. When a [`ProgUpdate`] instance is
 /// received, the transfer statistics are re-printed to stderr.
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 pub(crate) fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     print_level: Option<StatusLevel>,

@@ -1,9 +1,13 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
-// spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
+/*
+ * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2.
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
 
 pub(crate) mod error;
 mod parser;
@@ -25,20 +29,6 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use sys_locale::get_locale;
 
-// The help_usage method replaces util name (the first word) with {}.
-// And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
-// However, This test command has two util names.
-// So, we use test or [ instead of {} so that the usage string is correct.
-//"\
-//test EXPRESSION
-//[
-//[ EXPRESSION ]
-//[ ]
-//[ OPTION
-//]";
-
-// We use after_help so that this comes after the usage string (it would come before if we used about)
-
 #[derive(Default)]
 pub struct Test;
 impl Tool for Test {
@@ -55,9 +45,28 @@ impl Tool for Test {
     }
 }
 
+#[derive(Default)]
+pub struct LeftBracket;
+impl Tool for LeftBracket {
+    fn name(&self) -> &'static str {
+        "["
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        test_main(args.iter().cloned())
+    }
+}
+
+/// 创建和配置 clap 命令应用
 pub fn ct_app() -> Command {
     // Disable printing of -h and -v as valid alternatives for --help and --version,
     // since we don't recognize -h and -v as help/version flags.
+    // 中文注释: 禁用打印 -h 和 -v 作为 --help 和 --version 的有效替代方式，
+    // 因为我们不将 -h 和 -v 识别为帮助/版本标志。
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
         .about(t!("test.about"))
@@ -65,12 +74,7 @@ pub fn ct_app() -> Command {
         .after_help(t!("test.after_help"))
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    test_main(args)
-}
-
-/// Handle help and version flags for both test and [ commands
+/// 处理 help 和 version 标志
 fn handle_help_version(program: &OsString, args: &[OsString]) -> Option<CTResult<()>> {
     if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
         ct_app().get_matches_from(std::iter::once(program.clone()).chain(args.iter().cloned()));
@@ -79,7 +83,7 @@ fn handle_help_version(program: &OsString, args: &[OsString]) -> Option<CTResult
     None
 }
 
-/// Handle the closing bracket for [ command
+/// 处理 [ 命令的结束括号
 fn handle_closing_bracket(binary_name: &str, args: &mut Vec<OsString>) -> CTResult<()> {
     if binary_name.ends_with('[') {
         let last = args.pop();
@@ -90,6 +94,7 @@ fn handle_closing_bracket(binary_name: &str, args: &mut Vec<OsString>) -> CTResu
     Ok(())
 }
 
+/// test 命令的主要入口函数
 pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -111,8 +116,7 @@ pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
     if result { Ok(()) } else { Err(1.into()) }
 }
 
-/// Evaluate a stack of Symbols, returning the result of the evaluation or
-/// an error message if evaluation failed.
+/// 评估符号栈并返回布尔结果
 fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
     macro_rules! pop_literal {
         () => {
@@ -215,7 +219,7 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
     }
 }
 
-/// Parse string to i128 with proper error handling
+/// 将字符串解析为整数，处理可能的错误
 fn parse_integer(value: &OsStr) -> ParseResult<i128> {
     value
         .to_str()
@@ -223,7 +227,7 @@ fn parse_integer(value: &OsStr) -> ParseResult<i128> {
         .ok_or_else(|| ParseError::InvalidInteger(value.quote().to_string()))
 }
 
-/// Compare two integers based on the given operator
+/// 根据给定的操作符比较两个整数
 fn compare_integers(a: i128, b: i128, op: &str) -> ParseResult<bool> {
     match op {
         "-eq" => Ok(a == b),
@@ -236,10 +240,7 @@ fn compare_integers(a: i128, b: i128, op: &str) -> ParseResult<bool> {
     }
 }
 
-/// Operations to compare integers
-/// `a` is the left hand side
-/// `b` is the left hand side
-/// `op` the operation (ex: -eq, -lt, etc)
+/// 进行整数比较操作
 fn test_integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse input values
     let left = parse_integer(a)?;
@@ -254,10 +255,7 @@ fn test_integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     compare_integers(left, right, operator)
 }
 
-/// Operations to compare files metadata
-/// `a` is the left hand side
-/// `b` is the left hand side
-/// `op` the operation (ex: -ef, -nt, etc)
+/// 比较文件元数据的操作
 fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Don't manage the error. GNU doesn't show error when doing
     // test foo -nt bar
@@ -276,6 +274,7 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     })
 }
 
+/// 检查文件描述符是否为终端
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .and_then(|s| s.parse().ok())
@@ -305,6 +304,7 @@ enum TestPathCondition {
     Executable,
 }
 
+/// 在非Windows平台上检查文件路径条件
 #[cfg(not(windows))]
 fn path(path: &OsStr, condition: &TestPathCondition) -> bool {
     use std::fs::Metadata;
@@ -366,6 +366,7 @@ fn path(path: &OsStr, condition: &TestPathCondition) -> bool {
     }
 }
 
+/// 在Windows平台上检查文件路径条件
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &TestPathCondition) -> bool {
     use std::fs::metadata;

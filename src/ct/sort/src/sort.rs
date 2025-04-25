@@ -4342,9 +4342,8 @@ mod tests {
         fn test_ctmain_input_h() {
             {
                 let args = ["-h", ""];
-                let result = ctmain(args.iter().map(|s| OsString::from(s)));
-                println!("{}", result);
-                assert_eq!(result, 2);
+                let result = sort_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_err());
             }
         }
 
@@ -4352,9 +4351,8 @@ mod tests {
         fn test_ctmain_input_v() {
             {
                 let args = ["--version", ""];
-                let result = ctmain(args.iter().map(|s| OsString::from(s)));
-                println!("{}", result);
-                assert_eq!(result, 2);
+                let result = sort_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_err());
             }
         }
 
@@ -4362,9 +4360,8 @@ mod tests {
         fn test_ctmain_input_uppercase_v() {
             {
                 let args = ["-V", ""];
-                let result = ctmain(args.iter().map(|s| OsString::from(s)));
-                println!("{}", result);
-                assert_eq!(result, 2);
+                let result = sort_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_err());
             }
         }
 

@@ -8490,30 +8490,27 @@ mod tests {
     mod ct_main_tests {
         use std::ffi::OsString;
 
-        use crate::{ctmain, numfmt_main};
+        use crate::numfmt_main;
 
         #[test]
         fn test_ctmain_input_h() {
             let args = ["-h", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 2);
+            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_v() {
             let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 2);
+            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_uppercase_v() {
             let args = ["-V", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 2);
+            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]

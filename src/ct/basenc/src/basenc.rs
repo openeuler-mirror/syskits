@@ -1231,9 +1231,8 @@ mod test {
     fn test_basenc_h_ctmain() {
         {
             let args = ["--help", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
         {
             let command = ct_app();
@@ -1249,9 +1248,8 @@ mod test {
     fn test_basenc_hh_ctmain() {
         {
             let args = ["-h", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         {
@@ -1269,9 +1267,8 @@ mod test {
     fn test_basenc_v_ctmain() {
         {
             let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
         {
             let command = ct_app();
@@ -1288,9 +1285,8 @@ mod test {
     fn test_basenc_vv_ctmain() {
         {
             let args = ["-V", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
         {
             let command = ct_app();

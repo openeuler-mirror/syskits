@@ -113,18 +113,15 @@ mod tests {
     #[cfg(test)]
     mod ct_main_tests {
         use std::ffi::OsString;
-
         use clap::error::ErrorKind;
-
         use super::*;
 
         #[test]
         fn test_ctmain_input_h() {
             {
                 let args = ["-h", ""];
-                let result = ctmain(args.iter().map(|s| OsString::from(s)));
-                println!("{}", result);
-                assert_eq!(result, 1);
+                let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_err());
             }
 
             {
@@ -141,9 +138,8 @@ mod tests {
         fn test_ctmain_input_v() {
             {
                 let args = ["--version", ""];
-                let result = ctmain(args.iter().map(|s| OsString::from(s)));
-                println!("{}", result);
-                assert_eq!(result, 1);
+                let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_err());
             }
             {
                 let command = ct_app();
@@ -160,9 +156,8 @@ mod tests {
         fn test_ctmain_input_uppercase_v() {
             {
                 let args = ["-V", ""];
-                let result = ctmain(args.iter().map(|s| OsString::from(s)));
-                println!("{}", result);
-                assert_eq!(result, 1);
+                let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_err());
             }
             {
                 let command = ct_app();

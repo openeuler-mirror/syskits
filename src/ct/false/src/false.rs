@@ -33,12 +33,6 @@ impl Tool for False {
     }
 }
 
-/// 主函数，负责处理命令行输入并调用相应的操作。
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    false_main(args).map(|_| ())
-}
-
 pub fn false_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

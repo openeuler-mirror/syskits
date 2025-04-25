@@ -54,11 +54,6 @@ impl Tool for Logname {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    logname_main(args)
-}
-
 pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

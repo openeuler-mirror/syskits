@@ -60,19 +60,6 @@ impl Tool for Users {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    match users_main(args) {
-        Ok(users) => {
-            if !users.is_empty() {
-                println!("{}", users);
-            }
-            Ok(())
-        }
-        Err(err) => Err(err),
-    }
-}
-
 pub fn users_main(args: impl ctcore::Args) -> CTResult<String> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

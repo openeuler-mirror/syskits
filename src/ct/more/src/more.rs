@@ -125,11 +125,6 @@ impl MoreOptions {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    more_main(args)
-}
-
 /// more 命令的主入口函数
 ///
 /// # 参数

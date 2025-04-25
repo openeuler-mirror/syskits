@@ -21,41 +21,11 @@ use sys_locale::get_locale;
 
 mod platform;
 
-pub fn ctmain(args: impl ctcore::Args) -> i32 {
+pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-        whoami_main(args).map(|_| ())
-    }
-
-    let result = ctmain(args);
-    match result {
-        Ok(()) => ctcore::ct_error::get_ct_exit_code(),
-        Err(err) => {
-            let s_err = {
-                let res = format!("{}", err);
-                res
-            };
-            if !s_err.is_empty() {
-                {
-                    eprintln!("{}: ", ctcore::ct_util_name());
-                    eprintln!("{}", s_err);
-                }
-            }
-            if err.usage() {
-                eprintln!(
-                    "Try '{} --help' for more information.",
-                    ctcore::ct_execute_phrase()
-                );
-            }
-            err.code()
-        }
-    }
-}
-
-pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
     ct_app().try_get_matches_from(args)?;
     let username = whoami_exec()?;
     ct_println_verbatim(username.clone())

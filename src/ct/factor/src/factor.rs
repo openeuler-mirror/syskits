@@ -138,13 +138,6 @@ fn process_numbers(
     Ok(())
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let stdout = stdout();
-    let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
-    factor_main(args, &mut w)
-}
-
 #[derive(Default)]
 pub struct Factor;
 impl Tool for Factor {

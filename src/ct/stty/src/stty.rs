@@ -173,11 +173,6 @@ ioctl_write_ptr_bad!(
     TermSize
 );
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    stty_main(args)
-}
-
 pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

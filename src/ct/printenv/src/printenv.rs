@@ -22,10 +22,6 @@ static PRINTENV_OPT_NULL: &str = "null";
 
 static PRINTENV_ARG_VARIABLES: &str = "variables";
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    printenv_main(args).map(|_| ())
-}
 /// 主函数用于打印环境变量。
 ///
 /// # 参数

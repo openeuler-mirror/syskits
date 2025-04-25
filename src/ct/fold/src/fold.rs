@@ -31,14 +31,6 @@ mod fold_flags {
     pub const FOLD_FILE: &str = "file";
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    // 收集参数到Vec中
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    fold_main(&mut out, args)
-}
-
 struct FoldFlags {
     bytes: bool,
     spaces: bool,

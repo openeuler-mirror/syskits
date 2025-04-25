@@ -146,11 +146,6 @@ fn dircolors_generate_ls_colors(fmt: &DircolorsOutputFmt, sep: &str) -> String {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    dircolors_main(args).map(|_| ())
-}
-
 /**
  * 命令行应用程序的主函数，用于解析参数并执行相应的操作，如打印目录颜色配置。
  *

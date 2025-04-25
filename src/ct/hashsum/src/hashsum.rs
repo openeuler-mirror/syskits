@@ -745,25 +745,6 @@ impl Tool for B3sum {
     }
 }
 
-/// 程序入口函数
-///
-/// 处理命令行参数并执行相应的哈希操作。根据程序名称或命令行参数
-/// 确定要使用的哈希算法，然后处理指定的文件。
-///
-/// # 参数
-///
-/// * `args` - 命令行参数
-///
-/// # 返回值
-///
-/// 操作结果，成功为 Ok(())，失败包含错误信息
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    hashsum_main(&mut out, args)
-}
-
 /// 处理命令行参数并执行相应的哈希操作。根据程序名称或命令行参数
 /// 确定要使用的哈希算法，然后处理指定的文件。
 ///

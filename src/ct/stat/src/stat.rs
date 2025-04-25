@@ -971,11 +971,6 @@ impl Tool for Stat {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    stat_main(args)
-}
-
 pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言（需转换为 `rust_i18n` 支持的格式，例如 "en" -> "en", "zh-CN" -> "zh-CN"）
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

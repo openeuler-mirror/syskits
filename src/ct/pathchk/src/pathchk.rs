@@ -86,21 +86,6 @@ impl PathchkFlags {
     }
 }
 
-/// 程序入口点，设置标准错误输出并调用主函数
-///
-/// # 参数
-/// * `args` - 命令行参数
-///
-/// # 返回
-/// * `CTResult<()>` - 执行结果
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let stdout = std::io::stderr();
-    let mut out = stdout.lock();
-
-    pathchk_main(&mut out, args)
-}
-
 /// pathchk 命令的主要实现函数
 ///
 /// # 参数

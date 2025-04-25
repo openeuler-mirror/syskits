@@ -9,4 +9,4 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_comm);
+ctcore::ct_bin!(ct_comm, Comm);

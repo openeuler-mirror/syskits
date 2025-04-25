@@ -292,7 +292,6 @@ dns-lookup = "2.0"
 if-addrs = "0.13.4"
 
 ctcore = { version = ">=0.0.1", package = "ctcore", path = "src/ctcore" }
-ctcore_procs = { version = ">=0.0.1", package = "ctcore_procs", path = "src/ctcore_procs" }
 ct_base32 = { version = ">=0.0.1", path = "src/ct/base32" }
 
 ct_ls = { version = ">=0.0.1", path = "src/ct/ls" }

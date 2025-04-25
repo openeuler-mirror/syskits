@@ -157,11 +157,7 @@ impl Tool for Date {
     }
 }
 
-#[ctcore::main]
-#[allow(clippy::cognitive_complexity)]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    date_main(args).map(|_| ())
-}
+
 
 /**
  * 主函数，用于处理命令行参数并设置或显示系统日期和时间。

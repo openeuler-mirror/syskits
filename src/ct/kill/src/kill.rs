@@ -73,13 +73,6 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    kill_main(&mut out, args)
-}
-
 /// 主要的kill命令处理函数，用于终止进程或发送信号
 ///
 /// # 参数

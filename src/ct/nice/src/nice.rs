@@ -120,11 +120,6 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
     vec.into_iter() // 返回标准化后的参数迭代器
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    nice_main(args).map(|_| ())
-}
-
 /**
  * 主要功能：根据提供的参数调整当前进程的优先级，并执行指定的命令。
  *

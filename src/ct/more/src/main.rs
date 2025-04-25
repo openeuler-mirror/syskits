@@ -9,6 +9,4 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_more);
-
-//TODO
+ctcore::ct_bin!(ct_more, More);

@@ -40,10 +40,7 @@ impl Tool for Hostid {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    hostid_main(args)
-}
+
 
 pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

@@ -159,18 +159,6 @@ impl Tool for Tr {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let stdin = stdin();
-    let mut locked_stdin = stdin.lock();
-
-    let stdout = stdout();
-    let out = stdout.lock();
-    let mut buffered_writer = BufWriter::new(out);
-
-    tr_main(&mut locked_stdin, &mut buffered_writer, args)
-}
-
 /// tr 命令的主要实现函数
 ///
 /// # 参数

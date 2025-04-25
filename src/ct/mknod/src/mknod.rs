@@ -125,11 +125,6 @@ pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
     CString::new(os_str.as_bytes())
         .expect("Failed to convert OsStr to CString")
 }
-// ctmain函数：程序的入口点。
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    mknod_main(args).map(|_| ())
-}
 
 pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

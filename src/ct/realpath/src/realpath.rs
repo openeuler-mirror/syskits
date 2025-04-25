@@ -216,12 +216,6 @@ impl RealpathFlags {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let mut stdout = std::io::stdout();
-    realpath_main(&mut stdout, args)
-}
-
 /// 主函数，用于处理实时路径解析
 ///
 /// # Parameters

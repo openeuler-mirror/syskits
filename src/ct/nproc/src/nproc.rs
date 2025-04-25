@@ -47,32 +47,6 @@ impl Display for NprocInfo {
     }
 }
 
-/**
- * 程序的主入口函数。
- *
- * 参数:
- *  - args: 实现了 ctcore::Args 接口的参数对象，代表命令行传入的参数。
- *
- * 返回值:
- *  - CTResult<()>: 表示操作成功或失败的结果。成功时返回 ()，失败时返回错误信息。
- */
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let result = nproc_main(args);
-    match result {
-        Ok(nproc_info) => {
-            println!("{}", nproc_info);
-
-            Ok(())
-        }
-        _ => {
-            // 如果出现错误，则打印错误信息并返回错误
-            eprint!("{}", result.err().unwrap());
-            Err(125.into())
-        }
-    }
-}
-
 fn nproc_main(args: impl ctcore::Args) -> CTResult<NprocInfo> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

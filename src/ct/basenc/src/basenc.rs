@@ -104,10 +104,6 @@ impl Tool for Basenc {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    basenc_main(args).map(|_| ())
-}
 
 pub fn basenc_main(args: impl ctcore::Args) -> CTResult<String> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

@@ -163,20 +163,6 @@ impl Display for TacError {
     }
 }
 
-/// tac 命令的入口点函数
-///
-/// # 参数
-/// * `args` - 命令行参数
-///
-/// # 返回值
-/// 返回 `CTResult<()>`，表示命令执行的结果
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let stdout = stdout();
-    let mut out = stdout.lock();
-    tac_main(&mut out, args)
-}
-
 /// tac 命令的主要实现函数
 ///
 /// # 参数

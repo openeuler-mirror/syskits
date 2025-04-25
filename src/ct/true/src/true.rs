@@ -32,11 +32,6 @@ impl Tool for True {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    true_main(args).map(|_| ())
-}
-
 /// 主程序入口，处理命令行参数并执行相应操作。
 ///
 /// # 参数

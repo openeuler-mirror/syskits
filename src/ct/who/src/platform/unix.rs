@@ -31,10 +31,6 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    who_main(args)
-}
-
 pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

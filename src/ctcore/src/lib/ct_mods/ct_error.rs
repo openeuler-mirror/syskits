@@ -15,7 +15,7 @@
 //! * 2: 大问题
 //!
 //! 本模块提供了与 Rust 错误处理习惯相统一的类型，以便处理这些退出码。相比手动使用 [std::process::exit]，这种方式有以下几个优势：
-//! 1. 允许在 ctmain 中使用 ?、map_err、unwrap_or 等操作符。
+//! 1. 允许在 main 中使用 ?、map_err、unwrap_or 等操作符。
 //! 1. 鼓励在 utils 的函数中使用 [CTResult]/[Result] 类型。
 //! 1. 使得 utils 之间的错误消息格式标准化。
 //! 1. 可以从外部结果类型（如：[std::io::Result] 和 clap::ClapResult）创建标准化的错误消息。
@@ -25,11 +25,11 @@
 
 //! 一个典型的 util 签名应该是：
 //! ```ignore
-//! fn ctmain(args: impl ctcore::Args) -> UResult<()> {
+//! fn xxx_main(args: impl ctcore::Args) -> UResult<()> {
 //!     ...
 //! }
 //! ```
-//! [CTResult]是围绕[Result]的一个简单封装，带有一个自定义错误特征：[CTError]。与实现了[std::error::Error]的类型相比，最重要的区别在于当从ctmain返回时，[CTError]可以指定程序的退出码：
+//! [CTResult]是围绕[Result]的一个简单封装，带有一个自定义错误特征：[CTError]。与实现了[std::error::Error]的类型相比，最重要的区别在于当从xxx_main返回时，[CTError]可以指定程序的退出码：
 //! * 当返回Ok时，使用通过[set_ct_exit_code]设置的代码作为退出码。如果未使用[set_ct_exit_code]，则使用0。
 //! * 当返回Err时，使用与错误对应的代码作为退出码，并显示错误消息。
 //!
@@ -68,14 +68,14 @@ pub fn get_ct_exit_code() -> i32 {
     EXIT_CODE.load(Ordering::SeqCst)
 }
 
-/// 如果ctmain返回Ok(())，则为程序设置退出码。
+/// 如果xxx_main返回Ok(())，则为程序设置退出码。
 ///
 /// 本函数对于非致命错误最有用，例如在对多个文件应用操作时：
 ///
 /// ```ignore
 /// use ctcore::ct_error::{UResult, set_exit_code};
 ///
-/// fn ctmain(args: impl ctcore::Args) -> UResult<()> {
+/// fn xxx_main(args: impl ctcore::Args) -> UResult<()> {
 ///     ...
 ///     for file in files {
 ///         let res = some_operation_that_might_fail(file);
@@ -142,8 +142,8 @@ pub type CTResult<T> = Result<T, Box<dyn CTError>>;
 /// 主程序看起来像这样：
 ///
 /// ```ignore
-/// #[ctcore::main]
-/// pub fn ctmain(args: impl ctcore::Args) -> UResult<()> {
+/// 
+/// pub fn xxx_main(args: impl ctcore::Args) -> UResult<()> {
 ///     // Perform computations here ...
 ///     return Err(LsError::InvalidLineWidth(String::from("test")).into())
 /// }

@@ -454,11 +454,7 @@ impl Tool for Df {
     }
 }
 
-// ctmain是程序的主入口函数。
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    df_main(args).map(|_| ())
-}
+
 
 pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

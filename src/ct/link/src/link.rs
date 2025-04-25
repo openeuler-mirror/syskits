@@ -61,11 +61,6 @@ impl<'a> LinkFlags<'a> {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    link_main(args)
-}
-
 /// 主函数：解析参数并执行链接操作
 pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

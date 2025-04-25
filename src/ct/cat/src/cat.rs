@@ -177,10 +177,7 @@ mod opt_flags {
     pub static CAT_IGNORED_U: &str = "ignored-u";
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    cat_main(args).map(|_| ())
-}
+
 
 pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

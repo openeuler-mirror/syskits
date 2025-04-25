@@ -694,10 +694,7 @@ fn cut_args_init() -> Vec<Arg> {
     args
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    cut_main(args)
-}
+
 
 #[derive(Default)]
 pub struct Cut;

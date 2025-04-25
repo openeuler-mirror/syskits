@@ -63,10 +63,7 @@ pub mod opt_flags {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    chcon_main(args)
-}
+
 
 pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

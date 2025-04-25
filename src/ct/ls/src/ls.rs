@@ -1212,11 +1212,6 @@ impl Tool for Ls {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    ls_main(args).map(|_| ())
-}
-
 pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

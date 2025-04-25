@@ -49,10 +49,7 @@ impl Tool for Basename {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    basename_main(args).map(|_| ())
-}
+
 
 pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
     // Set locale based on system settings

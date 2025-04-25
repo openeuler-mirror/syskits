@@ -8,4 +8,4 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-ctcore::ct_bin!(ct_arch);
+ctcore::ct_bin!(ct_arch, Arch);

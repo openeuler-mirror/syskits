@@ -562,11 +562,6 @@ fn uniq_map_clap_errors(clap_err: &Error) -> Box<dyn CTError> {
     CtSimpleError::new(1, err_message)
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    uniq_main(args)
-}
-
 pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

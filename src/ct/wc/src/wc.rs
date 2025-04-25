@@ -379,11 +379,6 @@ impl CTError for WcError {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    wc_main(args)
-}
-
 pub fn wc_main(args: impl ctcore::Args) -> CTResult<()> {
     // Set locale based on system settings
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

@@ -58,11 +58,6 @@ pub mod runcon_options {
     pub const RUNCON_RANGE: &str = "range";
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    runcon_main(args)
-}
-
 /// 运行带有指定安全上下文的命令
 ///
 /// # 参数

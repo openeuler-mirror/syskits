@@ -11,11 +11,11 @@
 
 //! Set of functions to manage file systems
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 const CT_LINUX_MTAB: &str = "/etc/mtab";
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 const CT_LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
@@ -103,7 +103,7 @@ pub struct CtMountInfo {
 }
 
 impl CtMountInfo {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn new(filename: &str, raw: &[&str]) -> Option<Self> {
         let dev_name;
         let fs_type;
@@ -224,52 +224,7 @@ impl CtMountInfo {
     }
 }
 
-#[cfg(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_vendor = "apple",
-))]
-impl From<StatFs> for CtMountInfo {
-    fn from(statfs: StatFs) -> Self {
-        let dev_name = unsafe {
-            // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntfromname[0])
-                .to_string_lossy()
-                .into_owned()
-        };
-        let fs_type = unsafe {
-            // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_fstypename[0])
-                .to_string_lossy()
-                .into_owned()
-        };
-        let mount_dir = unsafe {
-            // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntonname[0])
-                .to_string_lossy()
-                .into_owned()
-        };
-
-        let dev_id = mount_dev_id(&mount_dir);
-        let dummy = is_dummy_filesystem(&fs_type, "");
-        let remote = is_remote_filesystem(&dev_name, &fs_type);
-
-        Self {
-            dev_id,
-            dev_name,
-            fs_type,
-            mount_dir,
-            mount_root: String::new(),
-            mount_option: String::new(),
-            remote,
-            dummy,
-        }
-    }
-}
-
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -287,14 +242,14 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -305,64 +260,14 @@ fn mount_dev_id(mount_dir: &str) -> String {
     }
 }
 
-#[cfg(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_vendor = "apple",
-))]
-use libc::c_int;
-#[cfg(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_vendor = "apple",
-))]
-extern "C" {
-    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
-    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
-
-    #[cfg(any(
-        target_os = "netbsd",
-        target_os = "openbsd",
-        all(target_vendor = "apple", target_arch = "aarch64")
-    ))]
-    #[link_name = "getmntinfo"] // spell-checker:disable-line
-    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
-
-    // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
-    // Call the right version of the symbol for getmntinfo() result to
-    // match libc StatFS layout.
-    #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"] // spell-checker:disable-line
-    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use std::fs::File;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "windows",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use std::ptr;
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use std::slice;
+
 /// Read file system list.
 pub fn read_fs_list() -> Result<Vec<CtMountInfo>, std::io::Error> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     {
         let (file_name, f) = File::open(CT_LINUX_MOUNTINFO)
             .map(|f| (CT_LINUX_MOUNTINFO, f))
@@ -377,25 +282,7 @@ pub fn read_fs_list() -> Result<Vec<CtMountInfo>, std::io::Error> {
             })
             .collect::<Vec<_>>())
     }
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_vendor = "apple",
-    ))]
-    {
-        let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
-        let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
-        if len < 0 {
-            ct_crash!(1, "get_mount_info() failed");
-        }
-        let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
-        Ok(mounts
-            .iter()
-            .map(|m| CtMountInfo::from(*m))
-            .collect::<Vec<_>>())
-    }
+    
     #[cfg(windows)]
     {
         let mut volume_name_buf = [0u16; MAX_PATH];
@@ -438,11 +325,6 @@ pub fn read_fs_list() -> Result<Vec<CtMountInfo>, std::io::Error> {
         }
         Ok(mounts)
     }
-    #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
-    {
-        // No method to read mounts, yet
-        Ok(Vec::new())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -460,10 +342,7 @@ impl FsUsage {
     #[cfg(unix)]
     pub fn new(statvfs: StatFs) -> Self {
         {
-            #[cfg(all(
-                not(any(target_os = "freebsd", target_os = "openbsd")),
-                target_pointer_width = "64"
-            ))]
+            #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks,
@@ -474,7 +353,7 @@ impl FsUsage {
                 ffree: statvfs.f_ffree,
             };
             #[cfg(all(
-                not(any(target_os = "freebsd", target_os = "openbsd")),
+                target_os = "linux",
                 not(target_pointer_width = "64")
             ))]
             return Self {
@@ -485,32 +364,6 @@ impl FsUsage {
                 bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
                 files: statvfs.f_files.into(),
                 ffree: statvfs.f_ffree.into(),
-            };
-            #[cfg(target_os = "freebsd")]
-            return Self {
-                blocksize: statvfs.f_bsize, // or `statvfs.f_frsize` ?
-                blocks: statvfs.f_blocks,
-                bfree: statvfs.f_bfree,
-                bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
-                    .unwrap())
-                    & (1u64.rotate_right(1)))
-                    != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree.try_into().unwrap(),
-            };
-            #[cfg(target_os = "openbsd")]
-            return Self {
-                blocksize: statvfs.f_bsize.into(),
-                blocks: statvfs.f_blocks,
-                bfree: statvfs.f_bfree,
-                bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
-                    .unwrap())
-                    & (1u64.rotate_right(1)))
-                    != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree,
             };
         }
     }
@@ -598,35 +451,11 @@ impl FsMeta for StatFs {
     fn block_size(&self) -> i64 {
         #[cfg(all(
             not(target_env = "musl"),
-            not(target_vendor = "apple"),
-            not(target_os = "android"),
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
-            not(target_os = "illumos"),
-            not(target_os = "solaris"),
-            not(target_os = "redox"),
+            any(target_os = "linux", target_os = "windows"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
         return self.f_bsize;
-        #[cfg(all(
-            not(target_env = "musl"),
-            not(target_os = "freebsd"),
-            not(target_os = "redox"),
-            any(
-                target_arch = "s390x",
-                target_vendor = "apple",
-                all(target_os = "android", target_pointer_width = "32"),
-                target_os = "openbsd",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.f_bsize.into();
-        #[cfg(any(
-            target_env = "musl",
-            all(target_os = "android", target_pointer_width = "64"),
-        ))]
-        return self.f_bsize.try_into().unwrap();
     }
     fn total_blocks(&self) -> u64 {
         #[cfg(target_pointer_width = "64")]
@@ -642,19 +471,15 @@ impl FsMeta for StatFs {
     }
     fn avail_blocks(&self) -> u64 {
         #[cfg(all(
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
+            any(target_os = "linux", target_os = "windows"),
             target_pointer_width = "64"
         ))]
         return self.f_bavail;
         #[cfg(all(
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
+            any(target_os = "linux", target_os = "windows"),
             not(target_pointer_width = "64")
         ))]
         return self.f_bavail.into();
-        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-        return self.f_bavail.try_into().unwrap();
     }
     fn total_file_nodes(&self) -> u64 {
         #[cfg(target_pointer_width = "64")]
@@ -663,130 +488,59 @@ impl FsMeta for StatFs {
         return self.f_files.into();
     }
     fn free_file_nodes(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        #[cfg(all(any(target_os = "linux", target_os = "windows"), target_pointer_width = "64"))]
         return self.f_ffree;
-        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        #[cfg(all(any(target_os = "linux", target_os = "windows"), not(target_pointer_width = "64")))]
         return self.f_ffree.into();
-        #[cfg(target_os = "freebsd")]
-        return self.f_ffree.try_into().unwrap();
     }
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_vendor = "apple",
-        target_os = "freebsd"
-    ))]
+    #[cfg(target_os = "linux")]
     fn fs_type(&self) -> i64 {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_vendor = "apple"),
-            not(target_os = "android"),
-            not(target_os = "freebsd"),
+            any(target_os = "linux", target_os = "windows"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
         return self.f_type;
-        #[cfg(all(
-            not(target_env = "musl"),
-            any(
-                target_vendor = "apple",
-                all(target_os = "android", target_pointer_width = "32"),
-                target_os = "freebsd",
-                target_arch = "s390x",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.f_type.into();
-        #[cfg(any(
-            target_env = "musl",
-            all(target_os = "android", target_pointer_width = "64"),
-        ))]
-        return self.f_type.try_into().unwrap();
     }
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_vendor = "apple",
-        target_os = "freebsd"
-    )))]
+    #[cfg(target_os = "windows")]
     fn fs_type(&self) -> i64 {
         // FIXME: statvfs doesn't have an equivalent, so we need to do something else
         unimplemented!()
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
-    fn io_size(&self) -> u64 {
-        #[cfg(target_os = "freebsd")]
-        return self.f_iosize;
-        #[cfg(not(target_os = "freebsd"))]
-        return self.f_iosize as u64;
-    }
     // XXX: dunno if this is right
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "android",
-        target_os = "netbsd"
-    )))]
+    #[cfg(target_os = "windows")]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
 
-    // Linux, SunOS, HP-UX, 4.4BSD, FreeBSD have a system call statfs() that returns
+    // Linux have a system call statfs() that returns
     // a struct statfs, containing a fsid_t f_fsid, where fsid_t is defined
     // as struct { int val[2];  }
     //
-    // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
-    // struct statvfs, containing an  unsigned  long  f_fsid
-    #[cfg(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "android",
-        target_os = "openbsd"
-    ))]
+    #[cfg(target_os = "linux")]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
             unsafe { &*(&self.f_fsid as *const nix::sys::statfs::fsid_t as *const [u32; 2]) };
         ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "android",
-        target_os = "openbsd"
-    )))]
+    #[cfg(target_os = "windows")]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn namelen(&self) -> u64 {
         self.f_namelen as u64
     }
-    #[cfg(target_vendor = "apple")]
-    fn namelen(&self) -> u64 {
-        1024
-    }
-    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
-    fn namelen(&self) -> u64 {
-        self.f_namemax as u64 // spell-checker:disable-line
-    }
     // XXX: should everything just use statvfs?
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "android",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(target_os = "windows")]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
@@ -1023,7 +777,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn test_mountinfo() {
         // spell-checker:ignore (word) relatime
         let info = CtMountInfo::new(
@@ -1084,112 +838,6 @@ mod tests {
             //assert_eq!(result.unwrap(), expected);
         }
     }
-
-    #[test]
-    fn test_read_fs_list_android() {
-        // Test case for Android OS
-        #[cfg(target_os = "android")]
-        {
-            // Arrange
-            let expected = vec![
-                CtMountInfo {
-                    // Define expected MountInfo struct values
-                },
-                // Add more expected MountInfo struct values
-            ];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_freebsd() {
-        // Test case for FreeBSD OS
-        #[cfg(target_os = "freebsd")]
-        {
-            // Arrange
-            let expected = vec![
-                CtMountInfo {
-                    // Define expected MountInfo struct values
-                },
-                // Add more expected MountInfo struct values
-            ];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_apple() {
-        // Test case for Apple OS
-        #[cfg(target_vendor = "apple")]
-        {
-            // Arrange
-            let expected = vec![
-                CtMountInfo {
-                    // Define expected MountInfo struct values
-                },
-                // Add more expected MountInfo struct values
-            ];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_netbsd() {
-        // Test case for NetBSD OS
-        #[cfg(target_os = "netbsd")]
-        {
-            // Arrange
-            let expected = vec![
-                CtMountInfo {
-                    // Define expected MountInfo struct values
-                },
-                // Add more expected MountInfo struct values
-            ];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_openbsd() {
-        // Test case for OpenBSD OS
-        #[cfg(target_os = "openbsd")]
-        {
-            // Arrange
-            let expected = vec![
-                CtMountInfo {
-                    // Define expected MountInfo struct values
-                },
-                // Add more expected MountInfo struct values
-            ];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
     #[test]
     fn test_read_fs_list_windows() {
         // Test case for Windows OS
@@ -1202,54 +850,6 @@ mod tests {
                 },
                 // Add more expected MountInfo struct values
             ];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_redox() {
-        // Test case for Redox OS
-        #[cfg(target_os = "redox")]
-        {
-            // Arrange
-            let expected = vec![];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_illumos() {
-        // Test case for Illumos OS
-        #[cfg(target_os = "illumos")]
-        {
-            // Arrange
-            let expected = vec![];
-
-            // Act
-            let result = read_fs_list();
-
-            // Assert
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn test_read_fs_list_solaris() {
-        // Test case for Solaris OS
-        #[cfg(target_os = "solaris")]
-        {
-            // Arrange
-            let expected = vec![];
 
             // Act
             let result = read_fs_list();

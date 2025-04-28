@@ -88,17 +88,9 @@ pub use crate::ct_features::ct_perms;
 pub use crate::ct_features::ct_pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::ct_features::ct_process;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(target_os = "linux", feature = "signals"))]
 pub use crate::ct_features::ct_signals;
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    not(target_env = "musl"),
-    feature = "utmpx"
-))]
+#[cfg(all(target_os = "linux", feature = "utmpx"))]
 pub use crate::ct_features::ct_utmpx;
 // ** windows-only
 #[cfg(all(windows, feature = "wide"))]
@@ -107,7 +99,7 @@ pub use crate::ct_features::ct_wide;
 #[cfg(feature = "fsext")]
 pub use crate::ct_features::ct_fsext;
 
-#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+#[cfg(all(target_os = "linux", feature = "fsxattr"))]
 pub use crate::ct_features::ct_fsxattr;
 
 //## core functions
@@ -283,7 +275,7 @@ mod tests {
         ]
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(target_os = "linux")]
     fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
         // 断言我们的字符串为无效UTF-8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -303,7 +295,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(target_os = "linux")]
     fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
         // 断言我们的字符串为无效UTF-8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -328,7 +320,7 @@ mod tests {
         let _ = test_vec.into_iter().collect_lossy();
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn invalid_utf8_args_unix() {
         use std::os::unix::ffi::OsStrExt;

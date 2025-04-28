@@ -52,19 +52,11 @@ pub mod ct_pipes;
 #[cfg(all(unix, feature = "process"))]
 pub mod ct_process;
 
-#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+#[cfg(all(target_os = "linux", feature = "fsxattr"))]
 pub mod ct_fsxattr;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(target_os = "linux", feature = "signals"))]
 pub mod ct_signals;
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    not(target_env = "musl"),
-    feature = "utmpx"
-))]
+#[cfg(all(target_os = "linux", feature = "utmpx"))]
 pub mod ct_utmpx;
 // ** windows-only
 #[cfg(all(windows, feature = "wide"))]

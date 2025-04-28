@@ -141,15 +141,12 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
 }
 
 #[allow(clippy::unnecessary_cast)]
-pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
-    #[cfg(all(
-        not(target_os = "freebsd"),
-        not(target_vendor = "apple"),
-        not(target_os = "android")
+pub fn parse_mode(mode: &str) -> Result<mode_t, String> { 
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "windows"
     ))]
     let fperm = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "android"))]
-    let fperm = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
     let result = if mode.chars().any(|c| c.is_ascii_digit()) {
         parse_numeric(fperm as u32, mode, true)
@@ -166,20 +163,11 @@ pub fn get_umask() -> u32 {
     // 安全性：umask总是成功，并且不操作内存。可能存在竞态条件，但它不能违反Rust的保证。
     let mask = unsafe { umask(0) };
     unsafe { umask(mask) };
-    #[cfg(all(
-        not(target_os = "freebsd"),
-        not(target_vendor = "apple"),
-        not(target_os = "android"),
-        not(target_os = "redox")
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "windows"
     ))]
     return mask;
-    #[cfg(any(
-        target_os = "freebsd",
-        target_vendor = "apple",
-        target_os = "android",
-        target_os = "redox"
-    ))]
-    return mask as u32;
 }
 
 // 遍历'args'并删除与MODE关联的首个前缀'-'

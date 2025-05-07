@@ -118,20 +118,26 @@ impl CtFileInformation {
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             not(target_arch = "loongarch64"),
-            not(target_arch = "sparc64"),
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
+        #[cfg(all(
+            unix,
+            any(
+                target_arch = "aarch64",
+                target_arch = "riscv64",
+                target_arch = "loongarch64",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.0.st_nlink.into();
         #[cfg(windows)]
         return self.0.number_of_links();
     }
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(
-            target_os = "linux",
-            target_pointer_width = "64"
-        ))]
+        #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
         return self.0.st_ino;
     }
 }

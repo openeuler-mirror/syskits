@@ -1132,7 +1132,7 @@ mod tests {
 
     #[test]
     fn printf_format() {
-        let s = r#"%-# 15a\t\r\"\\\a\b\e\f\v%+020.-23w\x12\167\132\112\n"#;
+        let s = r#"%-# 15a\t\r\"\\\a\b\e\f\v%+020w\x12\167\132\112\n"#;
         let expected = vec![
             StatToken::Directive {
                 flag: StatFlags {

@@ -1,0 +1,32 @@
+[package]
+name = "ct_rm"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "rm ~ (ctutils) remove PATHNAME"
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/rm"
+
+
+[lib]
+path = "src/rm.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+walkdir = { workspace = true }
+ctcore = { workspace = true, features = ["fs", "pipes"] }
+tempfile = "3.5.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[[bin]]
+name = "rm"
+path = "src/main.rs"
+

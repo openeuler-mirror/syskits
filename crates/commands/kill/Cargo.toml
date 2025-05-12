@@ -1,0 +1,25 @@
+[package]
+name = "ct_kill"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+description = "kill ~ (ctutils) send a signal to a process"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/kill"
+
+[lib]
+path = "src/kill.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+nix = { workspace = true, features = ["signal"] }
+ctcore = { workspace = true, features = ["signals"] }
+
+[[bin]]
+name = "kill"
+path = "src/main.rs"

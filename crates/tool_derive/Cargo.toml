@@ -1,0 +1,21 @@
+[package]
+name = "tool_derive"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Derive macros for syskits tools registration"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/c/tool_derive"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+glob = { workspace = true } 

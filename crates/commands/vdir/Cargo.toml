@@ -1,0 +1,30 @@
+[package]
+name = "ct_vdir"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "shortcut to ls -l -b"
+
+homepage.workspace = true
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/ls"
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/vdir.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["env"] }
+ctcore = { workspace = true, features = ["entries", "fs", "quoting-style"] }
+ct_ls = { path = "../ls" }
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# rand = { workspace = true }
+
+[[bin]]
+name = "vdir"
+path = "src/main.rs"

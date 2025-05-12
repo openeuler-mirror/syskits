@@ -1,0 +1,29 @@
+[package]
+name = "ct_split"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "split ~ (ctutils) split input into output files"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/split"
+
+[lib]
+path = "src/split.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+memchr = { workspace = true }
+ctcore = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "split"
+path = "src/main.rs"

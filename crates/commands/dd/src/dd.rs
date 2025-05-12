@@ -1,0 +1,1879 @@
+/*
+ * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2.
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
+extern crate rust_i18n;
+mod blocks;
+mod bufferedoutput;
+mod conversion_tables;
+mod datastructures;
+mod numbers;
+mod parseargs;
+mod progress;
+
+use crate::bufferedoutput::DDBufferedOutput;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use blocks::conv_block_unblock_helper;
+use ctcore::ct_io::CtOwnedFileDescriptorOrHandle;
+use datastructures::*;
+#[cfg(target_os = "linux")]
+use nix::fcntl::FcntlArg::F_SETFL;
+#[cfg(target_os = "linux")]
+use nix::fcntl::OFlag;
+use parseargs::Parser;
+use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+
+use clap::{Arg, Command, crate_version};
+use ctcore::Tool;
+use ctcore::ct_display::Quotable;
+#[cfg(unix)]
+use ctcore::ct_error::set_ct_exit_code;
+use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_show_error;
+#[cfg(target_os = "linux")]
+use ctcore::ct_show_if_err;
+use gcd::Gcd;
+#[cfg(target_os = "linux")]
+use nix::{
+    errno::Errno,
+    fcntl::{PosixFadviseAdvice, posix_fadvise},
+};
+use std::cmp;
+use std::env;
+use std::ffi::OsString;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::os::unix::{
+    fs::FileTypeExt,
+    io::{AsRawFd, FromRawFd},
+};
+#[cfg(windows)]
+use std::os::windows::{fs::MetadataExt, io::AsHandle};
+use std::path::Path;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering::Relaxed},
+    mpsc,
+};
+use std::thread;
+use std::time::{Duration, Instant};
+use sys_locale::get_locale;
+
+const BUF_INIT_BYTE: u8 = 0xDD;
+
+/// Final settings after parsing
+#[derive(Default)]
+struct DdOptions {
+    infile: Option<String>,
+    outfile: Option<String>,
+    ibs: usize,
+    obs: usize,
+    skip: u64,
+    seek: u64,
+    count: Option<Num>,
+    iconv: IConvFlags,
+    iflags: IFlags,
+    oconv: OConvFlags,
+    oflags: OFlags,
+    status: Option<StatusLevel>,
+    /// Whether the output writer should buffer partial blocks until complete.
+    buffered: bool,
+}
+
+/// A timer which triggers on a given interval
+///
+/// After being constructed with [`Alarm::with_interval`], [`Alarm::is_triggered`]
+/// will return true once per the given [`Duration`].
+///
+/// Can be cloned, but the trigger status is shared across all instances so only
+/// the first caller each interval will yield true.
+///
+/// When all instances are dropped the background thread will exit on the next interval.
+#[derive(Debug, Clone)]
+pub struct Alarm {
+    interval: Duration,
+    trigger: Arc<AtomicBool>,
+}
+
+impl Alarm {
+    pub fn with_interval(interval: Duration) -> Self {
+        let trigger = Arc::new(AtomicBool::default());
+
+        let weak_trigger = Arc::downgrade(&trigger);
+        thread::spawn(move || {
+            while let Some(trigger) = weak_trigger.upgrade() {
+                thread::sleep(interval);
+                trigger.store(true, Relaxed);
+            }
+        });
+
+        Self { interval, trigger }
+    }
+
+    pub fn is_triggered(&self) -> bool {
+        self.trigger.swap(false, Relaxed)
+    }
+
+    pub fn get_interval(&self) -> Duration {
+        self.interval
+    }
+}
+
+/// A number in blocks or bytes
+///
+/// Some values (seek, skip, iseek, oseek) can have values either in blocks or in bytes.
+/// We need to remember this because the size of the blocks (ibs) is only known after parsing
+/// all the arguments.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Num {
+    Blocks(u64),
+    Bytes(u64),
+}
+
+impl Default for Num {
+    fn default() -> Self {
+        Self::Blocks(0)
+    }
+}
+
+impl Num {
+    fn force_bytes_if(self, force: bool) -> Self {
+        match self {
+            Self::Blocks(n) if force => Self::Bytes(n),
+            count => count,
+        }
+    }
+
+    fn to_bytes(self, block_size: u64) -> u64 {
+        match self {
+            Self::Blocks(n) => n * block_size,
+            Self::Bytes(n) => n,
+        }
+    }
+}
+
+/// Data sources.
+///
+/// Use [`Source::stdin_as_file`] if available to enable more
+/// fine-grained access to reading from stdin.
+enum Source {
+    /// Input from stdin.
+    #[cfg(not(unix))]
+    Stdin(io::Stdin),
+
+    /// Input from a file.
+    File(File),
+
+    /// Input from stdin, opened from its file descriptor.
+    #[cfg(unix)]
+    StdinFile(File),
+
+    /// Input from a named pipe, also known as a FIFO.
+    #[cfg(unix)]
+    Fifo(File),
+}
+
+impl Source {
+    /// Create a source from stdin using its raw file descriptor.
+    ///
+    /// This returns an instance of the `Source::StdinFile` variant,
+    /// using the raw file descriptor of [`std::io::Stdin`] to create
+    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// `Source::Stdin` to allow reading from stdin without consuming
+    /// the entire contents of stdin when this process terminates.
+    #[cfg(unix)]
+    fn stdin_as_file() -> Self {
+        let fd = io::stdin().as_raw_fd();
+        let f = unsafe { File::from_raw_fd(fd) };
+        Self::StdinFile(f)
+    }
+
+    /// The length of the data source in number of bytes.
+    ///
+    /// If it cannot be determined, then this function returns 0.
+    #[allow(dead_code)]
+    fn len(&self) -> std::io::Result<i64> {
+        match self {
+            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
+            _ => Ok(0),
+        }
+    }
+
+    fn skip(&mut self, n: u64) -> io::Result<u64> {
+        match self {
+            #[cfg(not(unix))]
+            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+                Ok(m) if m < n => {
+                    ct_show_error!("'standard input': cannot skip to specified offset");
+                    Ok(m)
+                }
+                Ok(m) => Ok(m),
+                Err(e) => Err(e),
+            },
+            #[cfg(unix)]
+            Self::StdinFile(f) => {
+                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
+                    if len < n {
+                        // GNU compatibility:
+                        // this case prints the stats but sets the exit code to 1
+                        ct_show_error!("'standard input': cannot skip: Invalid argument");
+                        set_ct_exit_code(1);
+                        return Ok(len);
+                    }
+                }
+                match io::copy(&mut f.take(n), &mut io::sink()) {
+                    Ok(m) if m < n => {
+                        ct_show_error!("'standard input': cannot skip to specified offset");
+                        Ok(m)
+                    }
+                    Ok(m) => Ok(m),
+                    Err(e) => Err(e),
+                }
+            }
+            Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
+            #[cfg(unix)]
+            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+        }
+    }
+
+    /// Discard the system file cache for the given portion of the data source.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the data
+    /// source. This function informs the kernel that the specified
+    /// portion of the source is no longer needed. If not possible,
+    /// then this function returns an error.
+    #[cfg(target_os = "linux")]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        match self {
+            Self::File(f) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+            }
+            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        }
+    }
+}
+
+impl Read for Source {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            #[cfg(not(unix))]
+            Self::Stdin(stdin) => stdin.read(buf),
+            Self::File(f) => f.read(buf),
+            #[cfg(unix)]
+            Self::StdinFile(f) => f.read(buf),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.read(buf),
+        }
+    }
+}
+
+/// The source of the data, configured with the given settings.
+///
+/// Use the [`Input::new_stdin`] or [`Input::new_file`] functions to
+/// construct a new instance of this struct. Then pass the instance to
+/// the [`dd_copy`] function to execute the main copy operation
+/// for `dd`.
+struct Input<'a> {
+    /// The source from which bytes will be read.
+    src: Source,
+
+    /// Configuration settings for how to read the data.
+    settings: &'a DdOptions,
+}
+
+impl<'a> Input<'a> {
+    /// Instantiate this struct with stdin as a source.
+    fn new_stdin(settings: &'a DdOptions) -> CTResult<Self> {
+        #[cfg(unix)]
+        let mut src = Source::stdin_as_file();
+        #[cfg(unix)]
+        if let Source::StdinFile(f) = &src {
+            // GNU compatibility:
+            // this will check whether stdin points to a folder or not
+            if f.metadata()?.is_file() && settings.iflags.is_directory {
+                ct_show_error!("standard input: not a directory");
+                return Err(1.into());
+            }
+        };
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
+    }
+
+    /// Instantiate this struct with the named file as a source.
+    fn new_file(filename: &Path, settings: &'a DdOptions) -> CTResult<Self> {
+        let src = {
+            let mut opts = OpenOptions::new();
+            opts.read(true);
+
+            #[cfg(target_os = "linux")]
+            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
+                opts.custom_flags(libc_flags);
+            }
+
+            opts.open(filename)
+                .map_err_context(|| format!("failed to open {}", filename.quote()))?
+        };
+
+        let mut src = Source::File(src);
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
+    }
+
+    /// Instantiate this struct with the named pipe as a source.
+    #[cfg(unix)]
+    fn new_fifo(filename: &Path, settings: &'a DdOptions) -> CTResult<Self> {
+        let mut opts = OpenOptions::new();
+        opts.read(true);
+        #[cfg(target_os = "linux")]
+        opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
+        let mut src = Source::Fifo(opts.open(filename)?);
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
+    let mut flag = 0;
+
+    if iflags.is_direct {
+        flag |= libc::O_DIRECT;
+    }
+    if iflags.is_directory {
+        flag |= libc::O_DIRECTORY;
+    }
+    if iflags.is_dsync {
+        flag |= libc::O_DSYNC;
+    }
+    if iflags.is_noatime {
+        flag |= libc::O_NOATIME;
+    }
+    if iflags.is_noctty {
+        flag |= libc::O_NOCTTY;
+    }
+    if iflags.is_nofollow {
+        flag |= libc::O_NOFOLLOW;
+    }
+    if iflags.is_nonblock {
+        flag |= libc::O_NONBLOCK;
+    }
+    if iflags.is_sync {
+        flag |= libc::O_SYNC;
+    }
+
+    if flag == 0 { None } else { Some(flag) }
+}
+
+impl Read for Input<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut base_idx = 0;
+        let target_len = buf.len();
+        loop {
+            match self.src.read(&mut buf[base_idx..]) {
+                Ok(0) => return Ok(base_idx),
+                Ok(rlen) if self.settings.iflags.is_fullblock => {
+                    base_idx += rlen;
+
+                    if base_idx >= target_len {
+                        return Ok(target_len);
+                    }
+                }
+                Ok(len) => return Ok(len),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+}
+
+impl Input<'_> {
+    /// Discard the system file cache for the given portion of the input.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the input.
+    /// This function informs the kernel that the specified portion of
+    /// the input file is no longer needed. If not possible, then this
+    /// function prints an error message to stderr and sets the exit
+    /// status code to 1.
+    #[allow(unused_variables)]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        #[cfg(target_os = "linux")]
+        {
+            ct_show_if_err!(self
+                .src
+                .discard_cache(offset, len)
+                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // TODO Is there a way to discard filesystem cache on
+            // these other operating systems?
+        }
+    }
+
+    /// Fills a given buffer.
+    /// Reads in increments of 'self.ibs'.
+    /// The start of each ibs-sized read follows the previous one.
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> std::io::Result<ReadStat> {
+        let mut reads_complete = 0;
+        let mut reads_partial = 0;
+        let mut bytes_total = 0;
+
+        for chunk in buf.chunks_mut(self.settings.ibs) {
+            match self.read(chunk)? {
+                rlen if rlen == self.settings.ibs => {
+                    bytes_total += rlen;
+                    reads_complete += 1;
+                }
+                rlen if rlen > 0 => {
+                    bytes_total += rlen;
+                    reads_partial += 1;
+                }
+                _ => break,
+            }
+        }
+        buf.truncate(bytes_total);
+        Ok(ReadStat {
+            reads_complete,
+            reads_partial,
+            // Records are not truncated when filling.
+            records_truncated: 0,
+            bytes_total: bytes_total.try_into().unwrap(),
+        })
+    }
+
+    /// Fills a given buffer.
+    /// Reads in increments of 'self.ibs'.
+    /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> std::io::Result<ReadStat> {
+        let mut reads_complete = 0;
+        let mut reads_partial = 0;
+        let mut base_idx = 0;
+        let mut bytes_total = 0;
+
+        while base_idx < buf.len() {
+            let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
+            let target_len = next_blk - base_idx;
+
+            match self.read(&mut buf[base_idx..next_blk])? {
+                0 => break,
+                rlen if rlen < target_len => {
+                    bytes_total += rlen;
+                    reads_partial += 1;
+                    let padding = vec![pad; target_len - rlen];
+                    buf.splice(base_idx + rlen..next_blk, padding.into_iter());
+                }
+                rlen => {
+                    bytes_total += rlen;
+                    reads_complete += 1;
+                }
+            }
+
+            base_idx += self.settings.ibs;
+        }
+
+        buf.truncate(base_idx);
+        Ok(ReadStat {
+            reads_complete,
+            reads_partial,
+            records_truncated: 0,
+            bytes_total: bytes_total.try_into().unwrap(),
+        })
+    }
+}
+
+enum Density {
+    Sparse,
+    Dense,
+}
+
+/// Data destinations.
+enum Dest {
+    /// Output to stdout.
+    Stdout(Stdout),
+
+    /// Output to a file.
+    ///
+    /// The [`Density`] component indicates whether to attempt to
+    /// write a sparse file when all-zero blocks are encountered.
+    File(File, Density),
+
+    /// Output to a named pipe, also known as a FIFO.
+    #[cfg(unix)]
+    Fifo(File),
+
+    /// Output to nothing, dropping each byte written to the output.
+    #[cfg(unix)]
+    Sink,
+}
+
+impl Dest {
+    fn fsync(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::File(f, _) => {
+                f.flush()?;
+                f.sync_all()
+            }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                f.flush()?;
+                f.sync_all()
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
+        }
+    }
+
+    fn fdatasync(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::File(f, _) => {
+                f.flush()?;
+                f.sync_data()
+            }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                f.flush()?;
+                f.sync_data()
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
+        }
+    }
+
+    fn seek(&mut self, n: u64) -> io::Result<u64> {
+        match self {
+            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::File(f, _) => {
+                #[cfg(unix)]
+                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
+                    if len < n {
+                        // GNU compatibility:
+                        // this case prints the stats but sets the exit code to 1
+                        ct_show_error!("'standard output': cannot seek: Invalid argument");
+                        set_ct_exit_code(1);
+                        return Ok(len);
+                    }
+                }
+                f.seek(io::SeekFrom::Current(n.try_into().unwrap()))
+            }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                // Seeking in a named pipe means *reading* from the pipe.
+                io::copy(&mut f.take(n), &mut io::sink())
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(0),
+        }
+    }
+
+    /// Truncate the underlying file to the current stream position, if possible.
+    fn truncate(&mut self) -> io::Result<()> {
+        match self {
+            Self::File(f, _) => {
+                let pos = f.stream_position()?;
+                f.set_len(pos)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Discard the system file cache for the given portion of the destination.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the
+    /// destination. This function informs the kernel that the
+    /// specified portion of the destination is no longer needed. If
+    /// not possible, then this function returns an error.
+    #[cfg(target_os = "linux")]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        match self {
+            Self::File(f, _) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+            }
+            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        }
+    }
+}
+
+/// Decide whether the given buffer is all zeros.
+fn is_sparse(buf: &[u8]) -> bool {
+    buf.iter().all(|&e| e == 0u8)
+}
+
+impl Write for Dest {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::File(f, Density::Sparse) if is_sparse(buf) => {
+                let seek_amt: i64 = buf
+                    .len()
+                    .try_into()
+                    .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
+                f.seek(io::SeekFrom::Current(seek_amt))?;
+                Ok(buf.len())
+            }
+            Self::File(f, _) => f.write(buf),
+            Self::Stdout(stdout) => stdout.write(buf),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.write(buf),
+            #[cfg(unix)]
+            Self::Sink => Ok(buf.len()),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::File(f, _) => f.flush(),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.flush(),
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
+        }
+    }
+}
+
+/// The destination of the data, configured with the given settings.
+///
+/// Use the [`Output::new_stdout`] or [`Output::new_file`] functions
+/// to construct a new instance of this struct. Then use the
+/// [`dd_copy`] function to execute the main copy operation for
+/// `dd`.
+struct DdOutput<'a> {
+    /// The destination to which bytes will be written.
+    dst: Dest,
+
+    /// Configuration settings for how to read and write the data.
+    settings: &'a DdOptions,
+}
+
+impl<'a> DdOutput<'a> {
+    /// Instantiate this struct with stdout as a destination.
+    fn new_stdout(settings: &'a DdOptions) -> CTResult<Self> {
+        let mut dst = Dest::Stdout(io::stdout());
+        dst.seek(settings.seek)
+            .map_err_context(|| "write error".to_string())?;
+        Ok(Self { dst, settings })
+    }
+
+    /// Instantiate this struct with the named file as a destination.
+    fn new_file(filename: &Path, settings: &'a DdOptions) -> CTResult<Self> {
+        fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
+            let mut opts = OpenOptions::new();
+            opts.write(true)
+                .create(!cflags.is_nocreat)
+                .create_new(cflags.is_excl)
+                .append(oflags.is_append);
+
+            #[cfg(target_os = "linux")]
+            if let Some(libc_flags) = make_linux_oflags(oflags) {
+                opts.custom_flags(libc_flags);
+            }
+
+            opts.open(path)
+        }
+
+        let dst = open_dst(filename, &settings.oconv, &settings.oflags)
+            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
+
+        // Seek to the index in the output file, truncating if requested.
+        //
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens.  Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
+        if !settings.oconv.is_notrunc {
+            dst.set_len(settings.seek).ok();
+        }
+
+        Self::prepare_file(dst, settings)
+    }
+
+    fn prepare_file(dst: File, settings: &'a DdOptions) -> CTResult<Self> {
+        let density = if settings.oconv.is_sparse {
+            Density::Sparse
+        } else {
+            Density::Dense
+        };
+        let mut dst = Dest::File(dst, density);
+        dst.seek(settings.seek)
+            .map_err_context(|| "failed to seek in output file".to_string())?;
+        Ok(Self { dst, settings })
+    }
+
+    /// Instantiate this struct with file descriptor as a destination.
+    ///
+    /// This is useful e.g. for the case when the file descriptor was
+    /// already opened by the system (stdout) and has a state
+    /// (current position) that shall be used.
+    fn new_file_from_stdout(settings: &'a DdOptions) -> CTResult<Self> {
+        let fx = CtOwnedFileDescriptorOrHandle::from(io::stdout())?;
+        #[cfg(target_os = "linux")]
+        if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
+            nix::fcntl::fcntl(
+                fx.as_raw().as_raw_fd(),
+                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+            )?;
+        }
+
+        Self::prepare_file(fx.into_file(), settings)
+    }
+
+    /// Instantiate this struct with the given named pipe as a destination.
+    #[cfg(unix)]
+    fn new_fifo(filename: &Path, settings: &'a DdOptions) -> CTResult<Self> {
+        // We simulate seeking in a FIFO by *reading*, so we open the
+        // file for reading. But then we need to close the file and
+        // re-open it for writing.
+        if settings.seek > 0 {
+            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
+        }
+        // If `count=0`, then we don't bother opening the file for
+        // writing because that would cause this process to block
+        // indefinitely.
+        if let Some(Num::Blocks(0) | Num::Bytes(0)) = settings.count {
+            let dst = Dest::Sink;
+            return Ok(Self { dst, settings });
+        }
+        // At this point, we know there is at least one block to write
+        // to the output, so we open the file for writing.
+        let mut opts = OpenOptions::new();
+        opts.write(true)
+            .create(!settings.oconv.is_nocreat)
+            .create_new(settings.oconv.is_excl)
+            .append(settings.oflags.is_append);
+        #[cfg(target_os = "linux")]
+        opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
+        let dst = Dest::Fifo(opts.open(filename)?);
+        Ok(Self { dst, settings })
+    }
+
+    /// Discard the system file cache for the given portion of the output.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the output.
+    /// This function informs the kernel that the specified portion of
+    /// the output file is no longer needed. If not possible, then
+    /// this function prints an error message to stderr and sets the
+    /// exit status code to 1.
+    #[allow(unused_variables)]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        #[cfg(target_os = "linux")]
+        {
+            ct_show_if_err!(self.dst.discard_cache(offset, len).map_err_context(|| {
+                "failed to discard cache for: 'standard output'".to_string()
+            }));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // TODO Is there a way to discard filesystem cache on
+            // these other operating systems?
+        }
+    }
+
+    /// Write the given bytes one block at a time.
+    ///
+    /// This may write partial blocks (for example, if the underlying
+    /// call to [`Write::write`] writes fewer than `buf.len()`
+    /// bytes). The returned [`WriteStat`] object will include the
+    /// number of partial and complete blocks written during execution
+    /// of this function.
+    fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
+        let mut writes_complete = 0;
+        let mut writes_partial = 0;
+        let mut bytes_total = 0;
+
+        for chunk in buf.chunks(self.settings.obs) {
+            let wlen = self.dst.write(chunk)?;
+            if wlen < self.settings.obs {
+                writes_partial += 1;
+            } else {
+                writes_complete += 1;
+            }
+            bytes_total += wlen;
+        }
+
+        Ok(WriteStat {
+            writes_complete,
+            writes_partial,
+            bytes_total: bytes_total.try_into().unwrap_or(0u128),
+        })
+    }
+
+    /// Flush the output to disk, if configured to do so.
+    fn sync(&mut self) -> std::io::Result<()> {
+        if self.settings.oconv.is_fsync {
+            self.dst.fsync()
+        } else if self.settings.oconv.is_fdatasync {
+            self.dst.fdatasync()
+        } else {
+            // Intentionally do nothing in this case.
+            Ok(())
+        }
+    }
+
+    /// Truncate the underlying file to the current stream position, if possible.
+    fn truncate(&mut self) -> std::io::Result<()> {
+        self.dst.truncate()
+    }
+}
+
+/// The block writer either with or without partial block buffering.
+enum BlockWriter<'a> {
+    /// Block writer with partial block buffering.
+    ///
+    /// Partial blocks are buffered until completed.
+    Buffered(DDBufferedOutput<'a>),
+
+    /// Block writer without partial block buffering.
+    ///
+    /// Partial blocks are written immediately.
+    Unbuffered(DdOutput<'a>),
+}
+
+impl BlockWriter<'_> {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        match self {
+            Self::Unbuffered(o) => o.discard_cache(offset, len),
+            Self::Buffered(o) => o.discard_cache(offset, len),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<WriteStat> {
+        match self {
+            Self::Unbuffered(_) => Ok(WriteStat::default()),
+            Self::Buffered(o) => o.flush(),
+        }
+    }
+
+    fn sync(&mut self) -> io::Result<()> {
+        match self {
+            Self::Unbuffered(o) => o.sync(),
+            Self::Buffered(o) => o.sync(),
+        }
+    }
+
+    /// Truncate the file to the final cursor location.
+    fn truncate(&mut self) {
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens. Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
+        match self {
+            Self::Unbuffered(o) => o.truncate().ok(),
+            Self::Buffered(o) => o.truncate().ok(),
+        };
+    }
+
+    fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
+        match self {
+            Self::Unbuffered(o) => o.write_blocks(buf),
+            Self::Buffered(o) => o.dd_write_blocks(buf),
+        }
+    }
+}
+
+/// Copy data from input to output with dd functionality
+fn dd_copy(input: Input, output: DdOutput) -> std::io::Result<()> {
+    // 初始化复制环境
+    let (mut state, mut output) = initialize_copy_environment(input, output);
+
+    // 执行主复制循环
+    perform_copy_loop(&mut state, &mut output)?;
+
+    // 完成复制操作
+    finalize_copy(output, state)
+}
+
+/// 复制操作的状态
+struct CopyState<'a> {
+    input: Input<'a>,
+    buffer: Vec<u8>,
+    read_stat: ReadStat,
+    write_stat: WriteStat,
+    start_time: Instant,
+    duration: Duration,
+    prog_tx: mpsc::Sender<ProgUpdate>,
+    output_thread: thread::JoinHandle<()>,
+    read_offset: u64,
+    write_offset: u128,
+    alarm: Alarm,
+}
+
+/// 初始化复制环境
+fn initialize_copy_environment<'a>(
+    input: Input<'a>,
+    output: DdOutput<'a>,
+) -> (CopyState<'a>, BlockWriter<'a>) {
+    let bsize = calc_bsize(input.settings.ibs, output.settings.obs);
+    let buffer = vec![BUF_INIT_BYTE; bsize];
+    let read_stat = ReadStat::default();
+    let write_stat = WriteStat::default();
+    let start_time = Instant::now();
+
+    // 设置进度报告
+    let (prog_tx, rx) = mpsc::channel();
+    let output_thread = thread::spawn(gen_prog_updater(rx, input.settings.status));
+    let alarm = Alarm::with_interval(Duration::from_secs(1));
+
+    // 创建输出写入器
+    let output = if output.settings.buffered {
+        BlockWriter::Buffered(DDBufferedOutput::new(output))
+    } else {
+        BlockWriter::Unbuffered(output)
+    };
+
+    let state = CopyState {
+        input,
+        buffer,
+        read_stat,
+        write_stat,
+        start_time,
+        duration: Duration::ZERO,
+        prog_tx,
+        output_thread,
+        read_offset: 0,
+        write_offset: 0,
+        alarm,
+    };
+
+    (state, output)
+}
+
+/// 执行主复制循环
+fn perform_copy_loop(state: &mut CopyState, output: &mut BlockWriter) -> std::io::Result<()> {
+    while below_count_limit(&state.input.settings.count, &state.read_stat) {
+        // 读取数据块
+        if !read_and_process_block(state, output)? {
+            break;
+        }
+
+        // 更新进度
+        update_progress(state);
+    }
+    Ok(())
+}
+
+/// 读取并处理一个数据块
+fn read_and_process_block(
+    state: &mut CopyState,
+    output: &mut BlockWriter,
+) -> std::io::Result<bool> {
+    // 计算本次读取的缓冲区大小
+    let loop_bsize = calc_loop_bsize(
+        &state.input.settings.count,
+        &state.read_stat,
+        &state.write_stat,
+        state.input.settings.ibs,
+        state.buffer.len(),
+    );
+
+    state.start_time = Instant::now();
+    // 读取数据
+    let rstat_update = read_helper(&mut state.input, &mut state.buffer, loop_bsize)?;
+    if rstat_update.is_empty() {
+        return Ok(false);
+    }
+
+    // 写入数据
+    let wstat_update = output.write_blocks(&state.buffer)?;
+
+    // 处理缓存
+    handle_cache_updates(state, &rstat_update, &wstat_update, output)?;
+
+    //累加用时
+    state.duration += state.start_time.elapsed();
+
+    // 更新统计信息
+    state.read_stat += rstat_update;
+    state.write_stat += wstat_update;
+    state.read_offset += rstat_update.bytes_total;
+    state.write_offset += wstat_update.bytes_total;
+
+    Ok(true)
+}
+
+/// 处理缓存更新
+fn handle_cache_updates(
+    state: &mut CopyState,
+    rstat_update: &ReadStat,
+    wstat_update: &WriteStat,
+    output: &mut BlockWriter,
+) -> std::io::Result<()> {
+    // 处理输入缓存
+    if state.input.settings.iflags.is_nocache {
+        let offset = state.read_offset as i64;
+        let len = rstat_update.bytes_total as i64;
+        state.input.discard_cache(offset, len);
+    }
+
+    // 处理输出缓存
+    if state.input.settings.oflags.is_nocache {
+        let offset = state.write_offset as i64;
+        let len = wstat_update.bytes_total as i64;
+        output.discard_cache(offset, len);
+    }
+
+    Ok(())
+}
+
+/// 更新进度信息
+fn update_progress(state: &mut CopyState) {
+    if state.alarm.is_triggered() {
+        let prog_update = ProgUpdate::new(state.read_stat, state.write_stat, state.duration, false);
+        state.prog_tx.send(prog_update).unwrap_or(());
+    }
+}
+
+/// 完成复制操作
+fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<()> {
+    let mut dur = state.duration;
+    let start_time = Instant::now();
+
+    // 刷新输出缓冲
+    let wstat_update = output.flush()?;
+    output.sync()?;
+
+    // 如果需要，截断文件
+    if !state.input.settings.oconv.is_notrunc {
+        output.truncate();
+    }
+
+    dur += start_time.elapsed();
+    // 发送最终统计信息
+    let final_wstat = state.write_stat + wstat_update;
+    let prog_update = ProgUpdate::new(state.read_stat, final_wstat, dur, true);
+    state.prog_tx.send(prog_update).unwrap_or(());
+
+    // 等待输出线程完成
+    state
+        .output_thread
+        .join()
+        .expect("Failed to join with the output thread.");
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::cognitive_complexity)]
+fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
+    let mut flag = 0;
+
+    // oflag=FLAG
+    if oflags.is_append {
+        flag |= libc::O_APPEND;
+    }
+    if oflags.is_direct {
+        flag |= libc::O_DIRECT;
+    }
+    if oflags.is_directory {
+        flag |= libc::O_DIRECTORY;
+    }
+    if oflags.is_dsync {
+        flag |= libc::O_DSYNC;
+    }
+    if oflags.is_noatime {
+        flag |= libc::O_NOATIME;
+    }
+    if oflags.is_noctty {
+        flag |= libc::O_NOCTTY;
+    }
+    if oflags.is_nofollow {
+        flag |= libc::O_NOFOLLOW;
+    }
+    if oflags.is_nonblock {
+        flag |= libc::O_NONBLOCK;
+    }
+    if oflags.is_sync {
+        flag |= libc::O_SYNC;
+    }
+
+    if flag == 0 { None } else { Some(flag) }
+}
+
+/// Read from an input (that is, a source of bytes) into the given buffer.
+///
+/// This function also performs any conversions as specified by
+/// `conv=swab` or `conv=block` command-line arguments. This function
+/// mutates the `buf` argument in-place. The returned [`ReadStat`]
+/// indicates how many blocks were read.
+fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Result<ReadStat> {
+    // Local Helper Fns -------------------------------------------------
+    fn perform_swab(buf: &mut [u8]) {
+        for base in (1..buf.len()).step_by(2) {
+            buf.swap(base, base - 1);
+        }
+    }
+    // ------------------------------------------------------------------
+    // Read
+    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+    buf.resize(bsize, BUF_INIT_BYTE);
+
+    let mut rstat = match i.settings.iconv.sync {
+        Some(ch) => i.fill_blocks(buf, ch)?,
+        _ => i.fill_consecutive(buf)?,
+    };
+    // Return early if no data
+    if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
+        return Ok(rstat);
+    }
+
+    // Perform any conv=x[,x...] options
+    if i.settings.iconv.is_swab {
+        perform_swab(buf);
+    }
+
+    match i.settings.iconv.mode {
+        Some(ref mode) => {
+            *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
+            Ok(rstat)
+        }
+        None => Ok(rstat),
+    }
+}
+
+// Calculate a 'good' internal buffer size.
+// For performance of the read/write functions, the buffer should hold
+// both an integral number of reads and an integral number of writes. For
+// sane real-world memory use, it should not be too large. I believe
+// the least common multiple is a good representation of these interests.
+// https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
+fn calc_bsize(ibs: usize, obs: usize) -> usize {
+    let gcd = Gcd::gcd(ibs, obs);
+    // calculate the lcm from gcd
+    (ibs / gcd) * obs
+}
+
+// Calculate the buffer size appropriate for this loop iteration, respecting
+// a count=N if present.
+fn calc_loop_bsize(
+    count: &Option<Num>,
+    rstat: &ReadStat,
+    wstat: &WriteStat,
+    ibs: usize,
+    ideal_bsize: usize,
+) -> usize {
+    match count {
+        Some(Num::Blocks(rmax)) => {
+            let rsofar = rstat.reads_complete + rstat.reads_partial;
+            let rremain = rmax - rsofar;
+            cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
+        }
+        Some(Num::Bytes(bmax)) => {
+            let bmax: u128 = (*bmax).into();
+            let bremain: u128 = bmax - wstat.bytes_total;
+            cmp::min(ideal_bsize as u128, bremain) as usize
+        }
+        None => ideal_bsize,
+    }
+}
+
+// Decide if the current progress is below a count=N limit or return
+// true if no such limit is set.
+fn below_count_limit(count: &Option<Num>, rstat: &ReadStat) -> bool {
+    match count {
+        Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < *n,
+        Some(Num::Bytes(n)) => rstat.bytes_total < *n,
+        None => true,
+    }
+}
+
+/// Canonicalized file name of `/dev/stdout`.
+///
+/// For example, if this process were invoked from the command line as
+/// `dd`, then this function returns the [`OsString`] form of
+/// `"/dev/stdout"`. However, if this process were invoked as `dd >
+/// outfile`, then this function returns the canonicalized path to
+/// `outfile`, something like `"/path/to/outfile"`.
+fn stdout_canonicalized() -> OsString {
+    match Path::new("/dev/stdout").canonicalize() {
+        Ok(p) => p.into_os_string(),
+        Err(_) => OsString::from("/dev/stdout"),
+    }
+}
+
+/// Decide whether stdout is being redirected to a seekable file.
+///
+/// For example, if this process were invoked from the command line as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5 > /dev/sda1
+/// ```
+///
+/// where `/dev/sda1` is a seekable block device then this function
+/// would return true. If invoked as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5
+/// ```
+///
+/// then this function would return false.
+fn is_stdout_redirected_to_seekable_file() -> bool {
+    let s = stdout_canonicalized();
+    let p = Path::new(&s);
+    match File::open(p) {
+        Ok(mut f) => {
+            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
+        }
+        Err(_) => false,
+    }
+}
+
+/// Try to get the len if it is a block device
+#[cfg(unix)]
+fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
+    let ftype = file.metadata()?.file_type();
+    if !ftype.is_block_device() {
+        return Ok(None);
+    }
+
+    // FIXME: this can be replaced by file.stream_len() when stable.
+    let len = file.seek(SeekFrom::End(0))?;
+    file.rewind()?;
+    Ok(Some(len))
+}
+
+/// Decide whether the named file is a named pipe, also known as a FIFO.
+#[cfg(unix)]
+fn is_fifo(filename: &str) -> bool {
+    if let Ok(metadata) = std::fs::metadata(filename) {
+        if metadata.file_type().is_fifo() {
+            return true;
+        }
+    }
+    false
+}
+
+#[derive(Default)]
+pub struct Dd;
+impl Tool for Dd {
+    fn name(&self) -> &'static str {
+        "dd"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        dd_main(args.iter().cloned())
+    }
+}
+
+fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+
+    let options: DdOptions = Parser::new().parse(
+        &matches
+            .get_many::<String>(options::OPERANDS)
+            .unwrap_or_default()
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>()[..],
+    )?;
+
+    let i = match options.infile {
+        #[cfg(unix)]
+        Some(ref infile) if is_fifo(infile) => Input::new_fifo(Path::new(&infile), &options)?,
+        Some(ref infile) => Input::new_file(Path::new(&infile), &options)?,
+        None => Input::new_stdin(&options)?,
+    };
+    let o = match options.outfile {
+        #[cfg(unix)]
+        Some(ref outfile) if is_fifo(outfile) => DdOutput::new_fifo(Path::new(&outfile), &options)?,
+        Some(ref outfile) => DdOutput::new_file(Path::new(&outfile), &options)?,
+        None if is_stdout_redirected_to_seekable_file() => {
+            DdOutput::new_file_from_stdout(&options)?
+        }
+        None => DdOutput::new_stdout(&options)?,
+    };
+    dd_copy(i, o).map_err_context(|| "IO error".to_string())
+}
+
+pub fn ct_app() -> Command {
+    Command::new(ctcore::ct_util_name())
+        .version(crate_version!())
+        .about(t!("dd.about"))
+        .override_usage(t!("dd.usage"))
+        .after_help(t!("dd.after_help"))
+        .infer_long_args(true)
+        .arg(Arg::new(options::OPERANDS).num_args(1..))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DdOutput, Parser, calc_bsize};
+    use std::path::Path;
+
+    #[test]
+    fn test_tool_implementation() {
+        let dd = Dd;
+
+        // Test name method
+        assert_eq!(dd.name(), "dd");
+
+        // Test command method
+        assert!(dd.command().get_name().contains("dd"));
+
+        // Test execute method with help argument (should succeed)
+        let args: Vec<OsString> = vec![OsString::from("dd"), OsString::from("--help")];
+        let result = dd.execute(&args);
+        assert!(result.is_err());
+
+        // Test execute with invalid arguments (should fail gracefully)
+        let invalid_args: Vec<OsString> =
+            vec![OsString::from("dd"), OsString::from("invalid=argument")];
+        let invalid_result = dd.execute(&invalid_args);
+        assert!(invalid_result.is_err());
+    }
+
+    #[test]
+    fn bsize_test_primes() {
+        let (n, m) = (7901, 7919);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n * m);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_obs_greater() {
+        let (n, m) = (7 * 5119, 13 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_ibs_greater() {
+        let (n, m) = (13 * 5119, 7 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_3fac_rel_prime() {
+        let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 11 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_ibs_greater() {
+        let (n, m) = (512 * 1024, 256 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n);
+    }
+
+    #[test]
+    fn bsize_test_obs_greater() {
+        let (n, m) = (256 * 1024, 512 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn bsize_test_bs_eq() {
+        let (n, m) = (1024, 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
+        let args = &["conv=nocreat", "of=not-a-real.file"];
+        let settings = Parser::new().parse(args).unwrap();
+        assert!(
+            DdOutput::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod dd_copy_tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use std::io::{Read, Seek, SeekFrom};
+    use tempfile::{tempdir, tempfile};
+
+    // 辅助函数：创建测试用的DdOptions
+    fn create_test_options() -> DdOptions {
+        DdOptions {
+            infile: None,
+            outfile: None,
+            ibs: 512,
+            obs: 512,
+            skip: 0,
+            seek: 0,
+            count: None,
+            iconv: IConvFlags::default(),
+            iflags: IFlags::default(),
+            oconv: OConvFlags::default(),
+            oflags: OFlags::default(),
+            status: None,
+            buffered: false,
+        }
+    }
+
+    // 辅助函数：创建测试用的输入源
+    fn create_test_input<'a>(data: &[u8], settings: &'a DdOptions) -> CTResult<Input<'a>> {
+        let mut temp_file = tempfile()?;
+        temp_file.write_all(data)?;
+        temp_file.seek(SeekFrom::Start(0))?;
+
+        // 如果设置了skip，需要相应地调整文件位置
+        if settings.skip > 0 {
+            temp_file.seek(SeekFrom::Start(settings.skip as u64))?;
+        }
+
+        Ok(Input {
+            src: Source::File(temp_file),
+            settings,
+        })
+    }
+
+    // 辅助函数：创建测试用的输出目标
+    fn create_test_output<'a>(settings: &'a DdOptions) -> CTResult<(DdOutput<'a>, File)> {
+        let temp_file = tempfile()?;
+        let output = DdOutput {
+            dst: Dest::File(temp_file.try_clone()?, Density::Dense),
+            settings,
+        };
+        Ok((output, temp_file))
+    }
+
+    #[test]
+    fn test_basic_copy() -> CTResult<()> {
+        let input_data = b"Hello, World!";
+        let options = create_test_options();
+
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_block_size() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 4;
+        options.obs = 4;
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_count() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.count = Some(Num::Blocks(1));
+        options.ibs = 4;
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], b"Hell");
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_skip() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 1; // 设置输入块大小为1字节
+        options.skip = 7; // 跳过7个块（包括空格）
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+
+        assert_eq!(&result[..], b"World!");
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_empty_input() -> CTResult<()> {
+        let input_data = b"";
+        let options = create_test_options();
+
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert!(result.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_seek() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.seek = 3;
+
+        // 创建一个临时目录和文件
+        let dir = tempdir()?;
+        let file_path = dir.path().join("test.txt");
+
+        // 创建并写入初始内容
+        {
+            let mut file = File::create(&file_path)?;
+            file.write_all(b"XXXXXXXXXXXXX")?;
+        }
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let output = DdOutput::new_file(&file_path, &options)?;
+
+        dd_copy(input, output)?;
+
+        // 读取并验证结果
+        let mut result = Vec::new();
+        File::open(&file_path)?.read_to_end(&mut result)?;
+        assert_eq!(&result[..], b"XXXHello, World!");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_nocache() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.iflags.is_nocache = true;
+        options.oflags.is_nocache = true;
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_progress() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.status = Some(StatusLevel::Progress);
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests_input_new_stdin {
+    use super::*;
+
+    // 辅助函数：创建测试用的 DdOptions
+    fn create_test_options() -> DdOptions {
+        DdOptions {
+            infile: None,
+            outfile: None,
+            ibs: 512,
+            obs: 512,
+            skip: 0,
+            seek: 0,
+            count: None,
+            iconv: IConvFlags::default(),
+            iflags: IFlags::default(),
+            oconv: OConvFlags::default(),
+            oflags: OFlags::default(),
+            status: None,
+            buffered: false,
+        }
+    }
+
+    #[test]
+    fn test_new_stdin_with_directory_flag() {
+        let mut settings = create_test_options();
+        settings.iflags.is_directory = true;
+
+        #[cfg(unix)]
+        {
+            let result = Input::new_stdin(&settings);
+            assert!(
+                result.is_ok(),
+                "Should succeed when stdin is not a regular file"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_dest {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_dest_write_normal() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let mut dest = Dest::File(temp_file.reopen().unwrap(), Density::Dense);
+        let data = [1u8; 100];
+        assert_eq!(dest.write(&data).unwrap(), 100);
+    }
+
+    #[test]
+    fn test_dest_write_empty() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let mut dest = Dest::File(temp_file.reopen().unwrap(), Density::Dense);
+        let data = [];
+        assert_eq!(dest.write(&data).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_dest_flush_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let mut dest = Dest::File(temp_file.reopen().unwrap(), Density::Dense);
+        assert!(dest.flush().is_ok());
+    }
+
+    #[test]
+    fn test_dest_flush_stdout() {
+        let mut dest = Dest::Stdout(io::stdout());
+        assert!(dest.flush().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod tests_input_additional {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_input_read_full() {
+        let data = [1u8; 1024];
+        let temp_file = NamedTempFile::new().unwrap();
+        temp_file.as_file().write_all(&data).unwrap();
+
+        let mut input = Input {
+            src: Source::File(temp_file.reopen().unwrap()),
+            settings: &DdOptions {
+                iflags: IFlags {
+                    is_fullblock: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        };
+
+        let mut buf = [0u8; 512];
+        assert_eq!(input.read(&mut buf).unwrap(), 512);
+    }
+
+    #[test]
+    fn test_input_read_interrupted() {
+        let data = [1u8; 1024];
+        let temp_file = NamedTempFile::new().unwrap();
+        temp_file.as_file().write_all(&data).unwrap();
+
+        let mut input = Input {
+            src: Source::File(temp_file.reopen().unwrap()),
+            settings: &DdOptions {
+                iconv: IConvFlags {
+                    noerror: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        };
+
+        let mut buf = [0u8; 512];
+        assert!(input.read(&mut buf).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod tests_source_additional {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_source_read_empty() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let mut source = Source::File(temp_file.reopen().unwrap());
+        let mut buf = [0u8; 10];
+        assert_eq!(source.read(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_source_len() {
+        let data = [1u8; 100];
+        let temp_file = NamedTempFile::new().unwrap();
+        temp_file.as_file().write_all(&data).unwrap();
+
+        let source = Source::File(temp_file.reopen().unwrap());
+        assert_eq!(source.len().unwrap(), 100);
+    }
+
+    #[test]
+    fn test_source_skip() {
+        let data = [1u8; 100];
+        let temp_file = NamedTempFile::new().unwrap();
+        temp_file.as_file().write_all(&data).unwrap();
+
+        let mut source = Source::File(temp_file.reopen().unwrap());
+        assert_eq!(source.skip(50).unwrap(), 50);
+    }
+}
+
+#[cfg(test)]
+mod tests_alarm_additional {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_alarm_not_triggered_short_duration() {
+        let alarm = Alarm::with_interval(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_millis(10));
+        assert!(!alarm.is_triggered());
+    }
+
+    #[test]
+    fn test_alarm_multiple_checks() {
+        let alarm = Alarm::with_interval(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(25));
+        assert!(alarm.is_triggered());
+        std::thread::sleep(Duration::from_millis(25));
+        assert!(alarm.is_triggered());
+    }
+}
+
+#[cfg(test)]
+mod tests_dd_output_additional {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_dd_output_new_file_nonexistent() {
+        let settings = DdOptions::default();
+        let result = DdOutput::new_file(Path::new("/nonexistent/file"), &settings);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_dd_output_new_stdout() {
+        let settings = DdOptions::default();
+        let result = DdOutput::new_stdout(&settings);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_dd_output_write_blocks_small() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let settings = DdOptions {
+            obs: 512,
+            ..Default::default()
+        };
+        let mut output = DdOutput::new_file(temp_file.path(), &settings).unwrap();
+        let data = [1u8; 1]; // 最小的非空数据
+        let result = output.write_blocks(&data).unwrap();
+        assert_eq!(result.writes_complete, 0);
+        assert_eq!(result.writes_partial, 1);
+    }
+
+    #[test]
+    fn test_dd_output_write_blocks_multiple() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let settings = DdOptions {
+            obs: 256,
+            ..Default::default()
+        };
+        let mut output = DdOutput::new_file(temp_file.path(), &settings).unwrap();
+        let data = [1u8; 512];
+        let result = output.write_blocks(&data).unwrap();
+        assert_eq!(result.writes_complete, 2);
+        assert_eq!(result.writes_partial, 0);
+    }
+}

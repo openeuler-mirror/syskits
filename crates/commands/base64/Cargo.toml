@@ -1,0 +1,26 @@
+[package]
+name = "ct_base64"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "base64 ~ (ctutils) decode/encode input (base64-encoding)"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/base64"
+
+[lib]
+path = "src/base64.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+ctcore = { workspace = true, features = ["encoding"] }
+ct_base32 = { path = "../base32" }
+clap = { workspace = true }
+
+[[bin]]
+name = "base64"
+path = "src/main.rs"

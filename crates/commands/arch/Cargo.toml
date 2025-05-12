@@ -1,0 +1,26 @@
+[package]
+name = "ct_arch"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "arch ~ (ctutils) display machine architecture"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/arch"
+
+[lib]
+path = "src/arch.rs"
+
+[dependencies]
+platform-info = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true }
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
+
+[[bin]]
+name = "arch"
+path = "src/main.rs"

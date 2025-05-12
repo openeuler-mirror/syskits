@@ -1,0 +1,27 @@
+[package]
+name = "ct_chown"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "chown ~ (ctutils) change the ownership of FILE"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/chown"
+
+[lib]
+path = "src/chown.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "fs", "perms"] }
+
+[dev-dependencies]
+
+[[bin]]
+name = "chown"
+path = "src/main.rs"

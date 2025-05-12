@@ -1,0 +1,25 @@
+[package]
+name = "ct_numfmt"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "numfmt ~ (ctutils) reformat NUMBER"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/numfmt"
+
+[lib]
+path = "src/numfmt.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["ranges"] }
+
+[[bin]]
+name = "numfmt"
+path = "src/main.rs"

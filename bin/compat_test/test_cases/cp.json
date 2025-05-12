@@ -1,0 +1,256 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "基本功能测试 - 复制单个文件",
+            "setup_commands": [
+                "echo 'test content' > source.txt"
+            ],
+            "args": ["source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f dest.txt && cat dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "test content"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "递归复制目录",
+            "setup_commands": [
+                "mkdir -p source_dir/subdir",
+                "echo 'test1' > source_dir/file1.txt",
+                "echo 'test2' > source_dir/subdir/file2.txt"
+            ],
+            "args": ["-r", "source_dir", "dest_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f dest_dir/file1.txt && test -f dest_dir/subdir/file2.txt && echo 'OK'",
+                        "expected_exit": 0,
+                        "expected_stdout": "OK"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf source_dir dest_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "保留文件属性",
+            "setup_commands": [
+                "echo 'test' > source.txt",
+                "chmod 600 source.txt"
+            ],
+            "args": ["-p", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %a dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "600"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "创建备份",
+            "setup_commands": [
+                "echo 'original' > dest.txt",
+                "echo 'new' > source.txt"
+            ],
+            "args": ["-b", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f dest.txt~ && cat dest.txt~ && echo ' ' && cat dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "original \nnew"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt dest.txt~"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "创建符号链接",
+            "setup_commands": [
+                "echo 'test' > source.txt"
+            ],
+            "args": ["-s", "source.txt", "link.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -L link.txt && readlink link.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "source.txt"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt link.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "复制到目标目录",
+            "setup_commands": [
+                "mkdir -p target_dir",
+                "echo 'test1' > file1.txt",
+                "echo 'test2' > file2.txt"
+            ],
+            "args": ["-t", "target_dir", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target_dir/file1.txt && test -f target_dir/file2.txt && echo 'OK'",
+                        "expected_exit": 0,
+                        "expected_stdout": "OK"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt",
+                "rm -rf target_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "交互式复制",
+            "setup_commands": [
+                "echo 'original' > dest.txt",
+                "echo 'new' > source.txt"
+            ],
+            "args": ["-i", "source.txt", "dest.txt"],
+            "tstdin": "n\n",
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "cp: overwrite 'dest.txt'? "
+                },
+                "verifications": [
+                    {
+                        "command": "cat dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "original"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "不覆盖已存在文件",
+            "setup_commands": [
+                "echo 'original' > dest.txt",
+                "echo 'new' > source.txt"
+            ],
+            "args": ["-n", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "original"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "verbose模式",
+            "setup_commands": [
+                "echo 'test' > source.txt"
+            ],
+            "args": ["-v", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'source.txt' -> 'dest.txt'",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "错误情况 - 源文件不存在",
+            "setup_commands": [],
+            "args": ["nonexistent.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: cannot stat 'nonexistent.txt': No such file or directory"
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

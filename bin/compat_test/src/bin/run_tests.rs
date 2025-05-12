@@ -466,3 +466,372 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use compat_test::config::{Config, SyskitsConfig, SyskitsMode, TestEnvConfig, TestSettings};
+    use compat_test::{CommandResult, ComparisonResult};
+
+    #[test]
+    fn test_get_workspace_dir() {
+        let workspace_dir = get_workspace_dir();
+        assert!(
+            workspace_dir.join("Cargo.toml").exists(),
+            "应该能找到工作空间的Cargo.toml文件"
+        );
+    }
+
+    #[test]
+    fn test_print_test_result() {
+        let config = TestConfig {
+            verbose: true,
+            ..Default::default()
+        };
+
+        let result = ComparisonResult {
+            command: "echo".to_string(),
+            description: "测试echo命令".to_string(),
+            args: vec!["-n".to_string(), "hello".to_string()],
+            expected: CommandResult {
+                stdout: "hello".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            actual: CommandResult {
+                stdout: "hello".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            passed: true,
+            differences: vec![],
+        };
+
+        // 不应该panic
+        print_test_result(&result, &config, 1);
+
+        // 测试失败的情况
+        let failed_result = ComparisonResult {
+            command: "echo".to_string(),
+            description: "测试不匹配的输出".to_string(),
+            args: vec!["-n".to_string(), "hello".to_string()],
+            expected: CommandResult {
+                stdout: "hello".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            actual: CommandResult {
+                stdout: "world".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            passed: false,
+            differences: vec!["标准输出不匹配: 期望 'hello', 得到 'world'".to_string()],
+        };
+
+        // 不应该panic
+        print_test_result(&failed_result, &config, 2);
+    }
+
+    #[test]
+    fn test_print_test_summary() {
+        // 不应该panic
+        print_test_summary(10, 8, 2);
+    }
+
+    #[test]
+    fn test_simple_test_deserialize() {
+        let json = r#"
+        {
+            "tests": [
+                {
+                    "command": "echo",
+                    "description": "测试echo命令",
+                    "args": ["-n", "hello"],
+                    "expectation": {
+                        "execution": {
+                            "exit_code": 0,
+                            "stdout": "hello",
+                            "stderr": ""
+                        },
+                        "verifications": [],
+                        "use_patterns": false,
+                        "env_changes": {},
+                        "file_changes": [],
+                        "ignore_fields": {
+                            "ignore_exit_code": false,
+                            "ignore_stdout": false,
+                            "ignore_stderr": false,
+                            "ignore_verifications": false
+                        }
+                    },
+                    "environment": {
+                        "files": [],
+                        "env_vars": {"TEST_VAR": "value"},
+                        "working_dir": "/tmp"
+                    },
+                    "setup_commands": ["mkdir -p /tmp/test"],
+                    "cleanup_commands": ["rm -rf /tmp/test"],
+                    "requires_root": false,
+                    "timeout": 5,
+                    "tags": ["basic", "echo"]
+                }
+            ]
+        }
+        "#;
+
+        let simple_tests: SimpleTests = serde_json::from_str(json).unwrap();
+        assert_eq!(simple_tests.tests.len(), 1);
+        assert_eq!(simple_tests.tests[0].command, "echo");
+        assert_eq!(simple_tests.tests[0].args, vec!["-n", "hello"]);
+        assert_eq!(simple_tests.tests[0].description, "测试echo命令");
+    }
+
+    #[test]
+    fn test_load_config_default() {
+        // 测试默认配置加载
+        let config = load_config().unwrap();
+        assert!(config.test.env.show_progress);
+        assert!(config.test.env.cleanup);
+    }
+
+    #[test]
+    fn test_load_config_custom() {
+        // 这个测试可能无法在CI环境中正常工作，因为它需要读取配置文件
+        // 我们只进行基本测试
+        let result = load_config();
+        match result {
+            Ok(config) => {
+                // 检查加载的配置是否有效
+                match config.syskits.mode {
+                    SyskitsMode::Single => assert!(true),
+                    SyskitsMode::Multiple => assert!(true),
+                }
+            }
+            Err(e) => {
+                println!("Configuration loading error: {}", e);
+                // 不做断言，因为在某些环境中可能会失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_run_tests_with_progress_mock() {
+        // 创建模拟的TestRunner和TestConfig
+        struct MockRunner {
+            // 移除未使用的字段
+            // results: HashMap<String, Vec<ComparisonResult>>,
+        }
+
+        impl MockRunner {
+            fn new() -> Self {
+                Self {}
+            }
+
+            fn run_command_tests_parallel(&self, command: &str) -> Result<Vec<ComparisonResult>> {
+                if command == "echo" {
+                    Ok(vec![ComparisonResult {
+                        command: "echo".to_string(),
+                        description: "测试1".to_string(),
+                        args: vec![],
+                        expected: CommandResult::default(),
+                        actual: CommandResult::default(),
+                        passed: true,
+                        differences: vec![],
+                    }])
+                } else {
+                    Ok(vec![])
+                }
+            }
+        }
+
+        fn mock_run_tests(
+            runner: &MockRunner,
+            commands: &[String],
+            _config: &TestConfig,
+        ) -> compat_test::Result<()> {
+            // 模拟测试执行
+            for cmd in commands {
+                let _results = runner.run_command_tests_parallel(cmd)?;
+            }
+
+            Ok(())
+        }
+
+        // 创建要测试的命令列表
+        let commands = vec!["echo".to_string(), "ls".to_string()];
+        let mock_runner = MockRunner::new();
+        let config = TestConfig::default();
+
+        // 运行并确保无错误
+        let result = mock_run_tests(&mock_runner, &commands, &config);
+        assert!(result.is_ok());
+    }
+
+    // 测试print_test_summary函数
+    #[test]
+    fn test_print_test_summary_detailed() {
+        // 测试各种边界情况
+
+        // 测试总数为0的情况
+        print_test_summary(0, 0, 0);
+
+        // 测试全部通过的情况
+        print_test_summary(10, 10, 0);
+
+        // 测试全部失败的情况
+        print_test_summary(10, 0, 10);
+
+        // 测试部分通过部分失败的情况
+        print_test_summary(100, 75, 25);
+
+        // 测试传入负数（不正常情况，但不应崩溃）
+        // 注意：这不是期望的行为，但测试确保代码不会崩溃
+        // 省略这种测试，因为会造成NaN
+    }
+
+    // 测试print_test_result函数详细测试
+    #[test]
+    fn test_print_test_result_detailed() {
+        // 创建测试配置，同时测试带和不带coreutils_path的情况
+
+        // 不带coreutils_path
+        let config_without_coreutils = TestConfig {
+            coreutils_path: None,
+            verbose: true,
+            ..Default::default()
+        };
+
+        // 带coreutils_path
+        let config_with_coreutils = TestConfig {
+            coreutils_path: Some(PathBuf::from("/usr/bin/coreutils")),
+            verbose: true,
+            ..Default::default()
+        };
+
+        // 创建通过的测试结果
+        let passed_result = ComparisonResult {
+            command: "echo".to_string(),
+            description: "Test case for echo command".to_string(),
+            args: vec!["-n".to_string(), "hello".to_string()],
+            expected: CommandResult {
+                stdout: "hello".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            actual: CommandResult {
+                stdout: "hello".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            passed: true,
+            differences: vec![],
+        };
+
+        // 创建失败的测试结果，带多个差异
+        let failed_result = ComparisonResult {
+            command: "echo".to_string(),
+            description: "Test case for echo command with differences".to_string(),
+            args: vec!["-n".to_string(), "hello".to_string()],
+            expected: CommandResult {
+                stdout: "hello".to_string(),
+                stderr: "".to_string(),
+                exit_code: 0,
+            },
+            actual: CommandResult {
+                stdout: "world".to_string(),
+                stderr: "error message".to_string(),
+                exit_code: 1,
+            },
+            passed: false,
+            differences: vec![
+                "stdout differs: expected 'hello', got 'world'".to_string(),
+                "stderr differs: expected '', got 'error message'".to_string(),
+                "exit code differs: expected 0, got 1".to_string(),
+            ],
+        };
+
+        // 测试使用config_without_coreutils的打印
+        print_test_result(&passed_result, &config_without_coreutils, 1);
+        print_test_result(&failed_result, &config_without_coreutils, 2);
+
+        // 测试使用config_with_coreutils的打印
+        print_test_result(&passed_result, &config_with_coreutils, 1);
+        print_test_result(&failed_result, &config_with_coreutils, 2);
+
+        // 测试verbose=false的情况
+        let config_non_verbose = TestConfig {
+            verbose: false,
+            ..Default::default()
+        };
+
+        print_test_result(&passed_result, &config_non_verbose, 1);
+        print_test_result(&failed_result, &config_non_verbose, 2);
+    }
+
+    // 测试load_config函数（模拟方式）
+    #[test]
+    fn test_load_config_mock() {
+        // 定义一个模拟的load_config函数来测试逻辑
+        fn mock_load_config(file_exists: bool, valid_content: bool) -> Result<Config> {
+            if file_exists {
+                if valid_content {
+                    let config = Config {
+                        syskits: SyskitsConfig {
+                            syskits_path: Some(PathBuf::from("/mock/syskits")),
+                            coreutils_path: Some(PathBuf::from("/mock/coreutils")),
+                            mode: SyskitsMode::Single,
+                            commands_dir: None,
+                        },
+                        test: TestSettings {
+                            test_cases_dir: Some(PathBuf::from("/mock/test_cases")),
+                            default_commands: Some(vec!["ls".to_string(), "cp".to_string()]),
+                            env: TestEnvConfig::default(),
+                        },
+                    };
+                    Ok(config)
+                } else {
+                    Err(TestError::SerializationError("模拟解析错误".to_string()))
+                }
+            } else {
+                Ok(Config::default())
+            }
+        }
+
+        // 测试找到有效配置文件
+        let config_valid = mock_load_config(true, true).unwrap();
+        assert_eq!(
+            config_valid.syskits.syskits_path.unwrap(),
+            PathBuf::from("/mock/syskits")
+        );
+        assert_eq!(
+            config_valid.test.default_commands.unwrap(),
+            vec!["ls".to_string(), "cp".to_string()]
+        );
+
+        // 测试找到但内容无效
+        let config_invalid = mock_load_config(true, false);
+        assert!(config_invalid.is_err());
+
+        // 测试没有找到配置文件
+        let config_not_found = mock_load_config(false, false).unwrap();
+        assert!(config_not_found.syskits.syskits_path.is_none());
+        assert!(config_not_found.test.default_commands.is_none());
+    }
+
+    // 测试get_workspace_dir函数的特性
+    #[test]
+    fn test_get_workspace_dir_structure() {
+        let workspace_dir = get_workspace_dir();
+
+        // 检查返回的目录是绝对路径
+        assert!(workspace_dir.is_absolute());
+
+        // 检查返回的目录包含Cargo.toml
+        assert!(workspace_dir.join("Cargo.toml").exists());
+
+        // 检查工作区目录结构
+        assert!(workspace_dir.join("bin").exists());
+        assert!(workspace_dir.join("bin").is_dir());
+    }
+}

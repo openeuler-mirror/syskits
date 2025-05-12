@@ -1,0 +1,352 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "基本功能测试 - 复制单个文件",
+            "setup_commands": [
+                "echo 'test content' > source.txt"
+            ],
+            "args": ["source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f dest.txt && echo 'File exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "File exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "创建目录",
+            "setup_commands": [],
+            "args": ["-d", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d test_dir && echo 'Directory exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Directory exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "显示设置所有者",
+            "setup_commands": [
+                "echo 'test content' > source.txt"
+            ],
+            "args": ["-o", "root", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ll dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "Directory exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt",
+                "rm -rf dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "设置自定义权限模式",
+            "setup_commands": [
+                "echo 'test content' > source.txt"
+            ],
+            "args": ["-m", "644", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %a dest.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "644"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "复制到目标目录",
+            "setup_commands": [
+                "echo 'test content' > source1.txt",
+                "echo 'test content 2' > source2.txt",
+                "mkdir -p target_dir"
+            ],
+            "args": ["-t", "target_dir", "source1.txt", "source2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target_dir/source1.txt && test -f target_dir/source2.txt && echo 'Files exist'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Files exist"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source1.txt source2.txt",
+                "rm -rf target_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "创建备份",
+            "setup_commands": [
+                "echo 'original content' > dest.txt",
+                "echo 'new content' > source.txt"
+            ],
+            "args": ["--backup", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f dest.txt~ && echo 'Backup exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Backup exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt dest.txt~"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "保留时间戳",
+            "setup_commands": [
+                "echo 'test content' > source.txt",
+                "touch -t 202001010000 source.txt"
+            ],
+            "args": ["-p", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %Y source.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "$(stat -c %Y dest.txt)"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "创建多级目录",
+            "setup_commands": [],
+            "args": ["-d", "dir1/dir2/dir3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d dir1/dir2/dir3 && echo 'Directories exist'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Directories exist"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf dir1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "比较源文件和目标文件",
+            "setup_commands": [
+                "echo 'test content' > source.txt",
+                "cp source.txt dest.txt"
+            ],
+            "args": ["-C", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp source.txt dest.txt && echo 'Files are identical'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Files are identical"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "设置自定义后缀",
+            "setup_commands": [
+                "echo 'original content' > dest.txt",
+                "echo 'new content' > source.txt"
+            ],
+            "args": ["--backup", "--suffix=.bak", "source.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f dest.txt.bak && echo 'Backup exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Backup exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt dest.txt dest.txt.bak"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "创建父目录",
+            "setup_commands": [
+                "echo 'test content' > source.txt"
+            ],
+            "args": ["-D", "newdir/subdir/dest.txt", "source.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f newdir/subdir/dest.txt && echo 'File exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "File exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt",
+                "rm -rf newdir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "verbose模式",
+            "setup_commands": [
+                "echo 'test content' > source.txt"
+            ],
+            "args": ["-v", "-d", "verbose_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "creating directory 'verbose_dir'",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d verbose_dir && echo 'Directory exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "Directory exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f source.txt",
+                "rm -rf verbose_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "错误情况 - 源文件不存在",
+            "setup_commands": [],
+            "args": ["nonexistent.txt", "dest.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "install: cannot stat 'nonexistent.txt': No such file or directory"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "install",
+            "description": "拆解符号表功能",
+            "setup_commands": [],
+            "args": ["-s", "src/compat_test/test_dep/install/test_bin", "/root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

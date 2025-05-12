@@ -488,7 +488,7 @@ fn generate_tools_code(
             tool
         );
         let type_name = syn::Ident::new(&tool.type_name, proc_macro2::Span::call_site());
-        
+
         // 对于"test"模块，使用"command_test"作为特性名
         // 这必须与bin/syskits/Cargo.toml中的依赖设置保持一致
         // Cargo.toml中已将test模块映射为command_test特性，以避免与Rust内置的test特性冲突
@@ -497,13 +497,10 @@ fn generate_tools_code(
         } else {
             tool.module_name.clone()
         };
-        
+
         // 对于test模块，在导入路径中也使用command_test，而不是test
         let module_name = if tool.module_name == "test" {
-            quote::format_ident!(
-                "command_test",
-                span = proc_macro2::Span::call_site()
-            )
+            quote::format_ident!("command_test", span = proc_macro2::Span::call_site())
         } else if tool.module_name == "true" || tool.module_name == "false" {
             quote::format_ident!(
                 "r#{}",

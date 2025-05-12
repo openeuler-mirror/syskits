@@ -37,7 +37,7 @@ feat_common_core = ["arch", "base32", "base64", "basename", "basenc", "cat", "ck
 
 feat_common_core_unix = ["chgrp", "chmod", "chown", "chroot", "groups", "id",
   "install", "kill", "logname", "mkfifo", "mknod", "nice", "nohup", "pathchk", 
-  "stat", "stty", "timeout", "tty",
+  "runcon", "stat", "stty", "timeout", "tty",
   # depend on utmpx (requiring unix utmp/utmpx support)
   "pinky", "uptime", "users", "who",
   # depend on hostid (gethostid of libc)

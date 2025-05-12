@@ -57,7 +57,7 @@ impl UNameOutput {
             self.machine.as_ref(),
             self.processor.as_ref(),
             self.hardware_platform.as_ref(),
-            self.os.as_ref(),   
+            self.os.as_ref(),
         ]
         .into_iter()
         .flatten()
@@ -96,9 +96,11 @@ impl UNameOutput {
         let machine =
             (opts.is_machine || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
 
-        let processor = (opts.is_processor || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
+        let processor = (opts.is_processor || opts.is_all)
+            .then(|| uname.machine().to_string_lossy().to_string());
 
-        let hardware_platform = (opts.is_hardware_platform || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
+        let hardware_platform = (opts.is_hardware_platform || opts.is_all)
+            .then(|| uname.machine().to_string_lossy().to_string());
 
         let os = (opts.is_os || opts.is_all).then(|| uname.osname().to_string_lossy().to_string());
 

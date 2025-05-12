@@ -55,19 +55,6 @@ struct StatFlags {
     is_group: bool,
 }
 
-/// checks if the string is within the specified bound,
-/// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
-/// where `beg` & `end` is the beginning and end index of sub-string, respectively
-fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> CTResult<()> {
-    if end >= bound {
-        return Err(CtSimpleError::new(
-            1,
-            format!("{}: invalid directive", slice[beg..end].quote()),
-        ));
-    }
-    Ok(())
-}
-
 enum StatPadding {
     Zero,
     Space,
@@ -113,36 +100,10 @@ enum StatToken {
 }
 
 trait ScanUtil {
-    fn scan_num<F>(&self) -> Option<(F, usize)>
-    where
-        F: std::str::FromStr;
     fn scan_char(&self, radix: u32) -> Option<(char, usize)>;
 }
 
 impl ScanUtil for str {
-    fn scan_num<F>(&self) -> Option<(F, usize)>
-    where
-        F: std::str::FromStr,
-    {
-        let mut chars = self.chars();
-        let mut i = 0;
-        match chars.next() {
-            Some('-' | '+' | '0'..='9') => i += 1,
-            _ => return None,
-        }
-        for c in chars {
-            match c {
-                '0'..='9' => i += 1,
-                _ => break,
-            }
-        }
-        if i > 0 {
-            F::from_str(&self[..i]).ok().map(|x| (x, i))
-        } else {
-            None
-        }
-    }
-
     fn scan_char(&self, radix: u32) -> Option<(char, usize)> {
         let count = match radix {
             8 => 3,
@@ -446,35 +407,43 @@ impl Stater {
             }
             *i += 1;
         }
-        check_bound(format_str, bound, old, *i)?;
 
         let mut width = 0;
         let mut precision = None;
         let mut j = *i;
 
-        if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
-            width = field_width;
-            j += offset;
-        }
-        check_bound(format_str, bound, old, j)?;
-
-        if chars[j] == '.' {
+        // 使用 chars 数组来处理数字
+        while j < bound && chars[j].is_ascii_digit() {
+            width = width * 10 + chars[j].to_digit(10).unwrap() as usize;
             j += 1;
-            check_bound(format_str, bound, old, j)?;
+        }
 
-            match format_str[j..].scan_num::<i32>() {
-                Some((value, offset)) => {
-                    if value >= 0 {
-                        precision = Some(value as usize);
-                    }
-                    j += offset;
+        if j < bound && chars[j] == '.' {
+            j += 1;
+            if j < bound {
+                let mut prec = 0;
+                let mut has_precision = false;
+                while j < bound && chars[j].is_ascii_digit() {
+                    prec = prec * 10 + chars[j].to_digit(10).unwrap() as usize;
+                    has_precision = true;
+                    j += 1;
                 }
-                None => precision = Some(0),
+                if has_precision {
+                    precision = Some(prec);
+                } else {
+                    precision = Some(0);
+                }
             }
-            check_bound(format_str, bound, old, j)?;
         }
 
         *i = j;
+        if *i >= bound {
+            return Err(CtSimpleError::new(
+                1,
+                format!("{}: invalid directive", &format_str[old..]),
+            ));
+        }
+
         Ok(StatToken::Directive {
             width,
             flag,
@@ -528,8 +497,8 @@ impl Stater {
 
     fn generate_tokens(format_str: &str, use_printf: bool) -> CTResult<Vec<StatToken>> {
         let mut tokens = Vec::new();
-        let bound = format_str.len();
         let chars = format_str.chars().collect::<Vec<char>>();
+        let bound = chars.len();
         let mut i = 0;
         while i < bound {
             match chars[i] {
@@ -728,7 +697,7 @@ impl Stater {
         match result {
             Ok(meta) => {
                 let tokens = self.select_tokens(&meta);
-                self.print_file_info(&meta, tokens);
+                self.print_file_info(&meta, tokens, file);
                 0
             }
             Err(e) => {
@@ -765,7 +734,7 @@ impl Stater {
         }
     }
 
-    fn print_file_info(&self, meta: &fs::Metadata, tokens: &[StatToken]) {
+    fn print_file_info(&self, meta: &fs::Metadata, tokens: &[StatToken], file: &OsStr) {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
@@ -775,7 +744,7 @@ impl Stater {
                     precision,
                     format,
                 } => {
-                    let output = self.get_file_output(meta, *format);
+                    let output = self.get_file_output(meta, *format, file);
                     print_it(&output, *flag, *width, *precision);
                 }
             }
@@ -817,13 +786,39 @@ impl Stater {
         }
     }
 
-    fn get_file_output(&self, meta: &fs::Metadata, format: char) -> StatOutputType {
+    fn get_file_output(&self, meta: &fs::Metadata, format: char, file: &OsStr) -> StatOutputType {
         let display_name = self
             .files
             .first()
             .map(|f| f.to_string_lossy())
             .unwrap_or_default();
         let file_type = meta.file_type();
+        let mut context_str = "".to_string();
+        let substitute_string = "?".to_string();
+
+        if !file.is_empty() {
+            context_str = match selinux::SecurityContext::of_path(file, false, false) {
+                Err(_r) => {
+                    // TODO: show the actual reason why it failed
+                    ct_show_warning!("failed to get security context of: {}", file.quote());
+                    substitute_string
+                }
+    
+                Ok(None) => substitute_string,
+                Ok(Some(context)) => {
+                    let context = context.as_bytes();
+                    let context_strip_suffix = context.strip_suffix(&[0]).unwrap_or(context);
+                    String::from_utf8(context_strip_suffix.to_vec()).unwrap_or_else(|e| {
+                        ct_show_warning!(
+                            "getting security context of: {}: {}",
+                            file.quote(),
+                            e.to_string()
+                        );
+                        String::from_utf8_lossy(context_strip_suffix).into_owned()
+                    })
+                }
+            }
+        }
 
         match format {
             // access rights in octal
@@ -835,6 +830,10 @@ impl Stater {
             // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
             'B' => StatOutputType::Unsigned(512),
 
+            //SELinux security context string
+            'C' => {
+                StatOutputType::Str(context_str)
+            }
             // device number in decimal
             'd' => StatOutputType::Unsigned(meta.dev()),
             // device number in hex
@@ -938,7 +937,7 @@ impl Stater {
                     .into()
             }
         } else if terse {
-            "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n".into()
+            "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o %C\n".into()
         } else {
             [
                 "  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n",
@@ -1072,10 +1071,6 @@ mod tests {
 
     #[test]
     fn test_scanners() {
-        assert_eq!(Some((-5, 2)), "-5zxc".scan_num::<i32>());
-        assert_eq!(Some((51, 2)), "51zxc".scan_num::<u32>());
-        assert_eq!(Some((192, 4)), "+192zxc".scan_num::<i32>());
-        assert_eq!(None, "z192zxc".scan_num::<i32>());
 
         assert_eq!(Some(('a', 3)), "141zxc".scan_char(8));
         assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
@@ -1407,10 +1402,10 @@ mod test_stat_all {
         let metadata = fs::metadata(&temp_file).unwrap();
 
         // Test various format specifiers
-        let output = stater.get_file_output(&metadata, 'n');
+        let output = stater.get_file_output(&metadata, 'n', temp_file.as_os_str());
         assert!(matches!(output, StatOutputType::Str(_)));
 
-        let output = stater.get_file_output(&metadata, 's');
+        let output = stater.get_file_output(&metadata, 's', temp_file.as_os_str());
         assert!(matches!(output, StatOutputType::Integer(_)));
     }
 }

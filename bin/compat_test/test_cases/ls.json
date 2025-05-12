@@ -1,0 +1,286 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "基本功能测试 - 列出当前目录",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/file1.txt test_dir/file2.txt",
+                "cd test_dir"
+            ],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1.txt\nfile2.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "显示隐藏文件",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/.hidden test_dir/visible",
+                "cd test_dir"
+            ],
+            "args": ["-a"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".\n..\n.hidden\nvisible",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "长格式显示",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/file.txt",
+                "chmod 644 test_dir/file.txt"
+            ],
+            "args": ["-l", "test_dir/file.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-rw-r--r--*file.txt",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l test_dir/file.txt | grep -E '^-rw-r--r--'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "递归显示",
+            "setup_commands": [
+                "mkdir -p test_dir/subdir",
+                "touch test_dir/file1.txt test_dir/subdir/file2.txt"
+            ],
+            "args": ["-R", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_dir:\nfile1.txt\nsubdir\n\ntest_dir/subdir:\nfile2.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "按大小排序",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "echo 'content' > test_dir/larger.txt",
+                "echo 'a' > test_dir/smaller.txt"
+            ],
+            "args": ["-S", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "larger.txt\nsmaller.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "人类可读的大小格式",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "dd if=/dev/zero of=test_dir/file.bin bs=1M count=1 2>/dev/null"
+            ],
+            "args": ["-lh", "test_dir/file.bin"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "*1.0M*file.bin",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -lh test_dir/file.bin | grep '1.0M'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "显示inode编号",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/file.txt"
+            ],
+            "args": ["-i", "test_dir/file.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "*file.txt",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -i test_dir/file.txt | grep -E '^[0-9]+ file.txt'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "按时间排序",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/old.txt",
+                "sleep 1",
+                "touch test_dir/new.txt"
+            ],
+            "args": ["-t", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "new.txt\nold.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "反向排序",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/a.txt test_dir/b.txt"
+            ],
+            "args": ["-r", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "b.txt\na.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "只显示目录本身",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/file.txt"
+            ],
+            "args": ["-d", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_dir",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "显示扩展信息",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/file.txt",
+                "ln -s file.txt test_dir/link.txt"
+            ],
+            "args": ["-F", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file.txt\nlink.txt@",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "一行一个文件",
+            "setup_commands": [
+                "mkdir -p test_dir",
+                "touch test_dir/file1.txt test_dir/file2.txt"
+            ],
+            "args": ["-1", "test_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1.txt\nfile2.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "错误情况 - 不存在的目录",
+            "setup_commands": [],
+            "args": ["nonexistent"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "ls: cannot access 'nonexistent': No such file or directory"
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

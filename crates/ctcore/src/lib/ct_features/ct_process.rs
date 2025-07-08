@@ -65,15 +65,16 @@ impl CtChildExt for Child {
         }
     }
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
-        let ignore_signal = unsafe { libc::signal(signal as libc::c_int, libc::SIG_IGN) };
-        if ignore_signal == libc::SIG_ERR {
-            return Err(io::Error::last_os_error());
-        }
+        // 直接使用进程PID作为进程组ID发送信号
+        // 负号表示发送到整个进程组
+        let pid = self.id() as pid_t;
+        let pgid = unsafe { libc::getpgid(pid) };
 
-        let result = unsafe { libc::kill(0, signal as libc::c_int) };
-        match result {
-            0 => Ok(()),
-            _ => Err(io::Error::last_os_error()),
+        let result = unsafe { libc::kill(-pgid, signal as i32) };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
         }
     }
 

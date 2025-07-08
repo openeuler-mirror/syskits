@@ -15,6 +15,7 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates
 path = "src/tr.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 nom = { workspace = true }
 clap = { workspace = true }

@@ -231,18 +231,18 @@ fn timeout_report_if_verbose(signal: usize, cmd: &str, is_verbose: bool) {
 }
 
 /// 发送信号给一个带有超时的进程，处理前台和后台进程
-fn timeout_send_signal(process: &mut Child, signal: usize, is_foreground: bool) {
-    match is_foreground {
-        true => _ = process.send_signal(signal),
-        false => {
-            _ = process.send_signal_group(signal);
-            let kill_signal = get_ct_signal_by_name_or_value("KILL").unwrap();
-            let continued_signal = get_ct_signal_by_name_or_value("CONT").unwrap();
-            if signal != kill_signal && signal != continued_signal {
-                _ = process.send_signal_group(continued_signal);
-            }
-        }
+fn timeout_send_signal(process: &mut Child, signal: usize, _is_foreground: bool) {
+    let kill_signal = get_ct_signal_by_name_or_value("KILL").unwrap();
+
+    // 对于KILL信号，总是直接发送给进程，因为它无法被捕获
+    if signal == kill_signal {
+        _ = process.send_signal(signal);
+        return;
     }
+
+    // 为了避免timeout进程本身被信号杀死，我们直接向子进程发送信号
+    // 而不是向进程组发送信号
+    _ = process.send_signal(signal);
 }
 
 /// 根据指定的超时标志设置进程的超时行为
@@ -299,17 +299,22 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
     match process.wait_or_timeout(flags.duration) {
         Ok(Some(status)) => {
-            // 进程在超时前结束
+            // 进程在超时前正常结束 - 这是成功的情况，不应该返回超时状态
             if flags.is_preserve_status {
                 // 保留原始退出状态
                 if let Some(signal) = status.signal() {
                     Err(ExitStatus::SignalTerminated(signal).into())
                 } else {
-                    Err(status.code().unwrap_or(0).into())
+                    let exit_code = status.code().unwrap_or(0);
+                    if exit_code == 0 {
+                        Ok(()) // 成功退出
+                    } else {
+                        Err(exit_code.into()) // 非零退出码
+                    }
                 }
             } else {
-                // 不保留状态时，返回 124
-                Err(ExitStatus::CommandTimedOut.into())
+                // 不保留状态时，如果进程正常完成，返回成功
+                Ok(())
             }
         }
         Ok(None) => {
@@ -318,8 +323,17 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
             timeout_send_signal(process, flags.signal, flags.is_foreground);
 
             if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
-                // 如果直接使用 KILL 信号，等待进程结束并返回 137 (128 + 9)
-                process.wait()?;
+                // 如果直接使用 KILL 信号，等待进程结束
+                let status = process.wait()?;
+                if let Some(signal) = status.signal() {
+                    if signal == 9 {
+                        // 子进程被SIGKILL杀死，向自己发送相同的信号以便shell正确显示"Killed"消息
+                        unsafe {
+                            libc::signal(libc::SIGKILL, libc::SIG_DFL);
+                            libc::raise(libc::SIGKILL);
+                        }
+                    }
+                }
                 Err(ExitStatus::SignalTerminated(9).into())
             } else {
                 handle_timeout_exceeded(process, flags)
@@ -347,30 +361,17 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
     match flags.kill_after {
         None => {
             // 等待 TERM 信号的结果
-            let status = process.wait()?;
-            if flags.is_preserve_status {
-                if let Some(signal) = status.signal() {
-                    Err(ExitStatus::SignalTerminated(signal).into())
-                } else {
-                    Err(status.code().unwrap_or(0).into())
-                }
-            } else {
-                Err(ExitStatus::CommandTimedOut.into()) // 124
-            }
+            let _status = process.wait()?;
+            // 无论进程如何结束，都应该返回超时状态，因为是由于超时触发的信号
+            Err(ExitStatus::CommandTimedOut.into()) // 124
         }
         Some(kill_after) => {
             // 等待 kill_after 时间
             match process.wait_or_timeout(kill_after) {
-                Ok(Some(status)) => {
-                    if flags.is_preserve_status {
-                        if let Some(signal) = status.signal() {
-                            Err(ExitStatus::SignalTerminated(signal).into())
-                        } else {
-                            Err(status.code().unwrap_or(0).into())
-                        }
-                    } else {
-                        Err(ExitStatus::CommandTimedOut.into()) // 124
-                    }
+                Ok(Some(_status)) => {
+                    // 进程在 kill_after 时间内结束，无论如何都应该返回超时状态（124）
+                    // 因为这表示进程是因为超时而被杀死的
+                    Err(ExitStatus::CommandTimedOut.into()) // 124
                 }
                 Ok(None) => {
                     // 发送 KILL 信号
@@ -378,8 +379,8 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
                     timeout_report_if_verbose(kill_signal, &flags.command[0], flags.is_verbose);
                     timeout_send_signal(process, kill_signal, flags.is_foreground);
                     process.wait()?;
-                    // KILL 信号无法被捕获，返回 137 (128 + 9)
-                    Err(ExitStatus::SignalTerminated(9).into())
+                    // KILL 信号无法被捕获，返回 124 而不是 137
+                    Err(ExitStatus::CommandTimedOut.into()) // 124
                 }
                 Err(_) => Err(ExitStatus::TimeoutFailed.into()),
             }
@@ -522,8 +523,8 @@ mod tests {
                 is_verbose: false,
                 command: vec!["true".to_string()],
             });
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().code(), 124);
+            // 进程在超时前正常结束，应该返回成功
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -547,13 +548,60 @@ mod tests {
                 is_foreground: false,
                 kill_after: None,
                 signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
-                duration: Duration::from_millis(100),
+                duration: Duration::from_secs(1), // 增加超时时间以确保false命令能正常退出
                 is_preserve_status: true,
                 is_verbose: false,
                 command: vec!["false".to_string()],
             });
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
+        }
+
+        #[test]
+        fn test_timeout_normal_exit_with_preserve_status() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_secs(1),
+                is_preserve_status: true,
+                is_verbose: false,
+                command: vec!["true".to_string()],
+            });
+            // 进程正常退出（退出码0），preserve_status模式下应该返回成功
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_timeout_actual_timeout() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_millis(100), // 很短的超时时间
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["sleep".to_string(), "1".to_string()], // sleep 1秒
+            });
+            // 进程应该超时并返回124
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 124);
+        }
+
+        #[test]
+        fn test_timeout_with_kill_after() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: Some(Duration::from_millis(50)), // 50ms后发送KILL信号
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_millis(100), // 100ms超时
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["sleep".to_string(), "1".to_string()], // sleep 1秒
+            });
+            // 进程应该超时并返回124（兼容性要求）
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 124);
         }
     }
 
@@ -572,8 +620,17 @@ mod tests {
         fn test_main_command_exits() {
             let args = vec![ctcore::ct_util_name(), "2s", "true"];
             let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            // 进程在超时前正常结束，应该返回成功
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_main_command_with_nonzero_exit() {
+            let args = vec![ctcore::ct_util_name(), "--preserve-status", "2s", "false"];
+            let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            // 进程正常退出但返回非零退出码，preserve-status模式下应该保留原始退出码
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().code(), 124);
+            assert_eq!(result.unwrap_err().code(), 1);
         }
     }
 

@@ -1,6 +1,5 @@
 fold:
   clap:
-    fold_characters: count characters rather than columns
     fold_spaces: break lines at word boundaries rather than a hard cut-off
     fold_width: set WIDTH as the maximum line width rather than 80
   usage: fold [OPTION]... [FILE]...

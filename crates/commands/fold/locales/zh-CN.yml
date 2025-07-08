@@ -1,6 +1,5 @@
 fold:
   clap:
-    fold_characters: 按字符计数而不是按列计数
     fold_spaces: 在单词边界处断行而不是硬截断
     fold_width: 将宽度设置为最大行宽而不是80
   usage: fold [选项]... [文件]...

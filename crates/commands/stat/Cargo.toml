@@ -23,6 +23,8 @@ rust-i18n = { workspace = true }
 sys-locale = { workspace = true }
 tempfile = { workspace = true }
 selinux = { workspace = true }
+# 使用 rustix 获得现代 statx() 支持
+rustix = { version = "1.0.7", features = ["fs"] }
 
 [[bin]]
 name = "stat"

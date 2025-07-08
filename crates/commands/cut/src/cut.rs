@@ -39,6 +39,7 @@ struct CutOptions<'a> {
     out_delimiter: Option<&'a [u8]>,
     line_ending: CtLineEnding,
     field_opts: Option<CutFieldOptions<'a>>,
+    no_split_multibyte: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -82,6 +83,7 @@ mod opt_flags {
     pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
     pub const COMPLEMENT: &str = "complement";
     pub const FILE: &str = "file";
+    pub const NO_SPLIT_MULTIBYTE: &str = "no-split-multibyte";
 }
 
 // 创建一个stdout的writer，如果stdout是终端，则直接返回stdout，否则返回一个包裹了stdout的BufWriter。
@@ -144,11 +146,30 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
             } else if opts.out_delimiter.is_some() {
                 print_delim = true;
             }
+            
             // 将范围的索引从1-based转换为0-based
-            let low = low - 1;
-            let high = high.min(line.len());
+            let mut start = low - 1;
+            let mut end = high.min(line.len());
+            
+            // 如果启用了no_split_multibyte选项，调整范围以避免分割多字节字符
+            if opts.no_split_multibyte {
+                // 尝试将字节切片转换为UTF-8字符串来检查字符边界
+                if let Ok(line_str) = std::str::from_utf8(line) {
+                    // 调整起始位置 - 向后移动到有效的UTF-8字符边界
+                    while start > 0 && !line_str.is_char_boundary(start) {
+                        start -= 1;
+                    }
+                    
+                    // 调整结束位置 - 向前移动到有效的UTF-8字符边界
+                    while end < line.len() && !line_str.is_char_boundary(end) {
+                        end += 1;
+                    }
+                }
+                // 如果输入不是有效的UTF-8，就保持原有的字节范围
+            }
+            
             // 将指定范围的字节写入输出
-            out.write_all(&line[low..high])?;
+            out.write_all(&line[start..end])?;
         }
         // 在每行末尾写入行结束符
         out.write_all(&[newline_char])?;
@@ -689,7 +710,13 @@ fn cut_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::FILE)
             .hide(true)
             .action(ArgAction::Append)
-            .value_hint(clap::ValueHint::FilePath)
+            .value_hint(clap::ValueHint::FilePath),
+
+        // 添加 -n 参数，与 -b 一起使用时不分割多字节字符
+        Arg::new(opt_flags::NO_SPLIT_MULTIBYTE)
+            .short('n')
+            .help("with -b: don't split multibyte characters")
+            .action(ArgAction::SetTrue),
     ];
     args
 }
@@ -819,6 +846,7 @@ fn cut_mode_parse<'a>(
     line_ending: CtLineEnding,
     mode_args_count: usize,
 ) -> Result<CutMode<'a>, String> {
+    let no_split_multibyte = args_match.get_flag(opt_flags::NO_SPLIT_MULTIBYTE);
     let mode_parse = match (
         mode_args_count,
         args_match.get_one::<String>(opt_flags::BYTES),
@@ -832,6 +860,7 @@ fn cut_mode_parse<'a>(
                     out_delimiter,
                     line_ending,
                     field_opts: None,
+                    no_split_multibyte,
                 },
             )
         }),
@@ -842,6 +871,7 @@ fn cut_mode_parse<'a>(
                     out_delimiter,
                     line_ending,
                     field_opts: None,
+                    no_split_multibyte,
                 },
             )
         }),
@@ -855,6 +885,7 @@ fn cut_mode_parse<'a>(
                         only_delimited: is_only_delimited,
                         delimiter,
                     }),
+                    no_split_multibyte,
                 },
             )
         }),
@@ -1353,7 +1384,7 @@ mod tests {
         #[test]
         fn test_cut_app_fields_zero_terminated_file() {
             let temp_dir = Builder::new()
-                .prefix("tests_ct_main_file1")
+                .prefix("tests_ct_app_file1")
                 .tempdir()
                 .unwrap();
             let sub_dir_path = temp_dir.path().join("sub_dir");
@@ -1362,8 +1393,8 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let content = "abc     def     ghi.\n\
-                   012     456     789.\n\
+            let content = "abc\0def\0ghi.\0\
+                   012\0456\0789.\0\
                    ";
 
             file.write_all(content.as_bytes()).unwrap();
@@ -1375,8 +1406,34 @@ mod tests {
                 "-f",
                 "1",
             ];
-            let command = ct_app();
-            let result = command.try_get_matches_from(args);
+            let result = ct_app().try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_app_no_split_multibyte_short() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "测试文本\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "-n",
+                "-b",
+                "1-3",
+            ];
+            let result = ct_app().try_get_matches_from(args);
 
             assert!(result.is_ok());
         }
@@ -1782,8 +1839,8 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let content = "abc     def     ghi.\n\
-                   012     456     789.\n\
+            let content = "abc\0def\0ghi.\0\
+                   012\0456\0789.\0\
                    ";
 
             file.write_all(content.as_bytes()).unwrap();
@@ -1799,6 +1856,34 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_cut_main_no_split_multibyte_short() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "测试文本\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "-n",
+                "-b",
+                "1-3",
+            ];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
     }
 
     mod tests_cut_functions {

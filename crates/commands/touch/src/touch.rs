@@ -49,6 +49,7 @@ pub mod touch_flags {
     pub static TOUCH_NO_CREATE: &str = "no-create";
     pub static TOUCH_NO_DEREF: &str = "no-dereference";
     pub static TOUCH_TIME: &str = "time";
+    pub static TOUCH_FORCE: &str = "force";
 }
 
 static TOUCH_ARG_FILES: &str = "files";
@@ -192,6 +193,10 @@ pub fn ct_app() -> Command {
                 "affect each symbolic link instead of any referenced file \
                      (only for systems that can change the timestamps of a symlink)",
             )
+            .action(ArgAction::SetTrue),
+        Arg::new(touch_flags::TOUCH_FORCE)
+            .short('f')
+            .help("(ignored)")
             .action(ArgAction::SetTrue),
         Arg::new(touch_flags::sources::TOUCH_REFERENCE)
             .short('r')
@@ -1445,14 +1450,21 @@ mod tests {
 
         #[test]
         fn test_touch_main_time_long_mtime() {
-            let filename = "test_touch_main_time_long_mtime";
-            let dir = tempdir().unwrap();
-            let file_path = dir.path().join(filename);
-            let _ = File::create(&file_path).unwrap();
-            let file_name = file_path.to_str().unwrap();
+            let file_name = "test_touch_main_time_long_mtime";
+            let command = ct_app();
 
             let args = vec![ctcore::ct_util_name(), "--time", "mtime", file_name];
-            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_force_short() {
+            let file_name = "test_touch_main_force_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-f", file_name];
+            let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
     }
@@ -1713,6 +1725,17 @@ mod tests {
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_force_short() {
+            let file_name = "test_ct_app_force_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-f", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
     }
 
     #[cfg(windows)]

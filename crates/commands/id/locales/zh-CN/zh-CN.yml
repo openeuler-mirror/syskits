@@ -2,6 +2,7 @@ id:
   clap:
     id_effective_user: 仅显示有效用户ID（以数字形式）。
     id_group: 仅显示有效组ID（以数字形式）
+    id_ignore: 忽略，为兼容SVR4
   usage: id [选项]... [用户]...
   about: |-
     打印每个指定`用户`的用户和组信息，

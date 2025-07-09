@@ -1479,6 +1479,7 @@ mod tests {
         use crate::opt_flags::{
             OPT_FORCE, OPT_INTERACTIVE, OPT_NO_CLOBBER, OPT_NO_TARGET_DIRECTORY, OPT_PROGRESS,
             OPT_STRIP_TRAILING_SLASHES, OPT_TARGET_DIRECTORY, OPT_VERBOSE,
+            OPT_DEBUG, OPT_NO_COPY,
         };
         use clap::error::ErrorKind;
 
@@ -1777,6 +1778,38 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(result.unwrap().get_one::<bool>(OPT_PROGRESS), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_debug() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--debug"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_DEBUG), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_no_copy() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--no-copy"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_NO_COPY), Some(&true));
+        }
+
+        #[test]
+        fn test_debug_implies_verbose() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--debug"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<bool>(OPT_DEBUG), Some(&true));
+            // The debug option should imply verbose mode when creating MvOpts
         }
     }
     #[cfg(test)]

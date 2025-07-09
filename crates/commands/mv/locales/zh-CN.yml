@@ -8,6 +8,8 @@ mv:
     opt_no_target_directory: 将目标视为普通文件
     opt_verbose: 说明正在执行的操作
     opt_context: 将目标文件的SELinux安全上下文设置为默认类型
+    opt_debug: 解释文件是如何被复制的（注意，这意味着开启 -v 选项）
+    opt_no_copy: 如果重命名失败，则不执行复制操作
   usage: |-
     mv [选项]... [-T] 源文件 目标文件
     mv [选项]... 源文件... 目录

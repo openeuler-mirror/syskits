@@ -403,7 +403,7 @@ checksum = "120133d4db2ec47efe2e26502ee984747630c67f51974fca0b6c1340cf2368d3"
 
 [[package]]
 name = "compat_test"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -633,7 +633,7 @@ dependencies = [
 
 [[package]]
 name = "ct_arch"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -644,7 +644,7 @@ dependencies = [
 
 [[package]]
 name = "ct_base32"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "ct_base64"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ct_base32",
@@ -665,7 +665,7 @@ dependencies = [
 
 [[package]]
 name = "ct_basename"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -675,7 +675,7 @@ dependencies = [
 
 [[package]]
 name = "ct_basenc"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ct_base32",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "ct_cat"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -699,7 +699,7 @@ dependencies = [
 
 [[package]]
 name = "ct_chcon"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "ct_chgrp"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "ct_chmod"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "ct_chown"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "ct_chroot"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "ct_cksum"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -767,7 +767,7 @@ dependencies = [
 
 [[package]]
 name = "ct_comm"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "ct_cp"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "ct_csplit"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "ct_cut"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "bstr",
  "clap",
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "ct_date"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -839,7 +839,7 @@ dependencies = [
 
 [[package]]
 name = "ct_dd"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -854,7 +854,7 @@ dependencies = [
 
 [[package]]
 name = "ct_df"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -866,7 +866,7 @@ dependencies = [
 
 [[package]]
 name = "ct_dir"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ct_ls",
@@ -878,7 +878,7 @@ dependencies = [
 
 [[package]]
 name = "ct_dircolors"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -888,7 +888,7 @@ dependencies = [
 
 [[package]]
 name = "ct_dirname"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -898,7 +898,7 @@ dependencies = [
 
 [[package]]
 name = "ct_du"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -912,7 +912,7 @@ dependencies = [
 
 [[package]]
 name = "ct_echo"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -923,7 +923,7 @@ dependencies = [
 
 [[package]]
 name = "ct_env"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -936,7 +936,7 @@ dependencies = [
 
 [[package]]
 name = "ct_expand"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "ct_expr"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "ct_factor"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "coz",
@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "ct_false"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -989,7 +989,7 @@ dependencies = [
 
 [[package]]
 name = "ct_fmt"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1001,7 +1001,7 @@ dependencies = [
 
 [[package]]
 name = "ct_fold"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1013,7 +1013,7 @@ dependencies = [
 
 [[package]]
 name = "ct_groups"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "ct_hashsum"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "ct_head"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1048,7 +1048,7 @@ dependencies = [
 
 [[package]]
 name = "ct_hostid"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1059,7 +1059,7 @@ dependencies = [
 
 [[package]]
 name = "ct_hostname"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "ct_id"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "ct_install"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1099,7 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "ct_join"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1111,7 +1111,7 @@ dependencies = [
 
 [[package]]
 name = "ct_kill"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1122,7 +1122,7 @@ dependencies = [
 
 [[package]]
 name = "ct_libstdbuf"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "cpp",
  "cpp_build",
@@ -1131,7 +1131,7 @@ dependencies = [
 
 [[package]]
 name = "ct_link"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1142,7 +1142,7 @@ dependencies = [
 
 [[package]]
 name = "ct_ln"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1153,7 +1153,7 @@ dependencies = [
 
 [[package]]
 name = "ct_logname"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1164,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "ct_ls"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "ct_mkdir"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1196,7 +1196,7 @@ dependencies = [
 
 [[package]]
 name = "ct_mkfifo"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1208,7 +1208,7 @@ dependencies = [
 
 [[package]]
 name = "ct_mknod"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "ct_mktemp"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "ct_more"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "crossterm",
@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "ct_mv"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1260,7 +1260,7 @@ dependencies = [
 
 [[package]]
 name = "ct_nice"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1272,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "ct_nl"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1283,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "ct_nohup"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1294,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "ct_nproc"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1305,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "ct_numfmt"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "ct_od"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "byteorder",
  "clap",
@@ -1327,7 +1327,7 @@ dependencies = [
 
 [[package]]
 name = "ct_paste"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "ct_pathchk"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1349,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "ct_pinky"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "ct_pr"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "ct_printenv"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "ct_printf"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "ct_ptx"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "ct_pwd"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1418,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "ct_readlink"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "ct_realpath"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "ct_rm"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1453,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "ct_rmdir"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "ct_runcon"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1479,7 +1479,7 @@ dependencies = [
 
 [[package]]
 name = "ct_seq"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1492,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "ct_shred"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1505,7 +1505,7 @@ dependencies = [
 
 [[package]]
 name = "ct_shuf"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1519,7 +1519,7 @@ dependencies = [
 
 [[package]]
 name = "ct_sleep"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1530,7 +1530,7 @@ dependencies = [
 
 [[package]]
 name = "ct_sort"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "binary-heap-plus",
  "clap",
@@ -1551,7 +1551,7 @@ dependencies = [
 
 [[package]]
 name = "ct_split"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "ct_stat"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -1577,7 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "ct_stdbuf"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ct_libstdbuf",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "ct_stty"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1600,7 +1600,7 @@ dependencies = [
 
 [[package]]
 name = "ct_sum"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "ct_sync"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1625,7 +1625,7 @@ dependencies = [
 
 [[package]]
 name = "ct_tac"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "ct_tail"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "ct_tee"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "ct_test"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1680,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "ct_timeout"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "ct_touch"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -1707,7 +1707,7 @@ dependencies = [
 
 [[package]]
 name = "ct_tr"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1718,7 +1718,7 @@ dependencies = [
 
 [[package]]
 name = "ct_true"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1728,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "ct_truncate"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1739,7 +1739,7 @@ dependencies = [
 
 [[package]]
 name = "ct_tsort"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1750,7 +1750,7 @@ dependencies = [
 
 [[package]]
 name = "ct_tty"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "ct_uname"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1772,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "ct_unexpand"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1784,7 +1784,7 @@ dependencies = [
 
 [[package]]
 name = "ct_uniq"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1795,7 +1795,7 @@ dependencies = [
 
 [[package]]
 name = "ct_unlink"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1805,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "ct_uptime"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -1817,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "ct_users"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1828,7 +1828,7 @@ dependencies = [
 
 [[package]]
 name = "ct_vdir"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ct_ls",
@@ -1840,7 +1840,7 @@ dependencies = [
 
 [[package]]
 name = "ct_wc"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "bytecount",
  "clap",
@@ -1856,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "ct_who"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "ct_whoami"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1878,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "ct_yes"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "clap",
  "ctcore",
@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "ctcore"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "blake2b_simd",
  "blake3",
@@ -3766,7 +3766,7 @@ dependencies = [
 
 [[package]]
 name = "syskits"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -4080,7 +4080,7 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "tool_derive"
-version = "3.1.2"
+version = "3.1.3"
 dependencies = [
  "glob",
  "proc-macro2",

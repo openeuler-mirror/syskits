@@ -146,11 +146,11 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
             } else if opts.out_delimiter.is_some() {
                 print_delim = true;
             }
-            
+
             // 将范围的索引从1-based转换为0-based
             let mut start = low - 1;
             let mut end = high.min(line.len());
-            
+
             // 如果启用了no_split_multibyte选项，调整范围以避免分割多字节字符
             if opts.no_split_multibyte {
                 // 尝试将字节切片转换为UTF-8字符串来检查字符边界
@@ -159,7 +159,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
                     while start > 0 && !line_str.is_char_boundary(start) {
                         start -= 1;
                     }
-                    
+
                     // 调整结束位置 - 向前移动到有效的UTF-8字符边界
                     while end < line.len() && !line_str.is_char_boundary(end) {
                         end += 1;
@@ -167,7 +167,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
                 }
                 // 如果输入不是有效的UTF-8，就保持原有的字节范围
             }
-            
+
             // 将指定范围的字节写入输出
             out.write_all(&line[start..end])?;
         }
@@ -1426,13 +1426,7 @@ mod tests {
             let content = "测试文本\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
-                ctcore::ct_util_name(),
-                filename1,
-                "-n",
-                "-b",
-                "1-3",
-            ];
+            let args = vec![ctcore::ct_util_name(), filename1, "-n", "-b", "1-3"];
             let result = ct_app().try_get_matches_from(args);
 
             assert!(result.is_ok());
@@ -1872,18 +1866,11 @@ mod tests {
             let content = "测试文本\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
-                ctcore::ct_util_name(),
-                filename1,
-                "-n",
-                "-b",
-                "1-3",
-            ];
+            let args = vec![ctcore::ct_util_name(), filename1, "-n", "-b", "1-3"];
             let result = cut_main(args.iter().map(|s| OsString::from(s)));
 
             assert!(result.is_ok());
         }
-
     }
 
     mod tests_cut_functions {

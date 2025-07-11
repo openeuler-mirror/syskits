@@ -48,7 +48,7 @@ use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Seek, Write, Read, BufReader};
+use std::io::{self, BufReader, Read, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -227,7 +227,10 @@ enum BytesWriter {
 }
 
 impl BytesWriter {
-    fn from_pass_type_with_random_source(pass: &PassType, random_source: Option<&str>) -> Result<Self, io::Error> {
+    fn from_pass_type_with_random_source(
+        pass: &PassType,
+        random_source: Option<&str>,
+    ) -> Result<Self, io::Error> {
         match pass {
             // 创建随机数据生成器
             PassType::Random => {
@@ -246,7 +249,7 @@ impl BytesWriter {
                         buffer: Box::new([0; SHRED_BLOCK_SIZE]),
                     })
                 }
-            },
+            }
             // 创建固定模式生成器
             PassType::Pattern(pattern) => {
                 let buffer = match pattern {
@@ -281,7 +284,7 @@ impl BytesWriter {
             Self::FileRandom { reader, buffer } => {
                 let bytes = &mut buffer[..size];
                 let mut total_read = 0;
-                
+
                 while total_read < size {
                     match reader.read(&mut bytes[total_read..]) {
                         Ok(0) => {
@@ -375,7 +378,9 @@ impl<'a> ShredSettings<'a> {
         let zero = matches.get_flag(shred_options::SHRED_ZERO);
         let verbose = matches.get_flag(shred_options::SHRED_VERBOSE);
         let force = matches.get_flag(shred_options::SHRED_FORCE);
-        let random_source = matches.get_one::<String>(shred_options::SHRED_RANDOM_SOURCE).map(|s| s.as_str());
+        let random_source = matches
+            .get_one::<String>(shred_options::SHRED_RANDOM_SOURCE)
+            .map(|s| s.as_str());
 
         // 获取所有文件路径并创建配置
         let settings = matches
@@ -602,8 +607,14 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
             );
         }
         ct_show_if_err!(
-            shred_do_pass(&mut file, &pass_type, settings.exact, size, settings.random_source)
-                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
+            shred_do_pass(
+                &mut file,
+                &pass_type,
+                settings.exact,
+                size,
+                settings.random_source
+            )
+            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
         );
     }
 
@@ -789,10 +800,10 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
     use std::fs;
-    use tempfile::tempdir;
     use std::fs::File;
     use std::io::Write;
     use tempfile::Builder;
+    use tempfile::tempdir;
 
     #[test]
     fn test_tool_implementation() {
@@ -814,35 +825,51 @@ mod tests {
     #[test]
     fn test_app_random_source_arg() {
         let app = ct_app();
-        
+
         // 测试 --random-source 参数
         let args = vec!["shred", "--random-source", "/dev/urandom", "testfile.txt"];
         let matches = app.try_get_matches_from(args);
         assert!(matches.is_ok(), "应该能解析 --random-source 参数");
-        
+
         let matches = matches.unwrap();
-        assert!(matches.contains_id(shred_options::SHRED_RANDOM_SOURCE), "应该包含 random-source 参数");
+        assert!(
+            matches.contains_id(shred_options::SHRED_RANDOM_SOURCE),
+            "应该包含 random-source 参数"
+        );
         assert_eq!(
-            matches.get_one::<String>(shred_options::SHRED_RANDOM_SOURCE).unwrap(),
+            matches
+                .get_one::<String>(shred_options::SHRED_RANDOM_SOURCE)
+                .unwrap(),
             "/dev/urandom",
             "随机源路径应该正确解析"
         );
     }
 
-    #[test] 
+    #[test]
     fn test_settings_with_random_source() -> CTResult<()> {
         let app = ct_app();
-        let args = vec!["shred", "--random-source", "/dev/urandom", "--iterations", "2", "testfile.txt"];
+        let args = vec![
+            "shred",
+            "--random-source",
+            "/dev/urandom",
+            "--iterations",
+            "2",
+            "testfile.txt",
+        ];
         let matches = app.try_get_matches_from(args).unwrap();
-        
+
         let settings = ShredSettings::new(&matches)?;
         assert_eq!(settings.len(), 1, "应该有一个文件设置");
-        
+
         let setting = &settings[0];
-        assert_eq!(setting.random_source, Some("/dev/urandom"), "随机源应该正确设置");
+        assert_eq!(
+            setting.random_source,
+            Some("/dev/urandom"),
+            "随机源应该正确设置"
+        );
         assert_eq!(setting.n_passes, 2, "迭代次数应该正确设置");
         assert_eq!(setting.path_str, "testfile.txt", "文件路径应该正确设置");
-        
+
         Ok(())
     }
 
@@ -860,7 +887,7 @@ mod tests {
             let block2 = writer.bytes_for_pass(10)?.to_vec();
             assert_ne!(block1, block2, "随机块应该不相同");
             assert_eq!(block1.len(), 10, "应该生成请求的长度");
-            
+
             Ok(())
         }
 
@@ -876,9 +903,10 @@ mod tests {
             temp_file.flush().unwrap();
 
             let path = temp_file.path().to_str().unwrap();
-            
+
             // 使用文件作为随机源
-            let mut writer = BytesWriter::from_pass_type_with_random_source(&PassType::Random, Some(path))?;
+            let mut writer =
+                BytesWriter::from_pass_type_with_random_source(&PassType::Random, Some(path))?;
 
             let block = writer.bytes_for_pass(10)?;
             assert_eq!(block.len(), 10, "应该生成请求的长度");
@@ -890,7 +918,8 @@ mod tests {
         #[test]
         fn test_bytes_writer_with_random_source_none() -> Result<(), io::Error> {
             // 当没有提供随机源时，应该使用默认随机数生成器
-            let mut writer = BytesWriter::from_pass_type_with_random_source(&PassType::Random, None)?;
+            let mut writer =
+                BytesWriter::from_pass_type_with_random_source(&PassType::Random, None)?;
 
             let block1 = writer.bytes_for_pass(10)?.to_vec();
             let block2 = writer.bytes_for_pass(10)?.to_vec();
@@ -1109,7 +1138,7 @@ mod tests {
                 n_passes: 1,
                 remove_method: RemoveMethod::None,
                 size: Some(test_content.len() as u64), // 明确指定文件大小
-                exact: true, // 使用精确大小
+                exact: true,                           // 使用精确大小
                 zero: false,
                 verbose: false,
                 force: false,

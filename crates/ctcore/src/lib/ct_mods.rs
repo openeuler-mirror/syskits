@@ -13,6 +13,7 @@ pub mod ct_display;
 pub mod ct_error;
 pub mod ct_io;
 pub mod ct_line_ending;
+pub mod ct_locale;
 pub mod ct_os;
 pub mod ct_panic;
 pub mod ct_posix;

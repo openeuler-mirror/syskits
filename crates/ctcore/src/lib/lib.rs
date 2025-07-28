@@ -39,6 +39,7 @@ pub use crate::ct_mods::ct_display;
 pub use crate::ct_mods::ct_error;
 pub use crate::ct_mods::ct_io;
 pub use crate::ct_mods::ct_line_ending;
+pub use crate::ct_mods::ct_locale;
 pub use crate::ct_mods::ct_os;
 pub use crate::ct_mods::ct_panic;
 pub use crate::ct_mods::ct_posix;

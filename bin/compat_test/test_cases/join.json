@@ -279,6 +279,144 @@
             "cleanup_commands": [
                 "rm -f file2.txt"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 C locale 下的字符串比较（字节比较）",
+            "setup_commands": [
+                "echo -e 'ABC data1\\nabc data2' > file1.txt",
+                "echo -e 'ABC info1\\nabc info2' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "C"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ABC data1 info1\nabc data2 info2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试非 C locale 下的字符串比较（locale感知比较）",
+            "setup_commands": [
+                "echo -e 'apple data1\\nApple data2\\nbanana data3' > file1.txt",
+                "echo -e 'apple info1\\nApple info2\\nbanana info3' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "apple data1 info1\nApple data2 info2\nbanana data3 info3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试忽略大小写与 locale 的结合",
+            "setup_commands": [
+                "echo -e 'ABC data1\\nDEF data2' > file1.txt",
+                "echo -e 'abc info1\\ndef info2' > file2.txt"
+            ],
+            "args": ["-i", "file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ABC data1 info1\nDEF data2 info2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 Unicode 字符在不同 locale 下的比较",
+            "setup_commands": [
+                "echo -e 'café data1\\nnaïve data2' > file1.txt",
+                "echo -e 'café info1\\nnaïve info2' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "café data1 info1\nnaïve data2 info2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试中文字符在 UTF-8 locale 下的比较",
+            "setup_commands": [
+                "echo -e '北京 数据1\\n上海 数据2' > file1.txt",
+                "echo -e '北京 信息1\\n上海 信息2' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "zh_CN.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "北京 数据1 信息1\n上海 数据2 信息2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "join",
+            "description": "测试 POSIX locale 下的比较行为",
+            "setup_commands": [
+                "echo -e 'Test1 data1\\ntest2 data2' > file1.txt",
+                "echo -e 'Test1 info1\\ntest2 info2' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "POSIX"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Test1 data1 info1\ntest2 data2 info2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
         }
     ]
 }

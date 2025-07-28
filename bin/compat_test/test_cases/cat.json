@@ -233,6 +233,91 @@
         "cleanup_commands": [
           "rm -rf temp.txt"
         ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat -s处理\\r\\n序列的兼容性",
+        "setup_commands": [
+          "echo 1234 > crlf_test.txt",
+          "echo -e '\\O\\r\\n' >> crlf_test.txt",
+          "cat -s crlf_test.txt"
+        ],
+        "args": ["-s", "crlf_test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "1234\n\\O\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat -s crlf_test.txt | wc -l",
+              "expected_exit": 0,
+              "expected_stdout": "3"
+            }
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf crlf_test.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat -s处理混合行结束符的兼容性",
+        "setup_commands": [
+          "echo -e 'line1\\n\\nline2\\r\\n\\nline3' > mixed_endings.txt",
+          "cat -s mixed_endings.txt"
+        ],
+        "args": ["-s", "mixed_endings.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "line1\n\nline2\n\nline3",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat -s mixed_endings.txt | wc -l",
+              "expected_exit": 0,
+              "expected_stdout": "5"
+            }
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf mixed_endings.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat -s处理多个连续空行与\\r\\n的兼容性",
+        "setup_commands": [
+          "echo -e 'start\\n\\n\\n\\r\\n\\nend' > multi_blank.txt",
+          "cat -s multi_blank.txt"
+        ],
+        "args": ["-s", "multi_blank.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "start\n\n\nend",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat -s multi_blank.txt | wc -l",
+              "expected_exit": 0,
+              "expected_stdout": "4"
+            }
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf multi_blank.txt"
+        ]
       }
     ]
   } 

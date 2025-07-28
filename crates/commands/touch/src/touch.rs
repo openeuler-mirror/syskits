@@ -32,6 +32,7 @@ use sys_locale::get_locale;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_parse_datetime;
 use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
@@ -349,12 +350,22 @@ fn touch_stat(path: &Path, is_follow: bool) -> CTResult<(FileTime, FileTime)> {
 }
 
 fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
-    // 这实际上不兼容GNU touch，但似乎没有
-    // 关于此参数允许的日期格式的简单规范，我不打算
-    // 实现GNU parse_datetime。
-    // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
+    // 首先检查Unix时间戳格式 "@%s"，这应该被视为绝对时间
+    // "@%s" 是 "自纪元1970-01-01 00:00:00 +0000 (UTC)以来的秒数。 (TZ) (由mktime(tm)计算。)"
+    if s.bytes().next() == Some(b'@') {
+        if let Ok(ts) = &s[1..].parse::<i64>() {
+            return Ok(FileTime::from_unix_time(*ts, 0));
+        }
+    }
 
-    // TODO: 匹配字符数？
+    // 使用GNU coreutils兼容的日期解析器
+    // 支持"next friday"、"last monday"等自然语言日期表达式
+    match ct_parse_datetime::parse_datetime_to_filetime(s, ref_time) {
+        Ok(ft) => return Ok(ft),
+        Err(_) => {
+            // 如果新解析器失败，尝试其他格式
+        }
+    }
 
     // "当前语言环境的首选日期和时间表示。"
     // "(在POSIX语言环境中这相当于%a %b %e %H:%M:%S %Y。)"
@@ -388,17 +399,6 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
             .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
             .unwrap();
         return Ok(touch_datetime_to_filetime(&parsed));
-    }
-
-    // "@%s" 是 "自纪元1970-01-01 00:00:00 +0000 (UTC)以来的秒数。 (TZ) (由mktime(tm)计算。)"
-    if s.bytes().next() == Some(b'@') {
-        if let Ok(ts) = &s[1..].parse::<i64>() {
-            return Ok(FileTime::from_unix_time(*ts, 0));
-        }
-    }
-
-    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
-        return Ok(touch_datetime_to_filetime(&dt));
     }
 
     Err(CtSimpleError::new(1, format!("Unable to parse date: {s}")))
@@ -747,40 +747,24 @@ mod tests {
             // 测试其他有效格式的日期
             let date_str = "2022-06-15 08:30:00";
             let filetime = touch_parse_date(ref_time, date_str).unwrap();
-            // 使用NaiveDateTime直接计算期望的时间戳
-            // 注意：这里期望时间是UTC时间，所以要用UTC时区
-            let expected_time = NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(2022, 6, 15).unwrap(),
-                NaiveTime::from_hms_opt(8, 30, 0).unwrap(),
-            )
-            .and_utc()
-            .timestamp();
-            assert_eq!(filetime.unix_seconds(), expected_time);
+            // 使用本地时间计算期望的时间戳（GNU解析器将此格式视为本地时间）
+            let expected_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            assert_eq!(filetime.unix_seconds(), expected_time.timestamp());
             assert_eq!(filetime.nanoseconds(), 0);
 
             let date_str = "2022-06-15 08:30:00.123456";
             let filetime = touch_parse_date(ref_time, date_str).unwrap();
-            // 使用NaiveDateTime直接计算期望的时间戳
-            let expected_time = NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(2022, 6, 15).unwrap(),
-                NaiveTime::from_hms_micro_opt(8, 30, 0, 123456).unwrap(),
-            )
-            .and_utc()
-            .timestamp();
-            assert_eq!(filetime.unix_seconds(), expected_time);
+            // GNU解析器可能不支持微秒，回退到原解析器，使用本地时间
+            let expected_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            assert_eq!(filetime.unix_seconds(), expected_time.timestamp());
             // 修正纳秒值的对比，需要匹配代码实际处理逻辑
             assert_eq!(filetime.nanoseconds(), 123456);
 
             let date_str = "2022-06-15 08:30";
             let filetime = touch_parse_date(ref_time, date_str).unwrap();
-            // 使用NaiveDateTime直接计算期望的时间戳
-            let expected_time = NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(2022, 6, 15).unwrap(),
-                NaiveTime::from_hms_opt(8, 30, 0).unwrap(),
-            )
-            .and_utc()
-            .timestamp();
-            assert_eq!(filetime.unix_seconds(), expected_time);
+            // GNU解析器将此格式视为本地时间
+            let expected_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            assert_eq!(filetime.unix_seconds(), expected_time.timestamp());
             assert_eq!(filetime.nanoseconds(), 0);
 
             let date_str = "202206150830";
@@ -1748,4 +1732,5 @@ mod tests {
                 .contains("GetFinalPathNameByHandleW failed with code 1")
         );
     }
+
 }

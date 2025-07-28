@@ -11,6 +11,7 @@
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use std::borrow::Cow;
@@ -176,11 +177,16 @@ fn idle_string_local<'a>(when: i64, boot_time: i64, now: i64) -> Cow<'a, str> {
 }
 
 fn time_string(utmpx: &CtUtmpx) -> String {
-    // "%b %e %H:%M"
-    let time_fmt: Vec<time::format_description::FormatItem> =
+    let time_fmt = if hard_locale_time() {
+        time::format_description::parse(
+            "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]",
+        )
+        .unwrap()
+    } else {
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap();
-    utmpx.login_time().format(&time_fmt).unwrap() // LC_ALL=C
+            .unwrap()
+    };
+    utmpx.login_time().format(&time_fmt).unwrap()
 }
 
 #[inline]
@@ -431,8 +437,15 @@ impl Who {
             buffer.push_str(&msg);
         }
         write!(buffer, " {line:<12}").unwrap();
-        // "%b %e %H:%M" (LC_ALL=C)
-        let time_size = 3 + 2 + 2 + 1 + 2;
+        let lc_time = std::env::var("LC_TIME").unwrap_or_else(|_| {
+            std::env::var("LC_ALL")
+                .unwrap_or_else(|_| std::env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            3 + 1 + 2 + 1 + 2 + 1 + 2
+        } else {
+            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2
+        };
         write!(buffer, " {time:<time_size$}").unwrap();
 
         if !self.is_short_output {

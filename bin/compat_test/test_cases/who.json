@@ -307,6 +307,126 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_TIME=C locale 测试 - 英文月份格式",
+            "setup_commands": ["export LC_TIME=C"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": ["unset LC_TIME"]
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_TIME=en_US.UTF-8 locale 测试 - ISO日期格式",
+            "setup_commands": ["export LC_TIME=en_US.UTF-8"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": ["unset LC_TIME"]
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_TIME=zh_CN.UTF-8 locale 测试 - ISO日期格式",
+            "setup_commands": ["export LC_TIME=zh_CN.UTF-8"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": ["unset LC_TIME"]
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C locale 测试 - 英文月份格式",
+            "setup_commands": ["export LC_ALL=C"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": ["unset LC_ALL"]
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_TIME=POSIX locale 测试 - 英文月份格式",
+            "setup_commands": ["export LC_TIME=POSIX"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": ["unset LC_TIME"]
         }
     ]
 } 

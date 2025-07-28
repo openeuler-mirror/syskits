@@ -522,6 +522,22 @@ mod tests_all {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    mod time_format_tests {
+        use super::*;
+
+        #[test]
+        fn test_time_format_width_basic() {
+            // 由于时间格式宽度依赖于实际的环境变量，
+            // 我们只测试函数能正常返回合理的值
+            let width = time_format_width();
+            assert!(
+                width == 12 || width == 16,
+                "time_format_width should return 12 or 16, got {}",
+                width
+            );
+        }
+    }
+
     mod idle_string_tests {
         use super::*;
 

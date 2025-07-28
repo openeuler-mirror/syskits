@@ -209,6 +209,16 @@ pub fn ct_app() -> Command {
     let usage_description = t!("echo.usage");
 
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("echo.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("echo.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::NO_NEWLINE)
             .short('n')
             .help(t!("echo.clap.no_newline"))
@@ -234,6 +244,8 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .after_help(t!("echo.after_help"))
         .override_usage(usage_description)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 

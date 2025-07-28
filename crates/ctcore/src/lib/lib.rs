@@ -45,6 +45,8 @@ pub use crate::ct_mods::ct_panic;
 pub use crate::ct_mods::ct_posix;
 
 // * string parsing modules
+#[cfg(feature = "datetime")]
+pub use crate::ct_parser::ct_parse_datetime;
 pub use crate::ct_parser::ct_parse_glob;
 pub use crate::ct_parser::ct_parse_size;
 pub use crate::ct_parser::ct_parse_time;

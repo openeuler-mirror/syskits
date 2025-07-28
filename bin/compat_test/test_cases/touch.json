@@ -246,6 +246,373 @@
             "cleanup_commands": [
                 "rm -f target_file symlink"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - next Friday",
+            "args": ["--date=next Friday", "test_next_friday.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_next_friday.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_next_friday.txt '+%A' | grep -q 'Friday' && echo 'is_friday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_friday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_next_friday.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - last Monday",
+            "args": ["--date=last Monday", "test_last_monday.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_last_monday.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_last_monday.txt '+%A' | grep -q 'Monday' && echo 'is_monday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_monday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_last_monday.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - next Wednesday",
+            "args": ["--date=next Wednesday", "test_next_wednesday.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_next_wednesday.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_next_wednesday.txt '+%A' | grep -q 'Wednesday' && echo 'is_wednesday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_wednesday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_next_wednesday.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - this Saturday",
+            "args": ["--date=this Saturday", "test_this_saturday.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_this_saturday.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_this_saturday.txt '+%A' | grep -q 'Saturday' && echo 'is_saturday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_saturday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_this_saturday.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 纯星期几名称 Friday",
+            "args": ["--date=Friday", "test_friday.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_friday.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_friday.txt '+%A' | grep -q 'Friday' && echo 'is_friday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_friday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_friday.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 大小写不敏感 FRIDAY",
+            "args": ["--date=FRIDAY", "test_friday_upper.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_friday_upper.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_friday_upper.txt '+%A' | grep -q 'Friday' && echo 'is_friday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_friday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_friday_upper.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 星期几缩写 tues",
+            "args": ["--date=tues", "test_tues.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_tues.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_tues.txt '+%A' | grep -q 'Tuesday' && echo 'is_tuesday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_tuesday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_tues.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 星期几缩写 thurs",
+            "args": ["--date=thurs", "test_thurs.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_thurs.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_thurs.txt '+%A' | grep -q 'Thursday' && echo 'is_thursday'",
+                        "expected_exit": 0,
+                        "expected_stdout": "is_thursday"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_thurs.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 相对时间 tomorrow",
+            "args": ["--date=tomorrow", "test_tomorrow.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_tomorrow.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_tomorrow.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 相对时间 yesterday",
+            "args": ["--date=yesterday", "test_yesterday.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_yesterday.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_yesterday.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - ISO 8601格式 2025-08-15",
+            "args": ["--date=2025-08-15", "test_iso_date.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_iso_date.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    },
+                    {
+                        "command": "date -r test_iso_date.txt '+%Y-%m-%d' | grep -q '2025-08-15' && echo 'correct_date'",
+                        "expected_exit": 0,
+                        "expected_stdout": "correct_date"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_iso_date.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - Unix时间戳 @1640995200",
+            "args": ["--date=@1640995200", "test_unix_timestamp.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_unix_timestamp.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_unix_timestamp.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 现有格式兼容性 1 week",
+            "args": ["--date=1 week", "test_1week.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_1week.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_1week.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "日期解析 - 现有格式兼容性 next month",
+            "args": ["--date=next month", "test_next_month.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_next_month.txt && echo 'exists'",
+                        "expected_exit": 0,
+                        "expected_stdout": "exists"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_next_month.txt"
+            ]
         }
     ]
 } 

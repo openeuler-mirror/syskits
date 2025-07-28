@@ -277,6 +277,121 @@
         "cleanup_commands": [
           "rm -rf test3.txt"
         ]
+      },
+      
+      {
+        "tstdin": "abcdefgh\n",
+        "command": "cut",
+        "description": "测试字符模式相邻范围的output-delimiter",
+        "setup_commands": [],
+        "args": ["-c", "1-2,3-4", "--output-delimiter", " "],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "ab cd\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": []
+      },
+      
+      {
+        "tstdin": "abcdefgh\n",
+        "command": "cut",
+        "description": "测试字符模式重叠范围的output-delimiter",
+        "setup_commands": [],
+        "args": ["-c", "1-3,2-4", "--output-delimiter", " "],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "abcd\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": []
+      },
+      
+      {
+        "tstdin": "你好世界测试\n",
+        "command": "cut",
+        "description": "测试中文字符的output-delimiter",
+        "setup_commands": [],
+        "args": ["-c", "1-2,3-4", "--output-delimiter", "|"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "你好|世界\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": []
+      },
+      
+      {
+        "tstdin": "abcdefgh\n",
+        "command": "cut",
+        "description": "测试字节模式的output-delimiter",
+        "setup_commands": [],
+        "args": ["-b", "1-2,3-4", "--output-delimiter", ":"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "ab:cd\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": []
+      },
+      
+      {
+        "tstdin": "b0280181\n",
+        "command": "cut",
+        "description": "测试原始问题案例的output-delimiter修复",
+        "setup_commands": [],
+        "args": ["-c", "1-2,3-4", "--output-delimiter", " "],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "b0 28\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": []
       }
     ]
 }

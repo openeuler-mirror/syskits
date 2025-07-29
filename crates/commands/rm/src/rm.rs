@@ -373,7 +373,7 @@ fn handle_dir(path: &Path, options: &RMOptions) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = fs::remove_dir_all(path) {
+            if let Err(e) = custom_remove_dir_all(path) {
                 // GNU compatibility (rm/empty-inacc.sh)
                 // remove_dir_all failed. maybe it is because of the permissions
                 // but if the directory is empty, remove_dir might work.
@@ -653,6 +653,76 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
 
     metadata.file_type().is_symlink()
         && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+}
+
+/// 自定义的remove_dir_all函数，不使用fs库的remove_dir_all
+/// 递归删除目录及其所有内容
+fn custom_remove_dir_all(path: &Path) -> std::io::Result<()> {
+    let metadata = std::fs::metadata(path)?;
+    
+    if metadata.is_dir() {
+        // 读取目录内容
+        let entries = std::fs::read_dir(path)?;
+        let mut had_error = false;
+        let mut last_error = None;
+        
+        // 递归删除所有子项
+        for entry in entries {
+            match entry {
+                Ok(entry) => {
+                    let entry_path = entry.path();
+                    match entry.metadata() {
+                        Ok(entry_metadata) => {
+                            if entry_metadata.is_dir() {
+                                // 递归删除子目录
+                                if let Err(e) = custom_remove_dir_all(&entry_path) {
+                                    ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
+                                    had_error = true;
+                                    last_error = Some(e);
+                                }
+                            } else {
+                                // 删除文件
+                                if let Err(e) = std::fs::remove_file(&entry_path) {
+                                    ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
+                                    had_error = true;
+                                    last_error = Some(e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
+                            had_error = true;
+                            last_error = Some(e);
+                        }   
+                    }
+                }
+                Err(e) => {
+                    ct_show_error!("failed to read directory entry: {}", e);
+                    had_error = true;
+                    last_error = Some(e);
+                }
+            }
+        }
+        
+        // 尝试删除空目录
+        if let Err(e) = std::fs::remove_dir(path) {
+            ct_show_error!("cannot remove {}: {}", path.display(), e);
+            had_error = true;
+            last_error = Some(e);
+        }
+        
+        // 如果有错误发生，返回最后一个错误
+        if had_error {
+            if let Some(err) = last_error {
+                return Err(err);
+            }
+        }
+    } else {
+        // 如果不是目录，直接删除文件
+        std::fs::remove_file(path)?;
+    }
+    
+    Ok(())
 }
 
 #[cfg(test)]

@@ -13,6 +13,7 @@
 //!
 //! 目标是在不转换字符串的情况下（即不分配新字符串）比较字符串。)
 
+use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 
 fn custom_filter_char(
@@ -44,8 +45,8 @@ pub fn custom_cmp_str(
     ignore_case: bool,
 ) -> Ordering {
     if !(ignore_case || is_ignore_non_dictionary || is_ignore_non_printing) {
-        // 没有自定义设置。返回默认的 strcmp，速度更快。
-        return a.cmp(b);
+        // 没有自定义设置。使用locale感知的字符串比较，速度更快。
+        return strcoll_compare(a.as_bytes(), b.as_bytes(), false);
     }
     let mut a_chars = a
         .chars()

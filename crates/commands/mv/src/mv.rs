@@ -729,6 +729,14 @@ fn mv_rename(
         }
     }
 
+    if !to_path.exists() {
+        let message = format!(
+                "cannot move {} to {}: Not a directory",
+                from_path.quote(),
+                to_path.quote()
+            );
+        return Err(io::Error::new(io::ErrorKind::Other, message));
+    }
     // 执行重命名操作
     mv_rename_with_fallback(from_path, to_path, options, multi_progress)?;
 

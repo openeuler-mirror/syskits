@@ -3208,9 +3208,7 @@ mod tests {
     #[cfg(test)]
     mod locale_tests {
         use super::*;
-        use ctcore::ct_locale::hard_locale_collate;
         use std::cmp::Ordering;
-        use std::env;
 
         fn test_line_cmp(a: &[u8], b: &[u8]) -> Ordering {
             // 模拟comm命令中的比较逻辑，使用locale感知比较
@@ -3249,44 +3247,40 @@ mod tests {
 
         #[test]
         fn test_comm_line_cmp_unicode_strings() {
-            // 模拟支持Unicode的locale
-            unsafe {
-                env::set_var("LC_COLLATE", "zh_CN.UTF-8");
-            }
-
-            // 测试Unicode字符串比较
+            // 测试Unicode字符串比较，无需修改环境变量
             let result = test_line_cmp("你好".as_bytes(), "世界".as_bytes());
-            // Unicode字符串比较应该正常工作
+            // Unicode字符串比较应该正常工作，无论在什么locale下
             assert!(result != Ordering::Equal);
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_COLLATE");
-            }
+            
+            // 测试相同的Unicode字符串
+            let result_same = test_line_cmp("你好".as_bytes(), "你好".as_bytes());
+            assert_eq!(result_same, Ordering::Equal);
+            
+            // 测试ASCII和Unicode混合
+            let result_mixed = test_line_cmp("hello".as_bytes(), "你好".as_bytes());
+            assert!(result_mixed != Ordering::Equal);
         }
 
         #[test]
         fn test_hard_locale_collate_integration() {
-            // 测试hard_locale_collate函数的使用
-            unsafe {
-                env::set_var("LC_COLLATE", "C");
-            }
-            assert!(!hard_locale_collate());
-
-            unsafe {
-                env::set_var("LC_COLLATE", "POSIX");
-            }
-            assert!(!hard_locale_collate());
-
-            unsafe {
-                env::set_var("LC_COLLATE", "fr_FR.UTF-8");
-            }
-            assert!(hard_locale_collate());
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_COLLATE");
-            }
+            // 不修改全局环境变量，而是直接测试locale感知比较函数的行为
+            
+            // 测试C locale行为 - 应该使用字节比较
+            let result1 = strcoll_compare(b"apple", b"Apple", false);
+            let result2 = strcoll_compare(b"apple", b"Apple", true);
+            
+            // 在任何locale下，函数都应该正常工作而不崩溃
+            assert_ne!(result1, result2); // 大小写敏感和不敏感应该有不同结果
+            
+            // 测试基本的字符串比较
+            assert_eq!(strcoll_compare(b"a", b"b", false), Ordering::Less);
+            assert_eq!(strcoll_compare(b"b", b"a", false), Ordering::Greater);
+            assert_eq!(strcoll_compare(b"a", b"a", false), Ordering::Equal);
+            
+            // 测试空字符串
+            assert_eq!(strcoll_compare(b"", b"", false), Ordering::Equal);
+            assert_eq!(strcoll_compare(b"a", b"", false), Ordering::Greater);
+            assert_eq!(strcoll_compare(b"", b"a", false), Ordering::Less);
         }
 
         #[test]

@@ -627,7 +627,7 @@ fn is_root() -> bool {
 /// 打印链接详细信息。
 fn print_link_info(dst: &Path, source: &Path, backup_path: Option<PathBuf>, settings: &LnSettings) {
     if settings.is_verbose {
-        print!("{} -> {}", dst.quote(), source.quote());
+        print!("{} => {}", dst.quote(), source.quote());
         if let Some(path) = backup_path {
             println!(" (backup: {})", path.quote());
         } else {

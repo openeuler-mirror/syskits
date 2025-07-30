@@ -1811,8 +1811,10 @@ mod tests {
         use ctcore::ct_locale::hard_locale_collate;
         use std::cmp::Ordering;
         use std::env;
+        use serial_test::serial;
 
         #[test]
+        #[serial]
         fn test_compare_basic_functionality() {
             let input = JoinInput::new(Sep::Whitespaces, false, CheckOrder::Disabled);
 
@@ -1835,6 +1837,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_compare_with_locale_sensitivity() {
             let input = JoinInput::new(Sep::Whitespaces, false, CheckOrder::Disabled);
 
@@ -1853,6 +1856,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_compare_ignore_case_with_locale() {
             let input = JoinInput::new(Sep::Whitespaces, true, CheckOrder::Disabled);
 
@@ -1871,6 +1875,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_hard_locale_collate_integration() {
             // 测试hard_locale_collate函数的使用
             unsafe {
@@ -1890,6 +1895,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_compare_empty_fields() {
             let input = JoinInput::new(Sep::Whitespaces, false, CheckOrder::Disabled);
 

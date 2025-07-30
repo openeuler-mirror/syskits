@@ -22,6 +22,7 @@ clap = { workspace = true }
 ctcore = { workspace = true }
 memchr = { workspace = true }
 tempfile = { workspace = true }
+serial_test = { workspace = true }
 
 [[bin]]
 name = "join"

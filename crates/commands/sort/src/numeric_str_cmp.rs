@@ -191,7 +191,6 @@ impl NumInfo {
         } else {
             !c.is_ascii_digit()
         }
-        
     }
 }
 

@@ -39,8 +39,8 @@ use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
-use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_fs::make_path_relative_to;
+use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::libc;
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
@@ -559,7 +559,7 @@ fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTRe
             Ok(())
         }
         OverwriteMode::Force => {
-             if dst.exists() {
+            if dst.exists() {
                 let _ = fs::remove_file(dst);
             }
             Ok(())

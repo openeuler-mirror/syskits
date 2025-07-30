@@ -74,6 +74,7 @@ pub fn custom_cmp_str(
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::env;
 
     use super::{custom_cmp_chars, custom_cmp_str, custom_filter_char};
 
@@ -630,8 +631,17 @@ mod tests {
         let result = custom_cmp_str("ABCDEF", "abcdef", false, false, true);
         assert_eq!(result, Ordering::Equal);
 
+        // 在C locale下测试字节比较行为
+        unsafe {
+            env::set_var("LC_COLLATE", "C");
+        }
         let result = custom_cmp_str("ABCDEF", "abcdef", false, false, false);
         assert_eq!(result, Ordering::Less);
+        
+        // 恢复原始locale设置
+        unsafe {
+            env::remove_var("LC_COLLATE");
+        }
 
         let result = custom_cmp_str(
             "abc123\x08\x00$%def",

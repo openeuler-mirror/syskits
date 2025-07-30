@@ -206,8 +206,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
                 _ => unreachable!(),
             }
 
-            // 将指定范围的字节写入输出
-            out.write_all(&line[start..end])?;
+            // 不在这里输出，等待后面统一输出
         }
 
         // 添加最后一个段
@@ -1027,9 +1026,7 @@ fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> 
                     }
                     _ => unreachable!(),
                 }
-                // 连接并写入选中的字素簇
-                let selected = graphemes[start..end].join("");
-                out.write_all(selected.as_bytes())?;
+                // 不在这里输出，等待后面统一输出
             }
 
             // 添加最后一个段

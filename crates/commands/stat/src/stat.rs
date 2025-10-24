@@ -35,7 +35,7 @@ use sys_locale::get_locale;
 mod stat_options {
     pub const STAT_DEREFERENCE: &str = "dereference";
     pub const STAT_FILE_SYSTEM: &str = "file-system";
-    pub const STAT_FORMAT: &str = "ct_format";
+    pub const STAT_FORMAT: &str = "format";
     pub const STAT_PRINTF: &str = "printf";
     pub const STAT_TERSE: &str = "terse";
     pub const STAT_FILES: &str = "files";

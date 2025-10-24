@@ -43,7 +43,7 @@ use ctcore::ct_update_control;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
 #[cfg(unix)]
@@ -350,18 +350,72 @@ fn mv_determine_overwrite_mode(matches: &ArgMatches) -> MvOverwriteMode {
  * @return 返回一个PathBuf类型的向量，其中包含了根据opts选项调整后的路径。
  */
 fn mv_parse_paths(mv_files: &[OsString], mv_options: &MvOpts) -> Vec<PathBuf> {
-    // 将文件路径切片中的每个路径转换为Path类型。
-    let file_paths = mv_files.iter().map(Path::new);
+    mv_files
+        .iter()
+        .map(|raw| {
+            if mv_options.strip_slashes {
+                PathBuf::from(strip_trailing_slashes(raw))
+            } else {
+                PathBuf::from(raw)
+            }
+        })
+        .collect()
+}
 
-    // 根据opts中的strip_slashes选项来处理路径。
-    if mv_options.strip_slashes {
-        // 如果需要剥离斜杠，则将路径分解为组件，并仅保留最后一个组件。
-        file_paths
-            .map(|p| p.components().as_path().to_owned())
-            .collect::<Vec<PathBuf>>()
-    } else {
-        // 如果不需要剥离斜杠，则直接复制路径到PathBuf中。
-        file_paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+fn strip_trailing_slashes(path: &OsStr) -> OsString {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        let bytes = path.as_bytes();
+        if bytes.is_empty() {
+            return OsString::new();
+        }
+
+        if bytes.iter().all(|b| *b == b'/') {
+            // Collapse multiple leading slashes to a single slash
+            return OsString::from_vec(vec![b'/']);
+        }
+
+        let mut end = bytes.len();
+        while end > 0 && bytes[end - 1] == b'/' {
+            end -= 1;
+        }
+        if end == bytes.len() {
+            return path.to_os_string();
+        }
+        OsString::from_vec(bytes[..end].to_vec())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let wide: Vec<u16> = path.encode_wide().collect();
+        if wide.is_empty() {
+            return OsString::new();
+        }
+
+        let is_sep = |unit: u16| unit == b'/' as u16 || unit == b'\\' as u16;
+        if wide.iter().all(|unit| is_sep(*unit)) {
+            // Preserve a single separator (default to backslash for Windows-style paths)
+            let first = if wide.iter().any(|&u| u == b'/' as u16) {
+                b'/'
+            } else {
+                b'\\'
+            } as u16;
+            return OsString::from_wide(&[first]);
+        }
+
+        let mut end = wide.len();
+        while end > 0 && is_sep(wide[end - 1]) {
+            end -= 1;
+        }
+        if end == wide.len() {
+            return path.to_os_string();
+        }
+        OsString::from_wide(&wide[..end])
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        path.to_os_string()
     }
 }
 
@@ -394,13 +448,22 @@ fn mv_handle_two_paths(
     }
 
     // 检查源路径是否无法获取符号链接元数据，如果是，返回相应的错误。
-    if source_path.symlink_metadata().is_err() {
-        return Err(if path_ends_with_terminator(source_path) {
-            MvError::CannotStatNotADirectory(source_path.quote().to_string()).into()
-        } else {
-            MvError::NoSuchFile(source_path.quote().to_string()).into()
-        });
-    }
+    let source_metadata = match source_path.symlink_metadata() {
+        Ok(meta) => meta,
+        Err(_) => {
+            return Err(if path_ends_with_terminator(source_path) {
+                MvError::CannotStatNotADirectory(source_path.quote().to_string()).into()
+            } else {
+                MvError::NoSuchFile(source_path.quote().to_string()).into()
+            });
+        }
+    };
+    let target_metadata = target_path.symlink_metadata().ok();
+    let source_is_directory = source_metadata.file_type().is_dir();
+    let target_is_directory = target_metadata
+        .as_ref()
+        .is_some_and(|meta| meta.file_type().is_dir());
+    let target_exists = target_metadata.is_some();
 
     // 检查源和目标是否指向同一个文件，且未设置备份。如果是，则返回相应的错误。
     if (source_path.eq(target_path)
@@ -422,10 +485,6 @@ fn mv_handle_two_paths(
         };
     }
 
-    // 检查目标路径是否为目录，且源与目标不一致、不是硬链接指向同一文件、没有设置no_target_dir选项。
-    let target_is_directory = target_path.is_dir();
-    let source_is_directory = source_path.is_dir();
-
     if path_ends_with_terminator(target_path)
         && (!target_is_directory && !source_is_directory)
         && !mv_options.no_target_dir
@@ -438,7 +497,7 @@ fn mv_handle_two_paths(
     if target_is_directory {
         // 如果设置了no_target_dir且源是目录，则尝试重命名。
         if mv_options.no_target_dir {
-            if source_path.is_dir() {
+            if source_is_directory {
                 mv_rename(source_path, target_path, mv_options, None).map_err_context(|| {
                     format!(
                         "cannot move {} to {}",
@@ -461,7 +520,7 @@ fn mv_handle_two_paths(
             move_files_into_dir(&[source_path.to_path_buf()], target_path, mv_options)
         }
         // 如果目标存在且源是目录
-    } else if target_path.exists() && source_path.is_dir() {
+    } else if target_exists && source_is_directory {
         // 根据是否覆盖选项，处理交互式询问或直接返回错误。
         match mv_options.overwrite {
             MvOverwriteMode::NoClobber => return Ok(()),
@@ -547,10 +606,14 @@ fn move_files_into_dir(
         return Err(MvError::NotADirectory(target_directory.quote().to_string()).into());
     }
 
-    // 获取目标目录的规范路径
-    let canonicalize_target_dir = target_directory
-        .canonicalize()
-        .unwrap_or_else(|_| target_directory.to_path_buf());
+    // 若目标路径自身不是符号链接，则提前缓存其规范路径，用于后续循环中优化判断。
+    let canonical_target_dir = target_directory.symlink_metadata().ok().and_then(|meta| {
+        if meta.file_type().is_symlink() {
+            None
+        } else {
+            target_directory.canonicalize().ok()
+        }
+    });
 
     // 根据选项决定是否创建进度条
     let multi_progress = mv_opts.progress_bar.then(MultiProgress::new);
@@ -600,26 +663,30 @@ fn move_files_into_dir(
             continue;
         }
 
-        // 检查是否尝试将目录移动到自身
-        if let Ok(canonical_source) = source_path.canonicalize() {
-            if canonical_source == canonicalize_target_dir {
-                // 用户尝试将目录移动到其自身子目录，显示警告并继续移动文件
-                ct_show!(CtSimpleError::new(
-                    1,
-                    format!(
-                        "cannot move '{}' to a subdirectory of itself, '{}/{}'",
-                        source_path.display(),
-                        target_directory.display(),
-                        canonicalize_target_dir
-                            .components()
-                            .next_back()
-                            .map_or_else(
-                                || target_directory.display().to_string(),
-                                |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
+        // 检查是否尝试将目录移动到自身，仅对真实目录进行判断，避免符号链接误报。
+        if let (Some(canonical_target), Ok(source_meta)) = (
+            canonical_target_dir.as_ref(),
+            source_path.symlink_metadata(),
+        ) {
+            let file_type = source_meta.file_type();
+            if file_type.is_dir() && !file_type.is_symlink() {
+                if let Ok(canonical_source) = source_path.canonicalize() {
+                    if canonical_target.starts_with(&canonical_source) {
+                        ct_show!(CtSimpleError::new(
+                            1,
+                            format!(
+                                "cannot move '{}' to a subdirectory of itself, '{}/{}'",
+                                source_path.display(),
+                                target_directory.display(),
+                                source_path
+                                    .file_name()
+                                    .map(|s| s.to_string_lossy().into_owned())
+                                    .unwrap_or_else(|| String::new())
                             )
-                    )
-                ));
-                continue;
+                        ));
+                        continue;
+                    }
+                }
             }
         }
 
@@ -1823,13 +1890,15 @@ mod tests {
     }
     #[cfg(test)]
     mod tests_mv_fun {
-        use crate::{MvOpts, MvOverwriteMode, mv_parse_paths};
+        use crate::{MvOpts, MvOverwriteMode, mv, mv_parse_paths};
         use ctcore::ct_backup_control::CtBackupMode;
         use ctcore::ct_update_control::CtUpdateMode;
 
         use std::ffi::OsString;
+        use std::fs;
 
         use std::path::PathBuf;
+        use tempfile::tempdir;
 
         fn create_test_opts(overwrite: MvOverwriteMode, strip_slashes: bool) -> MvOpts {
             MvOpts {
@@ -1886,6 +1955,36 @@ mod tests {
                     PathBuf::from("/path/to/directory/"),
                 ]
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_mv_symlink_with_trailing_slash() {
+            use std::os::unix::fs::symlink;
+
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let real_dir = base.join("testdir");
+            fs::create_dir(&real_dir).unwrap();
+
+            let source_link = base.join("testdir1");
+            symlink(&real_dir, &source_link).unwrap();
+
+            let mut source_operand = source_link.clone().into_os_string();
+            source_operand.push("/");
+            let dest_path = base.join("testfile2");
+            let dest_operand = dest_path.clone().into_os_string();
+
+            let mut opts = create_test_opts(MvOverwriteMode::Force, true);
+            opts.strip_slashes = true;
+
+            let args = vec![source_operand, dest_operand.clone()];
+            assert!(mv(&args, &opts).is_ok());
+            assert!(!source_link.exists());
+
+            let symlink_meta = fs::symlink_metadata(&dest_path).unwrap();
+            assert!(symlink_meta.file_type().is_symlink());
+            assert_eq!(fs::read_link(&dest_path).unwrap(), real_dir);
         }
     }
 }

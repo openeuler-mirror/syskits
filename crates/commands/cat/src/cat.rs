@@ -17,8 +17,9 @@ use clap::crate_version;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 use ctcore::ct_fs::CtFileInformation;
+use ctcore::ct_show_error;
 use rust_i18n::t;
 use std::ffi::OsString;
 use std::fs::File;
@@ -463,8 +464,8 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
         skipped_carriage_return: false,
         one_blank_kept: false,
     };
-    // 用于收集处理过程中发生的错误信息。
-    let mut error_msg: Vec<String> = Vec::new();
+    // 标记处理过程中是否出现错误
+    let mut had_error = false;
 
     // 遍历每个文件路径，尝试合并其内容。
     for file_path in input_files {
@@ -474,16 +475,18 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
             &mut output_state,
             output_info.as_ref(),
         ) {
-            // 特殊处理 OutputIsInput 错误，与 GNU coreutils 行为一致
-            match err {
+            had_error = true;
+            set_ct_exit_code(1);
+            match &err {
                 CatError::OutputIsInput => {
-                    // 直接输出错误到 stderr，不使用 format!，与 GNU cat 输出格式一致
-                    eprintln!("{}: input file is output file", file_path.maybe_quote());
-                    error_msg.push(String::new()); // 标记有错误但不重复输出
+                    ct_show_error!("{}: input file is output file", file_path.maybe_quote());
                 }
-                _ => {
-                    // 其他错误正常处理
-                    error_msg.push(format!("{}: {}", file_path.maybe_quote(), err));
+                CatError::Io(io_err) => {
+                    let message = strip_errno(io_err);
+                    ct_show_error!("{}: {}", file_path.maybe_quote(), message);
+                }
+                other => {
+                    ct_show_error!("{}: {}", file_path.maybe_quote(), other);
                 }
             }
         }
@@ -494,26 +497,11 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
         print!("\r");
     }
 
-    // 根据是否收集到错误信息，决定是返回成功还是失败的结果。
-    if error_msg.is_empty() {
-        Ok(())
+    if had_error {
+        // 返回空消息，避免重复打印已输出的错误细节
+        Err(ctcore::ct_error::CtSimpleError::new(1, String::new()))
     } else {
-        // 过滤掉空的错误信息（来自 OutputIsInput 的占位符）
-        let non_empty_errors: Vec<String> =
-            error_msg.into_iter().filter(|s| !s.is_empty()).collect();
-
-        if non_empty_errors.is_empty() {
-            // 只有 OutputIsInput 错误，返回失败但不输出额外错误信息
-            Err(ctcore::ct_error::CtSimpleError::new(1, String::new()))
-        } else {
-            // 如果有其他错误信息，将它们格式化后作为错误返回。
-            // 错误信息将以 "cat: 文件路径: 错误信息" 的形式呈现。
-            let line_joiner = format!("\n{}: ", ctcore::ct_util_name());
-            Err(ctcore::ct_error::CtSimpleError::new(
-                non_empty_errors.len() as i32,
-                non_empty_errors.join(&line_joiner),
-            ))
-        }
+        Ok(())
     }
 }
 
@@ -576,7 +564,12 @@ fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> Cat
     // 如果当前运行环境不是Linux或Android系统，或者splice()系统调用执行失败，
     // 我们将回退到使用较慢的写入方式。
     let mut buffer = [0; 1024 * 64];
-    while let Ok(n) = input_handle.reader.read(&mut buffer) {
+    loop {
+        let n = match input_handle.reader.read(&mut buffer) {
+            Ok(n) => n,
+            Err(ref err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err.into()),
+        };
         if n == 0 {
             break;
         }
@@ -596,7 +589,12 @@ fn cat_write_lines<R: CatFdReadable>(
     let stdout_info = io::stdout();
     let mut stdout_writer = stdout_info.lock();
 
-    while let Ok(n) = input_handle.reader.read(&mut input_buffer) {
+    loop {
+        let n = match input_handle.reader.read(&mut input_buffer) {
+            Ok(n) => n,
+            Err(ref err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err.into()),
+        };
         if n == 0 {
             break;
         }
@@ -955,6 +953,33 @@ mod tests {
         let result = command.try_get_matches_from(help_args);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_cat_files_info_error_sets_exit_code() {
+        ctcore::ct_error::set_ct_exit_code(0);
+
+        let opts = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+
+        let files = vec![String::from("does-not-exist-for-cat-test")];
+        let result = cat_files_info(&files, &opts);
+
+        assert!(result.is_err());
+        assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
+
+        ctcore::ct_error::set_ct_exit_code(0);
+    }
+
+    #[test]
+    fn test_strip_errno_permission_denied() {
+        let err = std::io::Error::from_raw_os_error(13);
+        assert_eq!(strip_errno(&err), "Permission denied");
     }
 
     #[test]

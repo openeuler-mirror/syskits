@@ -455,6 +455,51 @@
         "cleanup_commands": [
             "rm -rf  test_file.txt dest_dir"
         ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv --strip-trailing-slashes 符号链接兼容行为",
+        "setup_commands": [
+            "mkdir realdir",
+            "ln -s realdir testdir1"
+        ],
+        "args": ["--strip-trailing-slashes", "testdir1", "testfile2"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "test -L testfile2",
+              "expected_exit": 0,
+              "expected_stdout": "",
+              "expected_stderr": ""
+            },
+            {
+              "command": "readlink testfile2",
+              "expected_exit": 0,
+              "expected_stdout": "realdir\n",
+              "expected_stderr": ""
+            },
+            {
+              "command": "test ! -e testdir1",
+              "expected_exit": 0,
+              "expected_stdout": "",
+              "expected_stderr": ""
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf realdir testdir1 testfile2"
+        ]
       }
     ]
 }

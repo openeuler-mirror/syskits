@@ -151,7 +151,7 @@ pub fn od_parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemI
 
     // 检查是否缺少格式说明符
     if expect_type_string {
-        return Err("missing ct_format specification after '--ct_format' / '-t'".to_string());
+        return Err("missing format specification after '--format' / '-t'".to_string());
     }
 
     // 如果没有指定格式，使用默认格式
@@ -182,14 +182,14 @@ fn handle_long_option(
     formats: &mut Vec<ParsedFormatterItemInfo>,
     expect_type_string: &mut bool,
 ) -> Result<(), String> {
-    // 处理 --ct_format=value 形式
-    if arg.starts_with("--ct_format=") {
+    // 处理 --format=value 形式
+    if arg.starts_with("--format=") {
         let params: String = arg.chars().skip_while(|c| *c != '=').skip(1).collect();
         let v = od_parse_type_string(&params)?;
         formats.extend(v);
     }
-    // 处理 --ct_format 形式
-    else if arg == "--ct_format" {
+    // 处理 --format 形式
+    else if arg == "--format" {
         *expect_type_string = true;
     }
     // 其他 -- 开头的参数忽略
@@ -324,7 +324,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
         // 解析格式类型字符（如 'x'、'd'、'f' 等）
         let type_char = format_type(type_char).ok_or_else(|| {
             format!(
-                "unexpected char '{}' in ct_format specification {}",
+                "unexpected char '{}' in format specification {}",
                 type_char,
                 params.quote()
             )
@@ -353,7 +353,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
             if !decimal_size.is_empty() {
                 byte_size = decimal_size.parse().map_err(|_| {
                     format!(
-                        "invalid number {} in ct_format specification {}",
+                        "invalid number {} in format specification {}",
                         decimal_size.quote(),
                         params.quote()
                     )
@@ -369,7 +369,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
         // 根据类型和大小获取对应的格式化器
         let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
             format!(
-                "invalid size '{}' in ct_format specification {}",
+                "invalid size '{}' in format specification {}",
                 byte_size,
                 params.quote()
             )
@@ -496,29 +496,29 @@ fn test_ignore_trailing_vals() {
 
 #[test]
 fn test_invalid_long_format() {
-    parse_format_flags_str(&["od", "--ct_format=X"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=xX"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=aC"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=fI"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=xD"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=X"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xX"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=aC"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=fI"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xD"]).unwrap_err();
 
-    parse_format_flags_str(&["od", "--ct_format=xC1"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=x1C"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=xz1"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=xzC"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=xzz"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=xCC"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xC1"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=x1C"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xz1"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xzC"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xzz"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=xCC"]).unwrap_err();
 
-    parse_format_flags_str(&["od", "--ct_format=c1"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=x256"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=d5"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format=f1"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=c1"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=x256"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=d5"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format=f1"]).unwrap_err();
 }
 
 #[test]
 fn test_long_format_a() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=a"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=a"]).unwrap(),
         vec![FORMAT_ITEM_A]
     );
 }
@@ -526,7 +526,7 @@ fn test_long_format_a() {
 #[test]
 fn test_long_format_cz() {
     assert_eq!(
-        od_parse_format_flags(&["od".to_string(), "--ct_format=cz".to_string()]).unwrap(),
+        od_parse_format_flags(&["od".to_string(), "--format=cz".to_string()]).unwrap(),
         vec![ParsedFormatterItemInfo::new(FORMAT_ITEM_C, true)]
     );
 }
@@ -534,7 +534,7 @@ fn test_long_format_cz() {
 #[test]
 fn test_long_format_d() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=d8"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=d8"]).unwrap(),
         vec![FORMAT_ITEM_DEC64S]
     );
 }
@@ -542,7 +542,7 @@ fn test_long_format_d() {
 #[test]
 fn test_long_format_d_default() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=d"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=d"]).unwrap(),
         vec![FORMAT_ITEM_DEC32S]
     );
 }
@@ -550,7 +550,7 @@ fn test_long_format_d_default() {
 #[test]
 fn test_long_format_o_default() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=o"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=o"]).unwrap(),
         vec![FORMAT_ITEM_OCT32]
     );
 }
@@ -558,7 +558,7 @@ fn test_long_format_o_default() {
 #[test]
 fn test_long_format_u_default() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=u"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=u"]).unwrap(),
         vec![FORMAT_ITEM_DEC32U]
     );
 }
@@ -566,7 +566,7 @@ fn test_long_format_u_default() {
 #[test]
 fn test_long_format_x_default() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=x"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=x"]).unwrap(),
         vec![FORMAT_ITEM_HEX32]
     );
 }
@@ -574,7 +574,7 @@ fn test_long_format_x_default() {
 #[test]
 fn test_long_format_f_default() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format=f"]).unwrap(),
+        parse_format_flags_str(&["od", "--format=f"]).unwrap(),
         vec![FORMAT_ITEM_F32]
     );
 }
@@ -582,7 +582,7 @@ fn test_long_format_f_default() {
 #[test]
 fn test_long_format_next_arg() {
     assert_eq!(
-        parse_format_flags_str(&["od", "--ct_format", "f8"]).unwrap(),
+        parse_format_flags_str(&["od", "--format", "f8"]).unwrap(),
         vec![FORMAT_ITEM_F64]
     );
 }
@@ -605,8 +605,8 @@ fn test_short_format_combined_arg() {
 
 #[test]
 fn test_format_next_arg_invalid() {
-    parse_format_flags_str(&["od", "--ct_format", "-v"]).unwrap_err();
-    parse_format_flags_str(&["od", "--ct_format"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format", "-v"]).unwrap_err();
+    parse_format_flags_str(&["od", "--format"]).unwrap_err();
     parse_format_flags_str(&["od", "-t", "-v"]).unwrap_err();
     parse_format_flags_str(&["od", "-t"]).unwrap_err();
 }
@@ -622,13 +622,13 @@ fn test_mixed_formats() {
             "1000".to_string(),
             "-xt".to_string(),
             "acdx1".to_string(),
-            "--ct_format=u2c".to_string(),
-            "--ct_format".to_string(),
+            "--format=u2c".to_string(),
+            "--format".to_string(),
             "f".to_string(),
             "-xAx".to_string(),
             "--".to_string(),
             "-h".to_string(),
-            "--ct_format=f8".to_string(),
+            "--format=f8".to_string(),
         ])
         .unwrap(),
         vec![
@@ -696,7 +696,7 @@ mod tests {
             "od".to_string(),
             "-t".to_string(),
             "x2z".to_string(),            // 16位十六进制，带ASCII转储
-            "--ct_format=d4".to_string(), // 32位十进制
+            "--format=d4".to_string(), // 32位十进制
             "-F".to_string(),             // 64位浮点数
         ];
 
@@ -747,6 +747,6 @@ mod tests {
         let args = vec!["od".to_string(), "-t".to_string()];
         let err = od_parse_format_flags(&args).unwrap_err();
         println!("Expected error for missing format: {}", err);
-        assert!(err.contains("missing ct_format specification"));
+        assert!(err.contains("missing format specification"));
     }
 }

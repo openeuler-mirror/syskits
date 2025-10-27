@@ -95,7 +95,7 @@ pub(crate) mod od_options {
     pub const OD_READ_BYTES: &str = "read-bytes";
     pub const OD_ENDIAN: &str = "endian";
     pub const OD_STRINGS: &str = "strings";
-    pub const OD_FORMAT: &str = "ct_format";
+    pub const OD_FORMAT: &str = "format";
     pub const OD_OUTPUT_DUPLICATES: &str = "output-duplicates";
     pub const OD_TRADITIONAL: &str = "traditional";
     pub const OD_WIDTH: &str = "width";

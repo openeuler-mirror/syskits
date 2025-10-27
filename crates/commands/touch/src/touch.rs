@@ -420,19 +420,19 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
         _ => {
             return Err(CtSimpleError::new(
                 1,
-                format!("invalid date ct_format {}", s.quote()),
+                format!("invalid date format {}", s.quote()),
             ));
         }
     };
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
-        .map_err(|_| CtSimpleError::new(1, format!("invalid date ts ct_format {}", ts.quote())))?;
+        .map_err(|_| CtSimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
     let mut local = match chrono::Local.from_local_datetime(&local) {
         LocalResult::Single(dt) => dt,
         _ => {
             return Err(CtSimpleError::new(
                 1,
-                format!("invalid date ts ct_format {}", ts.quote()),
+                format!("invalid date ts format {}", ts.quote()),
             ));
         }
     };
@@ -453,7 +453,7 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
     if local.hour() != local2.hour() {
         return Err(CtSimpleError::new(
             1,
-            format!("invalid date ct_format {}", s.quote()),
+            format!("invalid date format {}", s.quote()),
         ));
     }
 
@@ -708,7 +708,7 @@ mod tests {
             assert!(filetime.is_err());
             assert_eq!(
                 filetime.unwrap_err().to_string(),
-                "invalid date ct_format '202406150830.123456789'".to_string()
+                "invalid date format '202406150830.123456789'".to_string()
             );
 
             // 测试带有无效的纳秒部分的时间戳

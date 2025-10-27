@@ -3638,7 +3638,7 @@ mod tests {
             let mut output = Vec::new();
             line.print_debug(&settings, &mut output).unwrap();
 
-            // This test depends heavily on the output ct_format of `print_debug`, adjust assertion accordingly
+            // This test depends heavily on the output format of `print_debug`, adjust assertion accordingly
             assert!(String::from_utf8(output).unwrap().contains("Hello, world"));
         }
 
@@ -3746,7 +3746,7 @@ mod tests {
             let mut output = Vec::new();
             line.print_debug(&settings, &mut output).unwrap();
             let output_str = String::from_utf8(output).unwrap();
-            // The exact output needs to be adjusted based on the expected debug ct_format
+            // The exact output needs to be adjusted based on the expected debug format
             assert!(output_str.contains("100")); // Check that the numeric part is correctly annotated
             assert!(!output_str.contains("^")); // Check for debug markers
         }

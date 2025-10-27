@@ -449,7 +449,7 @@ fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -
 
 /// 根据所选选项格式化一行文本。
 ///
-/// 给定一行文本 "s"，将该行文本拆分成若干字段，对选定的数字字段进行转换和ct_format，
+/// 给定一行文本 "s"，将该行文本拆分成若干字段，对选定的数字字段进行转换和format，
 /// 并将结果打印到stdout。未被选中转换的字段将原封不动地通过。
 pub fn numfmt_format_and_print(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
     if numfmt_configs.delimiter.is_some() {

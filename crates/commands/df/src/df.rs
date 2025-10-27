@@ -612,7 +612,7 @@ fn df_args_init() -> Vec<Arg> {
             .default_values(["source", "size", "used", "avail", "pcent", "target"])
             .conflicts_with_all([DF_OPT_INODES, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE])
             .help(
-                "use the output ct_format defined by FIELD_LIST, \
+                "use the output format defined by FIELD_LIST, \
                          or print all fields if FIELD_LIST is omitted.",
             ),
         Arg::new(DF_OPT_PORTABILITY)

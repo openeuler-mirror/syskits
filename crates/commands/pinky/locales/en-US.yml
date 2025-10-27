@@ -1,14 +1,14 @@
 pinky:
   clap:
-    pinky_long_format: produce long ct_format output for the specified USERs
-    pinky_omit_home_dir: omit the user's home directory and shell in long ct_format
-    pinky_omit_project_file: omit the user's project file in long ct_format
-    pinky_omit_plan_file: omit the user's plan file in long ct_format
-    pinky_short_format: do short ct_format output, this is the default
-    pinky_omit_headings: omit the line of column headings in short ct_format
-    pinky_omit_name: omit the user's full name in short ct_format
-    pinky_omit_name_host: omit the user's full name and remote host in short ct_format
-    pinky_omit_name_host_time: omit the user's full name, remote host and idle time in short ct_format
+    pinky_long_format: produce long format output for the specified USERs
+    pinky_omit_home_dir: omit the user's home directory and shell in long format
+    pinky_omit_project_file: omit the user's project file in long format
+    pinky_omit_plan_file: omit the user's plan file in long format
+    pinky_short_format: do short format output, this is the default
+    pinky_omit_headings: omit the line of column headings in short format
+    pinky_omit_name: omit the user's full name in short format
+    pinky_omit_name_host: omit the user's full name and remote host in short format
+    pinky_omit_name_host_time: omit the user's full name, remote host and idle time in short format
     pinky_help: Print help information
   usage: pinky [OPTION]... [USER]...
   about: Displays brief user information on Unix-based systems

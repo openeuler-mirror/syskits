@@ -16,7 +16,7 @@ use ctcore::ct_error::CTResult;
 
 /// `dired`模块文档
 ///
-/// 该模块处理 --dired 输出 ct_format，代表文件和目录列表。
+/// 该模块处理 --dired 输出 format，代表文件和目录列表。
 /// 目录列表。
 ///
 /// 关键机制：

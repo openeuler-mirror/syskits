@@ -42,7 +42,7 @@ pub mod nl_flags {
     // 合并空行的数量
     pub const NL_JOIN_BLANK_LINES: &str = "join-blank-lines";
     // 行号格式
-    pub const NL_NUMBER_FORMAT: &str = "number-ct_format";
+    pub const NL_NUMBER_FORMAT: &str = "number-format";
     // 是否重新编号
     pub const NL_NO_RENUMBER: &str = "no-renumber";
     // 行号分隔符

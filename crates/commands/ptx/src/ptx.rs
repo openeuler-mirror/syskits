@@ -1073,6 +1073,19 @@ mod tests {
         }
 
         #[test]
+        fn test_get_config_sentence_regexp_not_supported() {
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-G", "-S", "[A-Z].*"])
+                .unwrap();
+            let err = get_config(&matches).unwrap_err();
+            assert!(
+                err.to_string().contains("-S not implemented yet"),
+                "错误信息应提示 -S 尚未实现，当前为 {}",
+                err
+            );
+        }
+
+        #[test]
         fn test_get_config_traditional() {
             let matches = ct_app().try_get_matches_from(vec!["ptx", "-G"]).unwrap();
             let config = get_config(&matches).unwrap();
@@ -1143,6 +1156,27 @@ mod tests {
             assert!(!filter.is_only_specified);
             assert!(!filter.is_ignore_specified);
             assert_eq!(filter.word_regex, "\\w+");
+        }
+
+        #[test]
+        fn test_word_filter_break_file_generates_regex() {
+            let breaker = create_temp_file_with_content("/");
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-G", "-b", breaker.path().to_str().unwrap()])
+                .unwrap();
+            let config = PtxConfig::default();
+            let filter = WordFilter::new(&matches, &config).unwrap();
+            assert_eq!(filter.word_regex, "[^/]+");
+        }
+
+        #[test]
+        fn test_word_filter_custom_word_regex() {
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-G", "-W", "[A-Z]+"])
+                .unwrap();
+            let config = PtxConfig::default();
+            let filter = WordFilter::new(&matches, &config).unwrap();
+            assert_eq!(filter.word_regex, "[A-Z]+");
         }
     }
 

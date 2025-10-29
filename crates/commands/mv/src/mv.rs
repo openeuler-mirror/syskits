@@ -1134,9 +1134,328 @@ mod tests_tool_implementation {
     }
 }
 
+#[cfg(test)]
+mod tests_helper_functions {
+    use super::*;
+    use clap::ArgMatches;
+    use std::ffi::{OsStr, OsString};
+    use std::path::PathBuf;
+
+    fn build_matches(args: &[&str]) -> ArgMatches {
+        let mut argv = Vec::with_capacity(args.len() + 1);
+        argv.push(ctcore::ct_util_name());
+        argv.extend_from_slice(args);
+        ct_app().try_get_matches_from(argv).expect("参数解析失败")
+    }
+
+    fn base_opts() -> MvOpts {
+        MvOpts {
+            overwrite: MvOverwriteMode::Force,
+            backup: CtBackupMode::NoBackup,
+            suffix: String::new(),
+            update: CtUpdateMode::ReplaceAll,
+            target_dir: None,
+            no_target_dir: false,
+            verbose: false,
+            strip_slashes: false,
+            progress_bar: false,
+            set_context: false,
+            debug: false,
+            no_copy: false,
+        }
+    }
+
+    #[test]
+    fn overwrite_mode_prefers_no_clobber() {
+        let matches = build_matches(&["-n", "from", "to"]);
+        assert_eq!(
+            mv_determine_overwrite_mode(&matches),
+            MvOverwriteMode::NoClobber
+        );
+    }
+
+    #[test]
+    fn overwrite_mode_prefers_interactive() {
+        let matches = build_matches(&["-i", "from", "to"]);
+        assert_eq!(
+            mv_determine_overwrite_mode(&matches),
+            MvOverwriteMode::Interactive
+        );
+    }
+
+    #[test]
+    fn overwrite_mode_defaults_to_force() {
+        let matches = build_matches(&["from", "to"]);
+        assert_eq!(
+            mv_determine_overwrite_mode(&matches),
+            MvOverwriteMode::Force
+        );
+    }
+
+    #[test]
+    fn overwrite_mode_honours_last_flag() {
+        let matches = build_matches(&["-f", "-n", "from", "to"]);
+        assert_eq!(
+            mv_determine_overwrite_mode(&matches),
+            MvOverwriteMode::NoClobber
+        );
+
+        let matches = build_matches(&["-n", "-i", "from", "to"]);
+        assert_eq!(
+            mv_determine_overwrite_mode(&matches),
+            MvOverwriteMode::Interactive
+        );
+    }
+
+    #[test]
+    fn parse_paths_respects_strip_trailing_slashes() {
+        let files = vec![OsString::from("dir//"), OsString::from("file")];
+        let mut opts = base_opts();
+        opts.strip_slashes = true;
+        let parsed = mv_parse_paths(&files, &opts);
+        assert_eq!(parsed[0], PathBuf::from("dir"));
+        assert_eq!(parsed[1], PathBuf::from("file"));
+
+        opts.strip_slashes = false;
+        let parsed = mv_parse_paths(&files, &opts);
+        assert_eq!(parsed[0], PathBuf::from("dir//"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn strip_trailing_slashes_unix_variants() {
+        assert_eq!(
+            strip_trailing_slashes(OsStr::new("path///")),
+            OsString::from("path")
+        );
+        assert_eq!(
+            strip_trailing_slashes(OsStr::new("///")),
+            OsString::from("/")
+        );
+        assert_eq!(
+            strip_trailing_slashes(OsStr::new("path/inner")),
+            OsString::from("path/inner")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_trailing_slashes_windows_variants() {
+        assert_eq!(
+            strip_trailing_slashes(OsStr::new("path///")),
+            OsString::from("path")
+        );
+        assert_eq!(
+            strip_trailing_slashes(OsStr::new(r"\\///")),
+            OsString::from("/")
+        );
+        assert_eq!(
+            strip_trailing_slashes(OsStr::new(r"dir\sub///")),
+            OsString::from(r"dir\sub")
+        );
+    }
+}
+
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use tempfile::tempdir;
+
+    fn temp_mv_opts() -> MvOpts {
+        MvOpts {
+            overwrite: MvOverwriteMode::Force,
+            backup: CtBackupMode::NoBackup,
+            suffix: String::new(),
+            update: CtUpdateMode::ReplaceAll,
+            target_dir: None,
+            no_target_dir: false,
+            verbose: false,
+            strip_slashes: false,
+            progress_bar: false,
+            set_context: false,
+            debug: false,
+            no_copy: false,
+        }
+    }
+
+    #[test]
+    fn test_move_files_into_dir_moves_all_sources() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+
+        let file_a = root.join("a.txt");
+        let file_b = root.join("b.txt");
+        File::create(&file_a).unwrap();
+        File::create(&file_b).unwrap();
+
+        let target = root.join("dest");
+        fs::create_dir(&target).unwrap();
+
+        let opts = temp_mv_opts();
+        move_files_into_dir(&[file_a.clone(), file_b.clone()], &target, &opts).unwrap();
+
+        assert!(!file_a.exists());
+        assert!(!file_b.exists());
+        assert!(target.join("a.txt").exists());
+        assert!(target.join("b.txt").exists());
+    }
+
+    #[test]
+    fn test_move_files_into_dir_rejects_non_directory_target() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+
+        let file_a = root.join("a.txt");
+        File::create(&file_a).unwrap();
+        let target = root.join("not_dir");
+        File::create(&target).unwrap();
+
+        let opts = temp_mv_opts();
+        let err = move_files_into_dir(&[file_a.clone()], &target, &opts).unwrap_err();
+        assert!(format!("{err}").contains("Not a directory"));
+        assert!(file_a.exists());
+    }
+
+    #[test]
+    fn test_mv_handle_multiple_paths_no_target_dir_error() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let file_a = root.join("a.txt");
+        let file_b = root.join("b.txt");
+        File::create(&file_a).unwrap();
+        File::create(&file_b).unwrap();
+        let target = root.join("dest");
+        fs::create_dir(&target).unwrap();
+
+        let mut opts = temp_mv_opts();
+        opts.no_target_dir = true;
+
+        let paths = vec![file_a.clone(), file_b.clone(), target.clone()];
+        let result = mv_handle_multiple_paths(&paths, &opts);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mv_handle_multiple_paths_moves_files() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        let file_a = root.join("a.txt");
+        let file_b = root.join("b.txt");
+        File::create(&file_a).unwrap();
+        File::create(&file_b).unwrap();
+        let target = root.join("dest");
+        fs::create_dir(&target).unwrap();
+
+        let opts = temp_mv_opts();
+        mv_handle_multiple_paths(&[file_a.clone(), file_b.clone(), target.clone()], &opts).unwrap();
+
+        assert!(target.join("a.txt").exists());
+        assert!(target.join("b.txt").exists());
+        assert!(!file_a.exists());
+        assert!(!file_b.exists());
+    }
+
+    #[test]
+    fn test_mv_handle_two_paths_same_file_error() {
+        let temp = tempdir().unwrap();
+        let file_a = temp.path().join("a.txt");
+        File::create(&file_a).unwrap();
+
+        let opts = temp_mv_opts();
+        let err = mv_handle_two_paths(&file_a, &file_a, &opts).unwrap_err();
+        assert!(err.to_string().contains("the same file"));
+    }
+
+    #[test]
+    fn test_mv_handle_two_paths_self_subdirectory_error() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("dir");
+        let subdir = source.join("inner");
+        fs::create_dir_all(&subdir).unwrap();
+        let target = subdir.join("nested");
+        fs::create_dir(&target).unwrap();
+
+        let opts = temp_mv_opts();
+        let err = mv_handle_two_paths(&source, &target, &opts).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("cannot move"));
+    }
+
+    #[test]
+    fn test_mv_rename_with_fallback_respects_no_copy() {
+        let temp = tempdir().unwrap();
+        let src = temp.path().join("file.txt");
+        fs::write(&src, b"content").unwrap();
+        let target = temp.path().join("missing").join("dest.txt");
+
+        let mut opts = temp_mv_opts();
+        opts.no_copy = true;
+
+        let err = mv_rename_with_fallback(&src, &target, &opts, None).unwrap_err();
+        assert!(err.to_string().contains("rename failed"));
+        assert!(src.exists());
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn test_mv_rename_with_fallback_directory_copy() {
+        let temp = tempdir().unwrap();
+        let src_dir = temp.path().join("src");
+        let nested_file = src_dir.join("hello.txt");
+        fs::create_dir(&src_dir).unwrap();
+        fs::write(&nested_file, b"hello").unwrap();
+
+        let dest_dir = temp.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+        fs::write(dest_dir.join("old.txt"), b"old").unwrap();
+
+        let opts = temp_mv_opts();
+        mv_rename_with_fallback(&src_dir, &dest_dir, &opts, None).unwrap();
+
+        assert!(dest_dir.join("hello.txt").exists());
+        assert!(!src_dir.exists());
+    }
+
+    #[test]
+    fn test_mv_rename_symlink_fallback_moves_link() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempdir().unwrap();
+        let target_file = temp.path().join("target.txt");
+        fs::write(&target_file, b"hello").unwrap();
+        let link_path = temp.path().join("link");
+        symlink(&target_file, &link_path).unwrap();
+
+        let dest_path = temp.path().join("link_dest");
+        mv_rename_symlink_fallback(&link_path, &dest_path).unwrap();
+
+        let metadata = dest_path.symlink_metadata().unwrap();
+        assert!(metadata.file_type().is_symlink());
+        let resolved = fs::read_link(&dest_path).unwrap();
+        assert_eq!(resolved, target_file);
+    }
+
+    #[test]
+    fn test_is_empty_dir_reports_status() {
+        let temp = tempdir().unwrap();
+        let dir = temp.path();
+        assert!(is_empty_dir(dir));
+        fs::write(dir.join("file.txt"), b"data").unwrap();
+        assert!(!is_empty_dir(dir));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_set_default_context_without_selinux_feature() {
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("file.txt");
+        fs::write(&file, b"content").unwrap();
+        assert!(set_default_context(&file).is_ok());
+    }
+
     #[cfg(test)]
     mod tests_mv_main {
         use crate::mv_main;

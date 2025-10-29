@@ -4113,7 +4113,13 @@ mod tests {
             }
 
             // 非C locale应该使用ISO格式
-            assert_eq!(get_pr_date_time_format(), "%Y-%m-%d %H:%M");
+            let format = get_pr_date_time_format();
+            if hard_locale_time() {
+                assert_eq!(format, "%Y-%m-%d %H:%M");
+            } else {
+                // 某些环境可能缺少 zh_CN locale，此时回退到 C locale
+                assert_eq!(format, "%b %d %H:%M %Y");
+            }
 
             // 清理环境变量
             unsafe {

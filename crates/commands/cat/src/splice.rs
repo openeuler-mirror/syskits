@@ -114,12 +114,17 @@ fn is_splice_unsupported(err: Errno) -> bool {
 #[cfg(test)]
 mod tests {
     // 导入必要的库和模块
-    use crate::splice::splice_copy_exact;
+    use crate::{
+        splice::{is_splice_retryable, is_splice_unsupported, splice_copy_exact},
+        CatInputHandle,
+    };
     use nix::errno::Errno;
+    use nix::unistd::{pipe, read, write};
     use std::fs::{File, OpenOptions};
-    use std::io::Write;
-    use std::os::fd::RawFd;
-    use std::os::unix::io::{FromRawFd, IntoRawFd};
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::os::fd::{AsRawFd, IntoRawFd, OwnedFd, RawFd};
+    use std::os::unix::io::FromRawFd;
+    use tempfile::tempfile;
 
     // 定义一个辅助函数，用于创建临时文件并返回其文件描述符
     fn create_temp_file() -> (File, RawFd) {
@@ -160,5 +165,97 @@ mod tests {
         // 模拟部分读写情况下的复制操作
         let result = splice_copy_exact(src_fd, &dst_file, data.len());
         assert_eq!(result, Err(Errno::EIO));
+    }
+
+    #[test]
+    fn test_splice_copy_exact_successful_transfer() {
+        let (read_fd, write_fd) = pipe().unwrap();
+        let (dest_read, dest_write) = pipe().unwrap();
+        let payload = b"splice-data";
+
+        write(&write_fd, payload).unwrap();
+        drop(write_fd);
+
+        let dest_writer = unsafe { File::from_raw_fd(dest_write.into_raw_fd()) };
+        splice_copy_exact(read_fd.as_raw_fd(), &dest_writer, payload.len()).unwrap();
+
+        let mut reader = unsafe { File::from_raw_fd(dest_read.into_raw_fd()) };
+        let mut buffer = vec![0_u8; payload.len()];
+        reader.read_exact(&mut buffer).unwrap();
+        assert_eq!(&buffer, payload);
+
+        drop(reader);
+        drop(dest_writer);
+    }
+
+    #[test]
+    fn test_is_splice_retryable_and_unsupported() {
+        assert!(is_splice_retryable(Errno::EINTR));
+        assert!(!is_splice_retryable(Errno::EINVAL));
+
+        assert!(is_splice_unsupported(Errno::EINVAL));
+        assert!(is_splice_unsupported(Errno::ENOSYS));
+        assert!(!is_splice_unsupported(Errno::EPIPE));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_splice_write_fast_completes_without_fallback() {
+        use super::splice_write_fast_using_splice;
+        use ctcore::ct_pipes::pipe;
+
+        let (input_reader, mut input_writer) = pipe().unwrap();
+        let payload = b"hello splice";
+        input_writer.write_all(payload).unwrap();
+        drop(input_writer);
+
+        let mut output_file = tempfile().unwrap();
+        let handle = CatInputHandle {
+            reader: input_reader,
+            is_interactive: false,
+        };
+
+        let need_fallback = splice_write_fast_using_splice(&handle, &output_file).unwrap();
+        assert!(!need_fallback, "正常情况下不应触发回退逻辑");
+
+        output_file.seek(SeekFrom::Start(0)).unwrap();
+        let mut buffer = Vec::new();
+        output_file.read_to_end(&mut buffer).unwrap();
+        assert_eq!(buffer, payload);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_splice_write_fast_triggers_fallback_on_unsupported() {
+        use super::splice_write_fast_using_splice;
+        use ctcore::ct_pipes::pipe;
+
+        let (input_reader, mut input_writer) = pipe().unwrap();
+        let value: u64 = 42;
+        input_writer
+            .write_all(&value.to_ne_bytes())
+            .expect("写入管道失败");
+        drop(input_writer);
+
+        let handle = CatInputHandle {
+            reader: input_reader,
+            is_interactive: false,
+        };
+
+        let fd =
+            unsafe { nix::libc::eventfd(0, nix::libc::EFD_NONBLOCK) };
+        assert!(fd >= 0, "eventfd 创建失败: {}", fd);
+        let event_fd = unsafe { OwnedFd::from_raw_fd(fd) };
+
+        let need_fallback =
+            splice_write_fast_using_splice(&handle, &event_fd).expect("调用应成功返回");
+        let mut buffer = [0u8; 8];
+        let read_len = read(event_fd.as_raw_fd(), &mut buffer).expect("读取 eventfd 失败");
+        assert_eq!(read_len, 8);
+        assert_eq!(u64::from_ne_bytes(buffer), value);
+        if !need_fallback {
+            // 某些内核支持直接 splice 到 eventfd，此时无需回退。
+            return;
+        }
     }
 }

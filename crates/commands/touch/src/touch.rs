@@ -546,6 +546,89 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
 
+    #[cfg(test)]
+    mod determine_times_tests {
+        use super::*;
+        use clap::ArgMatches;
+        use chrono::Local;
+        use filetime::{set_file_times, FileTime};
+        use tempfile::tempdir;
+
+        fn build_matches(args: &[&str]) -> ArgMatches {
+            let mut argv = Vec::with_capacity(args.len() + 1);
+            argv.push(ctcore::ct_util_name());
+            argv.extend_from_slice(args);
+            ct_app().try_get_matches_from(argv).expect("参数解析失败")
+        }
+
+        #[test]
+        fn determine_times_defaults_to_now() {
+            let matches = build_matches(&["dummy"]);
+            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            assert_eq!(atime, mtime);
+        }
+
+        #[test]
+        fn determine_times_with_timestamp_argument() {
+            let matches = build_matches(&["-t", "202406150830", "dummy"]);
+            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let expected = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
+                .unwrap();
+            assert_eq!(atime.unix_seconds(), expected.timestamp());
+            assert_eq!(mtime, atime);
+        }
+
+        #[test]
+        fn determine_times_with_date_argument() {
+            let matches = build_matches(&["-d", "2024-06-15 08:30:00", "dummy"]);
+            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let expected = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
+                .unwrap();
+            assert_eq!(atime.unix_seconds(), expected.timestamp());
+            assert_eq!(mtime, atime);
+        }
+
+        #[test]
+        fn determine_times_with_reference_file() {
+            let tmp = tempdir().unwrap();
+            let file_path = tmp.path().join("reference.txt");
+            std::fs::write(&file_path, b"test").unwrap();
+            let custom_time = FileTime::from_unix_time(1_600_000_000, 0);
+            set_file_times(&file_path, custom_time, custom_time).unwrap();
+
+            let matches = build_matches(&["-r", file_path.to_str().unwrap(), "dummy"]);
+            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            assert_eq!(atime.unix_seconds(), custom_time.unix_seconds());
+            assert_eq!(mtime.unix_seconds(), custom_time.unix_seconds());
+        }
+
+        #[test]
+        fn determine_times_with_reference_and_date_override() {
+            let tmp = tempdir().unwrap();
+            let file_path = tmp.path().join("reference.txt");
+            std::fs::write(&file_path, b"test").unwrap();
+            let custom_time = FileTime::from_unix_time(1_600_000_000, 0);
+            set_file_times(&file_path, custom_time, custom_time).unwrap();
+
+            let matches = build_matches(&[
+                "-r",
+                file_path.to_str().unwrap(),
+                "-d",
+                "2024-06-15 08:30:00",
+                "dummy",
+            ]);
+            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let expected = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(atime.unix_seconds(), expected);
+            assert_eq!(mtime.unix_seconds(), expected);
+        }
+    }
+
     #[test]
     fn test_tool_implementation() {
         let tool = Touch;

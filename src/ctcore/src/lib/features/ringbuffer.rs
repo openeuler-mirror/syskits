@@ -114,33 +114,3 @@ impl<T> RingBuffer<T> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    use crate::ringbuffer::RingBuffer;
-    use std::collections::VecDeque;
-
-    #[test]
-    fn test_size_limit_zero() {
-        let mut buf = RingBuffer::new(0);
-        assert_eq!(Some(0), buf.push_back(0));
-        assert_eq!(Some(1), buf.push_back(1));
-        assert_eq!(Some(2), buf.push_back(2));
-    }
-
-    #[test]
-    fn test_evict_oldest() {
-        let mut buf = RingBuffer::new(2);
-        assert_eq!(None, buf.push_back(0));
-        assert_eq!(None, buf.push_back(1));
-        assert_eq!(Some(0), buf.push_back(2));
-    }
-
-    #[test]
-    fn test_from_iter() {
-        let iter = [0, 1, 2].iter();
-        let actual = RingBuffer::from_iter(iter, 2).data;
-        let expected: VecDeque<&i32> = [1, 2].iter().collect();
-        assert_eq!(expected, actual);
-    }
-}

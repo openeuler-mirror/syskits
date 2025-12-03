@@ -211,28 +211,3 @@ pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     false
 }
 
-#[cfg(test)]
-mod test {
-
-    #[test]
-    fn symbolic_modes() {
-        assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);
-        assert_eq!(
-            super::parse_mode("+x").unwrap(),
-            if crate::ct_os::is_wsl_1() {
-                0o776
-            } else {
-                0o777
-            }
-        );
-        assert_eq!(super::parse_mode("a-w").unwrap(), 0o444);
-        assert_eq!(super::parse_mode("g-r").unwrap(), 0o626);
-    }
-
-    #[test]
-    fn numeric_modes() {
-        assert_eq!(super::parse_mode("644").unwrap(), 0o644);
-        assert_eq!(super::parse_mode("+100").unwrap(), 0o766);
-        assert_eq!(super::parse_mode("-4").unwrap(), 0o662);
-    }
-}

@@ -209,7 +209,7 @@ fn gen_completions<T: ctcore::Args>(
     };
 
     let bin_name = match std::env::var("PROG_PREFIX") {
-        Ok(prefix) => prefix + &utility,
+        Ok(prefix) => prefix + utility,
         Err(_) => utility.clone(),
     };
 

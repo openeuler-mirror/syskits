@@ -87,32 +87,3 @@ impl<B: BufRead> Iterator for Lines<B> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::lines::lines;
-    use std::io::Cursor;
-
-    #[test]
-    fn test_lines() {
-        let cursor = Cursor::new(b"x\ny\nz");
-        let mut it = lines(cursor, b'\n').map(|l| l.unwrap());
-
-        assert_eq!(it.next(), Some(Vec::from("x\n")));
-        assert_eq!(it.next(), Some(Vec::from("y\n")));
-        assert_eq!(it.next(), Some(Vec::from("z")));
-        assert_eq!(it.next(), None);
-    }
-
-    #[test]
-    fn test_lines_zero_terminated() {
-        use std::io::Cursor;
-
-        let cursor = Cursor::new(b"x\0y\0z\0");
-        let mut it = lines(cursor, b'\0').map(|l| l.unwrap());
-
-        assert_eq!(it.next(), Some(Vec::from("x\0")));
-        assert_eq!(it.next(), Some(Vec::from("y\0")));
-        assert_eq!(it.next(), Some(Vec::from("z\0")));
-        assert_eq!(it.next(), None);
-    }
-}

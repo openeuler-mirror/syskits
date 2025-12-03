@@ -477,3 +477,214 @@ pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bo
 //
 // Tests for this module
 //
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // Required to instantiate mutex in shared context
+    use clap::Command;
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+
+    // The mutex is required here as by default all tests are run as separate
+    // threads under the same parent process. As environment variables are
+    // specific to processes (and thus shared among threads), data races *will*
+    // occur if no precautions are taken. Thus we have all tests that rely on
+    // environment variables lock this empty mutex to ensure they don't access
+    // it concurrently.
+    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    // Environment variable for "VERSION_CONTROL"
+    static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
+
+    fn make_app() -> clap::Command {
+        Command::new("command")
+            .arg(arguments::backup())
+            .arg(arguments::backup_no_args())
+            .arg(arguments::suffix())
+    }
+
+    // Defaults to --backup=existing
+    #[test]
+    fn test_backup_mode_short_only() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "-b"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::ExistingBackup);
+    }
+
+    // --backup takes precedence over -b
+    #[test]
+    fn test_backup_mode_long_preferred_over_short() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "-b", "--backup=none"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::NoBackup);
+    }
+
+    // --backup can be passed without an argument
+    #[test]
+    fn test_backup_mode_long_without_args_no_env() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::ExistingBackup);
+    }
+
+    // --backup can be passed with an argument only
+    #[test]
+    fn test_backup_mode_long_with_args() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "--backup=simple"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::SimpleBackup);
+    }
+
+    // --backup errors on invalid argument
+    #[test]
+    fn test_backup_mode_long_with_args_invalid() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "--backup=foobar"]);
+
+        let result = determine_backup_mode(&matches);
+
+        assert!(result.is_err());
+        let text = format!("{}", result.unwrap_err());
+        assert!(text.contains("invalid argument 'foobar' for 'backup type'"));
+    }
+
+    // --backup errors on ambiguous argument
+    #[test]
+    fn test_backup_mode_long_with_args_ambiguous() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "--backup=n"]);
+
+        let result = determine_backup_mode(&matches);
+
+        assert!(result.is_err());
+        let text = format!("{}", result.unwrap_err());
+        assert!(text.contains("ambiguous argument 'n' for 'backup type'"));
+    }
+
+    // --backup accepts shortened arguments (si for simple)
+    #[test]
+    fn test_backup_mode_long_with_arg_shortened() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "--backup=si"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::SimpleBackup);
+    }
+
+    // -b ignores the "VERSION_CONTROL" environment variable
+    #[test]
+    fn test_backup_mode_short_only_ignore_env() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "none");
+        let matches = make_app().get_matches_from(vec!["command", "-b"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::ExistingBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup can be passed without an argument, but reads env var if existent
+    #[test]
+    fn test_backup_mode_long_without_args_with_env() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "none");
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::NoBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup errors on invalid VERSION_CONTROL env var
+    #[test]
+    fn test_backup_mode_long_with_env_var_invalid() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "foobar");
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
+
+        let result = determine_backup_mode(&matches);
+
+        assert!(result.is_err());
+        let text = format!("{}", result.unwrap_err());
+        assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup errors on ambiguous VERSION_CONTROL env var
+    #[test]
+    fn test_backup_mode_long_with_env_var_ambiguous() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "n");
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
+
+        let result = determine_backup_mode(&matches);
+
+        assert!(result.is_err());
+        let text = format!("{}", result.unwrap_err());
+        assert!(text.contains("ambiguous argument 'n' for '$VERSION_CONTROL'"));
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup accepts shortened env vars (si for simple)
+    #[test]
+    fn test_backup_mode_long_with_env_var_shortened() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "si");
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::SimpleBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    #[test]
+    fn test_suffix_takes_hyphen_value() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "-b", "--suffix", "-v"]);
+
+        let result = determine_backup_suffix(&matches);
+        assert_eq!(result, "-v");
+    }
+    #[test]
+    fn test_source_is_target_backup() {
+        let source = Path::new("data.txt.bak");
+        let target = Path::new("data.txt");
+        let suffix = String::from(".bak");
+
+        assert!(source_is_target_backup(source, target, &suffix));
+    }
+
+    #[test]
+    fn test_source_is_not_target_backup() {
+        let source = Path::new("data.txt");
+        let target = Path::new("backup.txt");
+        let suffix = String::from(".bak");
+
+        assert!(!source_is_target_backup(source, target, &suffix));
+    }
+
+    #[test]
+    fn test_source_is_target_backup_with_tilde_suffix() {
+        let source = Path::new("example~");
+        let target = Path::new("example");
+        let suffix = String::from("~");
+
+        assert!(source_is_target_backup(source, target, &suffix));
+    }
+}

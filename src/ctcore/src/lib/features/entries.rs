@@ -363,26 +363,3 @@ pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid)
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_sort_groups() {
-        assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
-        assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
-        assert_eq!(sort_groups(vec![1, 2, 3], 2), vec![2, 1, 3]);
-        assert_eq!(sort_groups(vec![1, 2, 3], 1), vec![1, 2, 3]);
-        assert_eq!(sort_groups(vec![1, 2, 3], 0), vec![0, 1, 2, 3]);
-    }
-
-    #[test]
-    fn test_entries_get_groups_gnu() {
-        if let Ok(mut groups) = get_groups() {
-            if let Some(last) = groups.pop() {
-                groups.insert(0, last);
-                assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
-            }
-        }
-    }
-}

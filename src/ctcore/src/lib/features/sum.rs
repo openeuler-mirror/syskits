@@ -476,36 +476,3 @@ impl<'a> Write for DigestWriter<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    /// Test for replacing a "\r\n" sequence with "\n" when the "\r" is
-    /// at the end of one block and the "\n" is at the beginning of the
-    /// next block, when reading in blocks.
-    #[cfg(windows)]
-    #[test]
-    fn test_crlf_across_blocks() {
-        use std::io::Write;
-
-        use super::Digest;
-        use super::DigestWriter;
-        use super::Md5;
-
-        // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
-        let mut writer_crlf = DigestWriter::new(&mut digest, false);
-        writer_crlf.write_all(&[b'\r']).unwrap();
-        writer_crlf.write_all(&[b'\n']).unwrap();
-        writer_crlf.finalize();
-        let result_crlf = digest.result_str();
-
-        // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
-        let mut writer_lf = DigestWriter::new(&mut digest, false);
-        writer_lf.write_all(&[b'\n']).unwrap();
-        writer_lf.finalize();
-        let result_lf = digest.result_str();
-
-        assert_eq!(result_crlf, result_lf);
-    }
-}

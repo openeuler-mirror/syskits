@@ -188,3 +188,141 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
     }
 }
 
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn test_convert_digit_octal() {
+        let result = Base::Oct.convert_digit(b'1');
+        assert_eq!(result, Some(1));
+
+        let result = Base::Oct.convert_digit(b'2');
+        assert_eq!(result, Some(2));
+
+        let result = Base::Oct.convert_digit(b'3');
+        assert_eq!(result, Some(3));
+
+        let result = Base::Oct.convert_digit(b'0');
+        assert_eq!(result, Some(0));
+
+        let result = Base::Oct.convert_digit(b'4');
+        assert_eq!(result, Some(4));
+
+        let result = Base::Oct.convert_digit(b'5');
+        assert_eq!(result, Some(5));
+
+        let result = Base::Oct.convert_digit(b'6');
+        assert_eq!(result, Some(6));
+
+        let result = Base::Oct.convert_digit(b'7');
+        assert_eq!(result, Some(7));
+        let result = Base::Oct.convert_digit(b'D');
+        assert_eq!(result, None);
+
+        let result = Base::Oct.convert_digit(b'E');
+        assert_eq!(result, None);
+
+        let result = Base::Oct.convert_digit(b'F');
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_convert_digit_hexadecimal() {
+        let result = Base::Hex.convert_digit(b'1');
+        assert_eq!(result, Some(1));
+
+        let result = Base::Hex.convert_digit(b'8');
+        assert_eq!(result, Some(8));
+
+        let result = Base::Hex.convert_digit(b'9');
+        assert_eq!(result, Some(9));
+
+        let result = Base::Hex.convert_digit(b'A');
+        assert_eq!(result, Some(10));
+
+        let result = Base::Hex.convert_digit(b'B');
+        assert_eq!(result, Some(11));
+
+        let result = Base::Hex.convert_digit(b'C');
+        assert_eq!(result, Some(12));
+
+        let result = Base::Hex.convert_digit(b'D');
+        assert_eq!(result, Some(13));
+
+        let result = Base::Hex.convert_digit(b'E');
+        assert_eq!(result, Some(14));
+
+        let result = Base::Hex.convert_digit(b'F');
+        assert_eq!(result, Some(15));
+
+        let result = Base::Hex.convert_digit(b'0');
+        assert_eq!(result, Some(0));
+
+        let result = Base::Hex.convert_digit(b'G');
+        assert_eq!(result, None);
+
+        let result = Base::Hex.convert_digit(b'H');
+        assert_eq!(result, None);
+
+        let result = Base::Hex.convert_digit(b'I');
+        assert_eq!(result, None);
+
+        let result = Base::Hex.convert_digit(b'J');
+        assert_eq!(result, None);
+    }
+    #[test]
+    fn test_max_digits_octal() {
+        assert_eq!(Base::Oct.max_digits(), 3);
+    }
+
+    #[test]
+    fn test_max_digits_hexadecimal() {
+        assert_eq!(Base::Hex.max_digits(), 2);
+    }
+
+    #[test]
+    fn test_parse_code_octal_1() {
+        let mut input: &[u8] = b"1";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(1));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_code_octal_2() {
+        let mut input: &[u8] = b"12";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(10));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_code_octal_3() {
+        let mut input: &[u8] = b"123";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(83));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_code_octal_4() {
+        let mut input: &[u8] = b"1234";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(83));
+        assert_eq!(input, b"4");
+    }
+
+    #[test]
+    fn test_parse_code_hex_1() {
+        let mut input: &[u8] = b"a";
+        assert_eq!(parse_code(&mut input, Base::Hex), Some(10));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_code_hex_2() {
+        let mut input: &[u8] = b"12";
+        assert_eq!(parse_code(&mut input, Base::Hex), Some(18));
+        assert_eq!(input, b"");
+    }
+
+
+}

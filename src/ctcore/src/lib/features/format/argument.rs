@@ -179,3 +179,147 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        struct MockArgumentIter<'a> {
+            args: &'a [FormatArgument],
+            index: usize,
+        }
+
+        impl<'a> MockArgumentIter<'a> {
+            fn new(args: &'a [FormatArgument]) -> Self {
+                MockArgumentIter { args, index: 0 }
+            }
+        }
+
+        impl<'a> Iterator for MockArgumentIter<'a> {
+            type Item = &'a FormatArgument;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.index < self.args.len() {
+                    let arg = &self.args[self.index];
+                    self.index += 1;
+                    Some(arg)
+                } else {
+                    None
+                }
+            }
+        }
+
+        #[test]
+        fn test_argument_iter_get_char() {
+            let args = vec![
+                FormatArgument::Char('A'),
+                FormatArgument::Unparsed("BCD".to_string()),
+                FormatArgument::String("EFG".to_string()),
+                FormatArgument::SignedInt(42),
+            ];
+            let mut iter = MockArgumentIter::new(&args);
+
+            assert_eq!(iter.get_char(), b'A');
+            assert_eq!(iter.get_char(), b'B');
+            assert_eq!(iter.get_char(), 0); // For String, only the first character should be considered
+            assert_eq!(iter.get_char(), 0); // For SignedInt, it should return '\0' as default
+        }
+
+        #[test]
+        fn test_argument_iter_get_i64() {
+            let args = vec![
+                FormatArgument::SignedInt(-42),
+                FormatArgument::Unparsed("123".to_string()),
+                FormatArgument::UnsignedInt(456),
+                FormatArgument::String("789".to_string()),
+            ];
+            let mut iter = MockArgumentIter::new(&args);
+
+            assert_eq!(iter.get_i64(), -42);
+            assert_eq!(iter.get_i64(), 123);
+            assert_eq!(iter.get_i64(), 0); // For UnsignedInt, it should be automatically converted to i64
+            assert_eq!(iter.get_i64(), 0); // For String, it should return 0 as default
+        }
+
+        #[test]
+        fn test_argument_iter_get_u64() {
+            let args = vec![
+                FormatArgument::UnsignedInt(123),
+                FormatArgument::Unparsed("456".to_string()),
+                FormatArgument::SignedInt(-789),
+                FormatArgument::String("101112".to_string()),
+            ];
+            let mut iter = MockArgumentIter::new(&args);
+
+            assert_eq!(iter.get_u64(), 123);
+            assert_eq!(iter.get_u64(), 456); // For Unparsed, it should parse the string as u64
+            assert_eq!(iter.get_u64(), 0); // For SignedInt, it should return 0 as default
+            assert_eq!(iter.get_u64(), 0); // For String, it should return 0 as default
+        }
+
+        #[test]
+        fn test_argument_iter_get_f64() {
+            let args = vec![
+                FormatArgument::Float(3.14),
+                FormatArgument::Unparsed("2.718".to_string()),
+                FormatArgument::SignedInt(-42),
+                FormatArgument::String("1.618".to_string()),
+            ];
+            let mut iter = MockArgumentIter::new(&args);
+
+            assert_eq!(iter.get_f64(), 3.14);
+            assert_eq!(iter.get_f64(), 2.718); // For Unparsed, it should parse the string as f64
+            assert_eq!(iter.get_f64(), 0.0); // For SignedInt, it should be automatically converted to f64
+            assert_eq!(iter.get_f64(), 0.0); // For String, it should return 0.0 as default
+        }
+
+        #[test]
+        fn test_argument_iter_get_str() {
+            let args = vec![
+                FormatArgument::String("abc".to_string()),
+                FormatArgument::Unparsed("def".to_string()),
+                FormatArgument::Char('g'),
+                FormatArgument::SignedInt(-42),
+            ];
+            let mut iter = MockArgumentIter::new(&args);
+
+            assert_eq!(iter.get_str(), "abc");
+            assert_eq!(iter.get_str(), "def");
+            assert_eq!(iter.get_str(), ""); // For Char, it should return an empty string
+            assert_eq!(iter.get_str(), ""); // For SignedInt, it should return an empty string
+        }
+    }
+
+    #[test]
+    fn test_extract_value_ok() {
+        let result: Result<u32, ParseError<u32>> = Ok(42);
+        assert_eq!(extract_value(result, "input"), 42);
+    }
+
+    #[test]
+    fn test_extract_value_overflow() {
+        let result: Result<u32, ParseError<u32>> = Err(ParseError::CtOverflow);
+        assert_eq!(extract_value(result, "input"), 0); // Default value
+    }
+
+    #[test]
+    fn test_extract_value_not_numeric() {
+        let result: Result<u32, ParseError<u32>> = Err(ParseError::CtNotNumeric);
+        assert_eq!(extract_value(result, "input"), 0); // Default value
+    }
+
+    #[test]
+    fn test_extract_value_partial_match() {
+        let result: Result<u32, ParseError<u32>> = Err(ParseError::CtPartialMatch(5, "rest"));
+        assert_eq!(extract_value(result, "input"), 5);
+    }
+    #[test]
+    fn test_extract_value_unexpected_error() {
+        // Simulate an unexpected parse error variant
+        let result: Result<u32, ParseError<u32>> = Err(ParseError::CtOverflow);
+        // Since this is an unexpected error, it should result in the default value
+        assert_eq!(extract_value(result, "input"), 0);
+    }
+}

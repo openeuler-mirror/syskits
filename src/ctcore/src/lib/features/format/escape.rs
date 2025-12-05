@@ -324,5 +324,75 @@ mod test {
         assert_eq!(input, b"");
     }
 
+    #[test]
+    fn test_parse_code_hex_3() {
+        let mut input: &[u8] = b"123";
+        assert_eq!(parse_code(&mut input, Base::Hex), Some(18));
+        assert_eq!(input, b"3");
+    }
+
+    #[test]
+    fn test_parse_code_hex_4() {
+        let mut input: &[u8] = b"1234";
+        assert_eq!(parse_code(&mut input, Base::Hex), Some(18));
+        assert_eq!(input, b"34");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length() {
+        let mut input: &[u8] = b"x";
+        assert_eq!(parse_code(&mut input, Base::Hex), None);
+        assert_eq!(input, b"x");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length_max() {
+        let mut input: &[u8] = b"x{10FFFF}";
+        assert_eq!(parse_code(&mut input, Base::Hex), None);
+        assert_eq!(input, b"x{10FFFF}");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length_min() {
+        let mut input: &[u8] = b"x";
+        assert_eq!(parse_code(&mut input, Base::Hex), None);
+        assert_eq!(input, b"x");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length_min_hex() {
+        let mut input: &[u8] = b"x";
+        assert_eq!(parse_code(&mut input, Base::Hex), None);
+        assert_eq!(input, b"x");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length_max_hex() {
+        let mut input: &[u8] = b"x{10FFFF}";
+        assert_eq!(parse_code(&mut input, Base::Hex), None);
+        assert_eq!(input, b"x{10FFFF}");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length_max_octal() {
+        let mut input: &[u8] = b"123456789";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(83));
+        assert_eq!(input, b"456789");
+    }
+
+    #[test]
+    fn test_parse_code_invalid_input_length_min_octal() {
+        let mut input: &[u8] = b"1";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(1));
+        assert_eq!(input, b"");
+    }
+
+      #[test]
+    fn test_parse_code_invalid_input_length_max_octal_2() {
+        let mut input: &[u8] = b"12345678";
+        assert_eq!(parse_code(&mut input, Base::Oct), Some(83));
+        assert_eq!(input, b"45678");
+    }
+
 
 }

@@ -470,5 +470,64 @@ mod test {
         let mut input: &[u8] = b"004100";
         assert_eq!(parse_unicode(&mut input, 6), Some('\u{004100}'));
     }
+    #[test]
+    fn test_parse_unicode_valid_unicode_range3() {
+        let mut input: &[u8] = b"004101";
+        assert_eq!(parse_unicode(&mut input, 4), Some('\u{0041}'));
+    }
+
+    #[test]
+    fn test_parse_unicode_valid_unicode_range5() {
+        let mut input: &[u8] = b"004101";
+        assert_eq!(parse_unicode(&mut input, 6), Some('\u{004101}'));
+    }
+
+    #[test]
+    fn test_parse_unicode_valid_unicode_range_max() {
+        let mut input: &[u8] = b"10FFFF";
+        assert_eq!(parse_unicode(&mut input, 8), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_valid_unicode_range_max2() {
+        let mut input: &[u8] = b"10FFFFF";
+        assert_eq!(parse_unicode(&mut input, 8), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_invalid_input_length() {
+        let mut input: &[u8] = b"u";
+        assert_eq!(parse_unicode(&mut input, 4), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_invalid_input_length_max() {
+        let mut input: &[u8] = b"u{10FFFF}";
+        assert_eq!(parse_unicode(&mut input, 9), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_invalid_input_length_min() {
+        let mut input: &[u8] = b"u";
+        assert_eq!(parse_unicode(&mut input, 1), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_invalid_input_length_min_hex() {
+        let mut input: &[u8] = b"\\u";
+        assert_eq!(parse_unicode(&mut input, 1), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_invalid_input_length_min_unicode() {
+        let mut input: &[u8] = b"\\U";
+        assert_eq!(parse_unicode(&mut input, 1), None);
+    }
+
+    #[test]
+    fn test_parse_unicode_invalid_input_length_max_hex() {
+        let mut input: &[u8] = b"\\u{10FFFF}";
+        assert_eq!(parse_unicode(&mut input, 10), None);
+    }
 
 }

@@ -485,3 +485,154 @@ impl<F: Formatter> Format<F> {
         Ok(())
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fmt::Write as FmtWrite;
+    use std::io::Cursor; // Import the Write trait from std::fmt for String
+    struct MockFormatter;
+
+    impl Formatter for MockFormatter {
+        type Input = i32;
+
+        fn try_from_spec(_spec: Spec) -> Result<Self, FormatError> {
+            Ok(MockFormatter)
+        }
+
+        fn fmt(&self, mut w: impl Write, f: Self::Input) -> io::Result<()> {
+            write!(w, "{}", f)
+        }
+    }
+
+    #[test]
+    fn test_spec_error_display() {
+        let error = FormatError::SpecError(vec![b'a']);
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "%a: invalid conversion specification");
+    }
+
+    #[test]
+    fn test_too_many_specs_display() {
+        let error = FormatError::TooManySpecs(vec![b'f', b'o', b'o']);
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "format 'foo' has too many % directives");
+    }
+
+    #[test]
+    fn test_need_at_least_one_spec_display() {
+        let error = FormatError::NeedAtLeastOneSpec(vec![b'b', b'a', b'r']);
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "format 'bar' has no % directive");
+    }
+
+    #[test]
+    fn test_wrong_spec_type_display() {
+        let error = FormatError::WrongSpecType;
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "wrong % directive type was given");
+    }
+
+    #[test]
+    fn test_io_error_display() {
+        let error = FormatError::IoError(io::Error::new(io::ErrorKind::Other, "test"));
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "io error");
+    }
+
+    #[test]
+    fn test_no_more_arguments_display() {
+        let error = FormatError::NoMoreArguments;
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "no more arguments");
+    }
+
+    #[test]
+    fn test_invalid_argument_display() {
+        let error = FormatError::InvalidArgument(FormatArgument::String("example".into()));
+        let mut output = String::new();
+        write!(output, "{}", error).unwrap();
+        assert_eq!(output, "invalid argument");
+    }
+
+    #[test]
+    fn test_sprintf() {
+        let format_string = "Hello, %s!";
+        let args = vec![FormatArgument::String("World".into())];
+        let result = sprintf(format_string, &args).unwrap();
+        let result_str = String::from_utf8(result).unwrap();
+        assert_eq!(result_str, "Hello, World!");
+    }
+    #[test]
+    fn test_printf_writer() {
+        let mut output = Vec::new();
+        let format_string = "Hello, %s!";
+        let args = vec![FormatArgument::String("Rust".into())];
+        printf_writer(&mut output, format_string, &args).unwrap();
+        let output_str = String::from_utf8(output).unwrap();
+        assert_eq!(output_str, "Hello, Rust!");
+    }
+
+    #[test]
+    fn test_parse_escape_only() {
+        let format_string = b"Hello, \\nWorld!";
+        let result: Vec<_> = parse_escape_only(format_string).collect();
+        assert_eq!(
+            result,
+            vec![
+                EscapedChar::Byte(b'H'),
+                EscapedChar::Byte(b'e'),
+                EscapedChar::Byte(b'l'),
+                EscapedChar::Byte(b'l'),
+                EscapedChar::Byte(b'o'),
+                EscapedChar::Byte(b','),
+                EscapedChar::Byte(b' '),
+                EscapedChar::Byte(b'\n'),
+                EscapedChar::Byte(b'W'),
+                EscapedChar::Byte(b'o'),
+                EscapedChar::Byte(b'r'),
+                EscapedChar::Byte(b'l'),
+                EscapedChar::Byte(b'd'),
+                EscapedChar::Byte(b'!'),
+            ]
+        );
+    }
+    #[test]
+    fn test_parse_spec_only() {
+        let format_string = b"%s %d";
+        let result: Vec<_> = parse_spec_only(format_string).map(|r| r.unwrap()).collect();
+        assert_eq!(result.len(), 3); // 验证结果中有两个 FormatItem，一个是 %s，另一个是 %d
+    }
+    #[test]
+    fn test_parse_spec_and_escape() {
+        let format_string = b"Hello, %s\\n";
+        let result: Vec<_> = parse_spec_and_escape(format_string)
+            .map(|r| r.unwrap())
+            .collect();
+
+        assert!(matches!(
+            result.last(),
+            Some(FormatItem::Char(EscapedChar::Byte(10)))
+        ));
+        // 确保正确解析 %s 指令和 \n 转义序列
+    }
+
+  
+  
+
+ 
+
+ 
+ 
+  
+  
+
+  
+
+   
+}

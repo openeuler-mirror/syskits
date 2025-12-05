@@ -599,4 +599,93 @@ mod test {
         assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(92));
         assert_eq!(input, b"x");
     }
+
+      // Add more test cases for other escape sequences and edge cases...
+
+    #[test]
+    fn test_parse_escape_code_form_feed() {
+        let mut input: &[u8] = b"f";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\x0c'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_newline() {
+        let mut input: &[u8] = b"n";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\n'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_carriage_return() {
+        let mut input: &[u8] = b"r";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\r'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_horizontal_tab() {
+        let mut input: &[u8] = b"t";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\t'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_vertical_tab() {
+        let mut input: &[u8] = b"v";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\x0b'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_invalid_octal() {
+        let mut input: &[u8] = b"08";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\0'));
+        assert_eq!(input, b"8");
+    }
+
+    // Add more test cases for other escape sequences and edge cases...
+
+    #[test]
+    fn test_parse_escape_code_boundary_octal_max() {
+        let mut input: &[u8] = b"777"; // Max octal value
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(255));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_boundary_hex_max() {
+        let mut input: &[u8] = b"xFF"; // Max hexadecimal value
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(255));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_boundary_unicode_max() {
+        let mut input: &[u8] = b"u{10FFFF}"; // Max Unicode code point
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Char('\0'));
+        assert_eq!(input, b"{10FFFF}");
+    }
+
+    #[test]
+    fn test_parse_escape_code_invalid_escape_sequence() {
+        let mut input: &[u8] = b"\\xyz"; // Invalid escape sequence
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\\'));
+        assert_eq!(input, b"xyz");
+    }
+
+    #[test]
+    fn test_parse_escape_code_incomplete_escape_sequence() {
+        let mut input: &[u8] = b"\\u123"; // Incomplete unicode escape sequence
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\\'));
+        assert_eq!(input, b"u123");
+    }
+    // #[test]
+    // fn test_parse_escape_code_invalid_escape_sequence_backslash() {
+    //     let mut input: &[u8] = b"\\xyz"; // Invalid escape sequence
+    //     assert_eq!(parse_escape_code(&mut input), EscapedChar::Backslash(b'\\'));
+    //     assert_eq!(input, b"xyz");
+    // }
+
+    // Add more boundary and error tests as necessary...
 }

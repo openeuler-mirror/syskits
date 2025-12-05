@@ -530,4 +530,73 @@ mod test {
         assert_eq!(parse_unicode(&mut input, 10), None);
     }
 
+
+        #[test]
+    fn test_parse_unicode_invalid_input_length_max_unicode() {
+        let mut input: &[u8] = b"\\U{10FFFF}";
+        assert_eq!(parse_unicode(&mut input, 17), None);
+    }
+
+    #[test]
+    fn test_parse_escape_code_octal() {
+        let mut input: &[u8] = b"123";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'S'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_hex() {
+        let mut input: &[u8] = b"x1F";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(0x1F));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_unicode() {
+        let mut input: &[u8] = b"u0041";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Char('\u{0041}'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_invalid_unicode() {
+        let mut input: &[u8] = b"uXXXX";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Char('\0'));
+        assert_eq!(input, b"XXXX");
+    }
+
+    #[test]
+    fn test_parse_escape_code_backslash() {
+        let mut input: &[u8] = b"\\";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\\'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_double_quote() {
+        let mut input: &[u8] = b"\"";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'"'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_control_char() {
+        let mut input: &[u8] = b"a";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\x07'));
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_end() {
+        let mut input: &[u8] = b"c";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::End);
+        assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_invalid_backslash() {
+        let mut input: &[u8] = b"\\x";
+        assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(92));
+        assert_eq!(input, b"x");
+    }
 }

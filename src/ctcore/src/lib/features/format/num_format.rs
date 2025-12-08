@@ -1074,5 +1074,154 @@ mod test {
 
         assert_eq!(actual, expected);
     }
+    #[test]
+    fn test_format_float_decimal_precision_nonzero() {
+        let f = 123456.789;
+        let precision = 6;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "123456.789000";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_decimal_force_decimal_zero_precision() {
+        let f = 123456.789;
+        let precision = 0;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "123457.";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_decimal_inf_input() {
+        let f = f64::INFINITY;
+        let precision = 6;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "inf";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_decimal_nan_input() {
+        let f = f64::NAN;
+        let precision = 6;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "NaN";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_scientific_normal_functionality() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "1.234568e+05";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_scientific_normal_functionality2() {
+        let f = 123456.789;
+        let precision = 5;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "1.23457e+05";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_scientific_precision_zero() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "1e+05";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_scientific_precision_nonzero() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Uppercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "1.234568E+05";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_scientific_force_decimal_zero_precision() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "1.e+05";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_scientific_inf_input() {
+        let f = f64::INFINITY;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "NaNe+2147483647";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_scientific_inf_input2() {
+        let f = f64::INFINITY;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "NaNe+2147483647";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_scientific_nan_input() {
+        let f = f64::NAN;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "NaNe+00";
+        let actual = format_float_scientific(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
 
 }

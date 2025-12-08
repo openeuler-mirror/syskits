@@ -852,4 +852,95 @@ mod tests {
         assert_eq!(index, 0);
     }
 
+    #[test]
+    fn test_eat_number_single_digit() {
+        let mut rest: &[u8] = &[b'0']; // "0"
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0);
+    }
+
+    #[test]
+    fn test_eat_number_multiple_digits() {
+        // "345"
+        let mut rest: &[u8] = &[b'3', b'4', b'5'];
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0);
+    }
+
+    #[test]
+    fn test_eat_number_multiple_digits2() {
+        // "3x5"
+        let mut rest: &[u8] = &[b'3', b'q', b'5'];
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), Some(3));
+        assert_eq!(index, 1);
+    }
+
+    #[test]
+    fn test_eat_number_mixed_digits_and_non_digits() {
+        // "2345hij"
+        let mut rest: &[u8] = &[b'2', b'3', b'4', b'5', b'h', b'i', b'j'];
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), Some(2345));
+        assert_eq!(index, 4);
+    }
+
+    #[test]
+    fn test_eat_number_non_digit_followed_by_digits() {
+        // "hij012"
+        let mut rest: &[u8] = &[b'h', b'i', b'j', b'0', b'1', b'2'];
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0);
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_positive() {
+        let mut rest: &[u8] = &mut [b'*', b'3', b'5', b'7'];
+        let mut index = 0;
+        assert_eq!(
+            eat_asterisk_or_number(&mut rest, &mut index),
+            Some(CanAsterisk::Asterisk)
+        );
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_negative() {
+        let mut rest: &[u8] = &mut [b'2', b'5', b'7'];
+        let mut index = 0;
+        if let Some(eat_asterisk_or_number_value) = eat_asterisk_or_number(&mut rest, &mut index) {
+            assert_eq!(eat_asterisk_or_number_value, CanAsterisk::Fixed(257));
+        }
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_not_an_asterisk() {
+        let mut rest: &[u8] = &mut [b'3', b'5', b'7', b'a'];
+        let mut index = 0;
+        // if let Some(eat_asterisk_or_number_value) = eat_asterisk_or_number(&mut rest, &mut index) {
+        //     assert_eq!(eat_asterisk_or_number_value, CanAsterisk::Fixed(357));
+        // }
+        assert_eq!(
+            eat_asterisk_or_number(&mut rest, &mut index),
+            Some(CanAsterisk::Fixed(357))
+        );
+    }
+    #[test]
+    fn test_eat_asterisk_or_number_no_asterisk() {
+        let mut rest: &[u8] = &mut [b'2', b'5', b'7'];
+        let mut index = 0;
+        assert_eq!(eat_asterisk_or_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0); // 索引不应该增加
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_no_data() {
+        let mut rest: &[u8] = &mut [];
+        let mut index = 0;
+        assert_eq!(eat_asterisk_or_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0); // 索引不应该增加
+    }
+
 }

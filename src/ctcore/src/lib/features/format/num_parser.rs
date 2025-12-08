@@ -611,4 +611,130 @@ mod tests {
         assert_eq!(Some(0), base.digit('0'));
     }
 
+    #[test]
+    fn test_digit_octal_trailing_zero() {
+        let base = Base::CtOctal;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_into_i64_positive_within_range_decimal() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 123,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(123));
+    }
+
+    #[test]
+    fn test_into_i64_negative_within_range_decimal() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: true,
+            integral: 123,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(-123));
+    }
+
+    #[test]
+    fn test_into_i64_decimal_positive() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 123,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(123));
+    }
+
+    #[test]
+    fn test_into_i64_decimal_negative() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: true,
+            integral: 456,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(-456));
+    }
+
+    #[test]
+    fn test_into_i64_hexadecimal_positive() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtHexadecimal,
+            negative: false,
+            integral: 0xAB,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(171));
+    }
+
+    #[test]
+    fn test_into_i64_octal_negative() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtOctal,
+            negative: true,
+            integral: 0o123,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(-83));
+    }
+
+    #[test]
+    fn test_into_i64_binary_positive() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtBinary,
+            negative: false,
+            integral: 0b1101,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(13));
+    }
+
+    #[test]
+    fn test_into_i64_max_positive() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: u64::MAX,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), None);
+    }
+
+    #[test]
+    fn test_into_i64_max_negative() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: true,
+            integral: u64::MAX,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), None);
+    }
+
+    #[test]
+    fn test_into_i64_min_positive() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 0,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(0));
+    }
+
 }

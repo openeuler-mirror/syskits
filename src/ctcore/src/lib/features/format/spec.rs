@@ -943,4 +943,112 @@ mod tests {
         assert_eq!(index, 0); // 索引不应该增加
     }
 
+    #[test]
+    fn test_eat_asterisk_or_number_no_number_err() {
+        let mut rest: &[u8] = &mut [b'a'];
+        let mut index = 0;
+        assert_eq!(eat_asterisk_or_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0); // 索引不应该增加
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_no_number() {
+        let mut rest: &[u8] = &mut [b'*', b'a'];
+        let mut index = 0;
+        assert_eq!(
+            eat_asterisk_or_number(&mut rest, &mut index),
+            Some(CanAsterisk::Asterisk)
+        );
+        assert_eq!(index, 1); // 索引不应该增加
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_no_number2() {
+        let mut rest: &[u8] = &mut [b'*', b' ', b'a'];
+        let mut index = 0;
+        assert_eq!(
+            eat_asterisk_or_number(&mut rest, &mut index),
+            Some(CanAsterisk::Asterisk)
+        );
+        assert_eq!(index, 1); // 索引不应该增加
+    }
+
+    #[test]
+    fn test_eat_asterisk_or_number_no_number3() {
+        let mut rest: &[u8] = &mut [b'*', b'b', b'a'];
+        let mut index = 0;
+        assert_eq!(
+            eat_asterisk_or_number(&mut rest, &mut index),
+            Some(CanAsterisk::Asterisk)
+        );
+        assert_eq!(index, 1); // 索引不应该增加
+    }
+
+    #[test]
+    fn test_write_padded_left_align() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 20;
+        let left = true;
+        let expected = b"Hello, world!       ";
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, expected);
+    }
+
+    #[test]
+    fn test_write_padded_right_align() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 20;
+        let left = false;
+        let expected = b"       Hello, world!";
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, expected);
+    }
+
+    #[test]
+    fn test_write_padded_text_too_long() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 5;
+        let left = true;
+        let expected = b"Hello, world!";
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, expected);
+    }
+
+    #[test]
+    fn test_write_padded_io_error() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 20;
+        let left = true;
+        let result = write_padded(&mut writer, text, width, left);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_write_padded_empty_input_left() {
+        let mut writer = Vec::<u8>::new();
+        let text = &[];
+        let width = 20;
+        let left = true;
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, b"                    ");
+    }
+    #[test]
+    fn test_write_padded_empty_input_right() {
+        let mut writer = Vec::<u8>::new();
+        let text: &[u8] = &mut [];
+        let width = 20;
+        let left = false;
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, b"                    ");
+    }
+
 }

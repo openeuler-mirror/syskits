@@ -1051,4 +1051,37 @@ mod tests {
         assert_eq!(writer, b"                    ");
     }
 
+   #[test]
+    fn test_write_padded_empty_width() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 0;
+        let left = true;
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, b"Hello, world!");
+    }
+
+    #[test]
+    fn test_write_padded_null_width_left() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 0;
+        let left = true;
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, b"Hello, world!");
+    }
+
+    #[test]
+    fn test_write_padded_null_width_right() {
+        let mut writer = Vec::<u8>::new();
+        let text = b"Hello, world!";
+        let width = 0;
+        let left = false;
+        let result = write_padded(&mut writer, text, width, left);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(writer, b"Hello, world!");
+    }
+
 }

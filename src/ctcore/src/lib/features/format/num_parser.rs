@@ -448,4 +448,107 @@ mod tests {
         assert_eq!(parsed_number.into_f64(), 1.8446744075554226e19);
     }
 
+      #[test]
+    fn test_into_f64_min_value() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: true,
+            integral: u64::MAX,
+            fractional: u64::MAX,
+            precision: 10,
+        };
+        assert_eq!(parsed_number.into_f64(), -1.8446744075554226e19);
+    }
+
+    #[test]
+    fn test_digit_binary() {
+        let base = Base::CtBinary;
+        // let parsed = ParsedNumber::new(Base::Binary, false, 0, 0, 0);
+        assert_eq!(Some(1), base.digit('1'));
+        assert_eq!(None, base.digit('2'));
+        assert_eq!(None, base.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_octal() {
+        let parsed = Base::CtOctal;
+        assert_eq!(Some(1), parsed.digit('1'));
+        assert_eq!(Some(2), parsed.digit('2'));
+        assert_eq!(Some(3), parsed.digit('3'));
+        assert_eq!(Some(4), parsed.digit('4'));
+        assert_eq!(Some(5), parsed.digit('5'));
+        assert_eq!(Some(6), parsed.digit('6'));
+        assert_eq!(Some(7), parsed.digit('7'));
+        assert_eq!(None, parsed.digit('8'));
+        assert_eq!(None, parsed.digit('9'));
+        assert_eq!(None, parsed.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_decimal() {
+        let parsed = Base::CtDecimal;
+
+        assert_eq!(Some(1), parsed.digit('1'));
+        assert_eq!(Some(2), parsed.digit('2'));
+        assert_eq!(Some(3), parsed.digit('3'));
+        assert_eq!(Some(4), parsed.digit('4'));
+        assert_eq!(Some(5), parsed.digit('5'));
+        assert_eq!(Some(6), parsed.digit('6'));
+        assert_eq!(Some(7), parsed.digit('7'));
+        assert_eq!(Some(8), parsed.digit('8'));
+        assert_eq!(Some(9), parsed.digit('9'));
+        assert_eq!(None, parsed.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_hexadecimal() {
+        let parsed = Base::CtHexadecimal;
+
+        assert_eq!(Some(1), parsed.digit('1'));
+        assert_eq!(Some(2), parsed.digit('2'));
+        assert_eq!(Some(3), parsed.digit('3'));
+        assert_eq!(Some(4), parsed.digit('4'));
+        assert_eq!(Some(5), parsed.digit('5'));
+        assert_eq!(Some(6), parsed.digit('6'));
+        assert_eq!(Some(7), parsed.digit('7'));
+        assert_eq!(Some(8), parsed.digit('8'));
+        assert_eq!(Some(9), parsed.digit('9'));
+        assert_eq!(Some(10), parsed.digit('a'));
+        assert_eq!(Some(11), parsed.digit('b'));
+        assert_eq!(Some(12), parsed.digit('c'));
+        assert_eq!(Some(13), parsed.digit('d'));
+        assert_eq!(Some(14), parsed.digit('e'));
+        assert_eq!(Some(15), parsed.digit('f'));
+        assert_eq!(None, parsed.digit('g'));
+    }
+    #[test]
+    fn test_digit_binary_overflow() {
+        let base = Base::CtBinary;
+        assert_eq!(None, base.digit('2'));
+    }
+
+    #[test]
+    fn test_digit_decimal_overflow() {
+        let base = Base::CtDecimal;
+        assert_eq!(None, base.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_hexadecimal_overflow() {
+        let base = Base::CtHexadecimal;
+        assert_eq!(None, base.digit('h'));
+    }
+
+    #[test]
+    fn test_digit_octal_overflow() {
+        let base = Base::CtOctal;
+        assert_eq!(None, base.digit('8'));
+    }
+
+    #[test]
+    fn test_digit_binary_invalid() {
+        let base = Base::CtBinary;
+        assert_eq!(None, base.digit('a'));
+    }
+
 }

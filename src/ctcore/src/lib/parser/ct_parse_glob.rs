@@ -144,4 +144,70 @@ mod tests {
         assert_eq!(fix_negation(&large_input), expected_output);
     }
 
+    #[test]
+    fn invalid_inputs() {
+        assert_eq!(fix_negation("["), "[");
+        assert_eq!(fix_negation("]"), "]");
+        assert_eq!(fix_negation("[]"), "[]");
+        assert_eq!(fix_negation("[^]"), "[^]"); // No valid characters to negate
+    }
+
+    #[test]
+    fn test_base_fix_negation() {
+        // Happy/Simple case
+        assert_eq!("[!abc]", fix_negation("[^abc]"));
+
+        // Should fix negations in a long regex
+        assert_eq!("foo[abc]  bar[!def]", fix_negation("foo[abc]  bar[^def]"));
+
+        // Should fix multiple negations in a regex
+        assert_eq!("foo[!abc]bar[!def]", fix_negation("foo[^abc]bar[^def]"));
+
+        // Should fix negation of the single character ]
+        assert_eq!("[!]]", fix_negation("[^]]"));
+
+        // Should fix negation of the single character ^
+        assert_eq!("[!^]", fix_negation("[^^]"));
+
+        // Should fix negation of the space character
+        assert_eq!("[! ]", fix_negation("[^ ]"));
+
+        // Complicated patterns
+        assert_eq!("[!][]", fix_negation("[^][]"));
+        assert_eq!("[![]]", fix_negation("[^[]]"));
+
+        // More complex patterns that should be replaced
+        assert_eq!("[[]] [!a]", fix_negation("[[]] [^a]"));
+        assert_eq!("[[] [!a]", fix_negation("[[] [^a]"));
+        assert_eq!("[]] [!a]", fix_negation("[]] [^a]"));
+
+        // test that we don't look for closing square brackets unnecessarily
+        // Verifies issue #5584
+        let chars = "^[".repeat(174571);
+        assert_eq!(chars, fix_negation(chars.as_str()));
+    }
+
+    #[test]
+    fn test_base_fix_negation_should_not_amend() {
+        assert_eq!("abc", fix_negation("abc"));
+
+        // Regex specifically matches either [ or ^
+        assert_eq!("[[^]", fix_negation("[[^]"));
+
+        // Regex that specifically matches either space or ^
+        assert_eq!("[ ^]", fix_negation("[ ^]"));
+
+        // Regex that specifically matches either [, space or ^
+        assert_eq!("[[ ^]", fix_negation("[[ ^]"));
+        assert_eq!("[ [^]", fix_negation("[ [^]"));
+
+        // Invalid globs (according to rust's glob implementation) will remain unamended
+        assert_eq!("[^]", fix_negation("[^]"));
+        assert_eq!("[^", fix_negation("[^"));
+        assert_eq!("[][^]", fix_negation("[][^]"));
+
+        // Issue #4479
+        assert_eq!("ààà[^", fix_negation("ààà[^"));
+    }
+
 }

@@ -551,3 +551,202 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::format::num_format::format_float_hexadecimal;
+    use crate::format::num_format::strip_fractional_zeroes_and_dot;
+    use crate::format::num_format::{Case, ForceDecimal};
+
+    use std::io::Cursor;
+
+    #[test]
+    fn test_signed_int_try_from_spec_success() {
+        let spec = Spec::SignedInt {
+            width: Some(CanAsterisk::Fixed(10)),
+            precision: Some(CanAsterisk::Fixed(4)),
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+        };
+
+        let signed_int = SignedInt::try_from_spec(spec).unwrap();
+
+        assert_eq!(signed_int.width, 10);
+        assert_eq!(signed_int.precision, 4);
+        assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
+        assert_eq!(signed_int.alignment, NumberAlignment::Left);
+    }
+
+    #[test]
+    fn test_signed_int_try_from_spec_zero_width() {
+        // Spec with zero width
+        let spec = Spec::SignedInt {
+            width: Some(CanAsterisk::Fixed(0)),
+            precision: Some(CanAsterisk::Fixed(4)),
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::RightSpace,
+        };
+
+        let result = SignedInt::try_from_spec(spec);
+
+        assert!(result.is_ok());
+        let signed_int = result.unwrap();
+        assert_eq!(signed_int.width, 0);
+        assert_eq!(signed_int.precision, 4);
+        assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
+        assert_eq!(signed_int.alignment, NumberAlignment::RightSpace);
+    }
+
+    #[test]
+    fn test_signed_int_try_from_spec_max_width() {
+        // Spec with maximum possible width
+        let spec = Spec::SignedInt {
+            width: Some(CanAsterisk::Fixed(i64::MAX as usize)),
+            precision: Some(CanAsterisk::Fixed(4)),
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+        };
+
+        let result = SignedInt::try_from_spec(spec);
+
+        assert!(result.is_ok());
+        let signed_int = result.unwrap();
+        assert_eq!(signed_int.width, i64::MAX as usize);
+        assert_eq!(signed_int.precision, 4);
+        assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
+        assert_eq!(signed_int.alignment, NumberAlignment::Left);
+    }
+
+    #[test]
+    fn test_signed_int_try_from_spec_max_precision() {
+        // Spec with maximum possible precision
+        let spec = Spec::SignedInt {
+            width: Some(CanAsterisk::Fixed(10)),
+            precision: Some(CanAsterisk::Fixed(i64::MAX as usize)),
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::RightZero,
+        };
+
+        let result = SignedInt::try_from_spec(spec);
+
+        assert!(result.is_ok());
+        let signed_int = result.unwrap();
+        assert_eq!(signed_int.width, 10);
+        assert_eq!(signed_int.precision, i64::MAX as usize);
+        assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
+        assert_eq!(signed_int.alignment, NumberAlignment::RightZero);
+    }
+
+    #[test]
+    fn test_signed_int_fmt_positive_plus() {
+        let formatter = SignedInt {
+            width: 8,
+            precision: 0,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::RightSpace,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+    1234");
+    }
+
+    #[test]
+    fn test_signed_int_fmt_positive_space() {
+        let formatter = SignedInt {
+            width: 10,
+            precision: 0,
+            positive_sign: PositiveSign::Space,
+            alignment: NumberAlignment::Left,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 5678).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b" 5678      ");
+    }
+
+    #[test]
+    fn test_signed_int_fmt_negative() {
+        let formatter = SignedInt {
+            width: 12,
+            precision: 0,
+            positive_sign: PositiveSign::None,
+            alignment: NumberAlignment::RightZero,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, -9876).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"0000000-9876");
+    }
+
+    #[test]
+    fn test_unsigned_int_fmt_decimal() {
+        let formatter = UnsignedInt {
+            variant: UnsignedIntVariant::Decimal,
+            width: 10,
+            precision: 2,
+            alignment: NumberAlignment::Left,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"1234      ");
+    }
+
+    #[test]
+    fn test_unsigned_int_fmt_octal() {
+        let formatter = UnsignedInt {
+            variant: UnsignedIntVariant::Octal(Prefix::Yes),
+            width: 8,
+            precision: 0,
+            alignment: NumberAlignment::RightSpace,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"   02322");
+    }
+
+    #[test]
+    fn test_unsigned_int_fmt_hex_lowercase() {
+        let formatter = UnsignedInt {
+            variant: UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes),
+            width: 16,
+            precision: 0,
+            alignment: NumberAlignment::Left,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"0x4d2           ");
+    }
+
+    #[test]
+    fn test_unsigned_int_fmt_hex_uppercase() {
+        let formatter = UnsignedInt {
+            variant: UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes),
+            width: 16,
+            precision: 0,
+            alignment: NumberAlignment::RightZero,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"000000000000X4D2");
+    }
+
+}

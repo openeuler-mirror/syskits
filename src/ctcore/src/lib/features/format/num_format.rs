@@ -1351,4 +1351,129 @@ mod test {
         assert_eq!(actual, expected);
     }
 
+    #[test]
+    fn test_format_float_hexadecimal() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0x1.e240c9fbe76c9p+10";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_hexadecimal_zero() {
+        let f = 0.0;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0x0.0000000000000p+0";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_hexadecimal_positive_number() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0x1.e240c9fbe76c9p+10";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_hexadecimal_positive_number2() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Uppercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0X1.E240C9FBE76C9P+10";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_hexadecimal_negative_number() {
+        let f = -123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0x1.e240c9fbe76c9p+810";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_hexadecimal_zero_precision() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0x1p+10";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_hexadecimal_zero_precision_forced() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "0x1.p+10";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_hexadecimal_force_decimal_zero_precision() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "0x1.p+10";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_hexadecimal_invalid_input() {
+        let f: f64 = 0.0;
+        let precision = 6;
+        let case = Case::Uppercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0X0.0000000000000P+0";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_hexadecimal_zero_input() {
+        let f: f64 = 0.0;
+        let precision = 6;
+        let case = Case::Uppercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "0X0.0000000000000P+0";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
 }

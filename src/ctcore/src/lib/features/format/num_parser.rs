@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(parsed_number.into_f64(), 1.8446744075554226e19);
     }
 
-      #[test]
+    #[test]
     fn test_into_f64_min_value() {
         let parsed_number = ParsedNumber {
             base: Base::CtDecimal,
@@ -549,6 +549,66 @@ mod tests {
     fn test_digit_binary_invalid() {
         let base = Base::CtBinary;
         assert_eq!(None, base.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_decimal_invalid() {
+        let base = Base::CtDecimal;
+        assert_eq!(None, base.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_hexadecimal_invalid() {
+        let base = Base::CtHexadecimal;
+        assert_eq!(None, base.digit('g'));
+    }
+
+    #[test]
+    fn test_digit_octal_invalid() {
+        let base = Base::CtOctal;
+        assert_eq!(None, base.digit('a'));
+    }
+
+    #[test]
+    fn test_digit_binary_leading_zero() {
+        let base = Base::CtBinary;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_digit_decimal_leading_zero() {
+        let base = Base::CtDecimal;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_digit_hexadecimal_leading_zero() {
+        let base = Base::CtHexadecimal;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_digit_octal_leading_zero() {
+        let base = Base::CtOctal;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_digit_binary_trailing_zero() {
+        let base = Base::CtBinary;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_digit_decimal_trailing_zero() {
+        let base = Base::CtDecimal;
+        assert_eq!(Some(0), base.digit('0'));
+    }
+
+    #[test]
+    fn test_digit_hexadecimal_trailing_zero() {
+        let base = Base::CtHexadecimal;
+        assert_eq!(Some(0), base.digit('0'));
     }
 
 }

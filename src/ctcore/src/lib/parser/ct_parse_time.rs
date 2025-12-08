@@ -132,3 +132,60 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     Ok(duration.saturating_mul(times))
 }
 
+#[cfg(test)]
+mod tests {
+
+    use crate::ct_parse_time::from_str;
+    use std::time::Duration;
+
+    #[test]
+    fn test_basic_seconds() {
+        assert_eq!(from_str("300s"), Ok(Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn test_minutes() {
+        assert_eq!(from_str("5m"), Ok(Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn test_hours() {
+        assert_eq!(from_str("2h"), Ok(Duration::from_secs(7200)));
+    }
+
+    #[test]
+    fn test_days() {
+        assert_eq!(from_str("1d"), Ok(Duration::from_secs(86400)));
+    }
+
+    #[test]
+    fn test_fractional_seconds() {
+        assert_eq!(from_str("0.5s"), Ok(Duration::new(0, 500_000_000)));
+    }
+
+    #[test]
+    fn test_fractional_minutes() {
+        assert_eq!(from_str("1.5m"), Ok(Duration::from_secs(90)));
+    }
+
+    #[test]
+    fn test_invalid_number() {
+        assert!(from_str("abc").is_err());
+    }
+
+    #[test]
+    fn test_invalid_suffix() {
+        assert!(from_str("10x").is_err());
+    }
+
+    #[test]
+    fn test_invalid_combination() {
+        assert!(from_str("10sd").is_err());
+    }
+
+    #[test]
+    fn test_empty_string() {
+        assert!(from_str("").is_err());
+    }
+
+}

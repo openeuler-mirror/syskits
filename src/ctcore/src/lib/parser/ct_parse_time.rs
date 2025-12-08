@@ -188,4 +188,66 @@ mod tests {
         assert!(from_str("").is_err());
     }
 
+    #[test]
+    fn test_no_suffix_with_decimal() {
+        assert_eq!(from_str("12.34"), Ok(Duration::new(12, 339_999_999)));
+    }
+
+    #[test]
+    fn test_large_number() {
+        let large_number = "1000000000000000000000";
+        assert!(from_str(large_number).is_ok());
+    }
+
+    #[test]
+    fn test_overflow() {
+        let overflow_number = "18446744073709551615.999999999";
+        assert_eq!(
+            from_str(overflow_number),
+            Ok(Duration::from_secs(18446744073709551615))
+        );
+    }
+
+    #[test]
+    fn test_infinity_strings() {
+        assert_eq!(from_str("inf"), Ok(Duration::from_secs(u64::MAX)));
+        assert_eq!(from_str("infinity"), Ok(Duration::from_secs(u64::MAX)));
+    }
+
+    #[test]
+    fn test_negative_input() {
+        assert!(from_str("-100").is_err());
+    }
+
+    #[test]
+    fn test_whitespace_handling() {
+        assert_eq!(
+            from_str(" 300s "),
+            Err(String::from(
+                "invalid time interval ' 300s ': invalid float literal"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_multiple_suffixes() {
+        assert!(from_str("10smh").is_err());
+    }
+
+    #[test]
+    fn test_special_characters() {
+        assert!(from_str("10$").is_err());
+        assert!(from_str("10#").is_err());
+    }
+
+    #[test]
+    fn test_large_fractional_part() {
+        assert_eq!(from_str("0.0000001s"), Ok(Duration::new(0, 100)));
+    }
+
+    #[test]
+    fn test_very_large_fractional_seconds() {
+        assert_eq!(from_str("0.9999999999s"), Ok(Duration::new(0, 999_999_999)));
+    }
+
 }

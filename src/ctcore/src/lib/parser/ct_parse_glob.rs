@@ -82,3 +82,66 @@ pub fn from_str(glob: &str) -> Result<Pattern, PatternError> {
     Pattern::new(&fix_negation(glob))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base_from_str() {
+        assert_eq!(Pattern::new("[!abc]").unwrap(), from_str("[^abc]").unwrap());
+    }
+
+    #[test]
+    fn basic_negation_fix() {
+        assert_eq!(fix_negation("[^abc]"), "[!abc]");
+        assert_eq!(fix_negation("test[^xyz]more"), "test[!xyz]more");
+    }
+
+    #[test]
+    fn multiple_negations() {
+        assert_eq!(fix_negation("[^a][^b][^c]"), "[!a][!b][!c]");
+    }
+
+    #[test]
+    fn edge_cases_with_special_characters() {
+        assert_eq!(fix_negation("[^\\]^[]]"), "[!\\]^[]]");
+        assert_eq!(fix_negation("abc[^]def"), "abc[^]def"); // Invalid negation not to be replaced
+        assert_eq!(fix_negation("nothing_special"), "nothing_special");
+    }
+
+    #[test]
+    fn escaped_characters() {
+        assert_eq!(fix_negation("[^\\^abc]"), "[!\\^abc]");
+        assert_eq!(fix_negation("[^\\]]"), "[!\\]]");
+    }
+
+    #[test]
+    fn complex_patterns() {
+        assert_eq!(fix_negation("foo[^]bar[^abc]baz"), "foo[!]bar[^abc]baz");
+        assert_eq!(fix_negation("[^abc][def][^ghi]"), "[!abc][def][!ghi]");
+    }
+
+    #[test]
+    fn nested_negations() {
+        assert_eq!(fix_negation("[^[^abc]]"), "[![^abc]]");
+    }
+
+    #[test]
+    fn no_change_needed() {
+        assert_eq!(fix_negation("abc"), "abc");
+        assert_eq!(fix_negation("[abc]"), "[abc]");
+    }
+
+    #[test]
+    fn already_correct_negation() {
+        assert_eq!(fix_negation("[!abc]"), "[!abc]");
+    }
+
+    #[test]
+    fn stress_test_with_large_input() {
+        let large_input = "[^abc]".repeat(10000);
+        let expected_output = "[!abc]".repeat(10000);
+        assert_eq!(fix_negation(&large_input), expected_output);
+    }
+
+}

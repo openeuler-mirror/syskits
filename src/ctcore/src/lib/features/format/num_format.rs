@@ -1224,4 +1224,131 @@ mod test {
         assert_eq!(actual, expected);
     }
 
+
+    #[test]
+    fn test_format_float_shortest_normal_functionality() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "123457.";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_shortest_normal_functionality2() {
+        let f = 123456.789;
+        let precision = 5;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "1.2346e+05";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_shortest_precision_zero() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "1e+05";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_shortest_precision_nonzero() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "123457";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_shortest_precision_nonzero2() {
+        let f = 123456.789;
+        let precision = 7;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "123456.8";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_shortest_force_decimal_zero_precision() {
+        let f = 123456.789;
+        let precision = 0;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "1.e+05";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_shortest_force_decimal_nonzero_precision() {
+        let f = 123456.789;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::Yes;
+
+        let expected = "123457.";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_shortest_invalid_input() {
+        let f = f64::INFINITY;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "NaNe+2147483647";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_shortest_inf_input() {
+        let f = f64::INFINITY;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "NaNe+2147483647";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_shortest_nan_input() {
+        let f = f64::NAN;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "NaN";
+        let actual = format_float_shortest(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
 }

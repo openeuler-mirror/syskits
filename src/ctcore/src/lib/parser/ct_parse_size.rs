@@ -725,5 +725,85 @@ mod tests {
         assert_eq!(parse_size_u64_max("18446744073709551616"), Ok(u64::MAX));
     }
 
+    #[test]
+    #[cfg(not(target_pointer_width = "128"))]
+    fn test_base_overflow_to_max_u128() {
+        assert_eq!(
+            parse_size_u128_max("10R"),
+            Ok(12_379_400_392_853_802_748_991_242_240),
+        );
+        assert_eq!(
+            parse_size_u128_max("10Q"),
+            Ok(12_676_506_002_282_294_014_967_032_053_760),
+        );
+        assert_eq!(parse_size_u128_max("1000000000000R"), Ok(u128::MAX),);
+        assert_eq!(parse_size_u128_max("1000000000Q"), Ok(u128::MAX),);
+    }
+
+    #[test]
+    fn test_base_invalid_suffix() {
+        let test_strings = ["5mib", "1eb", "1H"];
+        for &test_string in &test_strings {
+            assert_eq!(
+                ParseSizeError::InvalidSuffix(format!("{}", test_string.quote())),
+                parse_size_u64(test_string).unwrap_err(),
+            );
+        }
+    }
+
+    #[test]
+    fn test_base_invalid_syntax() {
+        let test_strings = ["biB", "-", "+", "", "-1", "∞"];
+        for &test_string in &test_strings {
+            assert_eq!(
+                ParseSizeError::ParseFailure(format!("{}", test_string.quote())),
+                parse_size_u64(test_string).unwrap_err(),
+            );
+        }
+    }
+
+    #[test]
+    fn test_base_b_suffix() {
+        assert_eq!(parse_size_u64("3b"), Ok(3 * 512),); // b is 512
+    }
+
+    #[test]
+    fn test_base_no_suffix() {
+        assert_eq!(parse_size_u64("1234"), Ok(1234),);
+        assert_eq!(parse_size_u64("0"), Ok(0),);
+        assert_eq!(parse_size_u64("5"), Ok(5),);
+        assert_eq!(parse_size_u64("999"), Ok(999),);
+    }
+
+    #[test]
+    fn test_base_kilobytes_suffix() {
+        assert_eq!(parse_size_u64("123KB"), Ok(123 * 1000),); // KB is 1000
+        assert_eq!(parse_size_u64("9kB"), Ok(9 * 1000),); // kB is 1000
+        assert_eq!(parse_size_u64("2K"), Ok(2 * 1024),); // K is 1024
+        assert_eq!(parse_size_u64("0K"), Ok(0),);
+        assert_eq!(parse_size_u64("0KB"), Ok(0),);
+        assert_eq!(parse_size_u64("KB"), Ok(1000),);
+        assert_eq!(parse_size_u64("K"), Ok(1024),);
+        assert_eq!(parse_size_u64("2kB"), Ok(2000),);
+        assert_eq!(parse_size_u64("4KB"), Ok(4000),);
+    }
+
+    #[test]
+    fn test_base_megabytes_suffix() {
+        assert_eq!(parse_size_u64("123M"), Ok(123 * 1024 * 1024));
+        assert_eq!(parse_size_u64("123MB"), Ok(123 * 1000 * 1000));
+        assert_eq!(parse_size_u64("M"), Ok(1024 * 1024));
+        assert_eq!(parse_size_u64("MB"), Ok(1000 * 1000));
+        assert_eq!(parse_size_u64("2m"), Ok(2 * 1_048_576));
+        assert_eq!(parse_size_u64("4M"), Ok(4 * 1_048_576));
+        assert_eq!(parse_size_u64("2mB"), Ok(2_000_000));
+        assert_eq!(parse_size_u64("4MB"), Ok(4_000_000));
+    }
+
+    #[test]
+    fn test_base_gigabytes_suffix() {
+        assert_eq!(parse_size_u64("1G"), Ok(1_073_741_824));
+        assert_eq!(parse_size_u64("2GB"), Ok(2_000_000_000));
+    }
 
 }

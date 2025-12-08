@@ -757,4 +757,99 @@ mod tests {
         // assert_eq!(Spec::parse(&mut input), Err([Spec::EscapedString, 100]));
     }
 
+    #[test]
+    fn test_parse_specifier_with_l_flag() {
+        let mut input: &[u8] = b"l";
+        let rest: &[u8] = &[b'l'];
+        let _expected = Spec::Char {
+            width: None,
+            align_left: true,
+        };
+        assert_eq!(Spec::parse(&mut input), Err(rest));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_l_flag2() {
+        let mut input: &[u8] = b"2.3L";
+        let _expected = Spec::Char {
+            width: None,
+            align_left: true,
+        };
+        let rest: &[u8] = &[b'2', b'.', b'3', b'L'];
+        assert_eq!(Spec::parse(&mut input), Err(rest));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_h_flag2() {
+        let mut input: &[u8] = b"H";
+        let rest: &[u8] = &[b'H'];
+        let _expected = Spec::Char {
+            width: None,
+            align_left: false,
+        };
+        assert_eq!(Spec::parse(&mut input), Err(rest));
+    }
+
+    #[test]
+    fn test_parse_length_char() {
+        let mut rest: &[u8] = b"hh";
+        let mut index = 0;
+        assert_eq!(
+            Spec::parse_length(&mut rest, &mut index),
+            Some(Length::Char)
+        );
+    }
+
+    #[test]
+    fn test_parse_length_short() {
+        let mut rest: &[u8] = b"h";
+        let mut index = 0;
+        assert_eq!(
+            Spec::parse_length(&mut rest, &mut index),
+            Some(Length::Short)
+        );
+    }
+
+    // Add more tests for other length options (Long, LongLong, IntMaxT, etc.)
+
+    #[test]
+    fn test_parse_length_invalid() {
+        let mut rest: &[u8] = b"abc"; // invalid length option
+        let mut index = 0;
+        assert_eq!(Spec::parse_length(&mut rest, &mut index), None);
+    }
+
+    #[test]
+    fn test_parse_length_no_length() {
+        let mut rest: &[u8] = b"";
+        let mut index = 0;
+        assert_eq!(Spec::parse_length(&mut rest, &mut index), None);
+    }
+
+    #[test]
+    fn test_parse_length_with_other_specifiers() {
+        let mut rest: &[u8] = b"zhlt"; // mixed length and other specifiers
+        let mut index = 0;
+        assert_eq!(
+            Spec::parse_length(&mut rest, &mut index),
+            Some(Length::PtfDiffT)
+        );
+        assert_eq!(index, 4); // Make sure only the length specifier is consumed
+    }
+
+    #[test]
+    fn test_eat_number_empty_input() {
+        let mut rest: &[u8] = &[];
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), None);
+    }
+
+    #[test]
+    fn test_eat_number_no_digits() {
+        let mut rest: &[u8] = &[b'h', b'i', b'j']; // "hij"
+        let mut index = 0;
+        assert_eq!(eat_number(&mut rest, &mut index), None);
+        assert_eq!(index, 0);
+    }
+
 }

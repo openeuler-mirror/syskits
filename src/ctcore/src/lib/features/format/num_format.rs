@@ -1476,4 +1476,163 @@ mod test {
         assert_eq!(actual, expected);
     }
 
+       #[test]
+    fn test_format_float_hexadecimal_inf_input() {
+        let f = f64::INFINITY;
+        let precision = 6;
+        let case = Case::Lowercase;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "0x1.0000000000000p+400";
+        let actual = format_float_hexadecimal(f, precision, case, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_normal_functionality() {
+        let mut s = String::from("1000.00000");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+
+        let mut s = String::from("1000.");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+
+        let mut s = String::from("1000.02030");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000.0203");
+
+        let mut s = String::from("1000.00000");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_empty_string() {
+        let mut s = String::new();
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "");
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_no_decimal_point() {
+        let mut s = String::from("1000");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_leading_zeros() {
+        let mut s = String::from("0000.00000");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "0000");
+
+        let mut s = String::from("0000.");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "0000");
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_trailing_zeros_and_decimal_point() {
+        let mut s = String::from("1000.000000");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+
+        let mut s = String::from("1000.");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_no_trailing_zeros_and_decimal_point() {
+        let mut s = String::from("1000");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+
+        let mut s = String::from("1000.");
+        strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "1000");
+    }
+
+    #[test]
+    fn test_strip_fractional_zeroes_and_dot_no_input() {
+        let mut s = String::new();
+        let _ = strip_fractional_zeroes_and_dot(&mut s);
+        assert_eq!(s, "");
+        // }
+    }
+    //
+    #[test]
+    fn unsigned_octal() {
+        use super::{Formatter, NumberAlignment, Prefix, UnsignedInt, UnsignedIntVariant};
+        let f = |x| {
+            let mut s = Vec::new();
+            UnsignedInt {
+                variant: UnsignedIntVariant::Octal(Prefix::Yes),
+                width: 0,
+                precision: 0,
+                alignment: NumberAlignment::Left,
+            }
+            .fmt(&mut s, x)
+            .unwrap();
+            String::from_utf8(s).unwrap()
+        };
+
+        assert_eq!(f(0), "0");
+        assert_eq!(f(5), "05");
+        assert_eq!(f(8), "010");
+    }
+
+    #[test]
+    fn decimal_float() {
+        use super::format_float_decimal;
+        let f = |x| format_float_decimal(x, 6, ForceDecimal::No);
+        assert_eq!(f(0.0), "0.000000");
+        assert_eq!(f(1.0), "1.000000");
+        assert_eq!(f(100.0), "100.000000");
+        assert_eq!(f(123456.789), "123456.789000");
+        assert_eq!(f(12.3456789), "12.345679");
+        assert_eq!(f(1000000.0), "1000000.000000");
+        assert_eq!(f(99999999.0), "99999999.000000");
+        assert_eq!(f(1.9999995), "1.999999");
+        assert_eq!(f(1.9999996), "2.000000");
+    }
+
+    #[test]
+    fn scientific_float() {
+        use super::format_float_scientific;
+        let f = |x| format_float_scientific(x, 6, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0.000000e+00");
+        assert_eq!(f(1.0), "1.000000e+00");
+        assert_eq!(f(100.0), "1.000000e+02");
+        assert_eq!(f(123456.789), "1.234568e+05");
+        assert_eq!(f(12.3456789), "1.234568e+01");
+        assert_eq!(f(1000000.0), "1.000000e+06");
+        assert_eq!(f(99999999.0), "1.000000e+08");
+    }
+
+    #[test]
+    fn scientific_float_zero_precision() {
+        use super::format_float_scientific;
+
+        let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0e+00");
+        assert_eq!(f(1.0), "1e+00");
+        assert_eq!(f(100.0), "1e+02");
+        assert_eq!(f(123456.789), "1e+05");
+        assert_eq!(f(12.3456789), "1e+01");
+        assert_eq!(f(1000000.0), "1e+06");
+        assert_eq!(f(99999999.0), "1e+08");
+
+        let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::Yes);
+        assert_eq!(f(0.0), "0.e+00");
+        assert_eq!(f(1.0), "1.e+00");
+        assert_eq!(f(100.0), "1.e+02");
+        assert_eq!(f(123456.789), "1.e+05");
+        assert_eq!(f(12.3456789), "1.e+01");
+        assert_eq!(f(1000000.0), "1.e+06");
+        assert_eq!(f(99999999.0), "1.e+08");
+    }
+
 }

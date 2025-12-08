@@ -736,5 +736,163 @@ mod tests {
         };
         assert_eq!(parsed_number.into_i64(), Some(0));
     }
+ #[test]
+    fn test_into_i64_min_negative() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: true,
+            integral: 0,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(0));
+    }
 
+    #[test]
+    fn test_into_i64_out_of_range_decimal() {
+        // An example where the parsed number is out of i64 range
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: u64::MAX,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), None);
+    }
+
+    #[test]
+    fn test_into_i64_zero_decimal() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 0,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_i64(), Some(0));
+    }
+
+    #[test]
+    fn test_decimal_u64() {
+        assert!(matches!(
+            ParsedNumber::parse_u64("666.88"),
+            Err(ParseError::CtPartialMatch(666, ".88"))
+        ));
+        assert_eq!(Ok(666), ParsedNumber::parse_u64("666"));
+        assert!(matches!(
+            ParsedNumber::parse_u64(""),
+            Err(ParseError::CtNotNumeric)
+        ));
+
+        assert!(matches!(
+            ParsedNumber::parse_u64("-666"),
+            Err(ParseError::CtNotNumeric)
+        ));
+
+        assert_eq!(
+            Ok(u64::MAX),
+            ParsedNumber::parse_u64(&format!("{}", u64::MAX))
+        );
+    }
+
+    #[test]
+    fn test_decimal_i64() {
+        assert!(matches!(
+            ParsedNumber::parse_i64(&format!("{}", i64::MAX as u64 + 1)),
+            Err(ParseError::CtOverflow)
+        ));
+        assert!(matches!(
+            ParsedNumber::parse_i64(&format!("{}", u64::MAX)),
+            Err(ParseError::CtOverflow)
+        ));
+        assert!(matches!(
+            ParsedNumber::parse_i64("--456"),
+            Err(ParseError::CtNotNumeric)
+        ));
+        assert_eq!(Ok(-456), ParsedNumber::parse_i64("-456"));
+        assert_eq!(Ok(456), ParsedNumber::parse_i64("456"));
+        assert_eq!(
+            Ok(i64::MIN),
+            ParsedNumber::parse_i64(&format!("{}", i64::MIN))
+        );
+        assert_eq!(
+            Ok(i64::MAX),
+            ParsedNumber::parse_i64(&format!("{}", i64::MAX))
+        );
+    }
+
+    #[test]
+    fn test_decimal_f64() {
+        assert_eq!(Ok(-456.0), ParsedNumber::parse_f64("-456"));
+        assert_eq!(Ok(456.0), ParsedNumber::parse_f64("456"));
+
+        assert_eq!(Ok(456.0), ParsedNumber::parse_f64("456."));
+        assert_eq!(Ok(-1456.0), ParsedNumber::parse_f64("-1456."));
+        assert_eq!(Ok(456.0), ParsedNumber::parse_f64("456.0"));
+        assert_eq!(Ok(-456.0), ParsedNumber::parse_f64("-456.0"));
+        assert_eq!(Ok(456.16), ParsedNumber::parse_f64("456.16"));
+        assert_eq!(Ok(-456.16), ParsedNumber::parse_f64("-456.16"));
+        assert_eq!(Ok(0.16), ParsedNumber::parse_f64(".16"));
+        assert_eq!(Ok(-0.16), ParsedNumber::parse_f64("-.16"));
+        assert_eq!(
+            Ok(0.16),
+            ParsedNumber::parse_f64(".160000000000000000000000000231313")
+        );
+
+        assert!(ParsedNumber::parse_f64(&format!("{}", i64::MIN)).is_ok());
+        assert!(ParsedNumber::parse_f64(&format!("{}", u64::MAX)).is_ok());
+        assert!(matches!(ParsedNumber::parse_f64("-infinity"),
+                         Err(ParseError::CtPartialMatch(f, "inity")) if f == f64::NEG_INFINITY));
+        assert!(matches!(ParsedNumber::parse_f64("1.2.3"),
+                         Err(ParseError::CtPartialMatch(f, ".3")) if f == 1.2));
+        assert_eq!(Ok(f64::INFINITY), ParsedNumber::parse_f64("inf"));
+        assert_eq!(Ok(f64::NEG_INFINITY), ParsedNumber::parse_f64("-inf"));
+        assert!(ParsedNumber::parse_f64("-NaN").unwrap().is_sign_negative());
+        assert!(ParsedNumber::parse_f64("NaN").unwrap().is_sign_positive());
+        assert!(ParsedNumber::parse_f64("NaN").unwrap().is_nan());
+        assert!(ParsedNumber::parse_f64("-NaN").unwrap().is_nan());
+    }
+
+    #[test]
+    fn test_hexadecimal() {
+        assert_eq!(Ok(-0x133), ParsedNumber::parse_i64("-0x133"));
+        assert_eq!(Ok(0x223), ParsedNumber::parse_u64("0X223"));
+        assert_eq!(Ok(0x323), ParsedNumber::parse_u64("0x323"));
+        assert_eq!(Ok(0xfd), ParsedNumber::parse_u64("0xfD"));
+
+        assert_eq!(Ok(14.0078125), ParsedNumber::parse_f64("0xe.02"));
+        assert_eq!(Ok(0.0625), ParsedNumber::parse_f64("0x.1"));
+        assert_eq!(Ok(0.5), ParsedNumber::parse_f64("0x.8"));
+    }
+
+    #[test]
+    fn test_octal() {
+        assert!(matches!(
+            ParsedNumber::parse_u64("0."),
+            Err(ParseError::CtPartialMatch(0, "."))
+        ));
+
+        assert!(matches!(
+            ParsedNumber::parse_u64("08"),
+            Err(ParseError::CtPartialMatch(0, "8"))
+        ));
+
+        assert!(matches!(
+            ParsedNumber::parse_u64("008"),
+            Err(ParseError::CtPartialMatch(0, "8"))
+        ));
+
+        assert_eq!(Ok(0), ParsedNumber::parse_u64("00"));
+        assert_eq!(Ok(0), ParsedNumber::parse_u64("0"));
+
+        assert_eq!(Ok(0o123), ParsedNumber::parse_u64("00123"));
+        assert_eq!(Ok(0o123), ParsedNumber::parse_u64("0123"));
+    }
+
+    #[test]
+    fn test_binary() {
+        assert_eq!(Ok(0b1001), ParsedNumber::parse_u64("0B1001"));
+        assert_eq!(Ok(0b1011), ParsedNumber::parse_u64("0b1011"));
+    }
 }

@@ -749,4 +749,183 @@ mod test {
         assert_eq!(result, b"000000000000X4D2");
     }
 
+    #[test]
+    fn test_unsigned_int_try_from_spec_decimal() {
+        let spec = Spec::UnsignedInt {
+            variant: UnsignedIntVariant::Decimal,
+            width: Some(CanAsterisk::Fixed(10)),
+            precision: Some(CanAsterisk::Fixed(2)),
+            alignment: NumberAlignment::Left,
+        };
+
+        let unsigned_int = UnsignedInt::try_from_spec(spec).unwrap();
+
+        assert_eq!(unsigned_int.variant, UnsignedIntVariant::Decimal);
+        assert_eq!(unsigned_int.width, 10);
+        assert_eq!(unsigned_int.precision, 2);
+        assert_eq!(unsigned_int.alignment, NumberAlignment::Left);
+    }
+
+    #[test]
+    fn test_unsigned_int_try_from_spec_octal() {
+        let spec = Spec::UnsignedInt {
+            variant: UnsignedIntVariant::Octal(Prefix::Yes),
+            width: Some(CanAsterisk::Fixed(8)),
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+        };
+
+        let unsigned_int = UnsignedInt::try_from_spec(spec).unwrap();
+
+        assert_eq!(unsigned_int.variant, UnsignedIntVariant::Octal(Prefix::Yes));
+        assert_eq!(unsigned_int.width, 8);
+        assert_eq!(unsigned_int.precision, 0); // Precision defaults to 0
+        assert_eq!(unsigned_int.alignment, NumberAlignment::RightSpace);
+    }
+
+    #[test]
+    fn test_unsigned_int_try_from_spec_hexadecimal() {
+        let spec = Spec::UnsignedInt {
+            variant: UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::No),
+            width: Some(CanAsterisk::Fixed(16)),
+            precision: Some(CanAsterisk::Asterisk), // Precision as asterisk should fail
+            alignment: NumberAlignment::Left,
+        };
+
+        let result = UnsignedInt::try_from_spec(spec);
+
+        assert!(result.is_err());
+        // assert_eq!(result.err().unwrap(), FormatError::WrongSpecType);
+    }
+
+    #[test]
+    fn test_float_fmt_decimal() {
+        let formatter = Float {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: 10,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+            precision: 2,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+1234.57   ");
+    }
+    #[test]
+    fn test_float_fmt_decimal2() {
+        let formatter = Float {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: 5,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+            precision: 1,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+1234.6");
+    }
+
+    #[test]
+    fn test_float_fmt_decimal3() {
+        let formatter = Float {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: 5,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::RightSpace,
+            precision: 1,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+1234.6");
+    }
+    #[test]
+    fn test_float_fmt_decimal4() {
+        let formatter = Float {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::Yes,
+            width: 10,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::RightSpace,
+            precision: 1,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+    1234.6");
+    }
+    #[test]
+    fn test_float_fmt_scientific() {
+        let formatter = Float {
+            variant: FloatVariant::Scientific,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: 10,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::RightSpace,
+            precision: 3,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+ 1.235e+03");
+    }
+
+    #[test]
+    fn test_float_fmt_shortest() {
+        let formatter = Float {
+            variant: FloatVariant::Shortest,
+            case: Case::Uppercase,
+            force_decimal: ForceDecimal::Yes,
+            width: 15,
+            positive_sign: PositiveSign::Space,
+            alignment: NumberAlignment::RightZero,
+            precision: 4,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b" 00000000001235.");
+    }
+    // use std::io::Cursor;
+    #[test]
+    fn test_float_fmt_hexadecimal() {
+        let formatter = Float {
+            variant: FloatVariant::Hexadecimal,
+            case: Case::Uppercase,
+            force_decimal: ForceDecimal::No,
+            width: 20,
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+            precision: 0,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 1234.567).unwrap();
+        buffer.set_position(0);
+        let result = buffer.get_ref();
+        assert_eq!(result, b"+0X1P+A              ");
+    }
+
 }

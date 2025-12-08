@@ -928,4 +928,151 @@ mod test {
         assert_eq!(result, b"+0X1P+A              ");
     }
 
+    #[test]
+    fn test_float_try_from_spec_success() {
+        let spec = Spec::Float {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: Some(CanAsterisk::Fixed(10)),
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+            precision: Some(CanAsterisk::Fixed(6)),
+        };
+
+        let float = Float::try_from_spec(spec).unwrap();
+
+        assert_eq!(float.variant, FloatVariant::Decimal);
+        assert_eq!(float.case, Case::Lowercase);
+        assert_eq!(float.force_decimal, ForceDecimal::No);
+        assert_eq!(float.width, 10);
+        assert_eq!(float.positive_sign, PositiveSign::Plus);
+        assert_eq!(float.alignment, NumberAlignment::Left);
+        assert_eq!(float.precision, 6);
+    }
+
+    #[test]
+    fn test_float_try_from_spec_default_precision_for_shortest() {
+        let spec = Spec::Float {
+            variant: FloatVariant::Shortest,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: Some(CanAsterisk::Fixed(10)),
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+            precision: None, // Precision not provided
+        };
+
+        let float = Float::try_from_spec(spec).unwrap();
+
+        assert_eq!(float.variant, FloatVariant::Shortest);
+        assert_eq!(float.case, Case::Lowercase);
+        assert_eq!(float.force_decimal, ForceDecimal::No);
+        assert_eq!(float.width, 10);
+        assert_eq!(float.positive_sign, PositiveSign::Plus);
+        assert_eq!(float.alignment, NumberAlignment::Left);
+        assert_eq!(float.precision, 6); // Default precision for Shortest
+    }
+
+    #[test]
+    fn test_float_try_from_spec_zero_width_and_precision() {
+        let spec = Spec::Float {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: Some(CanAsterisk::Fixed(0)), // Zero width
+            positive_sign: PositiveSign::Plus,
+            alignment: NumberAlignment::Left,
+            precision: Some(CanAsterisk::Fixed(0)), // Zero precision
+        };
+
+        let float = Float::try_from_spec(spec).unwrap();
+
+        assert_eq!(float.variant, FloatVariant::Decimal);
+        assert_eq!(float.case, Case::Lowercase);
+        assert_eq!(float.force_decimal, ForceDecimal::No);
+        assert_eq!(float.width, 0);
+        assert_eq!(float.positive_sign, PositiveSign::Plus);
+        assert_eq!(float.alignment, NumberAlignment::Left);
+        assert_eq!(float.precision, 0);
+    }
+
+    #[test]
+    fn test_format_float_non_finite_inf_input() {
+        let f = f64::INFINITY;
+        let case = Case::Lowercase;
+
+        let expected = "inf";
+        let actual = format_float_non_finite(f, case);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_non_finite_nan_input() {
+        let f = f64::NAN;
+        let case = Case::Lowercase;
+
+        let expected = "NaN";
+        let actual = format_float_non_finite(f, case);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_non_finite_case_uppercase_input() {
+        let f = f64::INFINITY;
+        let case = Case::Uppercase;
+
+        let expected = "INF";
+        let actual = format_float_non_finite(f, case);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_non_finite_case_lowercase_input() {
+        let f = f64::INFINITY;
+        let case = Case::Lowercase;
+
+        let expected = "inf";
+        let actual = format_float_non_finite(f, case);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_format_float_decimal_normal_functionality() {
+        let f = 123456.789;
+        let precision = 6;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "123456.789000";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_decimal_normal_functionality2() {
+        let f = 123456.789;
+        let precision = 5;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "123456.78900";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_format_float_decimal_precision_zero() {
+        let f = 123456.789;
+        let precision = 0;
+        let force_decimal = ForceDecimal::No;
+
+        let expected = "123457";
+        let actual = format_float_decimal(f, precision, force_decimal);
+
+        assert_eq!(actual, expected);
+    }
+
 }

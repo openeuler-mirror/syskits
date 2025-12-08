@@ -507,3 +507,223 @@ impl ParseSizeError {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ct_parse_size::{parse_size_u128, parse_size_u64, ParseSizeError, Parser};
+
+
+     #[test]
+    fn all_suffixes() {
+        // Units are K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).
+        // Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+        let suffixes = [
+            ('K', 1u32),
+            ('M', 2u32),
+            ('G', 3u32),
+            ('T', 4u32),
+            ('P', 5u32),
+            ('E', 6u32),
+            ('Z', 7u32),
+            ('Y', 8u32),
+            ('R', 9u32),
+            ('Q', 10u32),
+        ];
+
+        for &(c, exp) in &suffixes {
+            let s = format!("2{c}B"); // KB
+            assert_eq!(Ok(2 * (1000_u128).pow(exp)), parse_size_u128(&s));
+            let s = format!("2{c}"); // K
+            assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
+            let s = format!("2{c}iB"); // KiB
+            assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
+            let s = format!("2{}iB", c.to_lowercase()); // kiB
+            assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
+
+            // suffix only
+            let s = format!("{c}B"); // KB
+            assert_eq!(Ok((1000_u128).pow(exp)), parse_size_u128(&s));
+            let s = format!("{c}"); // K
+            assert_eq!(Ok((1024_u128).pow(exp)), parse_size_u128(&s));
+            let s = format!("{c}iB"); // KiB
+            assert_eq!(Ok((1024_u128).pow(exp)), parse_size_u128(&s));
+            let s = format!("{}iB", c.to_lowercase()); // kiB
+            assert_eq!(Ok((1024_u128).pow(exp)), parse_size_u128(&s));
+        }
+    }
+
+    #[test]
+    fn overflow_x64() {
+        assert!(parse_size_u64("10000000000000000000000").is_err());
+        assert!(parse_size_u64("1000000000T").is_err());
+        assert!(parse_size_u64("100000P").is_err());
+        assert!(parse_size_u64("100E").is_err());
+        assert!(parse_size_u64("1Z").is_err());
+        assert!(parse_size_u64("1Y").is_err());
+        assert!(parse_size_u64("1R").is_err());
+        assert!(parse_size_u64("1Q").is_err());
+
+        assert_eq!(
+            ParseSizeError::SizeTooBig(String::from("'1Z': Value too large for defined data type")),
+            parse_size_u64("1Z").unwrap_err()
+        );
+
+        assert_eq!(
+            ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_string()),
+            parse_size_u64("1Y").unwrap_err()
+        );
+        assert_eq!(
+            ParseSizeError::SizeTooBig("'1R': Value too large for defined data type".to_string()),
+            parse_size_u64("1R").unwrap_err()
+        );
+        assert_eq!(
+            ParseSizeError::SizeTooBig("'1Q': Value too large for defined data type".to_string()),
+            parse_size_u64("1Q").unwrap_err()
+        );
+    }
+
+    #[test]
+    fn overflow_to_max_u64() {
+        assert_eq!(Ok(1_099_511_627_776), parse_size_u64_max("1T"));
+        assert_eq!(Ok(1_125_899_906_842_624), parse_size_u64_max("1P"));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max("18446744073709551616"));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max("10000000000000000000000"));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max("1Y"));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max("1R"));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max("1Q"));
+    }
+
+    #[test]
+    fn overflow_to_max_u128() {
+        assert_eq!(
+            Ok(12_379_400_392_853_802_748_991_242_240),
+            parse_size_u128_max("10R")
+        );
+        assert_eq!(
+            Ok(12_676_506_002_282_294_014_967_032_053_760),
+            parse_size_u128_max("10Q")
+        );
+        assert_eq!(Ok(u128::MAX), parse_size_u128_max("1000000000000R"));
+        assert_eq!(Ok(u128::MAX), parse_size_u128_max("1000000000Q"));
+    }
+
+    #[test]
+    fn invalid_suffix() {
+        let test_strings = ["5mib", "1eb", "1H"];
+        let result_strings = ["'5mib'", "'1eb'", "'1H'"];
+        for (i, test_string) in test_strings.iter().enumerate() {
+            assert_eq!(
+                parse_size_u64(&test_string).unwrap_err(),
+                ParseSizeError::InvalidSuffix(result_strings[i].to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn parse_size_invalid_str() {
+        let test_strings = ["x", "", "abc"];
+        let result_strings = ["'x'", "''", "'abc'"];
+        for (i, test_string) in test_strings.iter().enumerate() {
+            assert_eq!(
+                parse_size_u64(&test_string).unwrap_err(),
+                ParseSizeError::ParseFailure(result_strings[i].to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn zero() {
+        assert_eq!(Ok(0), parse_size_u64("0"));
+        assert_eq!(Ok(0), parse_size_u128("0"));
+    }
+
+    fn variant_eq(a: &ParseSizeError, b: &ParseSizeError) -> bool {
+        std::mem::discriminant(b) == std::mem::discriminant(a)
+    }
+
+    #[test]
+    fn test_base_all_suffixes() {
+        // Units  are  K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).
+        // Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+        let suffixes = [
+            ('K', 1u32),
+            ('M', 2u32),
+            ('G', 3u32),
+            ('T', 4u32),
+            ('P', 5u32),
+            ('E', 6u32),
+            ('Z', 7u32),
+            ('Y', 8u32),
+            ('R', 9u32),
+            ('Q', 10u32),
+        ];
+
+        for &(c, exp) in &suffixes {
+            let s = format!("2{c}B"); // KB
+            assert_eq!(parse_size_u128(&s), Ok(2 * (1000_u128).pow(exp)));
+            let s = format!("2{c}"); // K
+            assert_eq!(parse_size_u128(&s), Ok(2 * (1024_u128).pow(exp)));
+            let s = format!("2{c}iB"); // KiB
+            assert_eq!(parse_size_u128(&s), Ok(2 * (1024_u128).pow(exp)));
+            let s = format!("2{}iB", c.to_lowercase()); // kiB
+            assert_eq!(parse_size_u128(&s), Ok(2 * (1024_u128).pow(exp)));
+
+            // suffix only
+            let s = format!("{c}B"); // KB
+            assert_eq!(parse_size_u128(&s), Ok((1000_u128).pow(exp)));
+            let s = format!("{c}"); // K
+            assert_eq!(parse_size_u128(&s), Ok((1024_u128).pow(exp)));
+            let s = format!("{c}iB"); // KiB
+            assert_eq!(parse_size_u128(&s), Ok((1024_u128).pow(exp)),);
+            let s = format!("{}iB", c.to_lowercase()); // kiB
+            assert_eq!(parse_size_u128(&s), Ok((1024_u128).pow(exp)));
+        }
+    }
+
+    #[test]
+    #[cfg(not(target_pointer_width = "128"))]
+    fn test_base_overflow_x64() {
+        assert!(parse_size_u64("10000000000000000000000").is_err());
+        assert!(parse_size_u64("1000000000T").is_err());
+        assert!(parse_size_u64("100000P").is_err());
+        assert!(parse_size_u64("100E").is_err());
+        assert!(parse_size_u64("1Z").is_err());
+        assert!(parse_size_u64("1Y").is_err());
+        assert!(parse_size_u64("1R").is_err());
+        assert!(parse_size_u64("1Q").is_err());
+
+        assert!(variant_eq(
+            &ParseSizeError::SizeTooBig(String::new()),
+            &parse_size_u64("1Z").unwrap_err()
+        ));
+
+        assert_eq!(
+            parse_size_u64("1Y").unwrap_err(),
+            ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_string()),
+        );
+        assert_eq!(
+            parse_size_u64("1R").unwrap_err(),
+            ParseSizeError::SizeTooBig("'1R': Value too large for defined data type".to_string()),
+        );
+        assert_eq!(
+            parse_size_u64("1Q").unwrap_err(),
+            ParseSizeError::SizeTooBig("'1Q': Value too large for defined data type".to_string()),
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_pointer_width = "128"))]
+    fn test_base_overflow_to_max_u64() {
+        assert_eq!(parse_size_u64_max("1Y"), Ok(u64::MAX));
+
+        assert_eq!(parse_size_u64_max("1Q"), Ok(u64::MAX));
+        assert_eq!(parse_size_u64_max("1R"), Ok(u64::MAX));
+        assert_eq!(parse_size_u64_max("1T"), Ok(1_099_511_627_776));
+        assert_eq!(parse_size_u64_max("1P"), Ok(1_125_899_906_842_624));
+
+        assert_eq!(parse_size_u64_max("10000000000000000000000"), Ok(u64::MAX));
+        assert_eq!(parse_size_u64_max("18446744073709551616"), Ok(u64::MAX));
+    }
+
+
+}

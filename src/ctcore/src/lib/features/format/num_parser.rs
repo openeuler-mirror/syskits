@@ -323,3 +323,129 @@ impl ParsedNumber {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{ParseError, ParsedNumber};
+    use crate::format::num_parser::Base;
+
+    #[test]
+    fn test_into_f64_decimal() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 123,
+            fractional: 456,
+            precision: 3,
+        };
+        assert_eq!(parsed_number.into_f64(), 123.456);
+    }
+
+    #[test]
+    fn test_into_f64_octal() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtOctal,
+            negative: false,
+            integral: 123,
+            fractional: 456,
+            precision: 3,
+        };
+        assert_eq!(parsed_number.into_f64(), 123.890625);
+    }
+
+    #[test]
+    fn test_into_f64_binary() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtBinary,
+            negative: false,
+            integral: 101,
+            fractional: 110,
+            precision: 3,
+        };
+        assert_eq!(parsed_number.into_f64(), 114.75);
+    }
+
+    #[test]
+    fn test_into_f64_hexadecimal() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtHexadecimal,
+            negative: false,
+            integral: 0xAB,
+            fractional: 0xCD,
+            precision: 3,
+        };
+        assert_eq!(parsed_number.into_f64(), 171.050048828125);
+    }
+
+    #[test]
+    fn test_into_f64_decimal_basic() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 123,
+            fractional: 456,
+            precision: 3,
+        };
+        assert_eq!(parsed_number.into_f64(), 123.456);
+    }
+
+    #[test]
+    fn test_into_f64_decimal_negative() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: true,
+            integral: 789,
+            fractional: 123,
+            precision: 2,
+        };
+        assert_eq!(parsed_number.into_f64(), -790.23);
+    }
+
+    #[test]
+    fn test_into_f64_decimal_zero() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 0,
+            fractional: 0,
+            precision: 0,
+        };
+        assert_eq!(parsed_number.into_f64(), 0.0);
+    }
+
+    #[test]
+    fn test_into_f64_decimal_large_precision() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 123,
+            fractional: 456,
+            precision: 10,
+        };
+        assert_eq!(parsed_number.into_f64(), 123.0000000456);
+    }
+
+    #[test]
+    fn test_into_f64_decimal_negative_fractional() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: 123,
+            fractional: 456,
+            precision: 3,
+        };
+        assert_eq!(parsed_number.into_f64(), 123.456);
+    }
+
+    #[test]
+    fn test_into_f64_max_value() {
+        let parsed_number = ParsedNumber {
+            base: Base::CtDecimal,
+            negative: false,
+            integral: u64::MAX,
+            fractional: u64::MAX,
+            precision: 10,
+        };
+        assert_eq!(parsed_number.into_f64(), 1.8446744075554226e19);
+    }
+
+}

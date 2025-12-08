@@ -906,4 +906,35 @@ mod tests {
         assert_eq!(get_exit_code(), 5);
     }
 
+    #[test]
+    fn test_from_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
+        let custom_err: Box<dyn UError> = Box::new(UIoError::from(io_err));
+        assert_eq!(format!("{}", custom_err), "Access denied");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_base_nix_error_conversion() {
+        use super::{FromIo, UIoError};
+        use nix::errno::Errno;
+        use std::io::ErrorKind;
+
+        for (nix_error, expected_error_kind) in [
+            (Errno::EACCES, ErrorKind::PermissionDenied),
+            (Errno::ENOENT, ErrorKind::NotFound),
+            (Errno::EEXIST, ErrorKind::AlreadyExists),
+        ] {
+            let error = UIoError::from(nix_error);
+            assert_eq!(expected_error_kind, error.inner.kind());
+        }
+        assert_eq!(
+            "test: Permission denied",
+            Err::<(), nix::Error>(Errno::EACCES)
+                .map_err_context(|| String::from("test"))
+                .unwrap_err()
+                .to_string()
+        );
+    }
+
 }

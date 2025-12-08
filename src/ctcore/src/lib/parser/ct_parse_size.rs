@@ -806,4 +806,104 @@ mod tests {
         assert_eq!(parse_size_u64("2GB"), Ok(2_000_000_000));
     }
 
+  #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn xtest_base_64() {
+        assert_eq!(parse_size_u64("1T"), Ok(1_099_511_627_776));
+        assert_eq!(parse_size_u64("1P"), Ok(1_125_899_906_842_624));
+        assert_eq!(parse_size_u64("1E"), Ok(1_152_921_504_606_846_976));
+
+        assert_eq!(parse_size_u128("1Z"), Ok(1_180_591_620_717_411_303_424));
+        assert_eq!(parse_size_u128("1Y"), Ok(1_208_925_819_614_629_174_706_176));
+        assert_eq!(
+            parse_size_u128("1R"),
+            Ok(1_237_940_039_285_380_274_899_124_224)
+        );
+        assert_eq!(
+            parse_size_u128("1Q"),
+            Ok(1_267_650_600_228_229_401_496_703_205_376)
+        );
+
+        assert_eq!(parse_size_u64("2TB"), Ok(2_000_000_000_000),);
+        assert_eq!(parse_size_u64("2PB"), Ok(2_000_000_000_000_000),);
+        assert_eq!(parse_size_u64("2EB"), Ok(2_000_000_000_000_000_000),);
+
+        assert_eq!(parse_size_u128("2ZB"), Ok(2_000_000_000_000_000_000_000),);
+        assert_eq!(
+            parse_size_u128("2YB"),
+            Ok(2_000_000_000_000_000_000_000_000)
+        );
+        assert_eq!(
+            parse_size_u128("2RB"),
+            Ok(2_000_000_000_000_000_000_000_000_000)
+        );
+        assert_eq!(
+            parse_size_u128("2QB"),
+            Ok(2_000_000_000_000_000_000_000_000_000_000)
+        );
+    }
+
+    #[test]
+    fn test_base_parse_size_options() {
+        let mut parser = Parser::default();
+
+        parser
+            .with_allow_list(&["k", "K", "G", "MB", "M"])
+            .with_default_unit("K");
+
+        assert_eq!(parser.parse("1"), Ok(1024));
+        assert_eq!(parser.parse("2"), Ok(2 * 1024));
+        assert_eq!(parser.parse("1MB"), Ok(1000 * 1000));
+        assert_eq!(parser.parse("1M"), Ok(1024 * 1024));
+        assert_eq!(parser.parse("1G"), Ok(1024 * 1024 * 1024));
+
+        assert!(parser.parse("1P").is_err());
+        assert!(parser.parse("1T").is_err());
+
+        assert!(parser.parse("1E").is_err());
+
+        parser
+            .with_allow_list(&[
+                "b", "k", "K", "m", "M", "MB", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q",
+            ])
+            .with_default_unit("K")
+            .with_b_byte_count(true);
+
+        assert_eq!(parser.parse("1"), Ok(1024));
+        assert_eq!(parser.parse("2"), Ok(2 * 1024));
+        assert_eq!(parser.parse("1MB"), Ok(1000 * 1000));
+        assert_eq!(parser.parse("1M"), Ok(1024 * 1024));
+        assert_eq!(parser.parse("1G"), Ok(1024 * 1024 * 1024));
+        assert_eq!(
+            parser.parse_u128("1R"),
+            Ok(1_237_940_039_285_380_274_899_124_224)
+        );
+        assert_eq!(
+            parser.parse_u128("1Q"),
+            Ok(1_267_650_600_228_229_401_496_703_205_376)
+        );
+
+        assert_eq!(Ok(1), parser.parse("1b"));
+        assert_eq!(Ok(1023), parser.parse("1023b"));
+        assert_eq!(Ok(1023 * 1024 * 1024), parser.parse("1023Mb"));
+
+        assert!(parser.parse("1B").is_err());
+        assert!(parser.parse("b").is_err());
+        assert!(parser.parse("B").is_err());
+    }
+
+    #[test]
+    fn test_base_parse_octal_size() {
+        assert_eq!(parse_size_u64("076"), Ok(62));
+        assert_eq!(parse_size_u64("01017"), Ok(527));
+        assert_eq!(parse_size_u128("01233K"), Ok(667 * 1024));
+    }
+
+    #[test]
+    fn test_base_parse_hex_size() {
+        assert_eq!(parse_size_u64("0xB"), Ok(11));
+        assert_eq!(parse_size_u64("0x17203"), Ok(94723));
+        assert_eq!(parse_size_u128("0xACDCK"), Ok(44252 * 1024));
+    }
+
 }

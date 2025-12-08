@@ -141,3 +141,151 @@ pub fn parse_section(section: &str, content: &str) -> Option<String> {
     Some(section_content.trim().to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_section() {
+        let input = r#"# arch
+## some arch section
+This is some arch section
+
+## ANOTHER SECTION
+            This is the other arch section
+with multiple lines test
+"#;
+        let expected_section1 = "This is some arch section";
+        let expected_section2 = "This is some arch section";
+        let expected_section3 = "This is the other arch section\nwith multiple lines test";
+
+        assert_eq!(
+            parse_section("some arch section", input).unwrap(),
+            expected_section1
+        );
+        assert_eq!(
+            parse_section("SOME ARCH SECTION", input).unwrap(),
+            expected_section2
+        );
+        assert_eq!(
+            parse_section("another section", input).unwrap(),
+            expected_section3
+        );
+    }
+
+    #[test]
+    fn test_parse_section_with_sub_headers() {
+        let input = r#"# ls
+## after section
+This is some section
+
+### level 3 header
+
+Additional text under the section.
+
+#### level 4 header
+
+Yet another paragraph
+"#;
+        let expeted_section = r#"This is some section
+
+### level 3 header
+
+Additional text under the section.
+
+#### level 4 header
+
+Yet another paragraph"#;
+
+        assert_eq!(
+            parse_section("after section", input).unwrap(),
+            expeted_section
+        );
+    }
+
+    #[test]
+    fn test_parse_non_existing_section() {
+        let input = r#"# ls
+## some section
+This is some section
+
+## ANOTHER SECTION
+            This is the other section
+with multiple lines
+"#;
+
+        assert!(parse_section("non-existing section", input).is_none());
+    }
+
+    #[test]
+    fn test_parse_usage() {
+        let input = r#"# ls
+```
+ls -l
+```
+## some section
+This is some section
+
+## ANOTHER SECTION
+            This is the other section
+with multiple lines
+"#;
+
+        assert_eq!(parse_usage(input), "{} -l");
+    }
+
+    #[test]
+    fn test_parse_multi_line_usage() {
+        let input = r#"# ls
+```
+ls -a
+ls -b
+ls -c
+```
+## some section
+This is some section
+"#;
+
+        assert_eq!(parse_usage(input), "{} -a\n{} -b\n{} -c");
+    }
+
+    #[test]
+    fn test_parse_about() {
+        let input = r#"
+# ll
+
+```
+ll -h
+```
+
+This is the about section for ll
+
+## some section
+
+This is some section for ll
+"#;
+
+        assert_eq!(parse_about(input), "This is the about section for ll");
+    }
+
+    #[test]
+    fn test_parse_multi_line_about() {
+        let input = r#"# ll
+```
+ll -h
+```
+
+about ctyunos22.09.1
+
+about ctyunos22.09.2
+
+## some section
+This is some section
+"#;
+
+        assert_eq!(
+            parse_about(input),
+            "about ctyunos22.09.1\n\nabout ctyunos22.09.2"
+        );
+    }
+}

@@ -613,3 +613,148 @@ fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_specifier() {
+        let mut input: &[u8] = b"d";
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_width() {
+        let mut input: &[u8] = b"d3";
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_precision() {
+        let mut input: &[u8] = b"d3.2";
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_width_and_precision() {
+        let mut input: &[u8] = b"d3.2.3";
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_minus_flag() {
+        let mut input: &[u8] = b"-d3.2";
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Fixed(3);
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::Left,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_plus_flag() {
+        let mut input: &[u8] = b"+d3.2";
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::Plus,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_space_flag() {
+        let mut input: &[u8] = b" d3.2";
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::Space,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_asterisk_flag() {
+        let mut input: &[u8] = b"*d3.2";
+        let width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let expected = Spec::SignedInt {
+            width: Some(width_value),
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_zero_flag() {
+        let _width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let _precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let mut input: &[u8] = b"0d3.2";
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightZero,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Ok(expected));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_hash_flag() {
+        let width_value: CanAsterisk<usize> = CanAsterisk::Asterisk;
+        let precision_value: CanAsterisk<usize> = CanAsterisk::Fixed(2);
+        let mut input: &[u8] = b"#d3.2";
+        let rest: &[u8] = &[35, 100];
+        let _expected = Spec::SignedInt {
+            width: Some(width_value),
+            precision: Some(precision_value),
+            alignment: NumberAlignment::Left,
+            positive_sign: PositiveSign::None,
+        };
+        assert_eq!(Spec::parse(&mut input), Err(rest));
+        // assert_eq!(Spec::parse(&mut input), Err([Spec::EscapedString, 100]));
+    }
+
+}

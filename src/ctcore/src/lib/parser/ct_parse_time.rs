@@ -250,4 +250,53 @@ mod tests {
         assert_eq!(from_str("0.9999999999s"), Ok(Duration::new(0, 999_999_999)));
     }
 
+ #[test]
+    fn test_basic_no_units() {
+        assert_eq!(from_str("123"), Ok(Duration::from_secs(123)));
+    }
+
+    #[test]
+    fn test_basic_units() {
+        assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+    }
+
+    #[test]
+    fn test_basic_saturating_mul() {
+        assert_eq!(from_str("9223372036854775808d"), Ok(Duration::MAX));
+    }
+
+    #[test]
+    fn test_basic_error_empty() {
+        assert!(from_str("").is_err());
+    }
+
+    #[test]
+    fn test_basic_error_invalid_unit() {
+        assert!(from_str("123X").is_err());
+    }
+
+    #[test]
+    fn test_basic_error_multi_bytes_characters() {
+        assert!(from_str("10€").is_err());
+    }
+
+    #[test]
+    fn test_basic_error_invalid_magnitude() {
+        assert!(from_str("12abc3s").is_err());
+    }
+
+    #[test]
+    fn test_basic_negative() {
+        assert!(from_str("-1").is_err());
+    }
+
+    /// Test that capital letters are not allowed in suffixes.
+    #[test]
+    fn test_basic_no_capital_letters() {
+        assert!(from_str("1S").is_err());
+        assert!(from_str("1M").is_err());
+        assert!(from_str("1H").is_err());
+        assert!(from_str("1D").is_err());
+    }
+
 }

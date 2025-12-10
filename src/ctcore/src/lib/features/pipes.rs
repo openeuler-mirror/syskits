@@ -79,3 +79,28 @@ pub fn vmsplice(target: &impl AsRawFd, bytes: &[u8]) -> Result<usize> {
     )
 }
 
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use std::io::{Read, Write};
+//     use tempfile::tempfile;
+//
+//     #[test]
+//     fn test_pipe() {
+//         // 创建管道
+//         let (mut read_pipe, mut write_pipe) = pipe().expect("Failed to create pipe");
+//
+//         // 写入数据到管道
+//         const DATA: &[u8] = b"Hello, world!";
+//         write_pipe.write_all(DATA).expect("Failed to write to pipe");
+//
+//         // 从管道读取数据
+//         let mut read_buffer = Vec::new();
+//         read_pipe
+//             .read_to_end(&mut read_buffer)
+//             .expect("Failed to read from pipe");
+//
+//         // 验证读取的数据与写入的数据一致
+//         assert_eq!(read_buffer, DATA);
+//     }
+// }

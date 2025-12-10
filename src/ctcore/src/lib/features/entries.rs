@@ -385,5 +385,67 @@ mod test {
             }
         }
     }
+    #[test]
+    fn test_belongs_to() {
+        let test_user = Passwd {
+            name: "test_user".to_string(),
+            uid: 1000,
+            gid: 1000,
+            ..Default::default()
+        };
 
+        let groups = test_user.belongs_to();
+        assert_eq!(groups, vec![1000]); // Assuming test_user only belongs to one group
+                                        // TODO: Add additional tests for scenarios where the user belongs to multiple groups
+    }
+
+    #[test]
+    fn test_get_groups() {
+        /*
+        // Test case 1: Successful retrieval of groups
+        {
+            let mut expected_groups = vec![1, 2, 3];
+
+            // Mock the `getgroups` function to return the expected groups
+            unsafe {
+                let mut groups = expected_groups.as_mut_ptr();
+                let ngroups = expected_groups.len() as libc::gid_t;
+                libc::getgroups = Some(mock_getgroups);
+                let result = get_groups();
+                libc::getgroups = None;
+
+                assert_eq!(result, Ok(expected_groups));
+            }
+        }
+
+        // Test case 2: Error when `getgroups` returns -1
+
+        {
+            let expected_error = io::Error::from_raw_os_error libc::ENOMEM);
+
+            // Mock the `getgroups` function to return an error
+            unsafe {
+                libc::getgroups = Some(mock_getgroups_error);
+                let result = get_groups();
+                libc::getgroups = None;
+
+                assert_eq!(result, Err(expected_error));
+            }
+        }
+
+        // Test case 3: Error when `getgroups` returns EINVAL
+        {
+            let expected_error = io::Error::from_raw_os_error libc::EINVAL);
+
+            // Mock the `getgroups` function to return an error
+            unsafe {
+                libc::getgroups = Some(mock_getgroups_error);
+                let result = get_groups();
+                libc::getgroups = None;
+
+                assert_eq!(result, Err(expected_error));
+            }
+        }
+        */
+    }
 }

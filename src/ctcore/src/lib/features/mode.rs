@@ -267,5 +267,129 @@ mod test {
         assert_eq!(super::parse_mode("+100").unwrap(), 0o766);
         assert_eq!(super::parse_mode("-4").unwrap(), 0o662);
     }
+    #[test]
+    fn test_parse_numeric() {
+        // Test case 1: Valid input with no operator
+        let fperm = 0o644;
+        let mode = "400";
+        let considering_dir = false;
+        let expected = Ok(0o400);
+        assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected);
 
+        // Test case 2: Valid input with '+' operator
+        let fperm = 0o644;
+        let mode = "+400";
+        let considering_dir = false;
+        let expected = Ok(0o644);
+        assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected);
+
+        // Test case 3: Valid input with '-' operator
+        let fperm = 0o644;
+        let mode = "-400";
+        let considering_dir = false;
+        let expected = Ok(0o244);
+        assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected);
+
+        // Test case 4: Valid input with '=' operator
+        let fperm = 0o644;
+        let mode = "=400";
+        let considering_dir = false;
+        let expected = Ok(0o400);
+        assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected);
+
+        // Test case 5: Invalid input with mode greater than 7777
+        // let fperm = 0o644;
+        // let mode = "800";
+        // let considering_dir = false;
+        //let expected = Err("mode is too large (800 > 7777)".to_owned());
+        //assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected.expect("REASON"));
+    }
+
+    #[test]
+    fn test_parse_symbolic() {
+        // Test case 1: Valid input with '+'
+        let fperm = 0o644;
+        let mode = "u+r";
+        let umask = 0o022;
+        let considering_dir = false;
+        let expected = Ok(0o644);
+        assert_eq!(
+            super::parse_symbolic(fperm, mode, umask, considering_dir),
+            expected
+        );
+
+        // Test case 2: Valid input with '-'
+        let fperm = 0o777;
+        let mode = "o-w";
+        let umask = 0o022;
+        let considering_dir = false;
+        let expected = Ok(0o775);
+        assert_eq!(
+            super::parse_symbolic(fperm, mode, umask, considering_dir),
+            expected
+        );
+
+        // Test case 3: Valid input with '='
+        let fperm = 0o644;
+        let mode = "g=r";
+        let umask = 0o022;
+        let considering_dir = false;
+        let expected = Ok(0o644);
+        assert_eq!(
+            super::parse_symbolic(fperm, mode, umask, considering_dir),
+            expected
+        );
+
+        // Test case 4: Invalid input with empty mode
+        let fperm = 0o644;
+        let mode = "";
+        let umask = 0o022;
+        let considering_dir = false;
+        let expected = Err("invalid mode ()".to_owned());
+        assert_eq!(
+            super::parse_symbolic(fperm, mode, umask, considering_dir),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_parse_levels() {
+        // Test case 1: Valid input with 'u'
+        let mode = "u";
+        let expected = (0o4700, 1);
+        assert_eq!(super::parse_levels(mode), expected);
+
+        // Test case 2: Valid input with 'ugo'
+        let mode = "ugo";
+        let expected = (0o7777, 3);
+        assert_eq!(super::parse_levels(mode), expected);
+
+        // Test case 3: Valid input with 'a'
+        let mode = "a";
+        let expected = (0o7777, 1);
+        assert_eq!(super::parse_levels(mode), expected);
+
+        // Test case 4: Invalid input with invalid character
+        let mode = "x";
+        let expected = (0o7777, 0);
+        assert_eq!(super::parse_levels(mode), expected);
+    }
+
+    #[test]
+    fn test_parse_op() {
+        // Test case 1: Valid input with '+'
+        let mode = "+";
+        let expected = Ok(('+', 1));
+        assert_eq!(super::parse_op(mode), expected);
+
+        // Test case 2: Valid input with '-'
+        let mode = "-";
+        let expected = Ok(('-', 1));
+        assert_eq!(super::parse_op(mode), expected);
+
+        // Test case 3: Valid input with '='
+        let mode = "=";
+        let expected = Ok(('=', 1));
+        assert_eq!(super::parse_op(mode), expected);
+    }
 }

@@ -816,4 +816,77 @@ mod tests {
         assert_eq!(bsd.result_str(), "49595");
     }
 
+    #[test]
+    fn test_bsd_reset() {
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0x61, 0x62, 0x63]);
+        bsd.reset();
+        let mut result = [0u8; 2];
+        bsd.hash_finalize(&mut result);
+        println!("{:?}", result);
+        assert_eq!(result, [0x0, 0x0]);
+    }
+
+    #[test]
+    fn test_bsd_output_bits() {
+        let bsd = BSD::new();
+        println!("{:?}", bsd.output_bits());
+        assert_eq!(bsd.output_bits(), 128);
+    }
+
+    #[test]
+    fn test_sysv_new() {
+        let sysv = SYSV::new();
+        assert_eq!(sysv.state, 0);
+    }
+
+    #[test]
+    fn test_sysv_hash_update() {
+        let mut sysv = SYSV::new();
+        sysv.hash_update(&[0x61, 0x62, 0x63]); // Hash the input "abc"
+        assert_eq!(sysv.state, 294);
+    }
+
+    #[test]
+    fn test_sysv_hash_finalize() {
+        let mut sysv = SYSV::new();
+        sysv.hash_update(&[0x61, 0x62, 0x63]); // Hash the input "abc"
+        let mut output = [0u8; 2];
+        sysv.hash_finalize(&mut output);
+        assert_eq!(&output, &[38, 1]);
+    }
+
+    #[test]
+    fn test_sysv_result_str() {
+        let mut sysv = SYSV::new();
+        sysv.hash_update(&[0x61, 0x62, 0x63]); // Hash the input "abc"
+        assert_eq!(sysv.result_str(), "294");
+    }
+
+    #[test]
+    fn test_sysv_reset() {
+        let mut sysv = SYSV::new();
+        sysv.hash_update(&[0x61, 0x62, 0x63]); // Hash the input "abc"
+        sysv.reset();
+        assert_eq!(sysv.state, 0);
+    }
+
+    #[test]
+    fn test_sysv_output_bits() {
+        let sysv = SYSV::new();
+        assert_eq!(sysv.output_bits(), 512);
+    }
+
+    #[test]
+    fn test_new() {
+        let algo = Shake256::new();
+        println!("test_new:{:?}", algo);
+    }
+    #[test]
+    fn test_hash_update() {
+        let mut algo = Shake256::new();
+        let input = b"hello world";
+        algo.hash_update(input);
+        println!("test_hash_update:{:?}", input);
+    }
 }

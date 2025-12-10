@@ -11,27 +11,38 @@
 
 use platform_info::*;
 
+#[warn(unused_imports)]
 use clap::{crate_version, Command};
 use ctcore::ct_error::{UResult, USimpleError};
-use ctcore::{help_about, help_section};
+use ctcore::{format_usage, help_about, help_section};
 
-static ABOUT: &str = help_about!("arch.md");
-static SUMMARY: &str = help_section!("after help", "arch.md");
-
+static CT_ABOUT: &str = help_about!("arch.md");
+static CT_SUMMARY: &str = help_section!("after help", "arch.md");
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> UResult<()> {
+    ct_main(args).map(|_| ())
+}
+
+pub fn ct_main(args: impl ctcore::Args) -> UResult<String> {
     ct_app().try_get_matches_from(args)?;
 
     let uts = PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
 
+    let binding = uts.machine().to_string_lossy();
+    let s = binding.trim();
     println!("{}", uts.machine().to_string_lossy().trim());
-    Ok(())
+    Ok(s.to_string())
 }
 
 pub fn ct_app() -> Command {
-    Command::new(ctcore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(SUMMARY)
+    let utility_name = ctcore::util_name();
+    let command_version = crate_version!();
+    let application_info = CT_ABOUT;
+    let usage_description = format_usage(CT_SUMMARY);
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .after_help(usage_description)
         .infer_long_args(true)
 }

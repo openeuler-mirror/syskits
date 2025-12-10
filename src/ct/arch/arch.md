@@ -1,7 +1,7 @@
 # arch
 
 ```
-arch
+arch [OPTION]...
 ```
 
 Display machine architecture

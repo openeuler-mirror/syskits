@@ -496,7 +496,98 @@ impl<'a> Write for DigestWriter<'a> {
 
 #[cfg(test)]
 mod tests {
- 
+     use super::*;
+
+    #[test]
+    fn test_blake2b_with_custom_output_bytes() {
+        let mut digest = Blake2b::with_output_bytes(32);
+        let input = b"test input";
+        digest.hash_update(input);
+        let result = digest.result_str();
+        // 这里假设我们有一个已知的哈希值，用于比较
+        assert_eq!(
+            result,
+            "14f9a1375564fd6e1753125374374be21fb72319d989381a443e5a11de6687e4"
+        );
+    }
+
+    #[test]
+    fn test_blake3_default_behavior() {
+        let mut digest = Blake3::new();
+        let input = b"test input";
+        digest.hash_update(input);
+        let result = digest.result_str();
+        assert_eq!(
+            result,
+            "aa4909e14f1389afc428e481ea20ffd9673604711f5afb60a747fec57e4c267c"
+        );
+    }
+
+    #[test]
+    fn test_sm3_digest() {
+        let mut digest = Sm3::new();
+        let input = b"test input";
+        digest.hash_update(input);
+        let mut result_vec = vec![0; digest.output_bytes()];
+
+        digest.hash_finalize(&mut result_vec);
+
+        let result = encode(result_vec);
+        assert_eq!(
+            result,
+            "9f38f758d5002744886d47b296194606d1cac672c95ca3a0c89dfa4134007b9b"
+        );
+    }
+
+    #[test]
+    fn test_crc_update() {
+        let mut crc = CRC::new();
+        crc.update(0x01);
+        crc.update(0x02);
+        crc.update(0x03);
+        assert_eq!(crc.state, 2892567633);
+        assert_eq!(crc.size, 0);
+    }
+
+    #[test]
+    fn test_crc_hash_update() {
+        let mut crc = CRC::new();
+        crc.hash_update(&[0x01, 0x02, 0x03]);
+        assert_eq!(crc.state, 2892567633);
+        assert_eq!(crc.size, 3);
+    }
+
+    #[test]
+    fn test_crc_hash_finalize() {
+        let mut crc = CRC::new();
+        crc.hash_update(&[0x01, 0x02, 0x03]);
+        let mut output = [0u8; 4];
+        crc.hash_finalize(&mut output);
+        assert_eq!(output, [76, 69, 139, 95]);
+    }
+
+    #[test]
+    fn test_crc_result_str() {
+        let mut crc = CRC::new();
+        crc.hash_update(&[0x01, 0x02, 0x03]);
+        let result = crc.result_str();
+        assert_eq!(result, "1602962764");
+    }
+
+    #[test]
+    fn test_crc_reset() {
+        let mut crc = CRC::new();
+        crc.hash_update(&[0x01, 0x02, 0x03]);
+        crc.reset();
+        assert_eq!(crc.state, 0);
+        assert_eq!(crc.size, 0);
+    }
+
+    #[test]
+    fn test_crc_output_bits() {
+        let crc = CRC::new();
+        assert_eq!(crc.output_bits(), 256);
+    }
 
     /// Test for replacing a "\r\n" sequence with "\n" when the "\r" is
     /// at the end of one block and the "\n" is at the beginning of the

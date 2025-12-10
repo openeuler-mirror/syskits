@@ -286,4 +286,75 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_range_from_list() {
+        let ranges = Range::from_list("11,2,6-8").unwrap();
+        assert_eq!(ranges, vec![r(2, 2), r(6, 8), r(11, 11)]);
+    }
+
+    #[test]
+    fn test_range_merge_simple() {
+        assert_eq!(vec![r(1, 2)], Range::merge(vec![r(1, 2)]));
+    }
+
+    #[test]
+    fn test_range_merge_disjoint_in_wrong_order() {
+        assert_eq!(vec![r(1, 2), r(4, 5)], Range::merge(vec![r(4, 5), r(1, 2)]));
+    }
+
+    #[test]
+    fn test_range_merge_two_elements_to_merge() {
+        assert_eq!(
+            vec![r(1, 4), r(6, 7)],
+            Range::merge(vec![r(1, 3), r(2, 4), r(6, 7)])
+        );
+    }
+
+    #[test]
+    fn test_range_merge_multiple_merges_and_duplicates() {
+        assert_eq!(
+            vec![r(1, 4), r(6, 7)],
+            Range::merge(vec![r(1, 3), r(6, 7), r(2, 4), r(6, 7)])
+        );
+    }
+
+    #[test]
+    fn test_range_merge_one_giant() {
+        assert_eq!(
+            vec![r(10, 20), r(100, 200)],
+            Range::merge(vec![
+                r(110, 120),
+                r(10, 20),
+                r(100, 200),
+                r(130, 140),
+                r(150, 160),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_range_merge_adjacent_ranges() {
+        assert_eq!(vec![r(1, 6)], Range::merge(vec![r(1, 3), r(4, 6)]));
+    }
+
+    #[test]
+    fn test_range_complement_simple() {
+        assert_eq!(vec![r(1, 2), r(5, usize::MAX - 1)], complement(&[r(3, 4)]));
+    }
+
+    #[test]
+    fn test_range_complement_with_start() {
+        assert_eq!(
+            vec![r(4, 5), r(11, usize::MAX - 1)],
+            complement(&[r(1, 3), r(6, 10)])
+        );
+    }
+
+    #[test]
+    fn test_range_complement_with_end() {
+        assert_eq!(
+            vec![r(1, 1), r(5, 5)],
+            complement(&[r(2, 4), r(6, usize::MAX - 1)])
+        );
+    }
 }

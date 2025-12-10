@@ -37,7 +37,7 @@ pub enum EncodeError {
 
 pub type DecodeResult = Result<Vec<u8>, DecodeError>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Format {
     Base64,
     Base64Url,

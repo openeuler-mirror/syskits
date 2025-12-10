@@ -143,5 +143,63 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    #[test]
+    fn test_size_limit_zero_behavior() {
+        let mut buf = RingBuffer::new(0);
+        assert_eq!(buf.push_back(0), Some(0));
+        assert_eq!(buf.push_back(1), Some(1));
+        assert_eq!(buf.push_back(2), Some(2));
+        assert!(buf.data.is_empty());
+    }
 
+    #[test]
+    fn test_push_back_into_empty_buffer() {
+        let mut buf = RingBuffer::new(3);
+        assert_eq!(buf.push_back(0), None);
+        assert_eq!(buf.data, vec![0]);
+    }
+
+    #[test]
+    fn test_push_back_until_full() {
+        let mut buf = RingBuffer::new(3);
+        assert_eq!(buf.push_back(0), None);
+        assert_eq!(buf.push_back(1), None);
+        assert_eq!(buf.push_back(2), None);
+        assert_eq!(buf.data, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_evict_oldest_element() {
+        let mut buf = RingBuffer::new(2);
+        buf.push_back(0);
+        buf.push_back(1);
+        assert_eq!(buf.push_back(2), Some(0));
+        assert_eq!(buf.data, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_push_back_does_not_evict_when_not_full() {
+        let mut buf = RingBuffer::new(3);
+        buf.push_back(0);
+        buf.push_back(1);
+        buf.push_back(2);
+        assert_eq!(buf.push_back(3), Some(0));
+        assert_eq!(buf.data, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_from_iter_smaller_than_size_limit() {
+        let iter = [0, 1].iter();
+        let actual = RingBuffer::from_iter(iter, 3).data;
+        let expected: VecDeque<&i32> = [0, 1].iter().collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_from_iter_larger_than_size_limit() {
+        let iter = [0, 1, 2, 3, 4, 5].iter();
+        let actual = RingBuffer::from_iter(iter, 3).data;
+        let expected: VecDeque<&i32> = [3, 4, 5].iter().collect();
+        assert_eq!(actual, expected);
+    }
 }

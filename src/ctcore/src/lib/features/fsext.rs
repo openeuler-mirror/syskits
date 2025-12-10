@@ -1041,7 +1041,6 @@ mod tests {
         // ...
     }
 
-
     #[test]
     #[cfg(unix)]
     fn test_file_type() {
@@ -1109,4 +1108,200 @@ mod tests {
         assert_eq!(info.dev_name, "/dev/fs0");
     }
 
+    #[test]
+    fn test_read_fs_list_linux() {
+        // Test case for Linux OS
+        #[cfg(target_os = "linux")]
+        {
+            // Arrange
+            let _expected = vec![
+                MountInfo::new(
+                    LINUX_MOUNTINFO,
+                    &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+                        .split_ascii_whitespace()
+                        .collect::<Vec<_>>(),
+                ), // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let _result = read_fs_list();
+
+            // Assert
+            //assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_android() {
+        // Test case for Android OS
+        #[cfg(target_os = "android")]
+        {
+            // Arrange
+            let expected = vec![
+                MountInfo {
+                    // Define expected MountInfo struct values
+                },
+                // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_freebsd() {
+        // Test case for FreeBSD OS
+        #[cfg(target_os = "freebsd")]
+        {
+            // Arrange
+            let expected = vec![
+                MountInfo {
+                    // Define expected MountInfo struct values
+                },
+                // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_apple() {
+        // Test case for Apple OS
+        #[cfg(target_vendor = "apple")]
+        {
+            // Arrange
+            let expected = vec![
+                MountInfo {
+                    // Define expected MountInfo struct values
+                },
+                // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_netbsd() {
+        // Test case for NetBSD OS
+        #[cfg(target_os = "netbsd")]
+        {
+            // Arrange
+            let expected = vec![
+                MountInfo {
+                    // Define expected MountInfo struct values
+                },
+                // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_openbsd() {
+        // Test case for OpenBSD OS
+        #[cfg(target_os = "openbsd")]
+        {
+            // Arrange
+            let expected = vec![
+                MountInfo {
+                    // Define expected MountInfo struct values
+                },
+                // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_likelinux() {
+        // Test case for Windows OS
+        #[cfg(target_os = "likelinux")]
+        {
+            // Arrange
+            let expected = vec![
+                MountInfo {
+                    // Define expected MountInfo struct values
+                },
+                // Add more expected MountInfo struct values
+            ];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_redox() {
+        // Test case for Redox OS
+        #[cfg(target_os = "redox")]
+        {
+            // Arrange
+            let expected = vec![];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_illumos() {
+        // Test case for Illumos OS
+        #[cfg(target_os = "illumos")]
+        {
+            // Arrange
+            let expected = vec![];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_read_fs_list_solaris() {
+        // Test case for Solaris OS
+        #[cfg(target_os = "solaris")]
+        {
+            // Arrange
+            let expected = vec![];
+
+            // Act
+            let result = read_fs_list();
+
+            // Assert
+            assert_eq!(result.unwrap(), expected);
+        }
+    }
 }

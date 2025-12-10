@@ -33,7 +33,7 @@ static EXIT_ERR: i32 = 1;
 ))]
 use crate::crash;
 #[cfg(likelinux)]
-use crate::show_warning;
+use crate::ct_show_warning;
 
 #[cfg(likelinux)]
 use std::ffi::OsStr;
@@ -453,7 +453,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         loop {
             let volume_name = LPWSTR2String(&volume_name_buf);
             if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
-                show_warning!("A bad path was skipped: {}", volume_name);
+                ct_show_warning!("A bad path was skipped: {}", volume_name);
                 continue;
             }
             if let Some(m) = MountInfo::new(volume_name) {

@@ -28,18 +28,18 @@
 //! fully qualified name like this:
 //!
 //! ```no_run
-//! use ctcore::{show, crash};
+//! use ctcore::{ct_show, crash};
 //! ```
 //!
 //! Here's an overview of the macros sorted by purpose
 //!
 //! - Print errors
-//!   - From types implementing [`crate::ct_error::UError`]: [`show!`],
+//!   - From types implementing [`crate::ct_error::CTError`]: [`ct_show!`],
 //!     [`show_if_err!`]
-//!   - From custom messages: [`show_error!`]
-//! - Print warnings: [`show_warning!`]
+//!   - From custom messages: [`ct_show_error!`]
+//! - Print warnings: [`ct_show_warning!`]
 //! - Terminate util execution
-//!   - Crash program: [`crash!`], [`crash_if_err!`]
+//!   - Crash program: [`crash!`], [`ct_crash_if_err!`]
 
 // spell-checker:ignore sourcepath targetpath rustdoc
 
@@ -55,10 +55,10 @@ pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 
 //====
 
-/// Display a [`crate::ct_error::UError`] and set global exit code.
+/// Display a [`crate::ct_error::CTError`] and set global exit code.
 ///
-/// Prints the error message contained in an [`crate::ct_error::UError`] to stderr
-/// and sets the exit code through [`crate::ct_error::set_exit_code`]. The printed
+/// Prints the error message contained in an [`crate::ct_error::CTError`] to stderr
+/// and sets the exit code through [`crate::ct_error::set_ct_exit_code`]. The printed
 /// error message is prepended with the calling utility's name. A call to this
 /// macro will not finish program execution.
 ///
@@ -71,43 +71,43 @@ pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 /// # #[macro_use]
 /// # extern crate ctcore;
 ///
-/// use ctcore::ct_error::{self, USimpleError};
+/// use ctcore::ct_error::{self, CtSimpleError};
 ///
 /// fn main() {
-///     let err = USimpleError::new(2, "Some error occurred.");
-///     show!(err);
+///     let err = CtSimpleError::new(2, "Some error occurred.");
+///     ct_show!(err);
 ///     assert_eq!(ct_error::get_exit_code(), 2);
 /// }
 /// ```
 ///
-/// If not using [`crate::ct_error::UError`], one may achieve the same behavior
+/// If not using [`crate::ct_error::CTError`], one may achieve the same behavior
 /// like this:
 ///
 /// ```
 /// # #[macro_use]
 /// # extern crate ctcore;
 ///
-/// use ctcore::ct_error::set_exit_code;
+/// use ctcore::ct_error::set_ct_exit_code;
 ///
 /// fn main() {
-///     set_exit_code(2);
-///     show_error!("Some error occurred.");
+///     set_ct_exit_code(2);
+///     ct_show_error!("Some error occurred.");
 /// }
 /// ```
 #[macro_export]
-macro_rules! show(
+macro_rules! ct_show(
     ($err:expr) => ({
-        use $crate::ct_error::UError;
+        use $crate::ct_error::CTError;
         let e = $err;
-        $crate::ct_error::set_exit_code(e.code());
-        eprintln!("{}: {}", $crate::util_name(), e);
+        $crate::ct_error::set_ct_exit_code(e.code());
+        eprintln!("{}: {}", $crate::ct_util_name(), e);
     })
 );
 
 /// Display an error and set global exit code in error case.
 ///
-/// Wraps around [`show!`] and takes a [`crate::ct_error::UResult`] instead of a
-/// [`crate::ct_error::UError`] type. This macro invokes [`show!`] if the
+/// Wraps around [`ct_show!`] and takes a [`crate::ct_error::UResult`] instead of a
+/// [`crate::ct_error::CTError`] type. This macro invokes [`ct_show!`] if the
 /// [`crate::ct_error::UResult`] is an `Err`-variant. This can be invoked directly
 /// on the result of a function call, like in the `install` utility:
 ///
@@ -120,7 +120,7 @@ macro_rules! show(
 /// ```ignore
 /// # #[macro_use]
 /// # extern crate ctcore;
-/// # use ctcore::ct_error::{UError, UIoError, UResult, USimpleError};
+/// # use ctcore::ct_error::{CTError, UIoError, UResult, USimpleError};
 ///
 /// # fn main() {
 /// let is_ok = Ok(1);
@@ -128,7 +128,7 @@ macro_rules! show(
 /// show_if_err!(is_ok);
 ///
 /// let is_err = Err(USimpleError::new(1, "I'm an error").into());
-/// // Calls `show!` on the contained USimpleError
+/// // Calls `ct_show!` on the contained USimpleError
 /// show_if_err!(is_err);
 /// # }
 /// ```
@@ -138,7 +138,7 @@ macro_rules! show(
 macro_rules! show_if_err(
     ($res:expr) => ({
         if let Err(e) = $res {
-            $crate::show!(e);
+            $crate::ct_show!(e);
         }
     })
 );
@@ -154,13 +154,13 @@ macro_rules! show_if_err(
 /// # #[macro_use]
 /// # extern crate ctcore;
 /// # fn main() {
-/// show_error!("Couldn't apply {} to {}", "foo", "bar");
+/// ct_show_error!("Couldn't apply {} to {}", "foo", "bar");
 /// # }
 /// ```
 #[macro_export]
-macro_rules! show_error(
+macro_rules! ct_show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::util_name());
+        eprint!("{}: ", $crate::ct_util_name());
         eprintln!($($args)+);
     })
 );
@@ -177,20 +177,20 @@ macro_rules! show_error(
 /// # extern crate ctcore;
 /// # fn main() {
 /// // outputs <name>: warning: Couldn't apply foo to bar
-/// show_warning!("Couldn't apply {} to {}", "foo", "bar");
+/// ct_show_warning!("Couldn't apply {} to {}", "foo", "bar");
 /// # }
 /// ```
 #[macro_export]
-macro_rules! show_warning(
+macro_rules! ct_show_warning(
     ($($args:tt)+) => ({
-        eprint!("{}: warning: ", $crate::util_name());
+        eprint!("{}: warning: ", $crate::ct_util_name());
         eprintln!($($args)+);
     })
 );
 
 /// Display an error and [`std::process::exit`]
 ///
-/// Displays the provided error message using [`show_error!`], then invokes
+/// Displays the provided error message using [`ct_show_error!`], then invokes
 /// [`std::process::exit`] with the provided exit code.
 ///
 /// # Examples
@@ -207,7 +207,7 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
-        $crate::show_error!($($args)+);
+        $crate::ct_show_error!($($args)+);
         std::process::exit($exit_code);
     })
 );
@@ -225,15 +225,15 @@ macro_rules! crash(
 /// # fn main() {
 /// let is_ok: Result<u32, &str> = Ok(1);
 /// // Does nothing
-/// crash_if_err!(1, is_ok);
+/// ct_crash_if_err!(1, is_ok);
 ///
 /// let is_err: Result<u32, &str> = Err("This didn't work...");
 /// // Calls `crash!`
-/// crash_if_err!(1, is_err);
+/// ct_crash_if_err!(1, is_err);
 /// # }
 /// ```
 #[macro_export]
-macro_rules! crash_if_err {
+macro_rules! ct_crash_if_err {
     ($exit_code:expr, $exp:expr) => {
         if let Err(f) = $exp {
             $crate::crash!($exit_code, "{}", f);

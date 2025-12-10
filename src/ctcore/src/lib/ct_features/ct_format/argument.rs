@@ -9,22 +9,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use crate::{
-    ct_error::set_exit_code,
-    features::format::num_parser::{ParseError, ParsedNumber},
-    quoting_style::{escape_name, Quotes, QuotingStyle},
-    show_error, show_warning,
+ use crate::{
+    ct_error::set_ct_exit_code,
+    ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
+    ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle},
+    ct_show_error, ct_show_warning,
 };
 use os_display::Quotable;
 use std::ffi::OsStr;
 
-/// An argument for formatting
+/// 格式化参数
 ///
-/// Each of these variants is only accepted by their respective directives. For
-/// example, [`FormatArgument::Char`] requires a `%c` directive.
+/// 这些变体各自仅被其相应的指令接受。例如，FormatArgument::Char 需要一个 %c 指令。
 ///
-/// The [`FormatArgument::Unparsed`] variant contains a string that can be
-/// parsed into other types. This is used by the `printf` utility.
+/// FormatArgument::Unparsed 变体包含一个可以解析为其他类型的字符串。
+/// 这是由 printf 工具使用的。
+///
+///
 #[derive(Clone, Debug)]
 pub enum FormatArgument {
     Char(char),
@@ -32,7 +33,7 @@ pub enum FormatArgument {
     UnsignedInt(u64),
     SignedInt(i64),
     Float(f64),
-    /// Special argument that gets coerced into the other variants
+    /// 特殊参数，会被强制转换为其他变体
     Unparsed(String),
 }
 
@@ -49,7 +50,6 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         if let Some(next) = self.next() {
             match next {
                 FormatArgument::Unparsed(s) => {
-                    // s.bytes().next().unwrap_or(b'\0')
                     let v = s.bytes().next();
                     v.unwrap_or(b'\0')
                 }
@@ -109,10 +109,6 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
     }
 
     fn get_str(&mut self) -> &'a str {
-        // match self.next() {
-        //     Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
-        //     _ => "",
-        // }
         let result = self.next();
         if let Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) = result {
             s
@@ -129,52 +125,34 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
     match p {
         Ok(v) => v,
         Err(e) => {
-            set_exit_code(1);
+            set_ct_exit_code(1);
             let input = escape_name(
                 OsStr::new(input),
-                &QuotingStyle::C {
-                    quotes: Quotes::None,
+                &CtQuotingStyle::C {
+                    quotes: CtQuotes::None,
                 },
             );
             match e {
                 ParseError::CtOverflow => {
-                    show_error!("{}: Numerical result out of range", input.quote());
+                    ct_show_error!("{}: Numerical result out of range", input.quote());
                     Default::default()
                 }
                 ParseError::CtNotNumeric => {
-                    show_error!("{}: expected a numeric value", input.quote());
+                    ct_show_error!("{}: expected a numeric value", input.quote());
                     Default::default()
                 }
                 ParseError::CtPartialMatch(v, rest) => {
                     if input.starts_with('\'') {
-                        show_warning!(
+                        ct_show_warning!(
                             "{}: character(s) following character constant have been ignored",
                             &rest,
                         );
                     } else {
-                        show_error!("{}: value not completely converted", input.quote());
+                        ct_show_error!("{}: value not completely converted", input.quote());
                     }
                     v
                 }
             }
-
-            // if let ParseError::CtOverflow = e {
-            //     show_error!("{}: Numerical result out of range", input.quote());
-            //     Default::default()
-            // } else if let ParseError::CtNotNumeric = e {
-            //     show_error!("{}: expected a numeric value", input.quote());
-            //     Default::default()
-            // } else if let ParseError::CtPartialMatch(v, rest) = e {
-            //     if input.starts_with('\'') {
-            //         show_warning!(
-            //             "{}: character(s) following character constant have been ignored",
-            //             &rest,
-            //         );
-            //     } else {
-            //         show_error!("{}: value not completely converted", input.quote());
-            //     }
-            //     v
-            // }
         }
     }
 }
@@ -223,8 +201,8 @@ mod tests {
 
             assert_eq!(iter.get_char(), b'A');
             assert_eq!(iter.get_char(), b'B');
-            assert_eq!(iter.get_char(), 0); // For String, only the first character should be considered
-            assert_eq!(iter.get_char(), 0); // For SignedInt, it should return '\0' as default
+            assert_eq!(iter.get_char(), 0); // 对于String，只应考虑第一个字符
+            assert_eq!(iter.get_char(), 0); // 对于 SignedInt 类型，应默认返回 '\0'
         }
 
         #[test]
@@ -239,8 +217,8 @@ mod tests {
 
             assert_eq!(iter.get_i64(), -42);
             assert_eq!(iter.get_i64(), 123);
-            assert_eq!(iter.get_i64(), 0); // For UnsignedInt, it should be automatically converted to i64
-            assert_eq!(iter.get_i64(), 0); // For String, it should return 0 as default
+            assert_eq!(iter.get_i64(), 0); // 对于UnsignedInt，它应该自动转换为i64
+            assert_eq!(iter.get_i64(), 0); // 对于 String 类型，应默认返回 0
         }
 
         #[test]
@@ -254,9 +232,9 @@ mod tests {
             let mut iter = MockArgumentIter::new(&args);
 
             assert_eq!(iter.get_u64(), 123);
-            assert_eq!(iter.get_u64(), 456); // For Unparsed, it should parse the string as u64
-            assert_eq!(iter.get_u64(), 0); // For SignedInt, it should return 0 as default
-            assert_eq!(iter.get_u64(), 0); // For String, it should return 0 as default
+            assert_eq!(iter.get_u64(), 456); //对于 Unparsed 类型，应将字符串解析为 u64
+            assert_eq!(iter.get_u64(), 0); //  对于 SignedInt 类型，应默认返回 0。
+            assert_eq!(iter.get_u64(), 0); // 对于 String 类型，应默认返回 0。
         }
 
         #[test]
@@ -270,9 +248,9 @@ mod tests {
             let mut iter = MockArgumentIter::new(&args);
 
             assert_eq!(iter.get_f64(), 3.14);
-            assert_eq!(iter.get_f64(), 2.718); // For Unparsed, it should parse the string as f64
-            assert_eq!(iter.get_f64(), 0.0); // For SignedInt, it should be automatically converted to f64
-            assert_eq!(iter.get_f64(), 0.0); // For String, it should return 0.0 as default
+            assert_eq!(iter.get_f64(), 2.718); //对于 Unparsed 类型，应将字符串解析为 u64
+            assert_eq!(iter.get_f64(), 0.0); // 对于 SignedInt 类型，应默认返回 0。
+            assert_eq!(iter.get_f64(), 0.0); // 对于 String 类型，应默认返回 0。
         }
 
         #[test]
@@ -287,8 +265,8 @@ mod tests {
 
             assert_eq!(iter.get_str(), "abc");
             assert_eq!(iter.get_str(), "def");
-            assert_eq!(iter.get_str(), ""); // For Char, it should return an empty string
-            assert_eq!(iter.get_str(), ""); // For SignedInt, it should return an empty string
+            assert_eq!(iter.get_str(), ""); //对于 Char类型，应该返回一个空的字符串
+            assert_eq!(iter.get_str(), ""); //对于 SignedInt 类型，应该返回一个空的字符串
         }
     }
 
@@ -301,13 +279,13 @@ mod tests {
     #[test]
     fn test_extract_value_overflow() {
         let result: Result<u32, ParseError<u32>> = Err(ParseError::CtOverflow);
-        assert_eq!(extract_value(result, "input"), 0); // Default value
+        assert_eq!(extract_value(result, "input"), 0); // 默认值
     }
 
     #[test]
     fn test_extract_value_not_numeric() {
         let result: Result<u32, ParseError<u32>> = Err(ParseError::CtNotNumeric);
-        assert_eq!(extract_value(result, "input"), 0); // Default value
+        assert_eq!(extract_value(result, "input"), 0); // 默认值
     }
 
     #[test]
@@ -317,9 +295,8 @@ mod tests {
     }
     #[test]
     fn test_extract_value_unexpected_error() {
-        // Simulate an unexpected parse error variant
         let result: Result<u32, ParseError<u32>> = Err(ParseError::CtOverflow);
-        // Since this is an unexpected error, it should result in the default value
+
         assert_eq!(extract_value(result, "input"), 0);
     }
 }

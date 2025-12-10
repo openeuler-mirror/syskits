@@ -14,26 +14,22 @@ use std::{fs::File, io::Read, path::PathBuf};
 use proc_macro::{Literal, TokenStream, TokenTree};
 use quote::quote;
 
-//## rust proc-macro background info
-//* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
-//* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
-
 #[proc_macro_attribute]
-pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
-    // Parse input TokenStream into proc_macro2::TokenStream
-    let stream = proc_macro2::TokenStream::from(stream);
+pub fn main(_ct_args: TokenStream, ct_stream: TokenStream) -> TokenStream {
+    // 将输入TokenStream解析为proc_macro2::TokenStream
+    let my_stream = proc_macro2::TokenStream::from(ct_stream);
 
-    // Generate the new main function
-    let new_main = quote!(
+    // 生成新的main函数
+    let ct_main = quote!(
         pub fn ctmain(args: impl ctcore::Args) -> i32 {
-            #stream
+            #my_stream
             let result = ctmain(args);
             match result {
                 Ok(()) => ctcore::ct_error::get_exit_code(),
                 Err(err) => {
                     let s_err = format!("{}", err);
                     if !s_err.is_empty() {
-                        ctcore::show_error!("{}", s_err);
+                        ctcore::ct_show_error!("{}", s_err);
                     }
                     if err.usage() {
                         eprintln!("Try '{} --help' for more information.", ctcore::execution_phrase());
@@ -44,130 +40,155 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
         }
     );
 
-    // Convert the generated new main function into TokenStream
-    TokenStream::from(new_main)
+    // 将生成的新main函数转换为TokenStream
+    TokenStream::from(ct_main)
 }
 
-// FIXME: This is currently a stub. We could do much more here and could
-// even pull in a full markdown parser to get better results.
-/// Render markdown into a format that's easier to read in the terminal.
-///
-/// For now, all this function does is remove backticks.
-/// Some ideas for future improvement:
-/// - Render headings as bold
-/// - Convert triple backticks to indented
-/// - Printing tables in a nice format
-fn render_markdown(s: &str) -> String {
-    s.replace('`', "")
+fn ct_render_markdown(str: &str) -> String {
+    str.replace('`', "")
 }
 
-/// Get the about text from the help file.
+/// 从帮助文件中获取“关于”文本。
 ///
-/// The about text is assumed to be the text between the first markdown
-/// code block and the next header, if any. It may span multiple lines.
+/// 假设“关于”文本位于第一个Markdown代码块与下一个标题（如果有）之间的文本。它可能跨越多行。
 #[proc_macro]
-pub fn help_about(input: TokenStream) -> TokenStream {
-    // Convert input into a vector of TokenTree
-    let input_token_tree: Vec<TokenTree> = input.into_iter().collect();
+pub fn ct_help_about(ct_input: TokenStream) -> TokenStream {
+    // 将输入转换为TokenTree向量
+    let ct_input_token_tree: Vec<TokenTree> = ct_input.into_iter().collect();
 
-    // Get filename argument
-    let filename_arg = get_argument(&input_token_tree, 0, "filename");
+    // 获取文件名参数
+    let ct_filename_arg = ct_get_argument(&ct_input_token_tree, 0, "filename");
 
-    // Parse about text from the help file
-    let help_content = read_help(&filename_arg);
-    let about_text = cthelp_parser::parse_about(&help_content);
+    // 从帮助文件中解析“关于”文本
+    let ct_help_content = ct_read_help(&ct_filename_arg);
+    let ct_about_text = cthelp_parser::ct_parse_about(&ct_help_content);
 
-    if about_text.is_empty() {
-        panic!("About text not found! Please make sure the markdown text format is correct");
+    if ct_about_text.is_empty() {
+        panic!("About text not found! Please make sure the markdown text ct_format is correct");
     }
-    // Convert the about text into TokenStream
-    TokenTree::Literal(Literal::string(&about_text)).into()
+    // 将关于文本转换为TokenStream
+    TokenTree::Literal(Literal::string(&ct_about_text)).into()
 }
 
-/// Get the usage from the help file.
+/// 从帮助文件获取用法信息。
 ///
-/// The usage is assumed to be surrounded by markdown code fences. It may span
-/// multiple lines. The first word of each line is assumed to be the name of
-/// the util and is replaced by "{}" so that the output of this function can be
-/// used with `ctcore::format_usage`.
+/// 假定用法信息被Markdown代码围栏包围，可能跨越多行。
+/// 每行的第一个单词被视为工具名称，并替换为 "{}"，以便此函数输出能与 ctcore::ct_format_usage 配合使用。
 #[proc_macro]
-pub fn help_usage(input: TokenStream) -> TokenStream {
-    // Convert input into a vector of TokenTree
-    let input_token_tree: Vec<TokenTree> = input.into_iter().collect();
+pub fn ct_help_usage(ct_input: TokenStream) -> TokenStream {
+    // 将输入转换为TokenTree向量
+    let ct_input_token_tree: Vec<TokenTree> = ct_input.into_iter().collect();
 
-    // Get filename argument
-    let filename_arg = get_argument(&input_token_tree, 0, "filename");
+    // 获取文件名参数
+    let ct_filename_arg = ct_get_argument(&ct_input_token_tree, 0, "filename");
 
-    // Parse usage text from the help file
-    let help_content = read_help(&filename_arg);
-    let usage_text: String = cthelp_parser::parse_usage(&help_content);
-    if usage_text.is_empty() {
-        panic!("Usage text is not found! Please make sure the markdown text format is correct");
+    // 从帮助文件解析用法文本
+    let ct_help_content = ct_read_help(&ct_filename_arg);
+    let ct_usage_text: String = cthelp_parser::ct_parse_usage(&ct_help_content);
+    if ct_usage_text.is_empty() {
+        panic!("Usage text is not found! Please make sure the markdown text ct_format is correct");
     }
 
-    // Convert the usage text into TokenStream
-    TokenTree::Literal(Literal::string(&usage_text)).into()
+    // 将关于文本转换为TokenStream
+    TokenTree::Literal(Literal::string(&ct_usage_text)).into()
 }
 
-/// Reads a section from a file of the util as a `str` literal.
+/// 从工具文件中读取指定部分作为 str 字面值。
 ///
-/// It reads from the file specified as the second argument, relative to the
-/// crate root. The contents of this file are read verbatim, without parsing or
-/// escaping. The name of the help file should match the name of the util.
-/// I.e. numfmt should have a file called `numfmt.md`. By convention, the file
-/// should start with a top-level section with the name of the util. The other
-/// sections must start with 2 `#` characters. Capitalization of the sections
-/// does not matter. Leading and trailing whitespace of each section will be
-/// removed.
+/// 文件由第二个参数指定，相对于crate根目录。该文件内容将按原样读取，不进行解析或转义处理。
+/// 帮助文件名应与工具名匹配，例如numfmt应有名为numfmt.md的文件。
+/// 按照惯例，文件应以工具名命名的顶级章节开始，其他章节必须以两个#字符开始。
+/// 章节名称的大小写无关紧要，每个章节的前后空白字符会被移除。
 ///
-/// Example:
-/// ```md
+/// 示例：
+///
+/// md
 /// # numfmt
 /// ## About
 /// Convert numbers from/to human-readable strings
 ///
 /// ## Long help
 /// This text will be the long help
-/// ```
 ///
-/// ```rust,ignore
+///
+/// rust,ignore
 /// help_section!("about", "numfmt.md");
-/// ```
+///
+
 #[proc_macro]
-pub fn help_section(input: TokenStream) -> TokenStream {
-    // Convert input into a vector of TokenTree
-    let input_content: Vec<TokenTree> = input.into_iter().collect();
+pub fn ct_help_section(ct_input: TokenStream) -> TokenStream {
+    // 将输入转换为TokenTree向量
+    let ct_input_content: Vec<TokenTree> = ct_input.into_iter().collect();
 
-    // Get section and filename arguments
-    let input_section = get_argument(&input_content, 0, "section");
-    let input_filename = get_argument(&input_content, 1, "filename");
+    // 获取文件名参数
+    let ct_input_section = ct_get_argument(&ct_input_content, 0, "section");
+    let ct_input_filename = ct_get_argument(&ct_input_content, 1, "filename");
 
-    // Parse section from the help file
-    let help_content = read_help(&input_filename);
-    let text_info = match cthelp_parser::parse_section(&input_section, &help_content) {
+    // 将关于文本转换为TokenStream
+    let ct_help_content = ct_read_help(&ct_input_filename);
+    let ct_text_info = match cthelp_parser::ct_parse_section(&ct_input_section, &ct_help_content) {
         Some(text) => text,
         None => panic!(
             "The section '{}' could not be found in the help file. Maybe it is spelled wrong?",
-            help_content
+            ct_help_content
         ),
     };
 
-    // Render the parsed text as markdown
-    let rendered_text = render_markdown(&text_info);
+    // 将解析后的文本渲染为Markdown格式
+    let ct_rendered_text = ct_render_markdown(&ct_text_info);
 
-    // Convert the rendered markdown text into TokenStream
-    TokenTree::Literal(Literal::string(&rendered_text)).into()
+    // 将已渲染的Markdown文本转换为TokenStream
+    TokenTree::Literal(Literal::string(&ct_rendered_text)).into()
 }
 
-/// Get an argument from the input vector of `TokenTree`.
+/// 读取帮助文件
+fn ct_read_help(filename: &str) -> String {
+    let mut ct_content = String::new();
+
+    // 获取Cargo清单目录
+    let ct_manifest_dir = match std::env::var("CARGO_MANIFEST_DIR") {
+        Ok(dir) => dir,
+        Err(err) => {
+            panic!("Error: Failed to get CARGO_MANIFEST_DIR: {}", err);
+        }
+    };
+
+    // 构建指向文件的路径
+    let mut ct_manifest_path = PathBuf::from(ct_manifest_dir);
+    ct_manifest_path.push(filename);
+
+    // 打开清单文件
+    let mut file = match File::open(&ct_manifest_path) {
+        Ok(f) => f,
+        Err(err) => {
+            panic!(
+                "Error: Failed to open file {}: {}",
+                ct_manifest_path.display(),
+                err
+            );
+        }
+    };
+
+    // 读取文件内容到字符串中
+    if let Err(err) = file.read_to_string(&mut ct_content) {
+        panic!(
+            "Error: Failed to read file {}: {}",
+            ct_manifest_path.display(),
+            err
+        );
+    }
+
+    ct_content
+}
+
+/// 从输入的TokenTree向量中获取一个参数。
 ///
-/// Asserts that the argument is a string literal and returns the string value,
-/// otherwise it panics with an error.
-fn get_argument(input: &[TokenTree], index: usize, name: &str) -> String {
-    // Multiply by two to ignore the `','` in between the arguments
+/// 断言该参数为字符串字面量，并返回其字符串值，否则将以错误信息引发panic。
+fn ct_get_argument(ct_input: &[TokenTree], index: usize, name: &str) -> String {
+    // 乘以二以忽略参数之间的,
     let token_index = index * 2;
 
-    let token = match &input.get(token_index) {
+    let token = match &ct_input.get(token_index) {
         Some(TokenTree::Literal(lit)) => lit.to_string(),
         Some(_) => panic!("Argument {} should be a string literal.", index),
         None => panic!("Missing argument at index {} for {}", index, name),
@@ -178,56 +199,16 @@ fn get_argument(input: &[TokenTree], index: usize, name: &str) -> String {
         _ => panic!("Invalid literal"),
     };
 
-    // Ensure that the value is enclosed in double quotes
+    // 确保值被双引号包围
     if !value.starts_with('"') || !value.ends_with('"') {
         panic!(
-            "Invalid string literal format for argument {} in {}",
+            "Invalid string literal ct_format for argument {} in {}",
             index, name
         );
     }
 
-    // Strip the double quotes
+    // 去掉双引号
     let value = &value[1..value.len() - 1];
 
     value.to_string()
-}
-
-/// Read the help file
-fn read_help(filename: &str) -> String {
-    let mut content = String::new();
-
-    // Get the cargo manifest directory
-    let manifest_dir = match std::env::var("CARGO_MANIFEST_DIR") {
-        Ok(dir) => dir,
-        Err(err) => {
-            panic!("Error: Failed to get CARGO_MANIFEST_DIR: {}", err);
-        }
-    };
-
-    // Build the path to the file
-    let mut manifest_path = PathBuf::from(manifest_dir);
-    manifest_path.push(filename);
-
-    // Open the file
-    let mut file = match File::open(&manifest_path) {
-        Ok(f) => f,
-        Err(err) => {
-            panic!(
-                "Error: Failed to open file {}: {}",
-                manifest_path.display(),
-                err
-            );
-        }
-    };
-
-    // Read the content of the file into the string
-    if let Err(err) = file.read_to_string(&mut content) {
-        panic!(
-            "Error: Failed to read file {}: {}",
-            manifest_path.display(),
-            err
-        );
-    }
-
-    content
 }

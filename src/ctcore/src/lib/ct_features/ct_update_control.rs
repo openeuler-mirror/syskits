@@ -21,7 +21,7 @@
 //!
 //!
 //! [1]: arguments
-//! [2]: `determine_update_mode()`
+//! [2]: `ct_determine_update_mode()`
 //!
 //!
 //! # Usage example
@@ -31,20 +31,20 @@
 //! extern crate ctcore;
 //!
 //! use clap::{Command, Arg, ArgMatches};
-//! use ctcore::update_control::{self, UpdateMode};
+//! use ctcore::ct_update_control::{self, CtUpdateMode};
 //!
 //! fn main() {
 //!     let matches = Command::new("command")
-//!         .arg(update_control::arguments::update())
-//!         .arg(update_control::arguments::update_no_args())
+//!         .arg(ct_update_control::arguments::update())
+//!         .arg(ct_update_control::arguments::update_no_args())
 //!         .get_matches_from(vec![
 //!             "command", "--update=older"
 //!         ]);
 //!
-//!     let update_mode = update_control::determine_update_mode(&matches);
+//!     let update_mode = ct_update_control::ct_determine_update_mode(&matches);
 //!
 //!     // handle cases
-//!     if update_mode == UpdateMode::ReplaceIfOlder {
+//!     if update_mode == CtUpdateMode::ReplaceIfOlder {
 //!         // do
 //!     } else {
 //!         unreachable!()
@@ -55,7 +55,7 @@ use clap::ArgMatches;
 
 // Available update mode
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UpdateMode {
+pub enum CtUpdateMode {
     // --update=`all`, ``
     ReplaceAll,
     // --update=`none`
@@ -96,7 +96,7 @@ pub mod arguments {
 /// Determine the "mode" for the update operation to perform, if any.
 ///
 /// Parses the backup options and converts them to an instance of
-/// `UpdateMode` for further processing.
+/// `CtUpdateMode` for further processing.
 ///
 /// Takes [`clap::ArgMatches`] as argument which **must** contain the options
 /// from [`arguments::update()`] or [`arguments::update_no_args()`]. Otherwise
@@ -110,33 +110,33 @@ pub mod arguments {
 /// ```
 /// #[macro_use]
 /// extern crate ctcore;
-/// use ctcore::update_control::{self, UpdateMode};
+/// use ctcore::ct_update_control::{self, CtUpdateMode};
 /// use clap::{Command, Arg, ArgMatches};
 ///
 /// fn main() {
 ///     let matches = Command::new("command")
-///         .arg(update_control::arguments::update())
-///         .arg(update_control::arguments::update_no_args())
+///         .arg(ct_update_control::arguments::update())
+///         .arg(ct_update_control::arguments::update_no_args())
 ///         .get_matches_from(vec![
 ///             "command", "--update=all"
 ///         ]);
 ///
-///     let update_mode = update_control::determine_update_mode(&matches);
-///     assert_eq!(update_mode, UpdateMode::ReplaceAll)
+///     let update_mode = ct_update_control::ct_determine_update_mode(&matches);
+///     assert_eq!(update_mode, CtUpdateMode::ReplaceAll)
 /// }
-pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
+pub fn ct_determine_update_mode(matches: &ArgMatches) -> CtUpdateMode {
     if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
         match mode.as_str() {
-            "all" => UpdateMode::ReplaceAll,
-            "none" => UpdateMode::ReplaceNone,
-            "older" => UpdateMode::ReplaceIfOlder,
+            "all" => CtUpdateMode::ReplaceAll,
+            "none" => CtUpdateMode::ReplaceNone,
+            "older" => CtUpdateMode::ReplaceIfOlder,
             _ => unreachable!("other args restricted by clap"),
         }
     } else if matches.get_flag(arguments::OPT_UPDATE_NO_ARG) {
         // short form of this option is equivalent to using --update=older
-        UpdateMode::ReplaceIfOlder
+        CtUpdateMode::ReplaceIfOlder
     } else {
         // no option was present
-        UpdateMode::ReplaceAll
+        CtUpdateMode::ReplaceAll
     }
 }

@@ -15,11 +15,11 @@ use std::num::IntErrorKind;
 
 use crate::ct_display::Quotable;
 
-/// Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
+/// CtParser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 ///
-/// The [`Parser::parse`] function performs the parse.
+/// The [`CtParser::parse`] function performs the parse.
 #[derive(Default)]
-pub struct Parser<'parser> {
+pub struct CtParser<'parser> {
     /// Whether to allow empty numeric strings.
     pub no_empty_numeric: bool,
     /// Whether to treat the suffix "B" as meaning "bytes".
@@ -39,7 +39,7 @@ enum NumberSystem {
     Hexadecimal,
 }
 
-impl<'parser> Parser<'parser> {
+impl<'parser> CtParser<'parser> {
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
@@ -76,13 +76,13 @@ impl<'parser> Parser<'parser> {
     /// # Examples
     ///
     /// ```rust
-    /// use ctcore::ct_parse_size::Parser;
-    /// let parser = Parser {
+    /// use ctcore::ct_parse_size::CtParser;
+    /// let parser = CtParser {
     ///     default_unit: Some("M"),
     ///     ..Default::default()
     /// };
     /// assert_eq!(Ok(123 * 1024 * 1024), parser.parse("123M")); // M is 1024^2
-    /// assert_eq!(Ok(123 * 1024 * 1024), parser.parse("123")); // default unit set to "M" on parser instance
+    /// assert_eq!(Ok(123 * 1024 * 1024), parser.parse("123")); // default unit set to "M" on ct_parser instance
     /// assert_eq!(Ok(9 * 1000), parser.parse("9kB")); // kB is 1000
     /// assert_eq!(Ok(2 * 1024), parser.parse("2K")); // K is 1024
     /// assert_eq!(Ok(44251 * 1024), parser.parse("0xACDBK")); // 0xACDB is 44251 in decimal
@@ -362,7 +362,7 @@ impl<'parser> Parser<'parser> {
 }
 
 /// Parse a size string into a number of bytes
-/// using Default Parser (no custom settings)
+/// using Default CtParser (no custom settings)
 ///
 /// # Examples
 ///
@@ -374,12 +374,12 @@ impl<'parser> Parser<'parser> {
 /// assert_eq!(parse_size_u128("0xACDBK"),Ok(44251 * 1024),);
 /// ```
 pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
-    Parser::default().parse(size)
+    CtParser::default().parse(size)
 }
 
 /// Same as `parse_size_u128()`, but for u64
 pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
-    Parser::default().parse_u64(size)
+    CtParser::default().parse_u64(size)
 }
 
 #[deprecated = "Please use parse_size_u64(size: &str) -> Result<u64, ParseSizeError> OR parse_size_u128(size: &str) -> Result<u128, ParseSizeError> instead."]
@@ -391,12 +391,12 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
 /// GNU lib/coreutils include similar functionality
 /// and GNU test suite checks this behavior for some utils
 pub fn parse_size_u64_max(size: &str) -> Result<u64, ParseSizeError> {
-    Parser::default().parse_u64_max(size)
+    CtParser::default().parse_u64_max(size)
 }
 
 /// Same as `parse_size_u128()`, except returns `u128::MAX` on overflow
 pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
-    Parser::default().parse_u128_max(size)
+    CtParser::default().parse_u128_max(size)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -510,7 +510,8 @@ impl ParseSizeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ct_parse_size::{parse_size_u128, parse_size_u64, ParseSizeError, Parser};
+
+    use crate::ct_parse_size::{parse_size_u128, parse_size_u64, ParseSizeError, CtParser};
 
 
      #[test]
@@ -845,7 +846,7 @@ mod tests {
 
     #[test]
     fn test_base_parse_size_options() {
-        let mut parser = Parser::default();
+        let mut parser = CtParser::default();
 
         parser
             .with_allow_list(&["k", "K", "G", "MB", "M"])

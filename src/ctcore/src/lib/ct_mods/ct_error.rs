@@ -14,14 +14,12 @@
 //! * `1`: minor problems
 //! * `2`: major problems
 //!
-//! This module provides types to reconcile these exit codes with idiomatic Rust error
-//! handling. This has a couple advantages over manually using [`std::process::exit`]:
-//! 1. It enables the use of `?`, `map_err`, `unwrap_or`, etc. in `ctmain`.
-//! 1. It encourages the use of [`UResult`]/[`Result`] in functions in the utils.
-//! 1. The error messages are largely standardized across utils.
-//! 1. Standardized error messages can be created from external result types
-//!    (i.e. [`std::io::Result`] & `clap::ClapResult`).
-//! 1. [`set_exit_code`] takes away the burden of manually tracking exit codes for non-fatal errors.
+//! 本模块提供了与 Rust 错误处理习惯相统一的类型，以便处理这些退出码。相比手动使用 [std::process::exit]，这种方式有以下几个优势：
+//! 1. 允许在 ctmain 中使用 ?、map_err、unwrap_or 等操作符。
+//! 1. 鼓励在 utils 的函数中使用 [CTResult]/[Result] 类型。
+//! 1. 使得 utils 之间的错误消息格式标准化。
+//! 1. 可以从外部结果类型（如：[std::io::Result] 和 clap::ClapResult）创建标准化的错误消息。
+//! 1. 使用 [set_ct_exit_code] 函数可以减轻非致命错误时手动跟踪退出码的负担。
 //!
 //! # Usage
 //! The signature of a typical util should be:
@@ -30,13 +28,9 @@
 //!     ...
 //! }
 //! ```
-//! [`UResult`] is a simple wrapper around [`Result`] with a custom error trait: [`UError`]. The
-//! most important difference with types implementing [`std::error::Error`] is that [`UError`]s
-//! can specify the exit code of the program when they are returned from `ctmain`:
-//! * When `Ok` is returned, the code set with [`set_exit_code`] is used as exit code. If
-//!   [`set_exit_code`] was not used, then `0` is used.
-//! * When `Err` is returned, the code corresponding with the error is used as exit code and the
-//! error message is displayed.
+//! [CTResult]是围绕[Result]的一个简单封装，带有一个自定义错误特征：[CTError]。与实现了[std::error::Error]的类型相比，最重要的区别在于当从ctmain返回时，[CTError]可以指定程序的退出码：
+//! * 当返回Ok时，使用通过[set_ct_exit_code]设置的代码作为退出码。如果未使用[set_ct_exit_code]，则使用0。
+//! * 当返回Err时，使用与错误对应的代码作为退出码，并显示错误消息。
 //!
 //! Additionally, the errors can be displayed manually with the [`show`] and [`show_if_err`] macros:
 //! ```ignore
@@ -44,12 +38,12 @@
 //! show_if_err!(res);
 //! // or
 //! if let Err(e) = res {
-//!    show!(e);
+//!    ct_show!(e);
 //! }
 //! ```
 //!
 //! **Note**: The [`show`] and [`show_if_err`] macros set the exit code of the program using
-//! [`set_exit_code`]. See the documentation on that function for more information.
+//! [`set_ct_exit_code`]. See the documentation on that function for more information.
 //!
 //! # Guidelines
 //! * Use error types from `ctcore` where possible.
@@ -69,7 +63,7 @@ use std::{
 
 static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 
-/// Get the last exit code set with [`set_exit_code`].
+/// Get the last exit code set with [`set_ct_exit_code`].
 /// The default value is `0`.
 pub fn get_exit_code() -> i32 {
     EXIT_CODE.load(Ordering::SeqCst)
@@ -80,7 +74,7 @@ pub fn get_exit_code() -> i32 {
 /// This function is most useful for non-fatal errors, for example when applying an operation to
 /// multiple files:
 /// ```ignore
-/// use ctcore::ct_error::{UResult, set_exit_code};
+/// use ctcore::ct_error::{UResult, set_ct_exit_code};
 ///
 /// fn ctmain(args: impl ctcore::Args) -> UResult<()> {
 ///     ...
@@ -88,18 +82,18 @@ pub fn get_exit_code() -> i32 {
 ///         let res = some_operation_that_might_fail(file);
 ///         match res {
 ///             Ok() => {},
-///             Err(_) => set_exit_code(1),
+///             Err(_) => set_ct_exit_code(1),
 ///         }
 ///     }
 ///     Ok(()) // If any of the operations failed, 1 is returned.
 /// }
 /// ```
-pub fn set_exit_code(code: i32) {
+pub fn set_ct_exit_code(code: i32) {
     EXIT_CODE.store(code, Ordering::SeqCst);
 }
 
 /// Result type that should be returned by all utils.
-pub type UResult<T> = Result<T, Box<dyn UError>>;
+pub type CTResult<T> = Result<T, Box<dyn CTError>>;
 
 /// Custom errors defined by the utils and `ctcore`.
 ///
@@ -112,7 +106,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 /// ```
 /// use ctcore::{
 ///     ct_display::Quotable,
-///     ct_error::{UError, UResult}
+///     ct_error::{CTError, CTResult}
 /// };
 /// use std::{
 ///     error::Error,
@@ -126,7 +120,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 ///     NoMetadata(PathBuf),
 /// }
 ///
-/// impl UError for LsError {
+/// impl CTError for LsError {
 ///     fn code(&self) -> i32 {
 ///         match self {
 ///             LsError::InvalidLineWidth(_) => 2,
@@ -157,13 +151,13 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 /// }
 /// ```
 ///
-/// The call to `into()` is required to convert the `LsError` to
-/// [`Box<dyn UError>`]. The implementation for `From` is provided automatically.
+/// /// 调用into()是为了将LsError转换为
+/// [`Box<dyn CTError>`]. From 的实现会自动提供。
 ///
-/// A crate like [`quick_error`](https://crates.io/crates/quick-error) might
-/// also be used, but will still require an `impl` for the `code` method.
-pub trait UError: Error + Send {
-    /// Error code of a custom error.
+/// 类似于 quick_error 这样的 crate 也可使用，
+/// 但仍然需要为 code 方法提供 impl 实现。
+pub trait CTError: Error + Send {
+    /// 自定义错误的错误码。
     ///
     /// Set a return value for each variant of an enum-type to associate an
     /// error code (which is returned to the system shell) with an error
@@ -174,7 +168,7 @@ pub trait UError: Error + Send {
     /// ```
     /// use ctcore::{
     ///     ct_display::Quotable,
-    ///     ct_error::UError
+    ///     ct_error::CTError
     /// };
     /// use std::{
     ///     error::Error,
@@ -189,7 +183,7 @@ pub trait UError: Error + Send {
     ///     Bing(),
     /// }
     ///
-    /// impl UError for MyError {
+    /// impl CTError for MyError {
     ///     fn code(&self) -> i32 {
     ///         match self {
     ///             MyError::Foo(_) => 2,
@@ -228,7 +222,7 @@ pub trait UError: Error + Send {
     /// ```
     /// use ctcore::{
     ///     ct_display::Quotable,
-    ///     ct_error::UError
+    ///     ct_error::CTError
     /// };
     /// use std::{
     ///     error::Error,
@@ -243,7 +237,7 @@ pub trait UError: Error + Send {
     ///     Bing(),
     /// }
     ///
-    /// impl UError for MyError {
+    /// impl CTError for MyError {
     ///     fn usage(&self) -> bool {
     ///         match self {
     ///             // This will have a short usage help appended
@@ -272,33 +266,33 @@ pub trait UError: Error + Send {
     }
 }
 
-impl<T> From<T> for Box<dyn UError>
+impl<T> From<T> for Box<dyn CTError>
 where
-    T: UError + 'static,
+    T: CTError + 'static,
 {
     fn from(t: T) -> Self {
         Box::new(t)
     }
 }
 
-/// A simple error type with an exit code and a message that implements [`UError`].
+/// 一个包含退出码和消息的简单错误类型，实现了 [CTError] 特征。
 ///
 /// ```
-/// use ctcore::ct_error::{UResult, USimpleError};
-/// let err = USimpleError { code: 1, message: "error!".into()};
-/// let res: UResult<()> = Err(err.into());
+/// use ctcore::ct_error::{CTResult, CtSimpleError};
+/// let err = CtSimpleError { code: 1, message: "error!".into()};
+/// let res: CTResult<()> = Err(err.into());
 /// // or using the `new` method:
-/// let res: UResult<()> = Err(USimpleError::new(1, "error!"));
+/// let res: CTResult<()> = Err(CtSimpleError::new(1, "error!"));
 /// ```
 #[derive(Debug)]
-pub struct USimpleError {
+pub struct CtSimpleError {
     pub code: i32,
     pub message: String,
 }
 
-impl USimpleError {
+impl CtSimpleError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
+    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn CTError> {
         Box::new(Self {
             code,
             message: message.into(),
@@ -306,29 +300,29 @@ impl USimpleError {
     }
 }
 
-impl Error for USimpleError {}
+impl Error for CtSimpleError {}
 
-impl Display for USimpleError {
+impl Display for CtSimpleError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.message.fmt(f)
     }
 }
 
-impl UError for USimpleError {
+impl CTError for CtSimpleError {
     fn code(&self) -> i32 {
         self.code
     }
 }
 
 #[derive(Debug)]
-pub struct UUsageError {
+pub struct CTsageError {
     pub code: i32,
     pub message: String,
 }
 
-impl UUsageError {
+impl CTsageError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
+    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn CTError> {
         Box::new(Self {
             code,
             message: message.into(),
@@ -336,15 +330,15 @@ impl UUsageError {
     }
 }
 
-impl Error for UUsageError {}
+impl Error for CTsageError {}
 
-impl Display for UUsageError {
+impl Display for CTsageError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.message.fmt(f)
     }
 }
 
-impl UError for UUsageError {
+impl CTError for CTsageError {
     fn code(&self) -> i32 {
         self.code
     }
@@ -356,39 +350,37 @@ impl UError for UUsageError {
 
 /// Wrapper type around [`std::io::Error`].
 ///
-/// The messages displayed by [`UIoError`] should match the error messages displayed by GNU
-/// coreutils.
+/// 显示由[CTIoError]的错误消息应与GNU coreutils显示的错误消息相匹配。
 ///
-/// There are two ways to construct this type: with [`UIoError::new`] or by calling the
-/// [`FromIo::map_err_context`] method on a [`std::io::Result`] or [`std::io::Error`].
+/// 有两种构造此类型的方法：使用[CTIoError::new]或在[std::io::Result]或[std::io::Error]上调用[FromIo::map_err_context]方法。
 /// ```
 /// use ctcore::{
 ///     ct_display::Quotable,
-///     ct_error::{FromIo, UResult, UIoError, UError}
+///     ct_error::{FromIo, CTResult, CTIoError, CTError}
 /// };
 /// use std::fs::File;
 /// use std::path::Path;
 /// let path = Path::new("test.txt");
 ///
 /// // Manual construction
-/// let e: Box<dyn UError> = UIoError::new(
+/// let e: Box<dyn CTError> = CTIoError::new(
 ///     std::io::ErrorKind::NotFound,
 ///     format!("cannot access {}", path.quote())
 /// );
-/// let res: UResult<()> = Err(e.into());
+/// let res: CTResult<()> = Err(e.into());
 ///
 /// // Converting from an `std::io::Error`.
-/// let res: UResult<File> = File::open(path).map_err_context(|| format!("cannot access {}", path.quote()));
+/// let res: CTResult<File> = File::open(path).map_err_context(|| format!("cannot access {}", path.quote()));
 /// ```
 #[derive(Debug)]
-pub struct UIoError {
+pub struct CTIoError {
     context: Option<String>,
     inner: std::io::Error,
 }
 
-impl UIoError {
+impl CTIoError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
+    pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn CTError> {
         Box::new(Self {
             context: Some(context.into()),
             inner: kind.into(),
@@ -396,11 +388,11 @@ impl UIoError {
     }
 }
 
-impl UError for UIoError {}
+impl CTError for CTIoError {}
 
-impl Error for UIoError {}
+impl Error for CTIoError {}
 
-impl Display for UIoError {
+impl Display for CTIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use std::io::ErrorKind::*;
 
@@ -530,37 +522,36 @@ pub fn strip_errno(err: &std::io::Error) -> String {
     }
 }
 
-/// Enables the conversion from [`std::io::Error`] to [`UError`] and from [`std::io::Result`] to
-/// [`UResult`].
+/// 启用从[std::io::Error]到[CTError]的转换，以及从[std::io::Result]到[CTResult]的转换。
 pub trait FromIo<T> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> T;
 }
 
-impl FromIo<Box<UIoError>> for std::io::Error {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
-        Box::new(UIoError {
+impl FromIo<Box<CTIoError>> for std::io::Error {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> Box<CTIoError> {
+        Box::new(CTIoError {
             context: Some((context)()),
             inner: self,
         })
     }
 }
 
-impl<T> FromIo<UResult<T>> for std::io::Result<T> {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
-        self.map_err(|e| e.map_err_context(context) as Box<dyn UError>)
+impl<T> FromIo<CTResult<T>> for std::io::Result<T> {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> CTResult<T> {
+        self.map_err(|e| e.map_err_context(context) as Box<dyn CTError>)
     }
 }
 
-impl FromIo<Box<UIoError>> for std::io::ErrorKind {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
-        Box::new(UIoError {
+impl FromIo<Box<CTIoError>> for std::io::ErrorKind {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> Box<CTIoError> {
+        Box::new(CTIoError {
             context: Some((context)()),
             inner: std::io::Error::new(self, ""),
         })
     }
 }
 
-impl From<std::io::Error> for UIoError {
+impl From<std::io::Error> for CTIoError {
     fn from(f: std::io::Error) -> Self {
         Self {
             context: None,
@@ -569,9 +560,9 @@ impl From<std::io::Error> for UIoError {
     }
 }
 
-impl From<std::io::Error> for Box<dyn UError> {
+impl From<std::io::Error> for Box<dyn CTError> {
     fn from(f: std::io::Error) -> Self {
-        let u_error: UIoError = f.into();
+        let u_error: CTIoError = f.into();
         Box::new(u_error) as Self
     }
 }
@@ -591,29 +582,29 @@ impl From<std::io::Error> for Box<dyn UError> {
 /// println!("{}", uio_result.unwrap_err());
 /// ```
 #[cfg(unix)]
-impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+impl<T> FromIo<CTResult<T>> for Result<T, nix::Error> {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> CTResult<T> {
         self.map_err(|e| {
-            Box::new(UIoError {
+            Box::new(CTIoError {
                 context: Some((context)()),
                 inner: std::io::Error::from_raw_os_error(e as i32),
-            }) as Box<dyn UError>
+            }) as Box<dyn CTError>
         })
     }
 }
 
 #[cfg(unix)]
-impl<T> FromIo<UResult<T>> for nix::Error {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
-        Err(Box::new(UIoError {
+impl<T> FromIo<CTResult<T>> for nix::Error {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> CTResult<T> {
+        Err(Box::new(CTIoError {
             context: Some((context)()),
             inner: std::io::Error::from_raw_os_error(self as i32),
-        }) as Box<dyn UError>)
+        }) as Box<dyn CTError>)
     }
 }
 
 #[cfg(unix)]
-impl From<nix::Error> for UIoError {
+impl From<nix::Error> for CTIoError {
     fn from(f: nix::Error) -> Self {
         Self {
             context: None,
@@ -623,9 +614,9 @@ impl From<nix::Error> for UIoError {
 }
 
 #[cfg(unix)]
-impl From<nix::Error> for Box<dyn UError> {
+impl From<nix::Error> for Box<dyn CTError> {
     fn from(f: nix::Error) -> Self {
-        let u_error: UIoError = f.into();
+        let u_error: CTIoError = f.into();
         Box::new(u_error) as Self
     }
 }
@@ -645,14 +636,14 @@ impl From<nix::Error> for Box<dyn UError> {
 /// # Examples
 ///
 /// ```
-/// use ctcore::ct_error::UIoError;
+/// use ctcore::ct_error::CTIoError;
 /// use ctcore::uio_error;
 ///
 /// let io_err = std::io::Error::new(
 ///     std::io::ErrorKind::PermissionDenied, "fix me please!"
 /// );
 ///
-/// let uio_err = UIoError::new(
+/// let uio_err = CTIoError::new(
 ///     io_err.kind(),
 ///     format!("Error code: {}", 2)
 /// );
@@ -665,16 +656,13 @@ impl From<nix::Error> for Box<dyn UError> {
 /// println!("{}", other_uio_err);
 /// ```
 ///
-/// The [`std::fmt::Display`] impl of [`UIoError`] will then ensure that an
-/// appropriate error message relating to the actual error kind of the
-/// [`std::io::Error`] is appended to whatever error message is defined in
-/// addition (as secondary argument).
+/// [CTIoError]的std::fmt::Display实现将确保与std::io::Error实际错误类型相关的适当错误消息被追加到任何附加定义的错误消息（作为第二个参数）之后。
 ///
 /// If you want to show only the error message for the [`std::io::ErrorKind`]
 /// that's contained in [`UIoError`], pass the second argument as empty string:
 ///
 /// ```
-/// use ctcore::ct_error::UIoError;
+/// use ctcore::ct_error::CTIoError;
 /// use ctcore::uio_error;
 ///
 /// let io_err = std::io::Error::new(
@@ -690,24 +678,25 @@ impl From<nix::Error> for Box<dyn UError> {
 #[macro_export]
 macro_rules! uio_error(
     ($err:expr, $($args:tt)+) => ({
-        UIoError::new(
+        CTIoError::new(
             $err.kind(),
             format!($($args)+)
         )
     })
 );
 
-/// A special error type that does not print any message when returned from
-/// `ctmain`. Especially useful for porting utilities to using [`UResult`].
+/// 一种特殊错误类型，当从 ctmain 返回时不会打印任何消息。对于将实用程序移植为使用 [CTResult] 特别有用。
+///
+/// 可以通过以下两种方式构造 ExitCode：
 ///
 /// There are two ways to construct an [`ExitCode`]:
 /// ```
-/// use ctcore::ct_error::{ExitCode, UResult};
+/// use ctcore::ct_error::{ExitCode, CTResult};
 /// // Explicit
-/// let res: UResult<()> = Err(ExitCode(1).into());
+/// let res: CTResult<()> = Err(ExitCode(1).into());
 ///
 /// // Using into on `i32`:
-/// let res: UResult<()> = Err(1.into());
+/// let res: CTResult<()> = Err(1.into());
 /// ```
 /// This type is especially useful for a trivial conversion from utils returning [`i32`] to
 /// returning [`UResult`].
@@ -716,7 +705,7 @@ pub struct ExitCode(pub i32);
 
 impl ExitCode {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(code: i32) -> Box<dyn UError> {
+    pub fn new(code: i32) -> Box<dyn CTError> {
         Box::new(Self(code))
     }
 }
@@ -729,19 +718,19 @@ impl Display for ExitCode {
     }
 }
 
-impl UError for ExitCode {
+impl CTError for ExitCode {
     fn code(&self) -> i32 {
         self.0
     }
 }
 
-impl From<i32> for Box<dyn UError> {
+impl From<i32> for Box<dyn CTError> {
     fn from(i: i32) -> Self {
         ExitCode::new(i)
     }
 }
 
-/// A wrapper for `clap::Error` that implements [`UError`]
+/// clap::Error的封装器，实现了[CTError] trait
 ///
 /// Contains a custom error code. When `Display::fmt` is called on this struct
 /// the [`clap::Error`] will be printed _directly to `stdout` or `stderr`_.
@@ -749,16 +738,16 @@ impl From<i32> for Box<dyn UError> {
 ///
 /// [`ClapErrorWrapper`] is generally created by calling the
 /// [`UClapError::with_exit_code`] method on [`clap::Error`] or using the [`From`]
-/// implementation from [`clap::Error`] to `Box<dyn UError>`, which constructs
+/// implementation from [`clap::Error`] to `Box<dyn CTError>`, which constructs
 /// a [`ClapErrorWrapper`] with an exit code of `1`.
 ///
 /// ```rust
-/// use ctcore::ct_error::{ClapErrorWrapper, UError, UClapError};
+/// use ctcore::ct_error::{ClapErrorWrapper, CTError, UClapError};
 /// let command = clap::Command::new("test");
 /// let result: Result<_, ClapErrorWrapper> = command.try_get_matches().with_exit_code(125);
 ///
 /// let command = clap::Command::new("test");
-/// let result: Result<_, Box<dyn UError>> = command.try_get_matches().map_err(Into::into);
+/// let result: Result<_, Box<dyn CTError>> = command.try_get_matches().map_err(Into::into);
 /// ```
 #[derive(Debug)]
 pub struct ClapErrorWrapper {
@@ -771,7 +760,7 @@ pub trait UClapError<T> {
     fn with_exit_code(self, code: i32) -> T;
 }
 
-impl From<clap::Error> for Box<dyn UError> {
+impl From<clap::Error> for Box<dyn CTError> {
     fn from(e: clap::Error) -> Self {
         Box::new(ClapErrorWrapper { code: 1, error: e })
     }
@@ -791,7 +780,7 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
     }
 }
 
-impl UError for ClapErrorWrapper {
+impl CTError for ClapErrorWrapper {
     fn code(&self) -> i32 {
         // If the error is a DisplayHelp or DisplayVersion variant,
         // we don't want to apply the custom error code, but leave
@@ -832,21 +821,21 @@ mod tests {
    #[test]
     fn test_get_exit_code() {
         // 测试默认退出码是否为0
-        set_exit_code(0);
+        set_ct_exit_code(0);
         assert_eq!(get_exit_code(), 0);
     }
 
     #[test]
     fn test_set_exit_code() {
         // 测试设置退出码是否成功
-        set_exit_code(1);
+        set_ct_exit_code(1);
         assert_eq!(get_exit_code(), 1);
     }
 
     #[test]
     fn test_ui_error_code() {
         // 测试自定义错误类型的错误码
-        let error = USimpleError {
+        let error = CtSimpleError {
             code: 42,
             message: String::from("Error message"),
         };
@@ -856,7 +845,7 @@ mod tests {
     #[test]
     fn test_ui_error_display() {
         // 测试自定义错误类型的显示
-        let error = USimpleError {
+        let error = CtSimpleError {
             code: 42,
             message: String::from("Error message"),
         };
@@ -866,7 +855,7 @@ mod tests {
     #[test]
     fn test_ui_io_error_display() {
         // 测试IO错误类型的显示
-        let error = UIoError {
+        let error = CTIoError {
             context: None,
             inner: std::io::Error::from(std::io::ErrorKind::NotFound),
         };
@@ -875,21 +864,21 @@ mod tests {
 
     #[test]
     fn test_usimple_error() {
-        let err = USimpleError::new(2, "Test error");
+        let err = CtSimpleError::new(2, "Test error");
         assert_eq!(err.code(), 2);
         assert_eq!(format!("{}", err), "Test error");
     }
 
     #[test]
     fn test_uusage_error_usage_flag() {
-        let err = UUsageError::new(1, "Usage needed");
+        let err = CTsageError::new(1, "Usage needed");
         assert!(err.usage());
         assert_eq!(format!("{}", err), "Usage needed");
     }
 
     #[test]
     fn test_uio_error_message() {
-        let err = UIoError::new(std::io::ErrorKind::NotFound, "File not found");
+        let err = CTIoError::new(std::io::ErrorKind::NotFound, "File not found");
         assert_eq!(format!("{}", err), "File not found: entity not found");
     }
 
@@ -902,21 +891,21 @@ mod tests {
 
     #[test]
     fn test_set_get_exit_code() {
-        set_exit_code(5);
+        set_ct_exit_code(5);
         assert_eq!(get_exit_code(), 5);
     }
 
     #[test]
     fn test_from_io_error_conversion() {
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
-        let custom_err: Box<dyn UError> = Box::new(UIoError::from(io_err));
+        let custom_err: Box<dyn CTError> = Box::new(CTIoError::from(io_err));
         assert_eq!(format!("{}", custom_err), "Access denied");
     }
 
     #[test]
     #[cfg(unix)]
     fn test_base_nix_error_conversion() {
-        use super::{FromIo, UIoError};
+        use super::{CTIoError, FromIo};
         use nix::errno::Errno;
         use std::io::ErrorKind;
 
@@ -925,7 +914,7 @@ mod tests {
             (Errno::ENOENT, ErrorKind::NotFound),
             (Errno::EEXIST, ErrorKind::AlreadyExists),
         ] {
-            let error = UIoError::from(nix_error);
+            let error = CTIoError::from(nix_error);
             assert_eq!(expected_error_kind, error.inner.kind());
         }
         assert_eq!(

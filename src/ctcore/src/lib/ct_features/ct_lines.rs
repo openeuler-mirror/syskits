@@ -89,7 +89,7 @@ impl<B: BufRead> Iterator for Lines<B> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lines::lines;
+    use crate::ct_lines::lines;
     use std::io::Cursor;
 
     #[test]

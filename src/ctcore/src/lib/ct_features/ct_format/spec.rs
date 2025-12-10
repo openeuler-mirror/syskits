@@ -11,7 +11,7 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
-use crate::quoting_style::{escape_name, QuotingStyle};
+use crate::ct_quoting_style::{escape_name, CtQuotingStyle};
 
 use super::{
     num_format::{
@@ -130,7 +130,7 @@ impl Flags {
 
 impl Spec {
     pub fn parse<'a>(rest: &mut &'a [u8]) -> Result<Self, &'a [u8]> {
-        // Based on the C++ reference, the spec format looks like:
+        // Based on the C++ reference, the spec ct_format looks like:
         //
         //   %[flags][width][.precision][length]specifier
         //
@@ -394,7 +394,7 @@ impl Spec {
                     .write_all(
                         escape_name(
                             s.as_ref(),
-                            &QuotingStyle::Shell {
+                            &CtQuotingStyle::Shell {
                                 escape: true,
                                 always_quote: false,
                                 show_control: false,

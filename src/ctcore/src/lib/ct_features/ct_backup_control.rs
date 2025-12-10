@@ -34,50 +34,50 @@
 //! [3]: `determine_backup_mode()`
 //! [4]: `determine_backup_suffix()`
 //! [5]: `get_backup_path()`
-//! [6]: `BackupError`
-//! [7]: `BACKUP_CONTROL_LONG_HELP`
+//! [6]: `CtBackupError`
+//! [7]: `CT_BACKUP_CONTROL_LONG_HELP`
 //!
 //!
 //! # Usage example
 //!
-//! ```
+//!```
 //! #[macro_use]
 //! extern crate ctcore;
 //!
 //! use clap::{Command, Arg, ArgMatches};
 //! use std::path::{Path, PathBuf};
-//! use ctcore::backup_control::{self, BackupMode};
-//! use ctcore::ct_error::{UError, UResult};
+//! use ctcore::ct_backup_control::{self, CtBackupMode};
+//! use ctcore::ct_error::{CTError, CTResult};
 //!
 //! fn main() {
 //!     let usage = String::from("command [OPTION]... ARG");
 //!     let long_usage = String::from("And here's a detailed explanation");
 //!
 //!     let matches = Command::new("command")
-//!         .arg(backup_control::arguments::backup())
-//!         .arg(backup_control::arguments::backup_no_args())
-//!         .arg(backup_control::arguments::suffix())
+//!         .arg(ct_backup_control::arguments::backup())
+//!         .arg(ct_backup_control::arguments::backup_no_args())
+//!         .arg(ct_backup_control::arguments::suffix())
 //!         .override_usage(usage)
 //!         .after_help(format!(
 //!             "{}\n{}",
 //!             long_usage,
-//!             backup_control::BACKUP_CONTROL_LONG_HELP
+//!             ct_backup_control::CT_BACKUP_CONTROL_LONG_HELP
 //!         ))
 //!         .get_matches_from(vec![
 //!             "command", "--backup=t", "--suffix=bak~"
 //!         ]);
 //!
-//!     let backup_mode = match backup_control::determine_backup_mode(&matches) {
+//!     let backup_mode = match ct_backup_control::determine_backup_mode(&matches) {
 //!         Err(e) => {
-//!             show!(e);
+//!             ct_show!(e);
 //!             return;
 //!         }
 //!         Ok(mode) => mode,
 //!     };
-//!     let backup_suffix = backup_control::determine_backup_suffix(&matches);
+//!     let backup_suffix = ct_backup_control::determine_backup_suffix(&matches);
 //!     let target_path = Path::new("/tmp/example");
 //!
-//!     let backup_path = backup_control::get_backup_path(
+//!     let backup_path = ct_backup_control::get_backup_path(
 //!         backup_mode, target_path, &backup_suffix
 //!     );
 //!
@@ -90,7 +90,7 @@
 
 use crate::{
     ct_display::Quotable,
-    ct_error::{UError, UResult},
+    ct_error::{CTError, CTResult},
 };
 use clap::ArgMatches;
 use std::{
@@ -100,11 +100,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub static BACKUP_CONTROL_VALUES: &[&str] = &[
+pub static CT_BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
 ];
 
-pub const BACKUP_CONTROL_LONG_HELP: &str =
+pub const CT_BACKUP_CONTROL_LONG_HELP: &str =
     "The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
 The version control method may be selected via the --backup option or through
 the VERSION_CONTROL environment variable.  Here are the values:
@@ -125,7 +125,7 @@ static VALID_ARGS_HELP: &str = "Valid arguments are:
 /// The mapping of the backup modes to the CLI arguments is annotated on the
 /// enum variants.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum BackupMode {
+pub enum CtBackupMode {
     /// Argument 'none', 'off'
     NoBackup,
     /// Argument 'simple', 'never'
@@ -139,9 +139,9 @@ pub enum BackupMode {
 /// Backup error types.
 ///
 /// Errors are currently raised by [`determine_backup_mode`] only. All errors
-/// are implemented as [`UError`] for uniform handling across utilities.
+/// are implemented as [`CTError`] for uniform handling across utilities.
 #[derive(Debug, Eq, PartialEq)]
-pub enum BackupError {
+pub enum CtBackupError {
     /// An invalid argument (e.g. 'foo') was given as backup type. First
     /// parameter is the argument, second is the arguments origin (CLI or
     /// ENV-var)
@@ -155,7 +155,7 @@ pub enum BackupError {
     // BackupFailed(PathBuf, PathBuf, std::io::Error),
 }
 
-impl UError for BackupError {
+impl CTError for CtBackupError {
     fn code(&self) -> i32 {
         match self {
             Self::BackupImpossible() => 2,
@@ -172,9 +172,9 @@ impl UError for BackupError {
     }
 }
 
-impl Error for BackupError {}
+impl Error for CtBackupError {}
 
-impl Display for BackupError {
+impl Display for CtBackupError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidArgument(arg, origin) => write!(
@@ -267,7 +267,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// Determine the "mode" for the backup operation to perform, if any.
 ///
 /// Parses the backup options according to the [GNU manual][1], and converts
-/// them to an instance of `BackupMode` for further processing.
+/// them to an instance of `CtBackupMode` for further processing.
 ///
 /// Takes [`clap::ArgMatches`] as argument which **must** contain the options
 /// from [`arguments::backup()`] and [`arguments::backup_no_args()`]. Otherwise
@@ -287,8 +287,8 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// multiple backup modes) or invalid, an [`InvalidArgument`][10] or
 /// [`AmbiguousArgument`][11] error is returned, respectively.
 ///
-/// [10]: BackupError::InvalidArgument
-/// [11]: BackupError::AmbiguousArgument
+/// [10]: CtBackupError::InvalidArgument
+/// [11]: CtBackupError::AmbiguousArgument
 ///
 ///
 /// # Examples
@@ -299,19 +299,19 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// ```
 /// #[macro_use]
 /// extern crate ctcore;
-/// use ctcore::backup_control::{self, BackupMode};
+/// use ctcore::ct_backup_control::{self, CtBackupMode};
 /// use clap::{Command, Arg, ArgMatches};
 ///
 /// fn main() {
 ///     let matches = Command::new("command")
-///         .arg(backup_control::arguments::backup())
-///         .arg(backup_control::arguments::backup_no_args())
+///         .arg(ct_backup_control::arguments::backup())
+///         .arg(ct_backup_control::arguments::backup_no_args())
 ///         .get_matches_from(vec![
 ///             "command", "-b", "--backup=t"
 ///         ]);
 ///
-///     let backup_mode = backup_control::determine_backup_mode(&matches).unwrap();
-///     assert_eq!(backup_mode, BackupMode::NumberedBackup)
+///     let backup_mode = ct_backup_control::determine_backup_mode(&matches).unwrap();
+///     assert_eq!(backup_mode, CtBackupMode::NumberedBackup)
 /// }
 /// ```
 ///
@@ -322,27 +322,27 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// ```
 /// #[macro_use]
 /// extern crate ctcore;
-/// use ctcore::backup_control::{self, BackupMode, BackupError};
+/// use ctcore::ct_backup_control::{self, CtBackupMode, CtBackupError};
 /// use clap::{Command, Arg, ArgMatches};
 ///
 /// fn main() {
 ///     let matches = Command::new("command")
-///         .arg(backup_control::arguments::backup())
-///         .arg(backup_control::arguments::backup_no_args())
+///         .arg(ct_backup_control::arguments::backup())
+///         .arg(ct_backup_control::arguments::backup_no_args())
 ///         .get_matches_from(vec![
 ///             "command", "-b", "--backup=n"
 ///         ]);
 ///
-///     let backup_mode = backup_control::determine_backup_mode(&matches);
+///     let backup_mode = ct_backup_control::determine_backup_mode(&matches);
 ///
 ///     assert!(backup_mode.is_err());
 ///     let err = backup_mode.unwrap_err();
-///     // assert_eq!(err, BackupError::AmbiguousArgument);
+///     // assert_eq!(err, CtBackupError::AmbiguousArgument);
 ///     // Use ctcore functionality to show the error to the user
-///     show!(err);
+///     ct_show!(err);
 /// }
 /// ```
-pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
+pub fn determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
     if matches.contains_id(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option
         // is used but method is not specified, then the value of the
@@ -356,24 +356,24 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
             match_method(&method, "$VERSION_CONTROL")
         } else {
             // Default if no argument is provided to '--backup'
-            Ok(BackupMode::ExistingBackup)
+            Ok(CtBackupMode::ExistingBackup)
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
         // Using -b is equivalent to using --backup=existing.
-        Ok(BackupMode::ExistingBackup)
+        Ok(CtBackupMode::ExistingBackup)
     } else {
         // No option was present at all
-        Ok(BackupMode::NoBackup)
+        Ok(CtBackupMode::NoBackup)
     }
 }
 
-/// Match a backup option string to a `BackupMode`.
+/// Match a backup option string to a `CtBackupMode`.
 ///
 /// The GNU manual specifies that abbreviations to options are valid as long as
 /// they aren't ambiguous. This function matches the given `method` argument
 /// against all valid backup options (via `starts_with`), and returns a valid
-/// [`BackupMode`] if exactly one backup option matches the `method` given.
+/// [`CtBackupMode`] if exactly one backup option matches the `method` given.
 ///
 /// `origin` is required in order to format the generated error message
 /// properly, when an error occurs.
@@ -385,39 +385,39 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
 /// modes), an [`InvalidArgument`][10] or [`AmbiguousArgument`][11] error is
 /// returned, respectively.
 ///
-/// [10]: BackupError::InvalidArgument
-/// [11]: BackupError::AmbiguousArgument
-fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
-    let matches: Vec<&&str> = BACKUP_CONTROL_VALUES
+/// [10]: CtBackupError::InvalidArgument
+/// [11]: CtBackupError::AmbiguousArgument
+fn match_method(method: &str, origin: &str) -> CTResult<CtBackupMode> {
+    let matches: Vec<&&str> = CT_BACKUP_CONTROL_VALUES
         .iter()
         .filter(|val| val.starts_with(method))
         .collect();
     if matches.len() == 1 {
         match *matches[0] {
-            "simple" | "never" => Ok(BackupMode::SimpleBackup),
-            "numbered" | "t" => Ok(BackupMode::NumberedBackup),
-            "existing" | "nil" => Ok(BackupMode::ExistingBackup),
-            "none" | "off" => Ok(BackupMode::NoBackup),
+            "simple" | "never" => Ok(CtBackupMode::SimpleBackup),
+            "numbered" | "t" => Ok(CtBackupMode::NumberedBackup),
+            "existing" | "nil" => Ok(CtBackupMode::ExistingBackup),
+            "none" | "off" => Ok(CtBackupMode::NoBackup),
             _ => unreachable!(), // cannot happen as we must have exactly one match
                                  // from the list above.
         }
     } else if matches.is_empty() {
-        Err(BackupError::InvalidArgument(method.to_string(), origin.to_string()).into())
+        Err(CtBackupError::InvalidArgument(method.to_string(), origin.to_string()).into())
     } else {
-        Err(BackupError::AmbiguousArgument(method.to_string(), origin.to_string()).into())
+        Err(CtBackupError::AmbiguousArgument(method.to_string(), origin.to_string()).into())
     }
 }
 
 pub fn get_backup_path(
-    backup_mode: BackupMode,
+    backup_mode: CtBackupMode,
     backup_path: &Path,
     suffix: &str,
 ) -> Option<PathBuf> {
     match backup_mode {
-        BackupMode::NoBackup => None,
-        BackupMode::SimpleBackup => Some(simple_backup_path(backup_path, suffix)),
-        BackupMode::NumberedBackup => Some(numbered_backup_path(backup_path)),
-        BackupMode::ExistingBackup => Some(existing_backup_path(backup_path, suffix)),
+        CtBackupMode::NoBackup => None,
+        CtBackupMode::SimpleBackup => Some(simple_backup_path(backup_path, suffix)),
+        CtBackupMode::NumberedBackup => Some(numbered_backup_path(backup_path)),
+        CtBackupMode::ExistingBackup => Some(existing_backup_path(backup_path, suffix)),
     }
 }
 
@@ -460,7 +460,7 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
 ///
 /// ```
 /// use std::path::Path;
-/// use ctcore::backup_control::source_is_target_backup;
+/// use ctcore::ct_backup_control::source_is_target_backup;
 /// let source = Path::new("data.txt~");
 /// let target = Path::new("data.txt");
 /// let suffix = String::from("~");
@@ -513,7 +513,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::ExistingBackup);
+        assert_eq!(result, CtBackupMode::ExistingBackup);
     }
 
     // --backup takes precedence over -b
@@ -524,7 +524,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::NoBackup);
+        assert_eq!(result, CtBackupMode::NoBackup);
     }
 
     // --backup can be passed without an argument
@@ -535,7 +535,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::ExistingBackup);
+        assert_eq!(result, CtBackupMode::ExistingBackup);
     }
 
     // --backup can be passed with an argument only
@@ -546,7 +546,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::SimpleBackup);
+        assert_eq!(result, CtBackupMode::SimpleBackup);
     }
 
     // --backup errors on invalid argument
@@ -583,7 +583,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::SimpleBackup);
+        assert_eq!(result, CtBackupMode::SimpleBackup);
     }
 
     // -b ignores the "VERSION_CONTROL" environment variable
@@ -595,7 +595,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::ExistingBackup);
+        assert_eq!(result, CtBackupMode::ExistingBackup);
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
@@ -608,7 +608,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::NoBackup);
+        assert_eq!(result, CtBackupMode::NoBackup);
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
@@ -651,7 +651,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::SimpleBackup);
+        assert_eq!(result, CtBackupMode::SimpleBackup);
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
@@ -692,7 +692,7 @@ mod tests {
 
     #[test]
     fn test_invalid_argument_display() {
-        let error = BackupError::InvalidArgument("arg".to_string(), "origin".to_string());
+        let error = CtBackupError::InvalidArgument("arg".to_string(), "origin".to_string());
         let expected = "invalid argument 'arg' for 'origin'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'";
         print!("{}", error);
         print!("{}", expected);
@@ -701,14 +701,14 @@ mod tests {
 
     #[test]
     fn test_ambiguous_argument_display() {
-        let error = BackupError::AmbiguousArgument("arg".to_string(), "origin".to_string());
+        let error = CtBackupError::AmbiguousArgument("arg".to_string(), "origin".to_string());
         let expected = "ambiguous argument 'arg' for 'origin'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'";
         assert_eq!(expected, format!("{}", error));
     }
 
     // #[test]
     // fn test_backup_impossible_display() {
-    //     let _error = BackupError::BackupImpossible;
+    //     let _error = CtBackupError::BackupImpossible;
     //     let expected = "cannot create backup";
     //     print!("{}", expected);
     //     // assert_eq!(expected, format!("{}", error));
@@ -717,7 +717,7 @@ mod tests {
     // Placeholder for later
     // #[test]
     // fn test_backup_failed_display() {
-    //     let error = BackupError::BackupFailed("from".to_string(), "to".to_string(), std::io::Error::new(std::io::ErrorKind::Other, "failed"));
+    //     let error = CtBackupError::BackupFailed("from".to_string(), "to".to_string(), std::io::Error::new(std::io::ErrorKind::Other, "failed"));
     //     let expected = "failed to backup 'from' to 'to': failed";
     //     assert_eq!(expected, format!("{}", error));
     // }
@@ -868,6 +868,6 @@ mod tests {
         //
         // // Assert
         // assert!(result.is_ok());
-        // assert_eq!(result.unwrap(), BackupMode::ExistingBackup);
+        // assert_eq!(result.unwrap(), CtBackupMode::ExistingBackup);
     }
 }

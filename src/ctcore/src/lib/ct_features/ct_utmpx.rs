@@ -15,8 +15,8 @@
 //! # Examples:
 //!
 //! ```
-//! use ctcore::utmpx::Utmpx;
-//! for ut in Utmpx::iter_all_records() {
+//! use ctcore::ct_utmpx::CtUtmpx;
+//! for ut in CtUtmpx::iter_all_records() {
 //!     if ut.is_user_process() {
 //!         println!("{}: {}", ut.host(), ut.user())
 //!     }
@@ -26,8 +26,8 @@
 //! Specifying the path to login record:
 //!
 //! ```
-//! use ctcore::utmpx::Utmpx;
-//! for ut in Utmpx::iter_all_records_from("/some/where/else") {
+//! use ctcore::ct_utmpx::CtUtmpx;
+//! for ut in CtUtmpx::iter_all_records_from("/some/where/else") {
 //!     if ut.is_user_process() {
 //!         println!("{}: {}", ut.host(), ut.user())
 //!     }
@@ -159,11 +159,11 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
-pub struct Utmpx {
+pub struct CtUtmpx {
     inner: utmpx,
 }
 
-impl Utmpx {
+impl CtUtmpx {
     /// A.K.A. ut.ut_type
     pub fn record_type(&self) -> i16 {
         self.inner.ut_type
@@ -213,7 +213,7 @@ impl Utmpx {
     pub fn exit_status(&self) -> (i16, i16) {
         (0, 0)
     }
-    /// Consumes the `Utmpx`, returning the underlying C struct utmpx
+    /// Consumes the `CtUtmpx`, returning the underlying C struct utmpx
     pub fn into_inner(self) -> utmpx {
         self.inner
     }
@@ -257,7 +257,7 @@ impl Utmpx {
 
     /// Iterate through all the utmp records.
     ///
-    /// This will use the default location, or the path [`Utmpx::iter_all_records_from`]
+    /// This will use the default location, or the path [`CtUtmpx::iter_all_records_from`]
     /// was most recently called with.
     ///
     /// Only one instance of [`UtmpxIter`] may be active at a time. This
@@ -277,9 +277,9 @@ impl Utmpx {
     ///
     /// No failure is reported or detected.
     ///
-    /// This function affects subsequent calls to [`Utmpx::iter_all_records`].
+    /// This function affects subsequent calls to [`CtUtmpx::iter_all_records`].
     ///
-    /// The same caveats as for [`Utmpx::iter_all_records`] apply.
+    /// The same caveats as for [`CtUtmpx::iter_all_records`] apply.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
         let iter = UtmpxIter::new();
         let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
@@ -329,7 +329,7 @@ impl UtmpxIter {
 }
 
 impl Iterator for UtmpxIter {
-    type Item = Utmpx;
+    type Item = CtUtmpx;
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
             let res = getutxent();
@@ -340,7 +340,7 @@ impl Iterator for UtmpxIter {
                 // call to getutxent(), so we have to read it now.
                 // All the strings live inline in the struct as arrays, which
                 // makes things easier.
-                Some(Utmpx {
+                Some(CtUtmpx {
                     inner: ptr::read(res as *const _),
                 })
             }

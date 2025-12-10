@@ -10,7 +10,7 @@
  */
 //! Provides consistent newline/zero terminator handling for `-z`/`--zero` flags.
 //!
-//! See the [`LineEnding`] struct for more information.
+//! See the [`CtLineEnding`] struct for more information.
 use std::fmt::Display;
 
 /// Line ending of either `\n` or `\0`
@@ -23,15 +23,15 @@ use std::fmt::Display;
 /// variant to the formatter.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum LineEnding {
+pub enum CtLineEnding {
     #[default]
     Newline = b'\n',
     Nul = 0,
 }
 
-impl Display for LineEnding {
+impl Display for CtLineEnding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if *self == LineEnding::Newline {
+        if *self == CtLineEnding::Newline {
             writeln!(f) // Writes a newline character to the formatter
         } else {
             write!(f, "\0") // Writes a null character to the formatter
@@ -39,17 +39,17 @@ impl Display for LineEnding {
     }
 }
 
-impl From<LineEnding> for u8 {
-    fn from(line_ending: LineEnding) -> Self {
+impl From<CtLineEnding> for u8 {
+    fn from(line_ending: CtLineEnding) -> Self {
         line_ending as Self
     }
 }
 
-impl LineEnding {
-    /// Create a [`LineEnding`] from a `-z`/`--zero` flag
+impl CtLineEnding {
+    /// Create a [`CtLineEnding`] from a `-z`/`--zero` flag
     ///
-    /// If `is_zero_terminated` is true, [`LineEnding::Nul`] is returned,
-    /// otherwise [`LineEnding::Newline`].
+    /// If `is_zero_terminated` is true, [`CtLineEnding::Nul`] is returned,
+    /// otherwise [`CtLineEnding::Newline`].
     pub fn from_zero_flag(is_zero_terminated: bool) -> Self {
         match is_zero_terminated {
             true => Self::Nul,
@@ -64,44 +64,44 @@ mod tests {
     use std::fmt::Write;
     #[test]
     fn test_default_line_ending() {
-        assert_eq!(LineEnding::default(), LineEnding::Newline);
+        assert_eq!(CtLineEnding::default(), CtLineEnding::Newline);
     }
 
     #[test]
     fn test_display_newline() {
-        let newline = LineEnding::Newline;
+        let newline = CtLineEnding::Newline;
         assert_eq!(format!("{}", newline), "\n");
     }
 
     #[test]
     fn test_display_nul() {
-        let nul = LineEnding::Nul;
+        let nul = CtLineEnding::Nul;
         assert_eq!(format!("{}", nul), "\0");
     }
 
     #[test]
     fn test_from_u8_newline() {
-        assert_eq!(u8::from(LineEnding::Newline), b'\n');
+        assert_eq!(u8::from(CtLineEnding::Newline), b'\n');
     }
 
     #[test]
     fn test_from_u8_nul() {
-        assert_eq!(u8::from(LineEnding::Nul), 0);
+        assert_eq!(u8::from(CtLineEnding::Nul), 0);
     }
 
     #[test]
     fn test_from_zero_flag_true() {
-        assert_eq!(LineEnding::from_zero_flag(true), LineEnding::Nul);
+        assert_eq!(CtLineEnding::from_zero_flag(true), CtLineEnding::Nul);
     }
 
     #[test]
     fn test_from_zero_flag_false() {
-        assert_eq!(LineEnding::from_zero_flag(false), LineEnding::Newline);
+        assert_eq!(CtLineEnding::from_zero_flag(false), CtLineEnding::Newline);
     }
 
     #[test]
     fn test_display_formats_correctly_newline() {
-        let newline = LineEnding::Newline;
+        let newline = CtLineEnding::Newline;
         let mut output = String::new();
         write!(output, "{}", newline).expect("Failed to write to string");
         assert_eq!(output, "\n");
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_display_formats_correctly_nul() {
-        let nul = LineEnding::Nul;
+        let nul = CtLineEnding::Nul;
         let mut output = String::new();
         write!(output, "{}", nul).expect("Failed to write to string");
         assert_eq!(output, "\0");
@@ -117,32 +117,32 @@ mod tests {
 
     #[test]
     fn line_ending_equality_checks() {
-        assert_eq!(LineEnding::Newline, LineEnding::Newline);
-        assert_eq!(LineEnding::Nul, LineEnding::Nul);
-        assert_ne!(LineEnding::Newline, LineEnding::Nul);
+        assert_eq!(CtLineEnding::Newline, CtLineEnding::Newline);
+        assert_eq!(CtLineEnding::Nul, CtLineEnding::Nul);
+        assert_ne!(CtLineEnding::Newline, CtLineEnding::Nul);
     }
 
     #[test]
     fn test_display_implementation_consistency() {
-        assert_eq!(format!("{}", LineEnding::Newline), "\n");
-        assert_eq!(format!("{}", LineEnding::Nul), "\0");
+        assert_eq!(format!("{}", CtLineEnding::Newline), "\n");
+        assert_eq!(format!("{}", CtLineEnding::Nul), "\0");
     }
 
     #[test]
     fn test_conversion_to_u8_and_back() {
-        let newline = LineEnding::Newline;
-        let nul = LineEnding::Nul;
+        let newline = CtLineEnding::Newline;
+        let nul = CtLineEnding::Nul;
         let newline_byte: u8 = newline.into();
         let nul_byte: u8 = nul.into();
 
         assert_eq!(
-            LineEnding::from_zero_flag(newline_byte == 0),
-            LineEnding::Newline
+            CtLineEnding::from_zero_flag(newline_byte == 0),
+            CtLineEnding::Newline
         );
-        assert_eq!(LineEnding::from_zero_flag(nul_byte == 0), LineEnding::Nul);
+        assert_eq!(CtLineEnding::from_zero_flag(nul_byte == 0), CtLineEnding::Nul);
         assert_eq!(
-            LineEnding::from_zero_flag(newline_byte != 0),
-            LineEnding::Nul
+            CtLineEnding::from_zero_flag(newline_byte != 0),
+            CtLineEnding::Nul
         );
     }
 }

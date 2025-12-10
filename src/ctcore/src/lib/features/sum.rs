@@ -889,4 +889,33 @@ mod tests {
         algo.hash_update(input);
         println!("test_hash_update:{:?}", input);
     }
+   #[test]
+    fn test_hash_finalize() {
+        let mut algo = Shake256::new();
+        let input = b"hello world";
+        algo.hash_update(input);
+        let mut output = [0u8; 32];
+        algo.hash_finalize(&mut output);
+        println!("test_hash_update:{:?}", input);
+    }
+    #[test]
+    fn test_reset() {
+        let mut algo = Shake256::new();
+        let input = b"hello world";
+        algo.hash_update(input);
+        algo.reset();
+        println!("test_reset:{:?}", input);
+        let _expected_value = [
+            26, 178, 29, 131, 85, 207, 161, 127, 142, 97, 25, 72, 49, 232, 26, 143, 34, 190, 200,
+            199, 40, 254, 251, 116, 126, 208, 53, 235, 80, 130, 170, 43,
+        ];
+        //assert_eq!(algo, expected_value);
+    }
+    // #[test]
+    // fn test_output_bits() {
+    //     let algo = Shake256::new();
+    //     println!("test_output_bits:{:?}", algo);
+    //     let expected_value = [104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100];
+    //     assert_eq!(algo, expected_value);
+    // }
 }

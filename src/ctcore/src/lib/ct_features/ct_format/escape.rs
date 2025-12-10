@@ -1,25 +1,26 @@
 /*
- * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved
- *   syskits is licensed under Mulan PSL v2.
- * You can use this software according to the terms and conditions of the Mulan PSL V2
- * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PSL v2 for more details.
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
+ *     syskits is licensed under Mulan PSL v2.
+ *    You can use this software according to the terms and conditions of the Mulan PSL V2
+ *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *    See the Mulan PSL v2 for more details.
+ *
  */
 
-//! Parsing of escape sequences
+// 转义序列的解析
 
 #[derive(Debug, PartialEq)]
 pub enum EscapedChar {
-    /// A single byte
+    /// 单个字节
     Byte(u8),
-    /// A unicode character
+    /// 一个 Unicode 字符
     Char(char),
-    /// A character prefixed with a backslash (i.e. an invalid escape sequence)
+    /// 前缀带反斜杠的字符（即无效的转义序列）
     Backslash(u8),
-    /// Specifies that the string should stop (`\c`)
+    /// 指定字符串应停止(\c)
     End,
 }
 
@@ -74,14 +75,13 @@ impl Base {
 // 输入参数是对代表输入字符串的字节片段的可变引用。
 // base 参数是一个枚举，表示转义序列数字部分的基数。
 // 它可以是 Oct（用于八进制序列）或 Hex（用于十六进制序列）。
-/// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
+
 fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
-    // All arithmetic on `ret` needs to be wrapping, because octal input can
-    // take 3 digits, which is 9 bits, and therefore more than what fits in a
-    // `u8`. GNU just seems to wrap these values.
-    // Note that if we instead make `ret` a `u32` and use `char::from_u32` will
-    // yield incorrect results because it will interpret values larger than
-    // `u8::MAX` as unicode.
+    // 对ret的所有算术运算都需要进行包裹处理，因为八进制输入可以包含3位数字，即9位，
+    // 因此超过了u8所能容纳的范围。
+    // GNU似乎只是简单地将这些值进行了包裹处理。
+    // 注意，如果我们改为将ret设为u32并使用char::from_u32将会得到错误的结果，
+    // 因为它会将大于u8::MAX的值解释为Unicode字符。
     if let [c, rest @ ..] = input {
         let mut ret = base.convert_digit(*c)?;
         *input = rest;
@@ -114,8 +114,8 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
 // 4. 然后，函数将返回的数值转换为 u32，并将其存储在 ret 变量中。
 // 5. 然后，函数进入一个循环，迭代 Unicode 转义序列的剩余十六进制数字。在每次迭代中，函数都会从输入片段中取出下一个字节，使用 Base 枚举的 convert_digit()? 方法将其转换为相应的数值，并使用位运算将该数值乘加到 ret 变量中。
 // 6. 循环结束后，函数最后使用 char::from_u32() 方法将数字值转换为 Unicode 字符并返回。
-// TODO: This should print warnings and possibly halt execution when it fails to parse
-// TODO: If the character cannot be converted to u32, the input should be printed.
+// 待办事项：当解析失败时，应打印警告并可能终止执行。
+// 待办事项： 如果字符不能转换为u32，则应打印输入。
 fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
     let (c, rest) = input.split_first()?;
     let mut ret = Base::Hex.convert_digit(*c)? as u32;
@@ -128,13 +128,6 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
         *input = rest;
     }
 
-    // let mut ret = 0;
-    // for (c, rest) in input.iter().take(digits - 1).enumerate() {
-    //     let n = Base::Hex.convert_digit(*c)?;
-    //     ret = ret.wrapping_mul(Base::Hex as u32).wrapping_add(n as u32);
-    //     *input = rest;
-    // }
-
     char::from_u32(ret)
 }
 
@@ -142,9 +135,7 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
 // 该函数负责解析字符串中的转义序列。
 pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
     if let [c, new_rest @ ..] = rest {
-        // This is for the \NNN syntax for octal sequences.
-        // Note that '0' is intentionally omitted because that
-        // would be the \0NNN syntax.
+        // 这是为了八进制序列的\NNN语法。 注意，'0'是故意省略的，因为那是\0NNN语法。
         if let b'1'..=b'7' = c {
             let parse_value = parse_code(rest, Base::Oct);
             if let Some(parsed) = parse_value {
@@ -600,8 +591,6 @@ mod test {
         assert_eq!(input, b"x");
     }
 
-      // Add more test cases for other escape sequences and edge cases...
-
     #[test]
     fn test_parse_escape_code_form_feed() {
         let mut input: &[u8] = b"f";
@@ -680,12 +669,4 @@ mod test {
         assert_eq!(parse_escape_code(&mut input), EscapedChar::Byte(b'\\'));
         assert_eq!(input, b"u123");
     }
-    // #[test]
-    // fn test_parse_escape_code_invalid_escape_sequence_backslash() {
-    //     let mut input: &[u8] = b"\\xyz"; // Invalid escape sequence
-    //     assert_eq!(parse_escape_code(&mut input), EscapedChar::Backslash(b'\\'));
-    //     assert_eq!(input, b"xyz");
-    // }
-
-    // Add more boundary and error tests as necessary...
 }

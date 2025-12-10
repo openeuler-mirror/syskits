@@ -20,7 +20,7 @@ use data_encoding_macro::new_encoding;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum DecodeError {
+pub enum CtDecodeError {
     #[error("{}", _0)]
     Decode(#[from] data_encoding::DecodeError),
     #[error("{}", _0)]
@@ -35,7 +35,7 @@ pub enum CtEncodeError {
     InvalidInput,
 }
 
-pub type DecodeResult = Result<Vec<u8>, DecodeError>;
+pub type DecodeResult = Result<Vec<u8>, CtDecodeError>;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Format {
@@ -69,8 +69,8 @@ pub fn encode(f: Format, input: &[u8]) -> Result<String, CtEncodeError> {
         Base2Lsbf => BASE2LSBF.encode(input),
         Base2Msbf => BASE2MSBF.encode(input),
         Z85 => {
-            // According to the spec we should not accept inputs whose len is not a multiple of 4.
-            // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
+            // 根据规范，我们不应接受长度不是4的倍数的输入。
+            // 但是，z85库实现了填充编码并接受此类输入。我们必须手动检查它们。
             if input.len() % 4 == 0 {
                 z85::encode(input)
             } else {
@@ -90,8 +90,8 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
         Base2Lsbf => BASE2LSBF.decode(input)?,
         Base2Msbf => BASE2MSBF.decode(input)?,
         Z85 => {
-            // The z85 crate implements a padded encoding by using a leading '#' which is otherwise not allowed.
-            // We manually check for a leading '#' and return an error ourselves.
+            // z85 库通过使用一个不允许出现的首字符 '#' 来实现带填充的编码。
+            // 我们手动检查是否有首字符 '#'，并自行返回错误。
             if input.starts_with(&[b'#']) {
                 return Err(z85::DecodeError::InvalidByte(0, b'#').into());
             } else {
@@ -161,7 +161,7 @@ impl<R: Read> Data<R> {
     }
 }
 
-// NOTE: this will likely be phased out at some point
+// 注意：这将在某个时候被淘汰
 pub fn wrap_print<R: Read>(data: &Data<R>, res: &str) {
     let stdout = io::stdout();
     wrap_write(stdout.lock(), data.line_wrap, res).unwrap();
@@ -276,12 +276,12 @@ mod test {
     //     let input = [
     //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
     //     ];
-    //     let _expected = CtEncodeError::Z85InputLenNotMultipleOf4;
+    //     let _expected = EncodeError::Z85InputLenNotMultipleOf4;
 
     //     let result = encode(Format::Z85, &input);
 
     //     // println!("{:?}", result);
-    //     //assert_eq!(result, CtEncodeError::Z85InputLenNotMultipleOf4);
+    //     //assert_eq!(result, EncodeError::Z85InputLenNotMultipleOf4);
     //     match result {
     //         _expected => println!("Z85InputLenNotMultipleOf4"),
     //         _ => println!("Error"),
@@ -370,21 +370,4 @@ mod test {
 
         assert_eq!(result.unwrap(), expected);
     }
-
-    // #[test]
-    // fn test_decode_base_z85() {
-    //     let input = [
-    //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
-    //     ];
-    //     let expected = CtEncodeError::Z85InputLenNotMultipleOf4;
-
-    //     let result = decode(Format::Z85, &input);
-
-    //     // println!("{:?}", result);
-    //     assert!(matches!(result, Err(CtEncodeError::Z85InputLenNotMultipleOf4)));
-    //     // match result {
-    //     //     _expected => println!("Z85InputLenNotMultipleOf4"),
-    //     //     _ => println!("Error"),
-    //     // }
-    // }
 }

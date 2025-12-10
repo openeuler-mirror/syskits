@@ -11,11 +11,11 @@
 
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
-pub trait ToWide {
+pub trait CtToWide {
     fn to_wide(&self) -> Vec<u16>;
     fn to_wide_null(&self) -> Vec<u16>;
 }
-impl<T> ToWide for T
+impl<T> CtToWide for T
 where
     T: AsRef<OsStr>,
 {
@@ -26,33 +26,20 @@ where
         self.as_ref().encode_wide().chain(Some(0)).collect()
     }
 }
-pub trait FromWide {
+pub trait CtFromWide {
     fn from_wide(wide: &[u16]) -> Self;
     fn from_wide_null(wide: &[u16]) -> Self;
 }
 
-impl FromWide for String {
+impl CtFromWide for String {
     fn from_wide(wide: &[u16]) -> Self {
-        if wide.is_empty() {
-            return String::new();
-        }
-
-        match OsString::from_wide(wide).to_string_lossy().to_string() {
-            Ok(s) => s,
-            Err(_) => String::new(),
-        }
+        OsString::from_wide(wide).to_string_lossy().into_owned()
     }
-
     fn from_wide_null(wide: &[u16]) -> Self {
-        let len = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
-        let os_string = OsString::from_wide(&wide[..len])
+        let len = wide.iter().take_while(|&&c| c != 0).count();
+        OsString::from_wide(&wide[..len])
             .to_string_lossy()
-            .to_string();
-
-        match os_string {
-            Ok(s) => s,
-            Err(_) => String::new(),
-        }
+            .into_owned()
     }
 }
 

@@ -9,8 +9,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// spell-checker:ignore getxattr
-
 //! Set of functions to manage xattr on files and dirs
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -26,32 +24,24 @@ use std::path::Path;
 /// # Returns
 ///
 /// A result indicating success or failure.
-pub fn __copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    for attr_name in xattr::list(&source)? {
-        if let Some(value) = xattr::get(&source, &attr_name)? {
-            xattr::set(&dest, &attr_name, &value)?;
-        }
-    }
-    Ok(())
-}
 
-pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    let source_path = source.as_ref();
-    let dest_path = dest.as_ref();
+pub fn ct_copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    let ct_source = source.as_ref();
+    let ct_dest = dest.as_ref();
 
-    let attrs = match xattr::list(source_path) {
+    let attrs = match xattr::list(ct_source) {
         Ok(attrs) => attrs,
         Err(err) => return Err(err),
     };
 
-    for attr_name in attrs {
-        let value = match xattr::get(source_path, &attr_name) {
+    for attr in attrs {
+        let value = match xattr::get(ct_source, &attr) {
             Ok(Some(value)) => value,
             Ok(None) => continue,
             Err(err) => return Err(err),
         };
 
-        match xattr::set(dest_path, &attr_name, &value) {
+        match xattr::set(ct_dest, &attr, &value) {
             Ok(_) => (),
             Err(err) => return Err(err),
         };
@@ -68,25 +58,18 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
-pub fn __retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
-    let mut attrs = HashMap::new();
-    for attr_name in xattr::list(&source)? {
-        if let Some(value) = xattr::get(&source, &attr_name)? {
-            attrs.insert(attr_name, value);
-        }
-    }
-    Ok(attrs)
-}
 
-pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
+pub fn ct_retrieve_xattrs<P: AsRef<Path>>(
+    source: P,
+) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
     let source_path = source.as_ref();
 
     // 获取源文件的所有扩展属性名称列表
-    let attr_names_result = xattr::list(source_path);
-    match attr_names_result {
-        Ok(attr_names) => {
+    let ct_attr_names = xattr::list(source_path);
+    match ct_attr_names {
+        Ok(ct_attrs) => {
             let mut attrs = HashMap::new();
-            for attr_name in attr_names {
+            for attr_name in ct_attrs {
                 // 对每个属性名称，获取其对应的值
                 let value_result = xattr::get(source_path, &attr_name);
                 match value_result {
@@ -122,7 +105,7 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsS
 /// # Returns
 ///
 /// A result indicating success or failure.
-pub fn apply_xattrs<P: AsRef<Path>>(
+pub fn ct_apply_xattrs<P: AsRef<Path>>(
     dest: P,
     xattrs: HashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {

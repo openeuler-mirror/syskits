@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-//! Utilities for formatting numbers in various formats
+//! 用于以各种格式格式化数字的实用程序
 
 use std::io::Write;
 
@@ -167,8 +167,7 @@ impl Formatter for UnsignedInt {
             s = format!("{x:X}");
         }
 
-        // Zeroes do not get a prefix. An octal value does also not get a
-        // prefix if the padded value will not start with a zero.
+        // 零不带有前缀。如果填充后的值不会以零开头，八进制值也不会带有前缀。
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
             (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
@@ -393,7 +392,7 @@ fn format_float_scientific(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    if f.abs() < f64::EPSILON {
+    if f.abs() < std::f64::EPSILON {
         let new_result = match (force_decimal, precision) {
             (ForceDecimal::Yes, 0) => "0.e+00".into(),
             _ => format!("{:.*}e+00", precision, 0.0),
@@ -405,8 +404,7 @@ fn format_float_scientific(
     let mut exponent: i32 = f.log10().floor() as i32;
     let mut normalized = f / 10.0_f64.powi(exponent);
 
-    // If the normalized value will be rounded to a value greater than 10
-    // we need to correct.
+    // 如果规范化后的值将被舍入为大于 10 的值，我们需要进行修正。
     let tmp_value = normalized * 10_f64.powi(precision as i32);
     let value = tmp_value.round() / 10_f64.powi(precision as i32);
     if value >= 10.0 {
@@ -435,12 +433,10 @@ fn format_float_shortest(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    // Precision here is about how many digits should be displayed
-    // instead of how many digits for the fractional part, this means that if
-    // we pass this to rust's format string, it's always gonna be one less.
+    // 此处的精度是指应显示多少位数，而不是小数部分的位数，这意味着如果我们将其传递给Rust的格式字符串，它总是少一位。
     let precision = precision.saturating_sub(1);
 
-    if f.abs() < f64::EPSILON {
+    if f.abs() < std::f64::EPSILON {
         let new_value = if force_decimal == ForceDecimal::Yes {
             if precision == 0 {
                 "0.".into()
@@ -454,12 +450,11 @@ fn format_float_shortest(
     }
 
     let mut exponent = f.log10().floor() as i32;
-    if f.abs() > f64::EPSILON && exponent <= -4 || exponent > precision as i32 {
-        // Scientific-ish notation (with a few differences)
+    if f.abs() > std::f64::EPSILON && exponent <= -4 || exponent > precision as i32 {
+        // 类似科学记数法（有几个不同之处）
         let mut normalized = f / 10.0_f64.powi(exponent);
 
-        // If the normalized value will be rounded to a value greater than 10
-        // we need to correct.
+        // 如果规范化后的值将四舍五入到大于10的值，我们需要修正。
         let tmp_value = normalized * 10_f64.powi(precision as i32);
         let value = tmp_value.round() / 10_f64.powi(precision as i32);
         if value >= 10.0 {
@@ -482,11 +477,9 @@ fn format_float_shortest(
 
         format!("{normalized}{additional_dot}{exp_char}{exponent:+03}")
     } else {
-        // Decimal-ish notation with a few differences:
-        //  - The precision works differently and specifies the total number
-        //    of digits instead of the digits in the fractional part.
-        //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
-        //    are trimmed.
+        // 类似十进制的表示法，有以下几点不同：
+        // - 精度的工作方式不同，指定的是总位数，而不是小数部分的位数。
+        // - 如果不强制使用小数点，小数部分的.和尾部的0会被修剪掉。
         let decimal_places = (precision as i32 - exponent) as usize;
         let mut formatted = match (decimal_places, force_decimal) {
             (0, ForceDecimal::Yes) => format!("{f:.0}."),
@@ -508,7 +501,7 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    let (first_digit, mantissa, exponent) = if f.abs() < f64::EPSILON {
+    let (first_digit, mantissa, exponent) = if f.abs() < std::f64::EPSILON {
         (0, 0, 0)
     } else {
         let bits = f.to_bits();

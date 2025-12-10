@@ -11,35 +11,33 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
-const LINUX_MTAB: &str = "/etc/mtab";
+const CT_LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
-const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
+const CT_LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(target_os = "redox")))]
 static MOUNT_OPT_BIND: &str = "bind";
-#[cfg(likelinux)]
+#[cfg(windows)]
 const MAX_PATH: usize = 266;
-#[cfg(likelinux)]
+#[cfg(windows)]
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
-    likelinux,
+    windows,
     target_os = "freebsd",
     target_vendor = "apple",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-use crate::crash;
-#[cfg(likelinux)]
+use crate::ct_crash;
+#[cfg(windows)]
 use crate::ct_show_warning;
 
-#[cfg(likelinux)]
+#[cfg(windows)]
 use std::ffi::OsStr;
-#[cfg(likelinux)]
+#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
-#[cfg(likelinux)]
+#[cfg(windows)]
 use windows_sys::Win32::{
     Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
     Storage::FileSystem::{
@@ -49,14 +47,14 @@ use windows_sys::Win32::{
     System::WindowsProgramming::DRIVE_REMOTE,
 };
 
-#[cfg(likelinux)]
+#[cfg(windows)]
 #[allow(non_snake_case)]
 fn LPWSTR2String(buf: &[u16]) -> String {
     let len = buf.iter().position(|&n| n == 0).unwrap();
     String::from_utf16(&buf[..len]).unwrap()
 }
 
-#[cfg(likelinux)]
+#[cfg(windows)]
 fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
     s.as_ref()
         .encode_wide()
@@ -116,12 +114,12 @@ pub use libc::statfs as statfs_fn;
 ))]
 pub use libc::statvfs as statfs_fn;
 
-pub trait BirthTime {
+pub trait CtBirthTime {
     fn birth(&self) -> Option<(u64, u32)>;
 }
 
 use std::fs::Metadata;
-impl BirthTime for Metadata {
+impl CtBirthTime for Metadata {
     fn birth(&self) -> Option<(u64, u32)> {
         self.created()
             .ok()
@@ -131,8 +129,8 @@ impl BirthTime for Metadata {
 }
 
 #[derive(Debug, Clone)]
-pub struct MountInfo {
-    /// Stores `volume_name` in likelinux platform and `dev_id` in unix platform
+pub struct CtMountInfo {
+    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
@@ -144,20 +142,20 @@ pub struct MountInfo {
     pub dummy: bool,
 }
 
-impl MountInfo {
+impl CtMountInfo {
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
+    fn new(filename: &str, raw: &[&str]) -> Option<Self> {
         let dev_name;
         let fs_type;
         let mount_root;
         let mount_dir;
         let mount_option;
 
-        match file_name {
-            // spell-checker:ignore (word) noatime
-            // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
-            // "man proc" for more details
-            LINUX_MOUNTINFO => {
+        match filename {
+            //拼写检查器忽略（单词）noatime
+            // 格式：36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
+            // “man proc”获取更多细节
+            CT_LINUX_MOUNTINFO => {
                 const FIELDS_OFFSET: usize = 6;
                 let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
                     + FIELDS_OFFSET
@@ -168,7 +166,7 @@ impl MountInfo {
                 mount_dir = raw[4].to_string();
                 mount_option = raw[5].to_string();
             }
-            LINUX_MTAB => {
+            CT_LINUX_MTAB => {
                 dev_name = raw[0].to_string();
                 fs_type = raw[2].to_string();
                 mount_root = String::new();
@@ -194,7 +192,7 @@ impl MountInfo {
         })
     }
 
-    #[cfg(likelinux)]
+    #[cfg(windows)]
     fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
@@ -272,7 +270,7 @@ impl MountInfo {
     target_os = "netbsd",
     target_os = "openbsd",
 ))]
-impl From<StatFs> for MountInfo {
+impl From<StatFs> for CtMountInfo {
     fn from(statfs: StatFs) -> Self {
         let dev_name = unsafe {
             // spell-checker:disable-next-line
@@ -326,7 +324,6 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
         _ => fs_type == "none"
             && !mount_option.contains(MOUNT_OPT_BIND)
     }
-    // spell-checker:enable
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -341,7 +338,6 @@ fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
     if let Ok(stat) = std::fs::metadata(mount_dir) {
-        // Why do we cast this to i32?
         (stat.dev() as i32).to_string()
     } else {
         String::new()
@@ -389,7 +385,7 @@ use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
     target_os = "freebsd",
-    target_os = "likelinux",
+    target_os = "windows",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
@@ -402,19 +398,19 @@ use std::ptr;
 ))]
 use std::slice;
 /// Read file system list.
-pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
+pub fn read_fs_list() -> Result<Vec<CtMountInfo>, std::io::Error> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let (file_name, f) = File::open(LINUX_MOUNTINFO)
-            .map(|f| (LINUX_MOUNTINFO, f))
-            .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))?;
+        let (file_name, f) = File::open(CT_LINUX_MOUNTINFO)
+            .map(|f| (CT_LINUX_MOUNTINFO, f))
+            .or_else(|_| File::open(CT_LINUX_MTAB).map(|f| (CT_LINUX_MTAB, f)))?;
         let reader = BufReader::new(f);
         Ok(reader
             .lines()
             .map_while(Result::ok)
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
-                MountInfo::new(file_name, &raw_data)
+                CtMountInfo::new(file_name, &raw_data)
             })
             .collect::<Vec<_>>())
     }
@@ -428,35 +424,35 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
-            crash!(1, "get_mount_info() failed");
+            ct_crash!(1, "get_mount_info() failed");
         }
         let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
         Ok(mounts
             .iter()
-            .map(|m| MountInfo::from(*m))
+            .map(|m| CtMountInfo::from(*m))
             .collect::<Vec<_>>())
     }
-    #[cfg(likelinux)]
+    #[cfg(windows)]
     {
         let mut volume_name_buf = [0u16; MAX_PATH];
         // As recommended in the MS documentation, retrieve the first volume before the others
         let find_handle =
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
-            crash!(
+            ct_crash!(
                 EXIT_ERR,
                 "FindFirstVolumeW failed: {}",
                 IOError::last_os_error()
             );
         }
-        let mut mounts = Vec::<MountInfo>::new();
+        let mut mounts = Vec::<CtMountInfo>::new();
         loop {
             let volume_name = LPWSTR2String(&volume_name_buf);
             if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
                 ct_show_warning!("A bad path was skipped: {}", volume_name);
                 continue;
             }
-            if let Some(m) = MountInfo::new(volume_name) {
+            if let Some(m) = CtMountInfo::new(volume_name) {
                 mounts.push(m);
             }
             if 0 == unsafe {
@@ -468,7 +464,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
             } {
                 let err = IOError::last_os_error();
                 if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
+                    ct_crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
                 }
                 break;
             }
@@ -554,7 +550,7 @@ impl FsUsage {
             };
         }
     }
-    #[cfg(likelinux)]
+    #[cfg(windows)]
     pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
@@ -568,7 +564,7 @@ impl FsUsage {
             )
         };
         if 0 == success {
-            crash!(
+            ct_crash!(
                 EXIT_ERR,
                 "GetVolumePathNamesForVolumeNameW failed: {}",
                 IOError::last_os_error()
@@ -612,7 +608,7 @@ impl FsUsage {
             bavail: 0,
             bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
             // Total number of file nodes (inodes) on the file system.
-            files: 0, // Not available on likelinux
+            files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
             ffree: 0, // Meaningless on Windows
         }
@@ -885,7 +881,7 @@ pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
 }
 
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
-    // spell-checker:disable
+    //关闭拼写检查
     match fstype {
         0x6163_6673 => "acfs".into(),
         0xADF5 => "adfs".into(),
@@ -1004,7 +1000,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0xDE => "zfs".into(),
         other => format!("UNKNOWN ({other:#x})").into(),
     }
-    // spell-checker:enable
+    // 启用拼写检查
 }
 
 #[cfg(test)]
@@ -1013,7 +1009,7 @@ mod tests {
 
     #[test]
     fn test_statfs_success() {
-        // Prepare test data
+        // 准备测试数据
         let path = "/";
 
         // Execute the function
@@ -1070,8 +1066,8 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn test_mountinfo() {
         // spell-checker:ignore (word) relatime
-        let info = MountInfo::new(
-            LINUX_MOUNTINFO,
+        let info = CtMountInfo::new(
+            CT_LINUX_MOUNTINFO,
             &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
                 .collect::<Vec<_>>(),
@@ -1085,8 +1081,8 @@ mod tests {
         assert_eq!(info.dev_name, "/dev/fs0");
 
         // Test parsing with different amounts of optional fields.
-        let info = MountInfo::new(
-            LINUX_MOUNTINFO,
+        let info = CtMountInfo::new(
+            CT_LINUX_MOUNTINFO,
             &"106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
                 .collect::<Vec<_>>(),
@@ -1096,8 +1092,8 @@ mod tests {
         assert_eq!(info.fs_type, "xfs");
         assert_eq!(info.dev_name, "/dev/fs0");
 
-        let info = MountInfo::new(
-            LINUX_MOUNTINFO,
+        let info = CtMountInfo::new(
+            CT_LINUX_MOUNTINFO,
             &"106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
                 .collect::<Vec<_>>(),
@@ -1110,18 +1106,16 @@ mod tests {
 
     #[test]
     fn test_read_fs_list_linux() {
-        // Test case for Linux OS
+        //  Linux OS 测试用例
         #[cfg(target_os = "linux")]
         {
             // Arrange
-            let _expected = vec![
-                MountInfo::new(
-                    LINUX_MOUNTINFO,
-                    &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
-                        .split_ascii_whitespace()
-                        .collect::<Vec<_>>(),
-                ), // Add more expected MountInfo struct values
-            ];
+            let _expected = vec![CtMountInfo::new(
+                CT_LINUX_MOUNTINFO,
+                &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+                    .split_ascii_whitespace()
+                    .collect::<Vec<_>>(),
+            )];
 
             // Act
             let _result = read_fs_list();
@@ -1138,7 +1132,7 @@ mod tests {
         {
             // Arrange
             let expected = vec![
-                MountInfo {
+                CtMountInfo {
                     // Define expected MountInfo struct values
                 },
                 // Add more expected MountInfo struct values
@@ -1159,7 +1153,7 @@ mod tests {
         {
             // Arrange
             let expected = vec![
-                MountInfo {
+                CtMountInfo {
                     // Define expected MountInfo struct values
                 },
                 // Add more expected MountInfo struct values
@@ -1180,7 +1174,7 @@ mod tests {
         {
             // Arrange
             let expected = vec![
-                MountInfo {
+                CtMountInfo {
                     // Define expected MountInfo struct values
                 },
                 // Add more expected MountInfo struct values
@@ -1201,7 +1195,7 @@ mod tests {
         {
             // Arrange
             let expected = vec![
-                MountInfo {
+                CtMountInfo {
                     // Define expected MountInfo struct values
                 },
                 // Add more expected MountInfo struct values
@@ -1222,7 +1216,7 @@ mod tests {
         {
             // Arrange
             let expected = vec![
-                MountInfo {
+                CtMountInfo {
                     // Define expected MountInfo struct values
                 },
                 // Add more expected MountInfo struct values
@@ -1237,13 +1231,13 @@ mod tests {
     }
 
     #[test]
-    fn test_read_fs_list_likelinux() {
+    fn test_read_fs_list_windows() {
         // Test case for Windows OS
-        #[cfg(target_os = "likelinux")]
+        #[cfg(target_os = "windows")]
         {
             // Arrange
             let expected = vec![
-                MountInfo {
+                CtMountInfo {
                     // Define expected MountInfo struct values
                 },
                 // Add more expected MountInfo struct values

@@ -11,8 +11,6 @@
 
 //! Set of functions to parse modes
 
-// spell-checker:ignore (vars) fperm srwx
-
 use libc::{mode_t, umask, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
@@ -29,8 +27,8 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
         Ok(match op {
             Some('+') => fperm | change,
             Some('-') => fperm & !change,
-            // If this is a directory, we keep the setgid and setuid bits,
-            // unless the mode contains 5 or more octal digits or the mode is "="
+            // 如果这是一个目录，我们会保留setgid和setuid位，
+            // 除非模式包含5个或更多的八进制数字或模式为“=”
             None if considering_dir && mode.len() < 5 => change | (fperm & (0o4000 | 0o2000)),
             None | Some('=') => change,
             Some(_) => unreachable!(),
@@ -63,7 +61,7 @@ pub fn parse_symbolic(
             '-' => fperm &= !(srwx & mask),
             '=' => {
                 if considering_dir {
-                    // keep the setgid and setuid bits for directories
+                    // 保留目录的setgid和setuid位
                     srwx |= fperm & (0o4000 | 0o2000);
                 }
                 fperm = (fperm & !mask) | (srwx & mask);
@@ -127,8 +125,7 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
             _ => break,
         };
         if ch == 'u' || ch == 'g' || ch == 'o' {
-            // symbolic modes only allows perms to be a single letter of 'ugo'
-            // therefore this must either be the first char or it is unexpected
+            // 符号模式只允许perms为'u'、'g'或'o'中的单个字母，因此它必须是第一个字符，否则就是意外的
             if pos != 0 {
                 break;
             }
@@ -163,13 +160,10 @@ pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
 }
 
 pub fn get_umask() -> u32 {
-    // There's no portable way to read the umask without changing it.
-    // We have to replace it and then quickly set it back, hopefully before
-    // some other thread is affected.
-    // On modern Linux kernels the current umask could instead be read
-    // from /proc/self/status. But that's a lot of work.
-    // SAFETY: umask always succeeds and doesn't operate on memory. Races are
-    // possible but it can't violate Rust's guarantees.
+    // 没有一种便携式方法可以在不更改umask的情况下读取它。
+    // 我们必须替换它，然后快速将其恢复原状，希望在这之前不会影响到其他线程。
+    // 在现代Linux内核中，当前umask可以从/proc/self/status中读取。但这很麻烦。
+    // 安全性：umask总是成功，并且不操作内存。可能存在竞态条件，但它不能违反Rust的保证。
     let mask = unsafe { umask(0) };
     unsafe { umask(mask) };
     #[cfg(all(
@@ -188,28 +182,8 @@ pub fn get_umask() -> u32 {
     return mask as u32;
 }
 
-// Iterate 'args' and delete the first occurrence
-// of a prefix '-' if it's associated with MODE
-// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-pub fn __strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    for arg in args {
-        if arg == "--" {
-            break;
-        }
-        if let Some(arg_stripped) = arg.strip_prefix('-') {
-            if let Some(second) = arg.chars().nth(1) {
-                match second {
-                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
-                        *arg = arg_stripped.to_string();
-                        return true;
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-    false
-}
+// 遍历'args'并删除与MODE关联的首个前缀'-'
+// 例如："chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
 
 pub fn strip_minus_from_mode(args: &mut [String]) -> bool {
     for arg in args.iter_mut() {
@@ -217,20 +191,20 @@ pub fn strip_minus_from_mode(args: &mut [String]) -> bool {
             break;
         }
 
-        // Check if the argument starts with a minus sign
+        // 检查参数是否以减号（-）开头
         if arg.starts_with('-') {
-            // Get the first character after the minus sign
+            // 获取减号后的第一个字符
             let second_char_opt = arg.chars().nth(1);
 
-            // If there is a second character, check its validity
+            // 如果存在第二个字符，检查其有效性
             if let Some(second_char) = second_char_opt {
-                // Valid characters for mode flags
+                // mode标志的有效字符
                 const VALID_CHARS: &[char] = &[
                     'r', 'w', 'x', 'X', 's', 't', 'u', 'g', 'o', '0', '1', '2', '3', '4', '5', '6',
                     '7',
                 ];
 
-                // If the second character is valid, remove the minus sign and return true
+                // 如果第二个字符有效，则移除减号并返回true
                 if VALID_CHARS.contains(&second_char) {
                     arg.replace_range(0..1, "");
                     return true;
@@ -239,7 +213,7 @@ pub fn strip_minus_from_mode(args: &mut [String]) -> bool {
         }
     }
 
-    // No valid flag found; return false
+    //没有发现有效标志，返回false
     false
 }
 
@@ -251,7 +225,7 @@ mod test {
         assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);
         assert_eq!(
             super::parse_mode("+x").unwrap(),
-            if crate::ct_os::is_wsl_1() {
+            if crate::ct_os::ct_wsl_1() {
                 0o776
             } else {
                 0o777
@@ -296,13 +270,6 @@ mod test {
         let considering_dir = false;
         let expected = Ok(0o400);
         assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected);
-
-        // Test case 5: Invalid input with mode greater than 7777
-        // let fperm = 0o644;
-        // let mode = "800";
-        // let considering_dir = false;
-        //let expected = Err("mode is too large (800 > 7777)".to_owned());
-        //assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected.expect("REASON"));
     }
 
     #[test]

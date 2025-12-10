@@ -11,8 +11,6 @@
 
 //! Common functions to manage permissions
 
-// spell-checker:ignore (jargon) TOCTOU
-
 use crate::ct_display::Quotable;
 use crate::ct_error::{strip_errno, CTResult, CtSimpleError};
 pub use crate::ct_features::ct_entries;
@@ -33,7 +31,7 @@ use std::path::{Path, MAIN_SEPARATOR_STR};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub enum VerbosityLevel {
+pub enum CtVerbosityLevel {
     Silent,
     Changes,
     Verbose,
@@ -42,7 +40,7 @@ pub enum VerbosityLevel {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Verbosity {
     pub groups_only: bool,
-    pub level: VerbosityLevel,
+    pub level: CtVerbosityLevel,
 }
 
 /// Actually perform the change of owner on a path
@@ -64,7 +62,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
 }
 
 /// Perform the change of owner on a path
-/// with the various opt_flags
+/// with the various options
 /// and error messages management
 pub fn wrap_chown<P: AsRef<Path>>(
     path: P,
@@ -81,7 +79,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
 
     if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
         match verbosity.level {
-            VerbosityLevel::Silent => (),
+            CtVerbosityLevel::Silent => (),
             level => {
                 out = format!(
                     "changing {} of {}: {}",
@@ -93,7 +91,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                     path.quote(),
                     e
                 );
-                if level == VerbosityLevel::Verbose {
+                if level == CtVerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
                         let gid = meta.gid();
                         format!(
@@ -124,7 +122,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
         let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
         if changed {
             match verbosity.level {
-                VerbosityLevel::Changes | VerbosityLevel::Verbose => {
+                CtVerbosityLevel::Changes | CtVerbosityLevel::Verbose => {
                     let gid = meta.gid();
                     out = if verbosity.groups_only {
                         format!(
@@ -148,7 +146,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 }
                 _ => (),
             };
-        } else if verbosity.level == VerbosityLevel::Verbose {
+        } else if verbosity.level == CtVerbosityLevel::Verbose {
             out = if verbosity.groups_only {
                 format!(
                     "group of {} retained as {}",
@@ -176,7 +174,7 @@ pub enum CtIfFrom {
 }
 
 #[derive(PartialEq, Eq)]
-pub enum TraverseSymlinks {
+pub enum CtTraverseSymlinks {
     None,
     First,
     All,
@@ -185,8 +183,8 @@ pub enum TraverseSymlinks {
 pub struct CtChownExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
-    pub raw_owner: String, // The owner of the file as input by the user in the command line.
-    pub traverse_symlinks: TraverseSymlinks,
+    pub raw_owner: String, //如果第二个字符有效，则移除减号并返回true
+    pub traverse_symlinks: CtTraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: CtIfFrom,
     pub files: Vec<String>,
@@ -213,15 +211,14 @@ pub fn check_root(path: &Path, would_recurse_symlink: bool) -> bool {
 /// The caller has to evaluate -P/-H/-L into 'would_recurse_symlink'.
 /// Recall that canonicalization resolves both relative paths (e.g. "..") and symlinks.
 fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
-    // The third clause can be evaluated without any syscalls, so we do that first.
-    // If we would_recurse_symlink, then the clause is true no matter whether the path is a symlink
-    // or not. Otherwise, we only need to check here if the path can syntactically be a symlink:
+    // 第三个子句可以在没有任何系统调用的情况下进行评估，所以我们先这样做。
+    // 如果would_recurse_symlink为真，那么无论路径是否为符号链接，该子句都为真。
+    // 否则，我们只需要在这里检查路径在语法上是否可以是符号链接：
     if !would_traverse_symlink {
-        // We cannot check path.is_dir() here, as this would resolve symlinks,
-        // which we need to avoid here.
-        // All directory-ish paths match "*/", except ".", "..", "*/.", and "*/..".
+        // 我们不能在这里检查 path.is_dir()，因为这会解析符号链接，这是我们这里需要避免的。
+        // 所有类似目录的路径都匹配“/”，除了“.”，“..”，“/.”和“*/..”。
         let looks_like_dir = match path.as_os_str().to_str() {
-            // If it contains special character, prefer to err on the side of safety, i.e. forbidding the chown operation:
+            // 如果它包含特殊字符，出于安全考虑，倾向于禁止chown操作：
             None => false,
             Some(".") | Some("..") => true,
             Some(path_str) => {
@@ -230,21 +227,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
                     || (path_str.ends_with(&format!("{}..", MAIN_SEPARATOR_STR)))
             }
         };
-        // TODO: Once we reach MSRV 1.74.0, replace this abomination by something simpler, e.g. this:
-        // let path_bytes = path.as_os_str().as_encoded_bytes();
-        // let looks_like_dir = path_bytes == [b'.']
-        //     || path_bytes == [b'.', b'.']
-        //     || path_bytes.ends_with(&[MAIN_SEPARATOR as u8])
-        //     || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.'])
-        //     || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.', b'.']);
+
         if !looks_like_dir {
             return false;
         }
     }
 
-    // FIXME: TOCTOU bug! canonicalize() runs at a different time than WalkDir's recursion decision.
-    // However, we're forced to make the decision whether to warn about --preserve-root
-    // *before* even attempting to chown the path, let alone doing the stat inside WalkDir.
+    // FIXME: TOCTOU漏洞！canonicalize()运行的时间与WalkDir的递归决策时间不同。
+    // 然而，我们被迫在甚至试图chown路径之前（更不用说在WalkDir内部做stat）就决定是否警告--preserve-root
     if let Ok(p) = path.canonicalize() {
         let path_buf = path.to_path_buf();
         if p.parent().is_none() {
@@ -282,7 +272,7 @@ impl CtChownExecutor {
         let meta = match self.obtain_meta(path, self.dereference) {
             Some(m) => m,
             _ => {
-                if self.verbosity.level == VerbosityLevel::Verbose {
+                if self.verbosity.level == CtVerbosityLevel::Verbose {
                     println!(
                         "failed to change ownership of {} to {}",
                         path.quote(),
@@ -295,9 +285,9 @@ impl CtChownExecutor {
 
         if self.recursive
             && self.preserve_root
-            && is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+            && is_root(path, self.traverse_symlinks != CtTraverseSymlinks::None)
         {
-            // Fail-fast, do not attempt to recurse.
+            //快速失败，不尝试递归。
             return 1;
         }
 
@@ -317,7 +307,7 @@ impl CtChownExecutor {
                     0
                 }
                 Err(e) => {
-                    if self.verbosity.level != VerbosityLevel::Silent {
+                    if self.verbosity.level != CtVerbosityLevel::Silent {
                         ct_show_error!("{}", e);
                     }
                     1
@@ -343,17 +333,17 @@ impl CtChownExecutor {
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
 
-        // walkdir always dereferences the root directory, so we have to check it ourselves
-        if self.traverse_symlinks == TraverseSymlinks::None && root.is_symlink() {
+        //walkdir总是解析根目录，所以我们必须自己检查
+        if self.traverse_symlinks == CtTraverseSymlinks::None && root.is_symlink() {
             return 0;
         }
 
         let mut ret = 0;
         let mut iterator = WalkDir::new(root)
-            .follow_links(self.traverse_symlinks == TraverseSymlinks::All)
+            .follow_links(self.traverse_symlinks == CtTraverseSymlinks::All)
             .min_depth(1)
             .into_iter();
-        // We can't use a for loop because we need to manipulate the iterator inside the loop.
+        // 我们不能使用 for 循环，因为在循环内部我们需要操作迭代器。
         while let Some(entry) = iterator.next() {
             let entry = match entry {
                 Err(e) => {
@@ -381,17 +371,17 @@ impl CtChownExecutor {
                 _ => {
                     ret = 1;
                     if entry.file_type().is_dir() {
-                        // Instruct walkdir to skip this directory to avoid getting another error
-                        // when walkdir tries to query the children of this directory.
+                        // 指示walkdir跳过此目录，以避免walkdir尝试查询此目录的子目录时再次出现错误。
                         iterator.skip_current_dir();
                     }
                     continue;
                 }
             };
 
-            if self.preserve_root && is_root(path, self.traverse_symlinks == TraverseSymlinks::All)
+            if self.preserve_root
+                && is_root(path, self.traverse_symlinks == CtTraverseSymlinks::All)
             {
-                // Fail-fast, do not recurse further.
+                // 快速失败，不再递归深入。
                 return 1;
             }
 
@@ -419,7 +409,7 @@ impl CtChownExecutor {
                     0
                 }
                 Err(e) => {
-                    if self.verbosity.level != VerbosityLevel::Silent {
+                    if self.verbosity.level != CtVerbosityLevel::Silent {
                         ct_show_error!("{}", e);
                     }
                     1
@@ -439,7 +429,7 @@ impl CtChownExecutor {
         match meta {
             Err(e) => {
                 match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
+                    CtVerbosityLevel::Silent => (),
                     _ => ct_show_error!(
                         "cannot {} {}: {}",
                         if follow { "dereference" } else { "access" },
@@ -464,7 +454,7 @@ impl CtChownExecutor {
     }
 
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
-        if self.verbosity.level == VerbosityLevel::Verbose {
+        if self.verbosity.level == CtVerbosityLevel::Verbose {
             match (self.dest_uid, self.dest_gid, gid) {
                 (Some(_), Some(_), Some(gid)) => {
                     println!(
@@ -548,7 +538,7 @@ pub fn chown_base(
     let args: Vec<_> = args.collect();
     let mut reference = false;
     let mut help = false;
-    // stop processing opt_flags on --
+    // stop processing options on --
     for arg in args.iter().take_while(|s| *s != "--") {
         if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
             reference = true;
@@ -595,35 +585,35 @@ pub fn chown_base(
     };
 
     let mut traverse_symlinks = if matches.get_flag(opt_flags::traverse::TRAVERSE) {
-        TraverseSymlinks::First
+        CtTraverseSymlinks::First
     } else if matches.get_flag(opt_flags::traverse::EVERY) {
-        TraverseSymlinks::All
+        CtTraverseSymlinks::All
     } else {
-        TraverseSymlinks::None
+        CtTraverseSymlinks::None
     };
 
     let recursive = matches.get_flag(opt_flags::RECURSIVE);
     if recursive {
-        if traverse_symlinks == TraverseSymlinks::None {
+        if traverse_symlinks == CtTraverseSymlinks::None {
             if dereference == Some(true) {
                 return Err(CtSimpleError::new(1, "-R --dereference requires -H or -L"));
             }
             dereference = Some(false);
         }
     } else {
-        traverse_symlinks = TraverseSymlinks::None;
+        traverse_symlinks = CtTraverseSymlinks::None;
     }
 
     let verbosity_level = if matches.get_flag(opt_flags::verbosity::CHANGES) {
-        VerbosityLevel::Changes
+        CtVerbosityLevel::Changes
     } else if matches.get_flag(opt_flags::verbosity::SILENT)
         || matches.get_flag(opt_flags::verbosity::QUIET)
     {
-        VerbosityLevel::Silent
+        CtVerbosityLevel::Silent
     } else if matches.get_flag(opt_flags::verbosity::VERBOSE) {
-        VerbosityLevel::Verbose
+        CtVerbosityLevel::Verbose
     } else {
-        VerbosityLevel::Normal
+        CtVerbosityLevel::Normal
     };
     let CtGidUidOwnerFilter {
         dest_gid,
@@ -664,8 +654,7 @@ mod tests {
     fn test_empty_string() {
         let path = PathBuf::new();
         assert_eq!(path.to_str(), Some(""));
-        // The main point to test here is that we don't crash.
-        // The result should be 'false', to avoid unnecessary and confusing warnings.
+        // 这里要测试的主要点是我们不会崩溃。结果应该是'false'，以避免不必要的和令人困惑的警告。
         assert!(!is_root(&path, false));
         assert!(!is_root(&path, true));
     }
@@ -681,7 +670,8 @@ mod tests {
             Some("/"),
             "cfg(unix) but using non-unix path delimiters?!"
         );
-        // Must return true, this is the main scenario that --preserve-root shall prevent.
+
+        // 必须返回 true，这是 --preserve-root 应阻止的主要场景。
         assert!(is_root(&path, false));
         assert!(is_root(&path, true));
     }
@@ -693,9 +683,8 @@ mod tests {
         let symlink_path = temp_dir.path().join("symlink");
         unix::fs::symlink(PathBuf::from("/"), symlink_path).unwrap();
         let symlink_path_slash = temp_dir.path().join("symlink/");
-        // Must return true, we're about to "accidentally" recurse on "/",
-        // since "symlink/" always counts as an already-entered directory
-        // Output from GNU:
+        // 必须返回 true，因为我们即将“意外地”对 "/" 进行递归操作，
+        // 因为 "symlink/" 总是被视为已进入的目录 // 来自 GNU 的输出：
         //   $ chown --preserve-root -RH --dereference $(id -u) slink-to-root/
         //   chown: it is dangerous to operate recursively on 'slink-to-root/' (same as '/')
         //   chown: use --no-preserve-root to override this failsafe
@@ -711,11 +700,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_symlink_no_slash() {
-        // This covers both the commandline-argument case and the recursion case.
+        // 这涵盖了命令行参数情况和递归情况。
         let temp_dir = tempdir().unwrap();
         let symlink_path = temp_dir.path().join("symlink");
         unix::fs::symlink(PathBuf::from("/"), &symlink_path).unwrap();
-        // Only return true  we're about to "accidentally" recurse on "/".
+        // 仅当我们将要“意外地”对 "/" 进行递归操作时才返回 true。
         assert!(!is_root(&symlink_path, false));
         assert!(is_root(&symlink_path, true));
     }

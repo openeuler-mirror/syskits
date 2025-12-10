@@ -39,7 +39,7 @@ pub mod ct_version_cmp;
 // * （平台相关）特性门控模块
 
 // ** 非Linux类（即Unix与Fuchsia）
-#[cfg(all(not(likelinux), feature = "mode"))]
+#[cfg(all(not(windows), feature = "mode"))]
 pub mod ct_mode;
 
 // ** 仅unix
@@ -66,6 +66,6 @@ pub mod ct_signals;
     feature = "utmpx"
 ))]
 pub mod ct_utmpx;
-// ** likelinux-only
-#[cfg(all(likelinux, feature = "wide"))]
+// ** windows-only
+#[cfg(all(windows, feature = "wide"))]
 pub mod ct_wide;

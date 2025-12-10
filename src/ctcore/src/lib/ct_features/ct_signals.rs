@@ -18,11 +18,11 @@ use nix::sys::signal::{
     signal, SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE,
 };
 
-pub static DEFAULT_SIGNAL: usize = 15;
+pub static CT_DEFAULT_SIGNAL: usize = 15;
 
 /*
 
-Linux Programmer's Manual
+Linux程序员手册
 
  1 HUP      2 INT      3 QUIT     4 ILL      5 TRAP     6 ABRT     7 BUS
  8 FPE      9 KILL    10 USR1    11 SEGV    12 USR2    13 PIPE    14 ALRM
@@ -42,7 +42,7 @@ pub static ALL_SIGNALS: [&str; 32] = [
 
 /*
 
-
+苹果开发者文档中关于signal(3)的页面
 https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man3/signal.3.html
 
 
@@ -90,7 +90,7 @@ pub static ALL_SIGNALS: [&str; 32] = [
 
 /*
 
-     The following signals are defined in NetBSD:
+     以下是NetBSD中定义的信号：
 
      SIGHUP           1     Hangup
      SIGINT           2     Interrupt
@@ -135,7 +135,7 @@ pub static ALL_SIGNALS: [&str; 33] = [
 
 /*
 
-     The following signals are defined in OpenBSD:
+     以下是OpenBSD中定义的信号：
 
      SIGHUP       terminate process    terminal line hangup
      SIGINT       terminate process    interrupt program
@@ -186,9 +186,8 @@ pub static ALL_SIGNALS: [&str; 33] = [
 ];
 
 /*
-     The following signals are defined in Solaris and illumos;
-     (the signals for illumos are the same as Solaris, but illumos still has SIGLWP
-     as well as the alias for SIGLWP (SIGAIOCANCEL)):
+    以下是Solaris和illumos中定义的信号；（illumos的信号与Solaris相同，
+    但illumos仍然具有SIGLWP以及SIGLWP（SIGAIOCANCEL）的别名）：
 
      SIGHUP       1       hangup
      SIGINT       2       interrupt (rubout)
@@ -296,21 +295,19 @@ static ALL_SIGNALS: [&str; SIGNALS_SIZE] = [
     "RTMAX",
 ];
 
-pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
+pub fn get_ct_signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     if let Ok(value) = signal_name_or_value.parse() {
-        if is_signal(value) {
+        if ct_signal(value) {
             return Some(value);
         } else {
             return None;
         }
     }
-    let signal_name = signal_name_or_value.trim_start_matches("SIG");
-
-    // ALL_SIGNALS.iter().position(|&s| s == signal_name)
+    let ct_signal_name = signal_name_or_value.trim_start_matches("SIG");
 
     let mut position = None;
-    for (index, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal == signal_name {
+    for (index, &ct_signal) in ALL_SIGNALS.iter().enumerate() {
+        if ct_signal == ct_signal_name {
             position = Some(index);
             break;
         }
@@ -318,14 +315,13 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     position
 }
 
-pub fn is_signal(num: usize) -> bool {
+pub fn ct_signal(num: usize) -> bool {
     num < ALL_SIGNALS.len()
 }
 
-pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
-    //ALL_SIGNALS.get(signal_value).copied()
-    if let Some(signal) = ALL_SIGNALS.get(signal_value) {
-        Some(signal)
+pub fn get_ct_signal_name_by_value(ct_signal_value: usize) -> Option<&'static str> {
+    if let Some(ct_signal) = ALL_SIGNALS.get(ct_signal_value) {
+        Some(ct_signal)
     } else {
         None
     }
@@ -333,26 +329,26 @@ pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
 
 #[cfg(unix)]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    // 我们原样传递错误，返回值只会是Ok(SigDfl)，所以我们可以安全地忽略它。
+    // 安全性：只要我们不使用自定义的SigHandler（我们使用默认的），这个函数就是安全的。
     unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
 }
 #[cfg(unix)]
 pub fn ignore_interrupts() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    // 我们原样传递错误，返回值只是 Ok(SigIgn)，所以我们可以安全地忽略它。
+    // 安全性：只要我们不使用自定义的 SigHandler（我们使用默认的），这个函数就是安全的。
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
 }
 
 #[test]
 fn signal_by_value() {
     // 测试信号名称 "0" 对应的值
-    assert_eq!(signal_by_name_or_value("0"), Some(0));
+    assert_eq!(get_ct_signal_by_name_or_value("0"), Some(0));
 
     // 遍历所有信号及其索引值，测试信号索引值字符串化后查找结果是否正确
     for (value_index, _signal) in ALL_SIGNALS.iter().enumerate() {
         let value_as_string = value_index.to_string();
-        match signal_by_name_or_value(&value_as_string) {
+        match get_ct_signal_by_name_or_value(&value_as_string) {
             Some(found_value) => assert_eq!(found_value, value_index),
             None => panic!(
                 "Expected to find signal with index {}, but got None",
@@ -365,7 +361,7 @@ fn signal_by_value() {
 #[test]
 fn signal_by_short_name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
-        match signal_by_name_or_value(signal) {
+        match get_ct_signal_by_name_or_value(signal) {
             Some(found_value) => assert_eq!(found_value, value),
             None => panic!(
                 "Expected to find value for signal {:?}, but got None",
@@ -382,7 +378,7 @@ fn signal_by_long_name() {
         let long_signal_name = format!("SIG{}", signal);
 
         // 调用 signal_by_name_or_value 获取 Option 类型的值
-        let result = signal_by_name_or_value(&long_signal_name);
+        let result = get_ct_signal_by_name_or_value(&long_signal_name);
 
         // 使用 match 语句处理 Option 类型的结果
         match result {
@@ -410,7 +406,7 @@ fn test_signal_name_by_value() {
     // 遍历信号集合
     for (value_index, signal_ref) in ALL_SIGNALS.iter().enumerate() {
         // 获取信号值对应的信号名称
-        let signal_name_option = signal_name_by_value(value_index); // 假设 ValueType 是 value 的类型
+        let signal_name_option = get_ct_signal_name_by_value(value_index); // 假设 ValueType 是 value 的类型
 
         // 使用 match 处理 Option 类型的结果
         match signal_name_option {

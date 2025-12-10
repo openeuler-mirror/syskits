@@ -9,10 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #![allow(rustdoc::broken_intra_doc_links)]
-//! All utils return exit with an exit code. Usually, the following scheme is used:
-//! * `0`: succeeded
-//! * `1`: minor problems
-//! * `2`: major problems
+//! 所有 utils 在退出时都会返回一个退出码。通常，会遵循以下编码规则：
+//! * 0: 成功
+//! * 1: 小问题
+//! * 2: 大问题
 //!
 //! 本模块提供了与 Rust 错误处理习惯相统一的类型，以便处理这些退出码。相比手动使用 [std::process::exit]，这种方式有以下几个优势：
 //! 1. 允许在 ctmain 中使用 ?、map_err、unwrap_or 等操作符。
@@ -21,8 +21,9 @@
 //! 1. 可以从外部结果类型（如：[std::io::Result] 和 clap::ClapResult）创建标准化的错误消息。
 //! 1. 使用 [set_ct_exit_code] 函数可以减轻非致命错误时手动跟踪退出码的负担。
 //!
-//! # Usage
-//! The signature of a typical util should be:
+//! # 使用方式
+
+//! 一个典型的 util 签名应该是：
 //! ```ignore
 //! fn ctmain(args: impl ctcore::Args) -> UResult<()> {
 //!     ...
@@ -32,28 +33,26 @@
 //! * 当返回Ok时，使用通过[set_ct_exit_code]设置的代码作为退出码。如果未使用[set_ct_exit_code]，则使用0。
 //! * 当返回Err时，使用与错误对应的代码作为退出码，并显示错误消息。
 //!
-//! Additionally, the errors can be displayed manually with the [`show`] and [`show_if_err`] macros:
+//! 此外，还可以使用[show]和[show_if_err]宏手动显示错误：
 //! ```ignore
 //! let res = Err(USimpleError::new(1, "Error!!"));
 //! show_if_err!(res);
 //! // or
 //! if let Err(e) = res {
-//!    ct_show!(e);
+//!    show!(e);
 //! }
 //! ```
 //!
-//! **Note**: The [`show`] and [`show_if_err`] macros set the exit code of the program using
-//! [`set_ct_exit_code`]. See the documentation on that function for more information.
+//! 注意：show 和 show_if_err 宏通过调用 set_exit_code 函数设置程序的退出码。有关更多信息，请参见该函数的文档。
 //!
-//! # Guidelines
-//! * Use error types from `ctcore` where possible.
-//! * Add error types to `ctcore` if an error appears in multiple utils.
-//! * Prefer proper custom error types over [`ExitCode`] and [`USimpleError`].
-//! * [`USimpleError`] may be used in small utils with simple error handling.
-//! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
-//!   [`UResult`].
+//! # 指导原则
+//! * 尽可能使用来自 ctcore 的错误类型。
+//! * 如果一个错误出现在多个 utils 中，请将其添加到 ctcore。
+//! * 优先使用适当的自定义错误类型，而不是 ExitCode 和 USimpleError。
+//! * 对于具有简单错误处理的小型 utils，可以使用 USimpleError。
+//! * 虽不推荐使用 ExitCode，但在将 utils 转换为使用 UResult 时可能会有用。
 
-// spell-checker:ignore uioerror rustdoc
+//拼写检查器：忽略 uioerror rustdoc
 
 use std::{
     error::Error,
@@ -63,18 +62,18 @@ use std::{
 
 static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 
-/// Get the last exit code set with [`set_ct_exit_code`].
-/// The default value is `0`.
-pub fn get_exit_code() -> i32 {
+/// 获取最后一次使用[set_ct_exit_code]设置的退出码。
+/// 默认值为 0。
+pub fn get_ct_exit_code() -> i32 {
     EXIT_CODE.load(Ordering::SeqCst)
 }
 
-/// Set the exit code for the program if `ctmain` returns `Ok(())`.
+/// 如果ctmain返回Ok(())，则为程序设置退出码。
 ///
-/// This function is most useful for non-fatal errors, for example when applying an operation to
-/// multiple files:
+/// 本函数对于非致命错误最有用，例如在对多个文件应用操作时：
+///
 /// ```ignore
-/// use ctcore::ct_error::{UResult, set_ct_exit_code};
+/// use ctcore::ct_error::{UResult, set_exit_code};
 ///
 /// fn ctmain(args: impl ctcore::Args) -> UResult<()> {
 ///     ...
@@ -82,7 +81,7 @@ pub fn get_exit_code() -> i32 {
 ///         let res = some_operation_that_might_fail(file);
 ///         match res {
 ///             Ok() => {},
-///             Err(_) => set_ct_exit_code(1),
+///             Err(_) => set_exit_code(1),
 ///         }
 ///     }
 ///     Ok(()) // If any of the operations failed, 1 is returned.
@@ -95,13 +94,12 @@ pub fn set_ct_exit_code(code: i32) {
 /// Result type that should be returned by all utils.
 pub type CTResult<T> = Result<T, Box<dyn CTError>>;
 
-/// Custom errors defined by the utils and `ctcore`.
+/// 由 utils 和 ctcore 定义的自定义错误。
 ///
-/// All errors should implement [`std::error::Error`], [`std::fmt::Display`] and
-/// [`std::fmt::Debug`] and have an additional `code` method that specifies the
-/// exit code of the program if the error is returned from `ctmain`.
+/// 所有错误应实现 [std::error::Error], [std::fmt::Display] 和 /// [std::fmt::Debug] 特征，
+/// 并提供一个额外的 code 方法，用于指定当该错误从 ctmain 返回时程序的退出码。
 ///
-/// An example of a custom error from `ls`:
+/// 来自 ls 工具的一个自定义错误示例：
 ///
 /// ```
 /// use ctcore::{
@@ -141,7 +139,7 @@ pub type CTResult<T> = Result<T, Box<dyn CTError>>;
 /// }
 /// ```
 ///
-/// The main routine would look like this:
+/// 主程序看起来像这样：
 ///
 /// ```ignore
 /// #[ctcore::main]
@@ -159,11 +157,11 @@ pub type CTResult<T> = Result<T, Box<dyn CTError>>;
 pub trait CTError: Error + Send {
     /// 自定义错误的错误码。
     ///
-    /// Set a return value for each variant of an enum-type to associate an
-    /// error code (which is returned to the system shell) with an error
-    /// variant.
     ///
-    /// # Example
+    /// 为枚举类型每个变体设置一个返回值，将错误码（返回给系统外壳）与错误变体关联起来。
+    ///
+    ///
+    /// # 示例
     ///
     /// ```
     /// use ctcore::{
@@ -211,13 +209,11 @@ pub trait CTError: Error + Send {
         1
     }
 
-    /// Print usage help to a custom error.
+    /// 将使用帮助打印到自定义错误中。
     ///
-    /// Return true or false to control whether a short usage help is printed
-    /// below the error message. The usage help is in the format: "Try `{name}
-    /// --help` for more information." and printed only if `true` is returned.
+    /// 返回true或false来控制是否在错误消息下方打印简短的使用帮助。使用帮助的格式为：“试试{name} --help以获取更多信息。”仅当返回true时才会打印。
     ///
-    /// # Example
+    /// # 示例
     ///
     /// ```
     /// use ctcore::{
@@ -348,7 +344,7 @@ impl CTError for CTsageError {
     }
 }
 
-/// Wrapper type around [`std::io::Error`].
+/// 包装类型，围绕着[std::io::Error]。
 ///
 /// 显示由[CTIoError]的错误消息应与GNU coreutils显示的错误消息相匹配。
 ///
@@ -397,50 +393,6 @@ impl Display for CTIoError {
         use std::io::ErrorKind::*;
 
         let message;
-        // let message = if self.inner.raw_os_error().is_some() {
-        //     // These are errors that come directly from the OS.
-        //     // We want to normalize their messages across systems,
-        //     // and we want to strip the "(os error X)" suffix.
-        //     match self.inner.kind() {
-        //         NotFound => "No such file or directory",
-        //         PermissionDenied => "Permission denied",
-        //         ConnectionRefused => "Connection refused",
-        //         ConnectionReset => "Connection reset",
-        //         ConnectionAborted => "Connection aborted",
-        //         NotConnected => "Not connected",
-        //         AddrInUse => "Address in use",
-        //         AddrNotAvailable => "Address not available",
-        //         BrokenPipe => "Broken pipe",
-        //         AlreadyExists => "Already exists",
-        //         WouldBlock => "Would block",
-        //         InvalidInput => "Invalid input",
-        //         InvalidData => "Invalid data",
-        //         TimedOut => "Timed out",
-        //         WriteZero => "Write zero",
-        //         Interrupted => "Interrupted",
-        //         UnexpectedEof => "Unexpected end of file",
-        //         _ => {
-        //             // TODO: When the new error variants
-        //             // (https://github.com/rust-lang/rust/issues/86442)
-        //             // are stabilized, we should add them to the match statement.
-        //             message = strip_errno(&self.inner);
-        //             &message
-        //         }
-        //     }
-        // } else {
-        //     // These messages don't need as much normalization, and the above
-        //     // messages wouldn't always be a good substitute.
-        //     // For example, ErrorKind::NotFound doesn't necessarily mean it was
-        //     // a file that was not found.
-        //     // There are also errors with entirely custom messages.
-        //     message = self.inner.to_string();
-        //     &message
-        // };
-        // if let Some(ctx) = &self.context {
-        //     write!(f, "{ctx}: {message}")
-        // } else {
-        //     write!(f, "{message}")
-        // }
 
         let message = match self.inner.raw_os_error() {
             Some(_) => {
@@ -479,19 +431,15 @@ impl Display for CTIoError {
                 } else if self.inner.kind() == UnexpectedEof {
                     "Unexpected end of file"
                 } else {
-                    // TODO: When the new error variants
-                    // (https://github.com/rust-lang/rust/issues/86442)
-                    // are stabilized, we should add them to the if-else chain.
                     message = strip_errno(&self.inner);
                     &message
                 }
             }
             None => {
-                // These messages don't need as much normalization, and the above
-                // messages wouldn't always be a good substitute.
-                // For example, ErrorKind::NotFound doesn't necessarily mean it was
-                // a file that was not found.
-                // There are also errors with entirely custom messages.
+                // 这些消息不需要过多规范化，而且上述
+                // 消息并不总是合适的替代品。
+                // 例如，ErrorKind::NotFound 并不一定意味着找不到文件。
+                // 还有一些错误带有完全自定义的消息。
                 message = self.inner.to_string();
                 &message
             }
@@ -504,14 +452,8 @@ impl Display for CTIoError {
     }
 }
 
-/// Strip the trailing " (os error XX)" from io error strings.
+/// 从 IO 错误字符串中移除尾部的 " (os error XX)"。
 pub fn strip_errno(err: &std::io::Error) -> String {
-    // let mut msg = err.to_string();
-    // if let Some(pos) = msg.find(" (os error ") {
-    //     msg.truncate(pos);
-    // }
-    // msg
-
     let mut msg = err.to_string();
     match msg.find(" (os error ") {
         Some(pos) => {
@@ -567,9 +509,9 @@ impl From<std::io::Error> for Box<dyn CTError> {
     }
 }
 
-/// Enables the conversion from [`Result<T, nix::Error>`] to [`UResult<T>`].
+/// 允许从Result<T, nix::Error>转换到UResult<T>。
 ///
-/// # Examples
+/// # 示例
 ///
 /// ```
 /// use ctcore::ct_error::FromIo;
@@ -621,20 +563,17 @@ impl From<nix::Error> for Box<dyn CTError> {
     }
 }
 
-/// Shorthand to construct [`UIoError`]-instances.
+/// 构造 UIoError 实例的简写。
 ///
-/// This macro serves as a convenience call to quickly construct instances of
-/// [`UIoError`]. It takes:
+/// 本宏作为一个便捷调用，可快速构造 UIoError 实例。它接受：
 ///
-/// - An instance of [`std::io::Error`]
-/// - A `format!`-compatible string and
-/// - An arbitrary number of arguments to the format string
+/// - 一个 std::io::Error 实例
+/// - 一个与 format! 兼容的字符串以及
+/// - 格式字符串所需的任意数量参数
 ///
-/// In exactly this order. It is equivalent to the more verbose code seen in the
-/// example.
+/// 严格按照此顺序。它等同于示例中所展示的更冗长的代码。
 ///
-/// # Examples
-///
+/// # 示例
 /// ```
 /// use ctcore::ct_error::CTIoError;
 /// use ctcore::uio_error;
@@ -658,8 +597,7 @@ impl From<nix::Error> for Box<dyn CTError> {
 ///
 /// [CTIoError]的std::fmt::Display实现将确保与std::io::Error实际错误类型相关的适当错误消息被追加到任何附加定义的错误消息（作为第二个参数）之后。
 ///
-/// If you want to show only the error message for the [`std::io::ErrorKind`]
-/// that's contained in [`UIoError`], pass the second argument as empty string:
+/// 如果您只想显示包含在UIoError中的std::io::ErrorKind的错误消息，请将第二个参数传递为空字符串：
 ///
 /// ```
 /// use ctcore::ct_error::CTIoError;
@@ -689,7 +627,6 @@ macro_rules! uio_error(
 ///
 /// 可以通过以下两种方式构造 ExitCode：
 ///
-/// There are two ways to construct an [`ExitCode`]:
 /// ```
 /// use ctcore::ct_error::{ExitCode, CTResult};
 /// // Explicit
@@ -698,8 +635,7 @@ macro_rules! uio_error(
 /// // Using into on `i32`:
 /// let res: CTResult<()> = Err(1.into());
 /// ```
-/// This type is especially useful for a trivial conversion from utils returning [`i32`] to
-/// returning [`UResult`].
+/// 此类型对于从返回i32的实用程序到返回UResult的简单转换特别有用。
 #[derive(Debug)]
 pub struct ExitCode(pub i32);
 
@@ -732,14 +668,12 @@ impl From<i32> for Box<dyn CTError> {
 
 /// clap::Error的封装器，实现了[CTError] trait
 ///
-/// Contains a custom error code. When `Display::fmt` is called on this struct
-/// the [`clap::Error`] will be printed _directly to `stdout` or `stderr`_.
-/// This is because `clap` only supports colored output when it prints directly.
+/// 包含一个自定义错误码。当对这个结构体调用Display::fmt时，会直接将[clap::Error]打印到stdout或stderr。
+/// 这是因为clap仅在直接打印时支持彩色输出。
 ///
-/// [`ClapErrorWrapper`] is generally created by calling the
-/// [`UClapError::with_exit_code`] method on [`clap::Error`] or using the [`From`]
-/// implementation from [`clap::Error`] to `Box<dyn CTError>`, which constructs
-/// a [`ClapErrorWrapper`] with an exit code of `1`.
+/// 通常通过在[clap::Error]上调用[UClapError::with_exit_code]方法，
+/// 或使用从[clap::Error]到Box<dyn UError>的[From]实现来创建[ClapErrorWrapper]，
+/// 后者会创建一个退出码为1的ClapErrorWrapper实例。
 ///
 /// ```rust
 /// use ctcore::ct_error::{ClapErrorWrapper, CTError, UClapError};
@@ -755,7 +689,7 @@ pub struct ClapErrorWrapper {
     error: clap::Error,
 }
 
-/// Extension trait for `clap::Error` to adjust the exit code.
+/// 用于clap::Error调整退出码的扩展特性。
 pub trait UClapError<T> {
     fn with_exit_code(self, code: i32) -> T;
 }
@@ -782,16 +716,6 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
 
 impl CTError for ClapErrorWrapper {
     fn code(&self) -> i32 {
-        // If the error is a DisplayHelp or DisplayVersion variant,
-        // we don't want to apply the custom error code, but leave
-        // it 0.
-        // if let clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion =
-        //     self.error.kind()
-        // {
-        //     0
-        // } else {
-        //     self.code
-        // }
         match self.error.kind() {
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
             _ => self.code,
@@ -801,12 +725,9 @@ impl CTError for ClapErrorWrapper {
 
 impl Error for ClapErrorWrapper {}
 
-// This is abuse of the Display trait
+// 这是对Display特性的滥用
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        // self.error.print().unwrap();
-        // Ok(())
-
         match self.error.print() {
             Ok(_) => Ok(()),
             Err(e) => panic!("{}", e),
@@ -822,14 +743,14 @@ mod tests {
     fn test_get_exit_code() {
         // 测试默认退出码是否为0
         set_ct_exit_code(0);
-        assert_eq!(get_exit_code(), 0);
+        assert_eq!(get_ct_exit_code(), 0);
     }
 
     #[test]
     fn test_set_exit_code() {
         // 测试设置退出码是否成功
         set_ct_exit_code(1);
-        assert_eq!(get_exit_code(), 1);
+        assert_eq!(get_ct_exit_code(), 1);
     }
 
     #[test]
@@ -892,7 +813,7 @@ mod tests {
     #[test]
     fn test_set_get_exit_code() {
         set_ct_exit_code(5);
-        assert_eq!(get_exit_code(), 5);
+        assert_eq!(get_ct_exit_code(), 5);
     }
 
     #[test]

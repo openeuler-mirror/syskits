@@ -12,10 +12,10 @@ use std::char::from_digit;
 use std::ffi::OsStr;
 use std::fmt;
 
-// These are characters with special meaning in the shell (e.g. bash).
-// The first const contains characters that only have a special meaning when they appear at the beginning of a name.
-const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
+// 这些是在shell（如bash）中有特殊含义的字符。
+// 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
+const CT_SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
+const CT_SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CtQuotingStyle {
@@ -40,47 +40,46 @@ pub enum CtQuotes {
     // TODO: Locale
 }
 
-// This implementation is heavily inspired by the std::char::EscapeDefault implementation
-// in the Rust standard library. This custom implementation is needed because the
-// characters \a, \b, \e, \f & \v are not recognized by Rust.
-struct EscapedChar {
-    state: EscapeState,
+// 此实现深受Rust标准库中std::char::EscapeDefault实现的启发。
+// 需要这个自定义实现是因为Rust不识别字符\a、\b、\e、\f和\v。
+struct CtEscapedChar {
+    state: CtEscapeState,
 }
 
-enum EscapeState {
+enum CtEscapeState {
     Done,
     Char(char),
     Backslash(char),
     ForceQuote(char),
-    Octal(EscapeOctal),
+    Octal(CtEscapeOctal),
 }
 
-struct EscapeOctal {
+struct CtEscapeOctal {
     c: char,
-    state: EscapeOctalState,
+    state: CtEscapeOctalState,
     idx: usize,
 }
 
-enum EscapeOctalState {
+enum CtEscapeOctalState {
     Done,
     Backslash,
     Value,
 }
 
-impl Iterator for EscapeOctal {
+impl Iterator for CtEscapeOctal {
     type Item = char;
 
     fn next(&mut self) -> Option<char> {
         match self.state {
-            EscapeOctalState::Done => None,
-            EscapeOctalState::Backslash => {
-                self.state = EscapeOctalState::Value;
+            CtEscapeOctalState::Done => None,
+            CtEscapeOctalState::Backslash => {
+                self.state = CtEscapeOctalState::Value;
                 Some('\\')
             }
-            EscapeOctalState::Value => {
+            CtEscapeOctalState::Value => {
                 let octal_digit = ((self.c as u32) >> (self.idx * 3)) & 0o7;
                 if self.idx == 0 {
-                    self.state = EscapeOctalState::Done;
+                    self.state = CtEscapeOctalState::Done;
                 } else {
                     self.idx -= 1;
                 }
@@ -90,25 +89,25 @@ impl Iterator for EscapeOctal {
     }
 }
 
-impl EscapeOctal {
+impl CtEscapeOctal {
     fn from(c: char) -> Self {
         Self {
             c,
             idx: 2,
-            state: EscapeOctalState::Backslash,
+            state: CtEscapeOctalState::Backslash,
         }
     }
 }
 
-impl EscapedChar {
+impl CtEscapedChar {
     fn new_literal(c: char) -> Self {
         Self {
-            state: EscapeState::Char(c),
+            state: CtEscapeState::Char(c),
         }
     }
 
     fn new_c(c: char, quotes: CtQuotes) -> Self {
-        use EscapeState::*;
+        use CtEscapeState::*;
         let init_state = match c {
             '\x07' => Backslash('a'),
             '\x08' => Backslash('b'),
@@ -130,14 +129,14 @@ impl EscapedChar {
                 CtQuotes::None => Backslash(' '),
                 _ => Char(' '),
             },
-            _ if c.is_ascii_control() => Octal(EscapeOctal::from(c)),
+            _ if c.is_ascii_control() => Octal(CtEscapeOctal::from(c)),
             _ => Char(c),
         };
         Self { state: init_state }
     }
 
     fn new_shell(c: char, escape: bool, quotes: CtQuotes) -> Self {
-        use EscapeState::*;
+        use CtEscapeState::*;
         let init_state = match c {
             _ if !escape && c.is_control() => Char(c),
             '\x07' => Backslash('a'),
@@ -147,12 +146,12 @@ impl EscapedChar {
             '\x0B' => Backslash('v'),
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
-            '\x00'..='\x1F' | '\x7F' => Octal(EscapeOctal::from(c)),
+            '\x00'..='\x1F' | '\x7F' => Octal(CtEscapeOctal::from(c)),
             '\'' => match quotes {
                 CtQuotes::Single => Backslash('\''),
                 _ => Char('\''),
             },
-            _ if SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
+            _ if CT_SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
             _ => Char(c),
         };
         Self { state: init_state }
@@ -160,29 +159,29 @@ impl EscapedChar {
 
     fn hide_control(self) -> Self {
         match self.state {
-            EscapeState::Char(c) if c.is_control() => Self {
-                state: EscapeState::Char('?'),
+            CtEscapeState::Char(c) if c.is_control() => Self {
+                state: CtEscapeState::Char('?'),
             },
             _ => self,
         }
     }
 }
 
-impl Iterator for EscapedChar {
+impl Iterator for CtEscapedChar {
     type Item = char;
 
     fn next(&mut self) -> Option<char> {
         match self.state {
-            EscapeState::Backslash(c) => {
-                self.state = EscapeState::Char(c);
+            CtEscapeState::Backslash(c) => {
+                self.state = CtEscapeState::Char(c);
                 Some('\\')
             }
-            EscapeState::Char(c) | EscapeState::ForceQuote(c) => {
-                self.state = EscapeState::Done;
+            CtEscapeState::Char(c) | CtEscapeState::ForceQuote(c) => {
+                self.state = CtEscapeState::Done;
                 Some(c)
             }
-            EscapeState::Done => None,
-            EscapeState::Octal(ref mut iter) => iter.next(),
+            CtEscapeState::Done => None,
+            CtEscapeState::Octal(ref mut iter) => iter.next(),
         }
     }
 }
@@ -193,7 +192,7 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
 
     for c in name.chars() {
         let escaped = {
-            let ec = EscapedChar::new_shell(c, false, quotes);
+            let ec = CtEscapedChar::new_shell(c, false, quotes);
             if show_control_chars {
                 ec
             } else {
@@ -202,8 +201,8 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
         };
 
         match escaped.state {
-            EscapeState::Backslash('\'') => escaped_str.push_str("'\\''"),
-            EscapeState::ForceQuote(x) => {
+            CtEscapeState::Backslash('\'') => escaped_str.push_str("'\\''"),
+            CtEscapeState::ForceQuote(x) => {
                 must_quote = true;
                 escaped_str.push(x);
             }
@@ -215,7 +214,7 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
         }
     }
 
-    must_quote = must_quote || name.starts_with(SPECIAL_SHELL_CHARS_START);
+    must_quote = must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
 
@@ -227,16 +226,16 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
     let mut escaped_str = String::with_capacity(name.len());
 
     for c in name.chars() {
-        let escaped = EscapedChar::new_shell(c, true, quotes);
+        let escaped = CtEscapedChar::new_shell(c, true, quotes);
         match escaped.state {
-            EscapeState::Char(x) => {
+            CtEscapeState::Char(x) => {
                 if in_dollar {
                     escaped_str.push_str("''");
                     in_dollar = false;
                 }
                 escaped_str.push(x);
             }
-            EscapeState::ForceQuote(x) => {
+            CtEscapeState::ForceQuote(x) => {
                 if in_dollar {
                     escaped_str.push_str("''");
                     in_dollar = false;
@@ -247,7 +246,7 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
             // Single quotes are not put in dollar expressions, but are escaped
             // if the string also contains double quotes. In that case, they must
             // be handled separately.
-            EscapeState::Backslash('\'') => {
+            CtEscapeState::Backslash('\'') => {
                 must_quote = true;
                 in_dollar = false;
                 escaped_str.push_str("'\\''");
@@ -264,7 +263,7 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
             }
         }
     }
-    must_quote = must_quote || name.starts_with(SPECIAL_SHELL_CHARS_START);
+    must_quote = must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
 
@@ -276,7 +275,7 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
             } else {
                 name.to_string_lossy()
                     .chars()
-                    .flat_map(|c| EscapedChar::new_literal(c).hide_control())
+                    .flat_map(|c| CtEscapedChar::new_literal(c).hide_control())
                     .collect()
             }
         }
@@ -284,7 +283,7 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| EscapedChar::new_c(c, *quotes))
+                .flat_map(|c| CtEscapedChar::new_c(c, *quotes))
                 .collect();
 
             match quotes {
@@ -365,7 +364,7 @@ mod tests {
     use crate::ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle};
     use std::ffi::OsStr;
 
-    // spell-checker:ignore (tests/words) one\'two one'two
+    //拼写检查器忽略（tests/words）one'two one'two
 
     fn get_style(s: &str) -> CtQuotingStyle {
         match s {

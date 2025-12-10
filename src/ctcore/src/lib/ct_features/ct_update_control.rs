@@ -8,6 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+
 //! Implement GNU-style update functionality.
 //!
 //! - pre-defined [`clap`-Arguments][1] for inclusion in utilities that
@@ -53,7 +54,7 @@
 //! ```
 use clap::ArgMatches;
 
-// Available update mode
+// 可用的更新模式
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CtUpdateMode {
     // --update=`all`, ``
@@ -71,7 +72,7 @@ pub mod arguments {
     pub static OPT_UPDATE: &str = "update";
     pub static OPT_UPDATE_NO_ARG: &str = "u";
 
-    // `--update` argument, defaults to `older` if no values are provided
+    // --update参数，默认情况下如果没有提供任何值则为older
     pub fn update() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
@@ -96,7 +97,7 @@ pub mod arguments {
 /// Determine the "mode" for the update operation to perform, if any.
 ///
 /// Parses the backup options and converts them to an instance of
-/// `CtUpdateMode` for further processing.
+/// `UpdateMode` for further processing.
 ///
 /// Takes [`clap::ArgMatches`] as argument which **must** contain the options
 /// from [`arguments::update()`] or [`arguments::update_no_args()`]. Otherwise
@@ -133,10 +134,10 @@ pub fn ct_determine_update_mode(matches: &ArgMatches) -> CtUpdateMode {
             _ => unreachable!("other args restricted by clap"),
         }
     } else if matches.get_flag(arguments::OPT_UPDATE_NO_ARG) {
-        // short form of this option is equivalent to using --update=older
+        // 此选项的简写形式等同于使用--update=older
         CtUpdateMode::ReplaceIfOlder
     } else {
-        // no option was present
+        // 没有选项存在
         CtUpdateMode::ReplaceAll
     }
 }

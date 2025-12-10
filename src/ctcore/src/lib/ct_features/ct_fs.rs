@@ -11,8 +11,6 @@
 
 //! Set of functions to manage files and symlinks
 
-// spell-checker:ignore backport
-
 #[cfg(unix)]
 use libc::{
     mode_t, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP,
@@ -38,7 +36,7 @@ use winapi_util::AsHandleRef;
 /// This macro expands to `mode & perm != 0`.
 #[cfg(unix)]
 #[macro_export]
-macro_rules! has {
+macro_rules! ct_has {
     ($mode:expr, $perm:expr) => {
         $mode & $perm != 0
     };
@@ -443,9 +441,9 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
             '-'
         };
 
-        ct_format!("{file_type}r{write}xr{write}xr{write}x")
+        format!("{file_type}r{write}xr{write}xr{write}x")
     } else {
-        ct_format!("r{write}xr{write}xr{write}x")
+        format!("r{write}xr{write}xr{write}x")
     }
 }
 
@@ -499,43 +497,43 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
         result = String::with_capacity(9);
     }
 
-    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISUID as mode_t) {
-        if has!(mode, S_IXUSR) {
+    result.push(if ct_has!(mode, S_IRUSR) { 'r' } else { '-' });
+    result.push(if ct_has!(mode, S_IWUSR) { 'w' } else { '-' });
+    result.push(if ct_has!(mode, S_ISUID as mode_t) {
+        if ct_has!(mode, S_IXUSR) {
             's'
         } else {
             'S'
         }
-    } else if has!(mode, S_IXUSR) {
+    } else if ct_has!(mode, S_IXUSR) {
         'x'
     } else {
         '-'
     });
 
-    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISGID as mode_t) {
-        if has!(mode, S_IXGRP) {
+    result.push(if ct_has!(mode, S_IRGRP) { 'r' } else { '-' });
+    result.push(if ct_has!(mode, S_IWGRP) { 'w' } else { '-' });
+    result.push(if ct_has!(mode, S_ISGID as mode_t) {
+        if ct_has!(mode, S_IXGRP) {
             's'
         } else {
             'S'
         }
-    } else if has!(mode, S_IXGRP) {
+    } else if ct_has!(mode, S_IXGRP) {
         'x'
     } else {
         '-'
     });
 
-    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISVTX as mode_t) {
-        if has!(mode, S_IXOTH) {
+    result.push(if ct_has!(mode, S_IROTH) { 'r' } else { '-' });
+    result.push(if ct_has!(mode, S_IWOTH) { 'w' } else { '-' });
+    result.push(if ct_has!(mode, S_ISVTX as mode_t) {
+        if ct_has!(mode, S_IXOTH) {
             't'
         } else {
             'T'
         }
-    } else if has!(mode, S_IXOTH) {
+    } else if ct_has!(mode, S_IXOTH) {
         'x'
     } else {
         '-'
@@ -796,6 +794,10 @@ pub mod sane_blksize {
             Err(_) => DEFAULT,
         }
     }
+}
+
+pub fn get_filename(file: &Path) -> Option<&str> {
+    file.file_name().and_then(|filename| filename.to_str())
 }
 
 #[cfg(test)]
@@ -1065,4 +1067,5 @@ mod tests {
         assert_eq!(0x2000_0000, sane_blksize::sane_blksize(0x2000_0000));
         assert_eq!(512, sane_blksize::sane_blksize(0x2000_0001));
     }
+
 }

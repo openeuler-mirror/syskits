@@ -15,25 +15,26 @@ use std::num::IntErrorKind;
 
 use crate::ct_display::Quotable;
 
-/// CtParser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
+/// 用于解析以 SI 或 IEC 单位（1000 或 1024 字节倍数）表示的尺寸的解析器。
 ///
-/// The [`CtParser::parse`] function performs the parse.
+/// 使用 [CtParser::parse] 函数执行解析。
+///
 #[derive(Default)]
 pub struct CtParser<'parser> {
-    /// Whether to allow empty numeric strings.
+    /// 是否允许空数字字符串。
     pub no_empty_numeric: bool,
-    /// Whether to treat the suffix "B" as meaning "bytes".
+    /// 是否将后缀 "B" 视为表示 "bytes"。
     pub capital_b_bytes: bool,
-    /// Whether to treat "b" as a "byte count" instead of "block"
+    /// 是否将 "b" 视为 "byte count" 而非 "block"
     pub b_byte_count: bool,
-    /// Whitelist for the suffix
+    /// 后缀白名单
     pub allow_list: Option<&'parser [&'parser str]>,
-    /// Default unit when no suffix is provided
+    /// 未提供后缀时使用的默认单位
     pub default_unit: Option<&'parser str>,
 }
 
 #[derive(PartialEq)]
-enum NumberSystem {
+enum CtNumberSystem {
     Decimal,
     Octal,
     Hexadecimal,
@@ -59,21 +60,16 @@ impl<'parser> CtParser<'parser> {
         self.no_empty_numeric = value;
         self
     }
-    /// Parse a size string into a number of bytes.
+    /// 将大小字符串解析为字节数。
     ///
-    /// A size string comprises an integer and an optional unit. The unit
-    /// may be K, M, G, T, P, E, Z, Y, R or Q (powers of 1024), or KB, MB,
-    /// etc. (powers of 1000), or b which is 512.
-    /// Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+    /// 大小字符串由一个整数和一个可选单位组成。单位可以是K、M、G、T、P、E、Z、Y、R或Q（1024的幂），也可以是KB、MB等（1000的幂），或者是b表示512。
+    /// 也可以使用二进制前缀：KiB=K，MiB=M，以此类推。
     ///
-    /// # Errors
+    /// # 错误
     ///
-    /// Will return `ParseSizeError` if it's not possible to parse this
-    /// string into a number, e.g. if the string does not begin with a
-    /// numeral, or if the unit is not one of the supported units described
-    /// in the preceding section.
+    /// 如果无法将此字符串解析为数字，则返回ParseSizeError，例如，字符串不是以数字开始，或者单位不是上一节所描述的支持单位之一。
     ///
-    /// # Examples
+    /// # 示例
     ///
     /// ```rust
     /// use ctcore::ct_parse_size::CtParser;
@@ -94,11 +90,10 @@ impl<'parser> CtParser<'parser> {
 
         let number_system = Self::determine_number_system(size);
 
-        // Split the size argument into numeric and unit parts
-        // For example, if the argument is "123K", the numeric part is "123", and
-        // the unit is "K"
+        // 将尺寸参数拆分为数字部分和单位部分
+        // 例如，若参数为 "123K"，则数字部分为 "123"，单位为 "K"
         let numeric_string: String = match number_system {
-            NumberSystem::Hexadecimal => size
+            CtNumberSystem::Hexadecimal => size
                 .chars()
                 .take(2)
                 .chain(size.chars().skip(2).take_while(char::is_ascii_hexdigit))
@@ -114,9 +109,9 @@ impl<'parser> CtParser<'parser> {
             }
         }
 
-        // Check if `b` is a byte count and remove `b`
+        // 检查b是否为字节计数并移除b
         if self.b_byte_count && unit.ends_with('b') {
-            // If `unit` = 'b' then return error
+            // 若 unit = 'b' 则返回错误
             if numeric_string.is_empty() {
                 return Err(ParseSizeError::parse_failure(size));
             }
@@ -124,7 +119,7 @@ impl<'parser> CtParser<'parser> {
         }
 
         if let Some(allow_list) = self.allow_list {
-            // Check if `unit` appears in `allow_list`, if not return error
+            // 检查unit是否出现在allow_list中，如果不在则返回错误
             if !allow_list.contains(&unit) && !unit.is_empty() {
                 if numeric_string.is_empty() {
                     return Err(ParseSizeError::parse_failure(size));
@@ -133,12 +128,10 @@ impl<'parser> CtParser<'parser> {
             }
         }
 
-        // Compute the factor the unit represents.
-        // empty string means the factor is 1.
+        // 计算单位所代表的因子。
+        // 空字符串表示因子为 1。
         //
-        // The lowercase "b" (used by `od`, `head`, `tail`, etc.) means
-        // "block" and the Posix block size is 512. The uppercase "B"
-        // means "byte".
+        // 小写字母 "b" （被 od、head、tail 等工具使用）表示“块”，而 Posix 块大小为 512。大写字母 "B" 则表示“字节”。
         let base: u128;
         let exponent: u32;
         if unit.is_empty() || unit == "B" && self.capital_b_bytes {
@@ -214,39 +207,37 @@ impl<'parser> CtParser<'parser> {
         }
         let factor = base.pow(exponent);
 
-        // parse string into u128
+        // 将字符串解析为u128
         let number: u128;
-        if number_system == NumberSystem::Decimal {
+        if number_system == CtNumberSystem::Decimal {
             if numeric_string.is_empty() && !self.no_empty_numeric {
                 number = 1;
             } else {
                 number = Self::parse_number(&numeric_string, 10, size)?;
             }
-        } else if number_system == NumberSystem::Octal {
+        } else if number_system == CtNumberSystem::Octal {
             let trimmed_string = numeric_string.trim_start_matches('0');
             number = Self::parse_number(trimmed_string, 8, size)?;
-        } else if number_system == NumberSystem::Hexadecimal {
+        } else if number_system == CtNumberSystem::Hexadecimal {
             let trimmed_string = numeric_string.trim_start_matches("0x");
             number = Self::parse_number(trimmed_string, 16, size)?;
         } else {
-            // Handle other cases if needed
+            // 如有必要处理其他情况
             unreachable!("Unexpected number system encountered");
         }
-        // number
-        //  .checked_mul(factor)
-        // .ok_or_else(|| ParseSizeError::size_too_big(size))
+
         match number.checked_mul(factor) {
             Some(result) => Ok(result),
             None => Err(ParseSizeError::size_too_big(size)),
         }
     }
 
-    /// Explicit u128 alias for `parse()`
+    /// parse()的显式u128别名
     pub fn parse_u128(&self, size: &str) -> Result<u128, ParseSizeError> {
         self.parse(size)
     }
 
-    /// Same as `parse()` but tries to return u64
+    /// 与 parse() 相同，但尝试返回 u64 类型结果
     pub fn parse_u64(&self, size: &str) -> Result<u64, ParseSizeError> {
         match self.parse(size) {
             Ok(num_u128) => {
@@ -260,9 +251,9 @@ impl<'parser> CtParser<'parser> {
         }
     }
 
-    /// Same as `parse_u64()`, except returns `u64::MAX` on overflow
-    /// GNU lib/coreutils include similar functionality
-    /// and GNU test suite checks this behavior for some utils (`split` for example)
+    /// 与parse_u64()相同，只是在溢出时返回u64::MAX。
+    /// GNU lib/coreutils包含类似功能，
+    /// 并且GNU测试套件针对某些实用程序（例如split）检查这种行为
     pub fn parse_u64_max(&self, size: &str) -> Result<u64, ParseSizeError> {
         let result = self.parse_u64(size);
         match result {
@@ -277,19 +268,8 @@ impl<'parser> CtParser<'parser> {
         }
     }
 
-    /// Same as `parse_u64_max()`, except for u128, i.e. returns `u128::MAX` on overflow
+    /// 与 parse_u64_max() 类似，但针对 u128 类型，即在溢出时返回 u128::MAX
     pub fn parse_u128_max(&self, size: &str) -> Result<u128, ParseSizeError> {
-        // let result = self.parse_u128(size);
-        // match result {
-        //     Ok(_) => result,
-        //     Err(error) => {
-        //         if let ParseSizeError::SizeTooBig(_) = error {
-        //             Ok(u128::MAX)
-        //         } else {
-        //             Err(error)
-        //         }
-        //     }
-        // }
         match self.parse_u128(size) {
             Ok(_) => self.parse_u128(size),
             Err(error) => match error {
@@ -299,44 +279,25 @@ impl<'parser> CtParser<'parser> {
         }
     }
 
-    fn determine_number_system(size: &str) -> NumberSystem {
-        // if size.len() <= 1 {
-        //     return NumberSystem::Decimal;
-        // }
-        //
-        // if size.starts_with("0x") {
-        //     return NumberSystem::Hexadecimal;
-        // }
-        //
-        // let num_digits: usize = size
-        //     .chars()
-        //     .take_while(char::is_ascii_digit)
-        //     .collect::<String>()
-        //     .len();
-        // let all_zeros = size.chars().all(|c| c == '0');
-        // if size.starts_with('0') && num_digits > 1 && !all_zeros {
-        //     return NumberSystem::Octal;
-        // }
-        //
-        // NumberSystem::Decimal
+    fn determine_number_system(size: &str) -> CtNumberSystem {
         if size.len() <= 1 {
-            return NumberSystem::Decimal;
+            return CtNumberSystem::Decimal;
         }
 
         if size.starts_with("0x") {
-            return NumberSystem::Hexadecimal;
+            return CtNumberSystem::Hexadecimal;
         }
 
         let mut iter = size.chars();
         if let Some('0') = iter.next() {
             if let Some(digit) = iter.next() {
                 if digit.is_ascii_digit() && !iter.all(|c| c == '0') {
-                    return NumberSystem::Octal;
+                    return CtNumberSystem::Octal;
                 }
             }
         }
 
-        NumberSystem::Decimal
+        CtNumberSystem::Decimal
     }
 
     fn parse_number(
@@ -344,10 +305,6 @@ impl<'parser> CtParser<'parser> {
         radix: u32,
         original_size: &str,
     ) -> Result<u128, ParseSizeError> {
-        // u128::from_str_radix(numeric_string, radix).map_err(|e| match e.kind() {
-        //     IntErrorKind::PosOverflow => ParseSizeError::size_too_big(original_size),
-        //     _ => ParseSizeError::ParseFailure(original_size.to_string()),
-        // })
         // 调用原始函数并处理错误
         let result = u128::from_str_radix(numeric_string, radix).map_err(|e| match e.kind() {
             IntErrorKind::PosOverflow => ParseSizeError::size_too_big(original_size),
@@ -362,7 +319,7 @@ impl<'parser> CtParser<'parser> {
 }
 
 /// Parse a size string into a number of bytes
-/// using Default CtParser (no custom settings)
+/// using Default Parser (no custom settings)
 ///
 /// # Examples
 ///
@@ -408,12 +365,6 @@ pub enum ParseSizeError {
 
 impl Error for ParseSizeError {
     fn description(&self) -> &str {
-        // match *self {
-        //     Self::InvalidSuffix(ref s) => s,
-        //     Self::ParseFailure(ref s) => s,
-        //     Self::SizeTooBig(ref s) => s,
-        // }
-
         match *self {
             ParseSizeError::InvalidSuffix(ref s) => s,
             ParseSizeError::ParseFailure(ref s) => s,
@@ -423,13 +374,6 @@ impl Error for ParseSizeError {
 }
 
 impl fmt::Display for ParseSizeError {
-    // fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    //     let s = match self {
-    //         Self::InvalidSuffix(s) | Self::ParseFailure(s) | Self::SizeTooBig(s) => s,
-    //     };
-    //     write!(f, "{s}")
-    // }
-
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let (_error_type, message) = match self {
             Self::InvalidSuffix(s) => ("Invalid Suffix", s),
@@ -440,66 +384,61 @@ impl fmt::Display for ParseSizeError {
     }
 }
 
-// FIXME: It's more idiomatic to move the formatting into the Display impl,
-// but there's a lot of downstream code that constructs these errors manually
-// that would be affected
 impl ParseSizeError {
     fn invalid_suffix(s: &str) -> Self {
         Self::InvalidSuffix(format!("{}", s.quote()))
     }
 
     fn parse_failure(s: &str) -> Self {
-        // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
-        // has to be handled in the respective cttils because strings differ, e.g.:
+        // 因为字符串不同，所以必须在相应的cttils中处理，例如：
         //
         // `NUM`
-        // head:     invalid number of bytes: '1fb'
-        // tail:     invalid number of bytes: '1fb'
+        // head:     无效的字节数量：'1fb'
+        // tail:     无效的字节数量：'1fb'
         //
         // `SIZE`
-        // split:    invalid number of bytes: '1fb'
-        // truncate: Invalid number: '1fb'
+        // split:    无效的字节数量：'1fb'
+        // truncate: 无效数字：'1fb'
         //
         // `MODE`
-        // stdbuf:   invalid mode '1fb'
+        // stdbuf:   无效模式 '1fb'
         //
         // `SIZE`
-        // sort:     invalid suffix in --buffer-size argument '1fb'
-        // sort:     invalid --buffer-size argument 'fb'
+        // sort:     --buffer-size 参数中存在无效后缀 '1fb'
+        // sort:     无效的 --buffer-size 参数 'fb'
         //
         // `SIZE`
-        // du:       invalid suffix in --buffer-size argument '1fb'
-        // du:       invalid suffix in --threshold argument '1fb'
-        // du:       invalid --buffer-size argument 'fb'
-        // du:       invalid --threshold argument 'fb'
+        // du:       --buffer-size 参数中存在无效后缀 '1fb'
+        // du:       --threshold 参数中存在无效后缀 '1fb'
+        // du:       无效的 --buffer-size 参数 'fb'
+        // du:       无效的 --threshold 参数 'fb'
         //
         // `BYTES`
-        // od:       invalid suffix in --read-bytes argument '1fb'
-        // od:       invalid --read-bytes argument  argument 'fb'
+        // od:       --read-bytes 参数中存在无效后缀 '1fb'
+        // od:       无效的 --read-bytes 参数 'fb'
         //                   --skip-bytes
         //                   --width
         //                   --strings
-        // etc.
         Self::ParseFailure(format!("{}", s.quote()))
     }
 
     fn size_too_big(s: &str) -> Self {
-        // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
-        // has to be handled in the respective cttils because strings differ, e.g.:
+        // 因为字符串不同，所以需要在各自的 ctutils 中进行处理，例如：
         //
-        // head:     invalid number of bytes: '1Y': Value too large for defined data type
-        // tail:     invalid number of bytes: '1Y': Value too large for defined data type
-        // split:    invalid number of bytes: '1Y': Value too large for defined data type
-        // truncate:          Invalid number: '1Y': Value too large for defined data type
-        // stdbuf:               invalid mode '1Y': Value too large for defined data type
-        // sort:     -S argument '1Y' too large
-        // du:       -B argument '1Y' too large
-        // od:       -N argument '1Y' too large
-        // etc.
-        //
-        // stderr on macos (brew - GNU coreutils 8.32) also differs for the same version, e.g.:
-        // ghead:   invalid number of bytes: '1Y': Value too large to be stored in data type
-        // gtail:   invalid number of bytes: '1Y': Value too large to be stored in data type
+        // 示例错误输出：
+        // head:     非法的字节数量：'1Y'，值过大，超过已定义的数据类型范围
+        // tail:     非法的字节数量：'1Y'，值过大，超过已定义的数据类型范围
+        // split:    非法的字节数量：'1Y'，值过大，超过已定义的数据类型范围
+        // truncate:          非法的数值：'1Y'，值过大，超过已定义的数据类型范围
+        // stdbuf:               非法的模式 '1Y'，值过大，超过已定义的数据类型范围
+        // sort:     -S参数 '1Y' 值过大
+        // du:       -B参数 '1Y' 值过大
+        // od:       -N参数 '1Y' 值过大
+        // 等等。
+        // 同样版本的GNU coreutils在macOS（通过Homebrew安装）上的标准错误输出也存在差异，例如：
+        // ghead:   非法的字节数量：'1Y'，值过大，无法存储在数据类型中
+        // gtail:   非法的字节数量：'1Y'，值过大，无法存储在数据类型中
+
         Self::SizeTooBig(format!(
             "{}: Value too large for defined data type",
             s.quote()
@@ -516,8 +455,6 @@ mod tests {
 
      #[test]
     fn all_suffixes() {
-        // Units are K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).
-        // Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
         let suffixes = [
             ('K', 1u32),
             ('M', 2u32),
@@ -541,7 +478,6 @@ mod tests {
             let s = format!("2{}iB", c.to_lowercase()); // kiB
             assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
 
-            // suffix only
             let s = format!("{c}B"); // KB
             assert_eq!(Ok((1000_u128).pow(exp)), parse_size_u128(&s));
             let s = format!("{c}"); // K
@@ -644,8 +580,8 @@ mod tests {
 
     #[test]
     fn test_base_all_suffixes() {
-        // Units  are  K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).
-        // Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+        // 单位可以是K、M、G、T、P、E、Z、Y、R或Q（1024的幂），也可以是KB、MB等（1000的幂）。
+        // 也可以使用二进制前缀：KiB=K，MiB=M，以此类推。
         let suffixes = [
             ('K', 1u32),
             ('M', 2u32),

@@ -81,12 +81,10 @@
 //!         backup_mode, target_path, &backup_suffix
 //!     );
 //!
-//!     // Perform your backups here.
+//!     // 在此处执行备份。
 //!
 //! }
 //! ```
-
-// spell-checker:ignore backupopt
 
 use crate::{
     ct_display::Quotable,
@@ -114,7 +112,7 @@ the VERSION_CONTROL environment variable.  Here are the values:
   existing, nil   numbered if numbered backups exist, simple otherwise
   simple, never   always make simple backups";
 
-static VALID_ARGS_HELP: &str = "Valid arguments are:
+static CT_VALID_ARGS_HELP: &str = "Valid arguments are:
   - 'none', 'off'
   - 'simple', 'never'
   - 'existing', 'nil'
@@ -152,7 +150,6 @@ pub enum CtBackupError {
     AmbiguousArgument(String, String),
     /// Currently unused
     BackupImpossible(),
-    // BackupFailed(PathBuf, PathBuf, std::io::Error),
 }
 
 impl CTError for CtBackupError {
@@ -164,7 +161,6 @@ impl CTError for CtBackupError {
     }
 
     fn usage(&self) -> bool {
-        // Suggested by clippy.
         matches!(
             self,
             Self::InvalidArgument(_, _) | Self::AmbiguousArgument(_, _)
@@ -182,21 +178,16 @@ impl Display for CtBackupError {
                 "invalid argument {} for '{}'\n{}",
                 arg.quote(),
                 origin,
-                VALID_ARGS_HELP
+                CT_VALID_ARGS_HELP
             ),
             Self::AmbiguousArgument(arg, origin) => write!(
                 f,
                 "ambiguous argument {} for '{}'\n{}",
                 arg.quote(),
                 origin,
-                VALID_ARGS_HELP
+                CT_VALID_ARGS_HELP
             ),
             Self::BackupImpossible() => write!(f, "cannot create backup"),
-            // Placeholder for later
-            // Self::BackupFailed(from, to, e) => Display::fmt(
-            //     &uio_error!(e, "failed to backup {} to {}", from.quote(), to.quote()),
-            //     f
-            // ),
         }
     }
 }
@@ -214,7 +205,7 @@ pub mod arguments {
     pub static OPT_BACKUP_NO_ARG: &str = "backupopt_b";
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
-    /// '--backup' argument
+    /// '--backup' 字段
     pub fn backup() -> clap::Arg {
         clap::Arg::new(OPT_BACKUP)
             .long("backup")
@@ -225,7 +216,7 @@ pub mod arguments {
             .value_name("CONTROL")
     }
 
-    /// '-b' argument
+    /// '-b' 字段
     pub fn backup_no_args() -> clap::Arg {
         clap::Arg::new(OPT_BACKUP_NO_ARG)
             .short('b')
@@ -233,7 +224,7 @@ pub mod arguments {
             .action(ArgAction::SetTrue)
     }
 
-    /// '-S, --suffix' argument
+    /// '-S, --suffix' 字段
     pub fn suffix() -> clap::Arg {
         clap::Arg::new(OPT_SUFFIX)
             .short('S')
@@ -267,7 +258,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// Determine the "mode" for the backup operation to perform, if any.
 ///
 /// Parses the backup options according to the [GNU manual][1], and converts
-/// them to an instance of `CtBackupMode` for further processing.
+/// them to an instance of `BackupMode` for further processing.
 ///
 /// Takes [`clap::ArgMatches`] as argument which **must** contain the options
 /// from [`arguments::backup()`] and [`arguments::backup_no_args()`]. Otherwise
@@ -337,38 +328,37 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///
 ///     assert!(backup_mode.is_err());
 ///     let err = backup_mode.unwrap_err();
-///     // assert_eq!(err, CtBackupError::AmbiguousArgument);
-///     // Use ctcore functionality to show the error to the user
+///
+///     // 使用ctcore功能向用户显示错误
 ///     ct_show!(err);
 /// }
 /// ```
 pub fn determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
     if matches.contains_id(arguments::OPT_BACKUP) {
-        // Use method to determine the type of backups to make. When this option
-        // is used but method is not specified, then the value of the
-        // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
-        // is not set, the default backup type is 'existing'.
+        // 使用方法来确定要创建的备份类型。
+        // 当使用此选项但未指定方法时，将使用 VERSION_CONTROL 环境变量的值。
+        // 如果 VERSION_CONTROL 未设置，则默认备份类型为 'existing'。
         if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
-            // Second argument is for the error string that is returned.
+            // 第二个参数用于返回的错误字符串。
             match_method(method, "backup type")
         } else if let Ok(method) = env::var("VERSION_CONTROL") {
-            // Second argument is for the error string that is returned.
+            // 第二个参数是用于返回的错误字符串
             match_method(&method, "$VERSION_CONTROL")
         } else {
-            // Default if no argument is provided to '--backup'
+            // 如果未向 --backup 提供参数时的默认值
             Ok(CtBackupMode::ExistingBackup)
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
-        // the short form of this option, -b does not accept any argument.
-        // Using -b is equivalent to using --backup=existing.
+        // 该选项的短形式 -b 不接受任何参数。
+        // 使用 -b 相当于使用 --backup=existing。
         Ok(CtBackupMode::ExistingBackup)
     } else {
-        // No option was present at all
+        // 完全没有出现任何选项
         Ok(CtBackupMode::NoBackup)
     }
 }
 
-/// Match a backup option string to a `CtBackupMode`.
+/// Match a backup option string to a `BackupMode`.
 ///
 /// The GNU manual specifies that abbreviations to options are valid as long as
 /// they aren't ambiguous. This function matches the given `method` argument
@@ -398,8 +388,7 @@ fn match_method(method: &str, origin: &str) -> CTResult<CtBackupMode> {
             "numbered" | "t" => Ok(CtBackupMode::NumberedBackup),
             "existing" | "nil" => Ok(CtBackupMode::ExistingBackup),
             "none" | "off" => Ok(CtBackupMode::NoBackup),
-            _ => unreachable!(), // cannot happen as we must have exactly one match
-                                 // from the list above.
+            _ => unreachable!(), // 由于上面的列表必须恰好有一个匹配项，所以这种情况不会发生。
         }
     } else if matches.is_empty() {
         Err(CtBackupError::InvalidArgument(method.to_string(), origin.to_string()).into())
@@ -475,7 +464,7 @@ pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bo
 }
 
 //
-// Tests for this module
+// 本模块的测试
 //
 #[cfg(test)]
 mod tests {
@@ -487,15 +476,13 @@ mod tests {
     use std::io::Write;
     use std::sync::Mutex;
 
-    // The mutex is required here as by default all tests are run as separate
-    // threads under the same parent process. As environment variables are
-    // specific to processes (and thus shared among threads), data races *will*
-    // occur if no precautions are taken. Thus we have all tests that rely on
-    // environment variables lock this empty mutex to ensure they don't access
-    // it concurrently.
+    // 在此处需要互斥锁，因为默认情况下所有测试都是作为同一个父进程下的单独线程运行的。
+    // 由于环境变量是特定于进程的（因此在多个线程间共享），
+    // 如果不采取预防措施，就一定会发生数据竞争。
+    // 因此，我们让所有依赖于环境变量的测试都锁定这个空互斥锁，以确保它们不会并发访问它。
     static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-    // Environment variable for "VERSION_CONTROL"
+    // “VERSION_CONTROL”的环境变量
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
 
     fn make_app() -> clap::Command {
@@ -505,7 +492,7 @@ mod tests {
             .arg(arguments::suffix())
     }
 
-    // Defaults to --backup=existing
+    // 默认为 --backup=existing
     #[test]
     fn test_backup_mode_short_only() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -516,7 +503,7 @@ mod tests {
         assert_eq!(result, CtBackupMode::ExistingBackup);
     }
 
-    // --backup takes precedence over -b
+    // --backup 选项优先于 -b 选项
     #[test]
     fn test_backup_mode_long_preferred_over_short() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -527,7 +514,7 @@ mod tests {
         assert_eq!(result, CtBackupMode::NoBackup);
     }
 
-    // --backup can be passed without an argument
+    // --backup 选项可以不带参数传入
     #[test]
     fn test_backup_mode_long_without_args_no_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -538,7 +525,7 @@ mod tests {
         assert_eq!(result, CtBackupMode::ExistingBackup);
     }
 
-    // --backup can be passed with an argument only
+    // --backup只能带有参数一起使用
     #[test]
     fn test_backup_mode_long_with_args() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -549,7 +536,7 @@ mod tests {
         assert_eq!(result, CtBackupMode::SimpleBackup);
     }
 
-    // --backup errors on invalid argument
+    // --backup对于无效参数报错
     #[test]
     fn test_backup_mode_long_with_args_invalid() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -562,7 +549,7 @@ mod tests {
         assert!(text.contains("invalid argument 'foobar' for 'backup type'"));
     }
 
-    // --backup errors on ambiguous argument
+    // --backup 在遇到模糊参数时报错
     #[test]
     fn test_backup_mode_long_with_args_ambiguous() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -575,7 +562,7 @@ mod tests {
         assert!(text.contains("ambiguous argument 'n' for 'backup type'"));
     }
 
-    // --backup accepts shortened arguments (si for simple)
+    // --backup接受缩写的参数（si表示simple）
     #[test]
     fn test_backup_mode_long_with_arg_shortened() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -586,7 +573,7 @@ mod tests {
         assert_eq!(result, CtBackupMode::SimpleBackup);
     }
 
-    // -b ignores the "VERSION_CONTROL" environment variable
+    // -b 选项忽略 “VERSION_CONTROL” 环境变量
     #[test]
     fn test_backup_mode_short_only_ignore_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -599,7 +586,7 @@ mod tests {
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
-    // --backup can be passed without an argument, but reads env var if existent
+    // --backup可以不带参数传入，但如果存在则读取环境变量
     #[test]
     fn test_backup_mode_long_without_args_with_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -612,7 +599,7 @@ mod tests {
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
-    // --backup errors on invalid VERSION_CONTROL env var
+    // --backup 在遇到无效的 VERSION_CONTROL 环境变量时报错
     #[test]
     fn test_backup_mode_long_with_env_var_invalid() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -627,7 +614,7 @@ mod tests {
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
-    // --backup errors on ambiguous VERSION_CONTROL env var
+    // --backup对于模糊的VERSION_CONTROL环境变量报错
     #[test]
     fn test_backup_mode_long_with_env_var_ambiguous() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -642,7 +629,7 @@ mod tests {
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
-    // --backup accepts shortened env vars (si for simple)
+    // --backup 接受简写的环境变量（如 si 代表 simple）
     #[test]
     fn test_backup_mode_long_with_env_var_shortened() {
         let _dummy = TEST_MUTEX.lock().unwrap();
@@ -706,41 +693,22 @@ mod tests {
         assert_eq!(expected, format!("{}", error));
     }
 
-    // #[test]
-    // fn test_backup_impossible_display() {
-    //     let _error = CtBackupError::BackupImpossible;
-    //     let expected = "cannot create backup";
-    //     print!("{}", expected);
-    //     // assert_eq!(expected, format!("{}", error));
-    // }
-
-    // Placeholder for later
-    // #[test]
-    // fn test_backup_failed_display() {
-    //     let error = CtBackupError::BackupFailed("from".to_string(), "to".to_string(), std::io::Error::new(std::io::ErrorKind::Other, "failed"));
-    //     let expected = "failed to backup 'from' to 'to': failed";
-    //     assert_eq!(expected, format!("{}", error));
-    // }
-
     #[test]
     fn test_existing_backup_path_with_existing_path() {
         let temp_dir = std::env::temp_dir();
         let path = temp_dir.join("test_file.txt");
         let suffix = ".bak";
 
-        // Create a dummy file for testing
+        // 创建一个用于测试的虚拟文件
         let _ = fs::File::create(&path).unwrap();
 
-        // Create a backup file with the given suffix
+        // 使用给定的后缀创建备份文件
         let backup_path = existing_backup_path(&path, suffix);
         let except_path: PathBuf = temp_dir.join("test_file.txt.bak");
 
-        // Check if the backup file exists
-        println!("{:?}", backup_path);
-
         assert_eq!(backup_path, except_path);
 
-        // Clean up the dummy file and backup file
+        // 清理虚拟文件和备份文件
         fs::remove_file(&path).unwrap();
     }
 
@@ -750,7 +718,7 @@ mod tests {
         let path = temp_dir.join("test_file.txt");
         let suffix = ".bak";
 
-        // Create a backup file with the given suffix
+        // 使用给定的后缀创建备份文件
         let backup_path = existing_backup_path(&path, suffix);
 
         // Check if the backup file does not exist
@@ -819,55 +787,5 @@ mod tests {
         let mut args = std::collections::HashMap::new();
         args.insert("backup", "incremental");
         let _matches = <ArgMatches as std::default::Default>::default();
-
-        // // Act
-        // let result = determine_backup_mode(&matches);
-        //
-        // // Assert
-        // assert!(result.is_ok());
-    }
-
-    // #[test]
-    // fn test_backup_mode_with_backup_option_and_env_variable() {
-    //     // Arrange
-    //     let mut args = std::collections::HashMap::new();
-    //     args.insert("backup", "incremental");
-    //     let _matches = <ArgMatches as std::default::Default>::default();
-    //     env::set_var("VERSION_CONTROL", "full");
-
-    //     // Act
-    //     // let result = determine_backup_mode(&matches);
-    //     //
-    //     // // Assert
-    //     // assert!(result.is_ok());
-    // }
-
-    #[test]
-    fn test_backup_mode_with_backup_option_and_invalid_method() {
-        // Arrange
-        let mut args = std::collections::HashMap::new();
-        args.insert("backup", "invalid_method");
-        let _matches = <ArgMatches as std::default::Default>::default();
-
-        // // Act
-        // let result = determine_backup_mode(&matches);
-        //
-        // // Assert
-        // assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_backup_mode_with_backup_no_arg_option() {
-        // Arrange
-        let mut args = std::collections::HashMap::new();
-        args.insert("b", "");
-        let _matches = <ArgMatches as std::default::Default>::default();
-
-        // // Act
-        // let result = determine_backup_mode(&matches);
-        //
-        // // Assert
-        // assert!(result.is_ok());
-        // assert_eq!(result.unwrap(), CtBackupMode::ExistingBackup);
     }
 }

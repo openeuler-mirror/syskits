@@ -9,8 +9,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid
-
 //! Get password/group file entry
 //!
 //! # Examples:
@@ -29,9 +27,9 @@
 //! assert!(ct_entries::gid2grp(0).is_ok());
 //! assert!(ct_entries::grp2gid(root_group).is_ok());
 //!
-//! assert!(ct_entries::Passwd::locate(0).is_ok());
-//! assert!(ct_entries::Passwd::locate("0").is_ok());
-//! assert!(ct_entries::Passwd::locate("root").is_ok());
+//! assert!(ct_entries::CtPasswd::locate(0).is_ok());
+//! assert!(ct_entries::CtPasswd::locate("0").is_ok());
+//! assert!(ct_entries::CtPasswd::locate("root").is_ok());
 //!
 //! assert!(ct_entries::Group::locate(0).is_ok());
 //! assert!(ct_entries::Group::locate("0").is_ok());
@@ -82,14 +80,13 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
             n => n,
         };
 
-        // This is a small buffer, so we can afford to zero-initialize it and
-        // use safe Vec operations
+        // 这是一个小缓冲区，所以我们能够负担得起对其进行零初始化，并使用安全的Vec操作
         groups.resize(ngroups.try_into().unwrap(), 0);
         let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
         if res == -1 {
             let err = IOError::last_os_error();
             if err.raw_os_error() == Some(libc::EINVAL) {
-                // Number of groups changed, retry
+                // 更改的组数量，重试
                 continue;
             } else {
                 return Err(err);
@@ -141,7 +138,7 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct Passwd {
+pub struct CtPasswd {
     /// AKA passwd.pw_name
     pub name: String,
     /// AKA passwd.pw_uid
@@ -177,7 +174,7 @@ unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     }
 }
 
-impl Passwd {
+impl CtPasswd {
     /// SAFETY: All the pointed-to strings must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
@@ -269,14 +266,10 @@ pub trait Locate<K> {
         Self: ::std::marker::Sized;
 }
 
-// These functions are not thread-safe:
-// > The return value may point to a static area, and may be
-// > overwritten by subsequent calls to getpwent(3), getpwnam(),
-// > or getpwuid().
-// This applies not just to the struct but also the strings it points
-// to, so we must copy all the data we want before releasing the lock.
-// (Technically we must also ensure that the raw functions aren't being called
-// anywhere else in the program.)
+// 这些函数不是线程安全的：
+// > 返回值可能会指向静态区域，并且可能会被后续调用 getpwent(3)，getpwnam() 或 getpwuid() 覆写。
+// 这不仅适用于结构体，还适用于它所指向的字符串，因此我们必须在释放锁之前复制所有想要的数据。
+// （从技术上讲，我们也必须确保程序其他地方没有调用这些原始函数。）
 static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 macro_rules! f {
@@ -284,17 +277,16 @@ macro_rules! f {
         impl Locate<$t> for $st {
             fn locate(k: $t) -> IOResult<Self> {
                 let _guard = PW_LOCK.lock();
-                // SAFETY: We're holding PW_LOCK.
+                // 安全性：我们持有PW_LOCK。
                 unsafe {
                     let data = $fid(k);
                     if !data.is_null() {
                         Ok($st::from_raw(ptr::read(data as *const _)))
                     } else {
-                        // FIXME: Resource limits, signals and I/O failure may
-                        // cause this too. See getpwnam(3).
-                        // errno must be set to zero before the call. We can
-                        // use libc::__errno_location() on some platforms.
-                        // The same applies for the two cases below.
+                        // FIXME: 资源限制、信号和 I/O 失败也可能导致这种情况。
+                        // 参见 getpwnam(3)。在调用前必须将 errno 设置为零。
+                        // 我们可以在某些平台上使用 libc::__errno_location()。
+                        // 下面两种情况也适用这一点。
                         Err(IOError::new(
                             ErrorKind::NotFound,
                             format!("No such id: {}", k),
@@ -308,7 +300,7 @@ macro_rules! f {
             fn locate(k: &'a str) -> IOResult<Self> {
                 let _guard = PW_LOCK.lock();
                 if let Ok(id) = k.parse::<$t>() {
-                    // SAFETY: We're holding PW_LOCK.
+                    // 安全性：我们持有PW_LOCK。
                     unsafe {
                         let data = $fid(id);
                         if !data.is_null() {
@@ -321,7 +313,7 @@ macro_rules! f {
                         }
                     }
                 } else {
-                    // SAFETY: We're holding PW_LOCK.
+                    // 安全性：我们持有PW_LOCK。
                     unsafe {
                         let cstring = CString::new(k).unwrap();
                         let data = $fnam(cstring.as_ptr());
@@ -340,12 +332,12 @@ macro_rules! f {
     };
 }
 
-f!(getpwnam, getpwuid, uid_t, Passwd);
+f!(getpwnam, getpwuid, uid_t, CtPasswd);
 f!(getgrnam, getgrgid, gid_t, Group);
 
 #[inline]
 pub fn uid2usr(id: uid_t) -> IOResult<String> {
-    Passwd::locate(id).map(|p| p.name)
+    CtPasswd::locate(id).map(|p| p.name)
 }
 
 #[inline]
@@ -355,7 +347,7 @@ pub fn gid2grp(id: gid_t) -> IOResult<String> {
 
 #[inline]
 pub fn usr2uid(name: &str) -> IOResult<uid_t> {
-    Passwd::locate(name).map(|p| p.uid)
+    CtPasswd::locate(name).map(|p| p.uid)
 }
 
 #[inline]
@@ -387,7 +379,7 @@ mod test {
     }
     #[test]
     fn test_belongs_to() {
-        let test_user = Passwd {
+        let test_user = CtPasswd {
             name: "test_user".to_string(),
             uid: 1000,
             gid: 1000,
@@ -396,7 +388,6 @@ mod test {
 
         let groups = test_user.belongs_to();
         assert_eq!(groups, vec![1000]); // Assuming test_user only belongs to one group
-                                        // TODO: Add additional tests for scenarios where the user belongs to multiple groups
     }
 
     #[test]

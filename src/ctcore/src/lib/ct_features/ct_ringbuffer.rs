@@ -8,7 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-//! A fixed-size ring buffer.
+
 use std::collections::VecDeque;
 
 /// A fixed-size ring buffer backed by a `VecDeque`.
@@ -46,12 +46,15 @@ use std::collections::VecDeque;
 ///
 /// [`push_back`]: struct.RingBuffer.html#method.push_back
 /// [`from_iter`]: struct.RingBuffer.html#method.from_iter
-pub struct RingBuffer<T> {
+///
+
+//环形buffer
+pub struct CtRingBuffer<T> {
     pub data: VecDeque<T>,
     size: usize,
 }
 
-impl<T> RingBuffer<T> {
+impl<T> CtRingBuffer<T> {
     pub fn new(size: usize) -> Self {
         Self {
             data: VecDeque::new(),
@@ -117,12 +120,12 @@ impl<T> RingBuffer<T> {
 #[cfg(test)]
 mod tests {
 
-    use crate::ct_ringbuffer::RingBuffer;
+    use crate::ct_ringbuffer::CtRingBuffer;
     use std::collections::VecDeque;
 
     #[test]
     fn test_size_limit_zero() {
-        let mut buf = RingBuffer::new(0);
+        let mut buf = CtRingBuffer::new(0);
         assert_eq!(Some(0), buf.push_back(0));
         assert_eq!(Some(1), buf.push_back(1));
         assert_eq!(Some(2), buf.push_back(2));
@@ -130,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_evict_oldest() {
-        let mut buf = RingBuffer::new(2);
+        let mut buf = CtRingBuffer::new(2);
         assert_eq!(None, buf.push_back(0));
         assert_eq!(None, buf.push_back(1));
         assert_eq!(Some(0), buf.push_back(2));
@@ -138,14 +141,14 @@ mod tests {
     #[test]
     fn test_from_iter() {
         let iter = [0, 1, 2, 3, 4].iter();
-        let actual = RingBuffer::from_iter(iter, 2).data;
+        let actual = CtRingBuffer::from_iter(iter, 2).data;
         let expected: VecDeque<&i32> = [3, 4].iter().collect();
         assert_eq!(actual, expected);
     }
 
     #[test]
     fn test_size_limit_zero_behavior() {
-        let mut buf = RingBuffer::new(0);
+        let mut buf = CtRingBuffer::new(0);
         assert_eq!(buf.push_back(0), Some(0));
         assert_eq!(buf.push_back(1), Some(1));
         assert_eq!(buf.push_back(2), Some(2));
@@ -154,14 +157,14 @@ mod tests {
 
     #[test]
     fn test_push_back_into_empty_buffer() {
-        let mut buf = RingBuffer::new(3);
+        let mut buf = CtRingBuffer::new(3);
         assert_eq!(buf.push_back(0), None);
         assert_eq!(buf.data, vec![0]);
     }
 
     #[test]
     fn test_push_back_until_full() {
-        let mut buf = RingBuffer::new(3);
+        let mut buf = CtRingBuffer::new(3);
         assert_eq!(buf.push_back(0), None);
         assert_eq!(buf.push_back(1), None);
         assert_eq!(buf.push_back(2), None);
@@ -170,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_evict_oldest_element() {
-        let mut buf = RingBuffer::new(2);
+        let mut buf = CtRingBuffer::new(2);
         buf.push_back(0);
         buf.push_back(1);
         assert_eq!(buf.push_back(2), Some(0));
@@ -179,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_push_back_does_not_evict_when_not_full() {
-        let mut buf = RingBuffer::new(3);
+        let mut buf = CtRingBuffer::new(3);
         buf.push_back(0);
         buf.push_back(1);
         buf.push_back(2);
@@ -190,7 +193,7 @@ mod tests {
     #[test]
     fn test_from_iter_smaller_than_size_limit() {
         let iter = [0, 1].iter();
-        let actual = RingBuffer::from_iter(iter, 3).data;
+        let actual = CtRingBuffer::from_iter(iter, 3).data;
         let expected: VecDeque<&i32> = [0, 1].iter().collect();
         assert_eq!(actual, expected);
     }
@@ -198,7 +201,7 @@ mod tests {
     #[test]
     fn test_from_iter_larger_than_size_limit() {
         let iter = [0, 1, 2, 3, 4, 5].iter();
-        let actual = RingBuffer::from_iter(iter, 3).data;
+        let actual = CtRingBuffer::from_iter(iter, 3).data;
         let expected: VecDeque<&i32> = [3, 4, 5].iter().collect();
         assert_eq!(actual, expected);
     }

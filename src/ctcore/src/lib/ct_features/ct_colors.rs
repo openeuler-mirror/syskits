@@ -14,7 +14,7 @@
 /// Global config options can be specified before TERM or COLORTERM entries
 /// below are TERM or COLORTERM entries, which can be glob patterns, which
 /// restrict following config to systems with matching environment variables.
-pub static TERMS: &[&str] = &[
+pub static CT_TERMS: &[&str] = &[
     "Eterm",
     "ansi",
     "*color*",
@@ -54,25 +54,25 @@ pub static TERMS: &[&str] = &[
 /// 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white
 /// #NORMAL 00 /// no color code at all
 /// #FILE 00 /// regular file: use no color at all
-pub static FILE_TYPES: &[(&str, &str, &str)] = &[
-    ("RESET", "rs", "0"),                     // reset to "normal" color
-    ("DIR", "di", "01;34"),                   // directory
-    ("LINK", "ln", "01;36"),                  // symbolic link
-    ("MULTIHARDLINK", "mh", "00"),            // regular file with more than one link
-    ("FIFO", "pi", "40;33"),                  // pipe
-    ("SOCK", "so", "01;35"),                  // socket
-    ("DOOR", "do", "01;35"),                  // door
-    ("BLK", "bd", "40;33;01"),                // block device driver
-    ("CHR", "cd", "40;33;01"),                // character device driver
-    ("ORPHAN", "or", "40;31;01"),             // symlink to nonexistent file, or non-stat'able file
-    ("MISSING", "mi", "00"),                  // ... and the files they point to
-    ("SETUID", "su", "37;41"),                // file that is setuid (u+s)
-    ("SETGID", "sg", "30;43"),                // file that is setgid (g+s)
-    ("CAPABILITY", "ca", "00"),               // file with capability
-    ("STICKY_OTHER_WRITABLE", "tw", "30;42"), // dir that is sticky and other-writable (+t,o+w)
-    ("OTHER_WRITABLE", "ow", "34;42"),        // dir that is other-writable (o+w) and not sticky
-    ("STICKY", "st", "37;44"), // dir with the sticky bit set (+t) and not other-writable
-    ("EXEC", "ex", "01;32"),   // files with execute permission
+pub static CT_FILE_TYPES: &[(&str, &str, &str)] = &[
+    ("RESET", "rs", "0"),          //RESET (rs)：重置颜色和样式到默认状态。
+    ("DIR", "di", "01;34"),        // DIR (di)：目录，以粗体蓝色显示。
+    ("LINK", "ln", "01;36"),       // LINK (ln)：符号链接（软链接），以粗体青色显示。
+    ("MULTIHARDLINK", "mh", "00"), // MULTIHARDLINK (mh)：拥有多个硬链接的常规文件，不改变颜色（默认颜色）。
+    ("FIFO", "pi", "40;33"),       // FIFO (pi)：命名管道（FIFO），以黄色背景和红色前景显示。
+    ("SOCK", "so", "01;35"),       // SOCK (so)：套接字，以粗体紫色显示。
+    ("DOOR", "do", "01;35"),       // DOOR (do)：门（Solaris特有的文件类型），以粗体紫色显示。
+    ("BLK", "bd", "40;33;01"),     // BLK (bd)：块设备驱动，以黄色背景、红色前景和粗体显示。
+    ("CHR", "cd", "40;33;01"),     // CHR (cd)：字符设备驱动，以黄色背景、红色前景和粗体显示。
+    ("ORPHAN", "or", "40;31;01"), // ORPHAN (or)：指向不存在文件的符号链接，或无法通过stat获取信息的文件，以粗体红底黑字显示。
+    ("MISSING", "mi", "00"), // MISSING (mi)：与ORPHAN对应的文件（即被ORPHAN链接指向的文件），不改变颜色（默认颜色）。
+    ("SETUID", "su", "37;41"), // SETUID (su)：设置了SUID位的文件（用户ID执行位），以白色背景和红色前景显示。
+    ("SETGID", "sg", "30;43"), // SETGID (sg)：设置了SGID位的文件（组ID执行位），以绿色背景和黄色前景显示。
+    ("CAPABILITY", "ca", "00"), // CAPABILITY (ca)：具有Linux能力集的文件，不改变颜色（默认颜色）。
+    ("STICKY_OTHER_WRITABLE", "tw", "30;42"), // STICKY_OTHER_WRITABLE (tw)：具有粘滞位（+t）且其他用户可写（o+w）的目录，以绿色背景和蓝色前景显示。
+    ("OTHER_WRITABLE", "ow", "34;42"), // OTHER_WRITABLE (ow)：其他用户可写（o+w）但不具有粘滞位的目录，以蓝色前景和绿色背景显示。
+    ("STICKY", "st", "37;44"), // STICKY (st)：具有粘滞位（+t）但不可其他用户写入的目录，以白色背景和蓝色前景显示。
+    ("EXEC", "ex", "01;32"),   // EXEC (ex)：具有执行权限的文件，以粗体绿色显示。
 ];
 
 /// Colors for file types
@@ -80,9 +80,9 @@ pub static FILE_TYPES: &[(&str, &str, &str)] = &[
 /// List any file extensions like '.gz' or '.tar' that you would like ls
 /// to color below. Put the extension, a space, and the color init string.
 /// (and any comments you want to add after a '#')
-pub static FILE_COLORS: &[(&str, &str)] = &[
+pub static CT_FILE_COLORS: &[(&str, &str)] = &[
     /*
-    // Executables (Windows)
+    // 可执行文件
     (".cmd", "01;32"),
     (".exe", "01;32"),
     (".com", "01;32"),
@@ -90,7 +90,7 @@ pub static FILE_COLORS: &[(&str, &str)] = &[
     (".bat", "01;32"),
     (".sh", "01;32"),
     (".csh", "01;32"),*/
-    // Archives or compressed
+    // 归档文件或压缩文件
     (".tar", "01;31"),
     (".tgz", "01;31"),
     (".arc", "01;31"),
@@ -187,10 +187,9 @@ pub static FILE_COLORS: &[(&str, &str)] = &[
     (".yuv", "01;35"),
     (".cgm", "01;35"),
     (".emf", "01;35"),
-    // https://wiki.xiph.org/MIME_Types_and_File_Extensions
     (".ogv", "01;35"),
     (".ogx", "01;35"),
-    // Audio formats
+    // 音频格式
     (".aac", "00;36"),
     (".au", "00;36"),
     (".flac", "00;36"),
@@ -203,12 +202,11 @@ pub static FILE_COLORS: &[(&str, &str)] = &[
     (".ogg", "00;36"),
     (".ra", "00;36"),
     (".wav", "00;36"),
-    // https://wiki.xiph.org/MIME_Types_and_File_Extensions
     (".oga", "00;36"),
     (".opus", "00;36"),
     (".spx", "00;36"),
     (".xspf", "00;36"),
-    // Backup files
+    // 文件备份
     ("*~", "00;90"),
     ("*#", "00;90"),
     (".bak", "00;90"),
@@ -228,7 +226,7 @@ pub static FILE_COLORS: &[(&str, &str)] = &[
     (".rpmsave", "00;90"),
 ];
 
-pub static FILE_ATTRIBUTE_CODES: &[(&str, &str)] = &[
+pub static CT_FILE_ATTRIBUTE_CODES: &[(&str, &str)] = &[
     ("normal", "no"),
     ("norm", "no"),
     ("file", "fi"),

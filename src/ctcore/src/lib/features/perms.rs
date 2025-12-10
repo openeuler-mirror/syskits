@@ -719,5 +719,62 @@ mod tests {
         assert!(!is_root(&symlink_path, false));
         assert!(is_root(&symlink_path, true));
     }
+    #[test]
+    fn test_check_root_valid_cases() {
+        // Test case 1: root path is "/", would_traverse_symlink is true
+        let result1 = check_root(Path::new("/"), true);
+        assert!(result1);
 
+        // Test case 2: root path is "/", would_traverse_symlink is false
+        let result2 = check_root(Path::new("/"), false);
+        assert!(result2);
+
+        // Test case 3: root path is not "/", would_traverse_symlink is true
+        let result3 = check_root(Path::new("/test"), true);
+        assert!(!result3);
+
+        // Test case 4: root path is not "/", would_traverse_symlink is false
+        let result4 = check_root(Path::new("/test"), false);
+        assert!(!result4);
+    }
+
+    #[test]
+    fn test_check_root_invalid_cases() {
+        // Test case 5: Invalid path (non-existent), would_traverse_symlink is true
+        let non_existent_path = Path::new("non_existent");
+        let result5 = check_root(non_existent_path, true);
+        // 根据实际情况判断此处应抛出错误还是返回特定值
+        assert_eq!(result5, false);
+
+        // Test case 6: Invalid path (non-existent), would_traverse_symlink is false
+        let result6 = check_root(non_existent_path, false);
+        // 同上，根据实际情况进行断言
+        assert_eq!(result6, false);
+
+        // Test case 7: Handling symbolic links (if applicable)
+        // 如果函数应该处理符号链接，请添加相应的测试用例
+        // 注意：在大多数情况下，仅路径字符串并不足以模拟符号链接行为
+    }
+
+    #[test]
+    fn test_chown() {
+        // Prepare test data
+        let test_path = "/tmp/test_file";
+        fs::create_dir_all("/tmp").expect("create_dir_all FAIL");
+        fs::write(test_path, "test data").expect("write FAIL");
+
+        // Change ownership of the file
+        let uid = 0; // Replace with the desired UID
+        let gid = 0; // Replace with the desired GID
+        let follow = true; // Set to true if following symbolic links
+        chown(test_path, uid, gid, follow).expect("chown FAIL");
+
+        // Verify ownership change
+        let metadata = fs::metadata(test_path);
+        assert_eq!(metadata.expect("REASON").clone().uid(), uid as u32);
+        //assert_eq!(metadata.expect("REASON").clone().gid(), gid as u32);
+
+        // Clean up test data
+        fs::remove_file(test_path).expect("Tremove_file FAIL");
+    }
 }

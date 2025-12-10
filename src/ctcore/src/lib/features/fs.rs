@@ -850,6 +850,35 @@ mod tests {
         },
     ];
 
+    #[test]
+    fn test_from_file() {
+        let file = fs::File::open("/etc/hosts").unwrap();
+        let file_info = FileInformation::from_file(&file).unwrap();
+
+        let expected_stat = stat::stat("/etc/hosts").unwrap();
+        assert_eq!(file_info.0.st_dev, expected_stat.st_dev);
+        assert_eq!(file_info.0.st_ino, expected_stat.st_ino);
+        // Add more assertions as needed
+    }
+
+    #[test]
+    fn test_from_path() {
+        let file_info = FileInformation::from_path("/etc/hosts", true).unwrap();
+
+        let expected_stat = stat::stat("/etc/hosts").unwrap();
+        assert_eq!(file_info.0.st_dev, expected_stat.st_dev);
+        assert_eq!(file_info.0.st_ino, expected_stat.st_ino);
+        // Add more assertions as needed
+    }
+
+    #[test]
+    fn test_file_size() {
+        let file = fs::File::open("/etc/hosts").unwrap();
+        let file_info = FileInformation::from_file(&file).unwrap();
+
+        let expected_size = fs::metadata("/etc/hosts").unwrap().len();
+        assert_eq!(file_info.file_size(), expected_size);
+    }
 
     #[test]
     fn test_normalize_path() {

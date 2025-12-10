@@ -139,7 +139,10 @@ mod tests {
             CtLineEnding::from_zero_flag(newline_byte == 0),
             CtLineEnding::Newline
         );
-        assert_eq!(CtLineEnding::from_zero_flag(nul_byte == 0), CtLineEnding::Nul);
+        assert_eq!(
+            CtLineEnding::from_zero_flag(nul_byte == 0),
+            CtLineEnding::Nul
+        );
         assert_eq!(
             CtLineEnding::from_zero_flag(newline_byte != 0),
             CtLineEnding::Nul

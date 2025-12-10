@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
- use crate::{
+use crate::{
     ct_error::set_ct_exit_code,
     ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
     ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle},

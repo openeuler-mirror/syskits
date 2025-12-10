@@ -511,7 +511,7 @@ impl ParseSizeError {
 mod tests {
     use super::*;
 
-    use crate::ct_parse_size::{parse_size_u128, parse_size_u64, ParseSizeError, CtParser};
+    use crate::ct_parse_size::{parse_size_u128, parse_size_u64, CtParser, ParseSizeError};
 
 
      #[test]

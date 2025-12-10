@@ -13,20 +13,20 @@ use platform_info::*;
 
 #[warn(unused_imports)]
 use clap::{crate_version, Command};
-use ctcore::ct_error::{UResult, USimpleError};
-use ctcore::{format_usage, help_about, help_section};
+use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_section};
 
-static CT_ABOUT: &str = help_about!("arch.md");
-static CT_SUMMARY: &str = help_section!("after help", "arch.md");
+static CT_ABOUT: &str = ct_help_about!("arch.md");
+static CT_SUMMARY: &str = ct_help_section!("after help", "arch.md");
 #[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> UResult<()> {
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     ct_main(args).map(|_| ())
 }
 
-pub fn ct_main(args: impl ctcore::Args) -> UResult<String> {
+pub fn ct_main(args: impl ctcore::Args) -> CTResult<String> {
     ct_app().try_get_matches_from(args)?;
 
-    let uts = PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
+    let uts = PlatformInfo::new().map_err(|_e| CtSimpleError::new(1, "cannot get system name"))?;
 
     let binding = uts.machine().to_string_lossy();
     let s = binding.trim();
@@ -35,10 +35,10 @@ pub fn ct_main(args: impl ctcore::Args) -> UResult<String> {
 }
 
 pub fn ct_app() -> Command {
-    let utility_name = ctcore::util_name();
+    let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = CT_ABOUT;
-    let usage_description = format_usage(CT_SUMMARY);
+    let usage_description = ct_format_usage(CT_SUMMARY);
 
     Command::new(utility_name)
         .version(command_version)
@@ -63,7 +63,7 @@ mod tests {
 
         {
             let command = ct_app();
-            let args = vec![ctcore::util_name(), "-h"];
+            let args = vec![ctcore::ct_util_name(), "-h"];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
@@ -81,7 +81,7 @@ mod tests {
         }
         {
             let command = ct_app();
-            let args = vec![ctcore::util_name(), "--version"];
+            let args = vec![ctcore::ct_util_name(), "--version"];
             // let result = ct_main(args.iter().map(|s| OsString::from(s)));
 
             let result = command.try_get_matches_from(args);
@@ -100,7 +100,7 @@ mod tests {
         }
         {
             let command = ct_app();
-            let args = vec![ctcore::util_name(), "-V"];
+            let args = vec![ctcore::ct_util_name(), "-V"];
             // let result = ct_main(args.iter().map(|s| OsString::from(s)));
 
             let result = command.try_get_matches_from(args);
@@ -113,7 +113,7 @@ mod tests {
         let expected_arch = std::env::consts::ARCH;
         // println!("当前操作系统架构：{}", expected_arch);
 
-        let args = vec![ctcore::util_name()];
+        let args = vec![ctcore::ct_util_name()];
         let result = ct_main(args.iter().map(|s| OsString::from(s)));
         let mut s = String::new();
         // 使用模式匹配提取字段值

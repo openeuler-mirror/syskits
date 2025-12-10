@@ -619,4 +619,201 @@ mod tests {
         assert_eq!(result_crlf, result_lf);
     }
 
+    #[test]
+    fn test_blake3() {
+        let mut blake3 = Blake3::new();
+        blake3.hash_update(b"hello");
+        let mut output = [0u8; 32];
+        blake3.hash_finalize(&mut output);
+
+        // Replace the expected hash value with the actual expected hash value
+        let expected_hash = [
+            234, 143, 22, 61, 179, 134, 130, 146, 94, 68, 145, 197, 229, 141, 75, 179, 80, 110,
+            248, 193, 78, 183, 138, 134, 233, 8, 197, 98, 74, 103, 32, 15,
+        ];
+        println!("{:?}", output);
+        assert_eq!(output, expected_hash);
+
+        // Test reset
+        blake3.reset();
+        let mut output = [0u8; 32];
+        blake3.hash_finalize(&mut output);
+        let expected_hash = [
+            175, 19, 73, 185, 245, 249, 161, 166, 160, 64, 77, 234, 54, 220, 201, 73, 155, 203, 37,
+            201, 173, 193, 18, 183, 204, 154, 147, 202, 228, 31, 50, 98,
+        ];
+        println!("{:?}", output);
+        assert_eq!(output, expected_hash);
+    }
+
+    #[test]
+    fn test_sm3() {
+        let mut sm3 = Sm3::new();
+        sm3.hash_update(b"hello");
+        let mut output = [0u8; 32];
+        sm3.hash_finalize(&mut output);
+
+        // Replace the expected hash value with the actual expected hash value
+        let expected_hash = [
+            190, 203, 191, 170, 230, 84, 139, 139, 240, 207, 202, 213, 162, 113, 131, 205, 27, 230,
+            9, 59, 28, 206, 204, 195, 3, 217, 198, 29, 10, 100, 82, 104,
+        ];
+
+        println!("{:?}", output);
+        assert_eq!(output, expected_hash);
+
+        // Test reset
+        sm3.reset();
+        let mut output = [0u8; 32];
+        sm3.hash_finalize(&mut output);
+        let expected_hash = [
+            26, 178, 29, 131, 85, 207, 161, 127, 142, 97, 25, 72, 49, 232, 26, 143, 34, 190, 200,
+            199, 40, 254, 251, 116, 126, 208, 53, 235, 80, 130, 170, 43,
+        ];
+        println!("{:?}", output);
+        assert_eq!(output, expected_hash);
+    }
+
+    #[test]
+    fn test_blake2b_with_output_bytes() {
+        let output_bytes = 32; // custom output bytes length
+        let blake2b = Blake2b::with_output_bytes(output_bytes);
+
+        // Assert that the output bytes length is correct
+        assert_eq!(blake2b.output_bits() / 8, output_bytes);
+    }
+
+    #[test]
+    fn test_blake2b_new() {
+        let blake2b = Blake2b::new();
+
+        // Assert that the default output bytes length is 64 bits
+        assert_eq!(blake2b.output_bits() / 8, 64);
+    }
+
+    #[test]
+    fn test_blake2b_hash_update() {
+        let mut blake2b = Blake2b::new();
+        let input = b"Hello, world!";
+
+        // Update the hash with the input
+        blake2b.hash_update(input);
+
+        // Finalize the hash and store it in `output`
+        let mut output = [0u8; 64];
+        blake2b.hash_finalize(&mut output);
+
+        // Assert that the output is not all zeros (since we updated the hash with input)
+        assert_ne!(output, [0u8; 64]);
+    }
+
+    #[test]
+    fn test_blake2b_hash_finalize() {
+        let mut blake2b = Blake2b::new();
+        let input = b"Hello, world!";
+
+        // Update the hash with the input
+        blake2b.hash_update(input);
+
+        // Finalize the hash and store it in `output`
+        let mut output = [0u8; 64];
+        blake2b.hash_finalize(&mut output);
+
+        let _expected_hash = [
+            120, 106, 2, 247, 66, 1, 89, 3, 198, 198, 253, 133, 37, 82, 210, 114, 145, 47, 71, 64,
+            225, 88, 71, 97, 138, 134, 226, 23, 247, 31, 84, 25, 210, 94, 16, 49, 175, 238, 88, 83,
+            19, 137, 100, 68, 147, 78, 176, 75, 144, 58, 104, 91, 20, 72, 183, 85, 213, 111, 112,
+            26, 254, 155, 226, 206,
+        ];
+        // Assert that the output is not all zeros
+        assert_ne!(output, [0u8; 64]);
+    }
+
+    #[test]
+    fn test_blake2b_reset() {
+        let mut blake2b = Blake2b::new();
+        let input = b"Hello, world!";
+
+        // Update the hash with the input
+        blake2b.hash_update(input);
+
+        // Reset the hash
+        blake2b.reset();
+
+        // Finalize the hash and store it in `output`
+        let mut output = [0u8; 64];
+        blake2b.hash_finalize(&mut output);
+
+        let expected_hash = [
+            120, 106, 2, 247, 66, 1, 89, 3, 198, 198, 253, 133, 37, 82, 210, 114, 145, 47, 71, 64,
+            225, 88, 71, 97, 138, 134, 226, 23, 247, 31, 84, 25, 210, 94, 16, 49, 175, 238, 88, 83,
+            19, 137, 100, 68, 147, 78, 176, 75, 144, 58, 104, 91, 20, 72, 183, 85, 213, 111, 112,
+            26, 254, 155, 226, 206,
+        ];
+        // Assert that the output is all zeros (since we reset the hash)
+        assert_eq!(output, expected_hash);
+    }
+    #[test]
+    fn test_div_ceil() {
+        assert_eq!(div_ceil(5, 2), 3);
+        assert_eq!(div_ceil(10, 3), 4);
+        assert_eq!(div_ceil(8, 4), 2);
+        assert_eq!(div_ceil(0, 1), 0);
+        assert_eq!(div_ceil(1, 1), 1);
+    }
+
+    #[test]
+    fn test_bsd() {
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0x61, 0x62, 0x63]);
+        let mut result = [0u8; 2];
+        bsd.hash_finalize(&mut result);
+        println!("{:?}", result);
+        assert_eq!(result, [172, 64]);
+
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0x31, 0x32, 0x33]);
+        let mut result = [0u8; 2];
+        bsd.hash_finalize(&mut result);
+        println!("{:?}", result);
+        assert_eq!(result, [88, 64]);
+
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[]);
+        let mut result = [0u8; 2];
+        bsd.hash_finalize(&mut result);
+        println!("{:?}", result);
+        assert_eq!(result, [0x0, 0x0]);
+
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0xff, 0xfe, 0xfd]);
+        let mut result = [0u8; 2];
+        bsd.hash_finalize(&mut result);
+        println!("{:?}", result);
+        assert_eq!(result, [187, 193]);
+    }
+
+    #[test]
+    fn test_bsd_result_str() {
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0x61, 0x62, 0x63]);
+        println!("{:?}", bsd.result_str());
+        assert_eq!(bsd.result_str(), "16556");
+
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0x31, 0x32, 0x33]);
+        println!("{:?}", bsd.result_str());
+        assert_eq!(bsd.result_str(), "16472");
+
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[]);
+        println!("{:?}", bsd.result_str());
+        assert_eq!(bsd.result_str(), "0");
+
+        let mut bsd = BSD::new();
+        bsd.hash_update(&[0xff, 0xfe, 0xfd]);
+        println!("{:?}", bsd.result_str());
+        assert_eq!(bsd.result_str(), "49595");
+    }
+
 }

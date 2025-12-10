@@ -64,7 +64,7 @@ fn remove_file_ending(a: &str) -> &str {
     }
 }
 
-pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
+pub fn ct_version_cmp(mut a: &str, mut b: &str) -> Ordering {
     let str_cmp = a.cmp(b);
     if str_cmp == Ordering::Equal {
         return str_cmp;
@@ -156,146 +156,146 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
 
 #[cfg(test)]
 mod tests {
-    use crate::version_cmp::remove_file_ending;
-    use crate::version_cmp::version_cmp;
-    use crate::version_cmp::version_non_digit_cmp;
+    use crate::ct_version_cmp::remove_file_ending;
+    use crate::ct_version_cmp::ct_version_cmp;
+    use crate::ct_version_cmp::version_non_digit_cmp;
 
     use std::cmp::Ordering;
     #[test]
     fn test_version_cmp() {
         // Identical strings
-        assert_eq!(version_cmp("hello", "hello"), Ordering::Equal);
+        assert_eq!(ct_version_cmp("hello", "hello"), Ordering::Equal);
 
-        assert_eq!(version_cmp("file12", "file12"), Ordering::Equal);
+        assert_eq!(ct_version_cmp("file12", "file12"), Ordering::Equal);
 
         assert_eq!(
-            version_cmp("file12-suffix", "file12-suffix"),
+            ct_version_cmp("file12-suffix", "file12-suffix"),
             Ordering::Equal
         );
 
         assert_eq!(
-            version_cmp("file12-suffix24", "file12-suffix24"),
+            ct_version_cmp("file12-suffix24", "file12-suffix24"),
             Ordering::Equal
         );
 
         // Shortened names
-        assert_eq!(version_cmp("world", "wo"), Ordering::Greater,);
+        assert_eq!(ct_version_cmp("world", "wo"), Ordering::Greater,);
 
-        assert_eq!(version_cmp("hello10wo", "hello10world"), Ordering::Less,);
+        assert_eq!(ct_version_cmp("hello10wo", "hello10world"), Ordering::Less,);
 
         // Simple names
-        assert_eq!(version_cmp("world", "hello"), Ordering::Greater,);
+        assert_eq!(ct_version_cmp("world", "hello"), Ordering::Greater,);
 
-        assert_eq!(version_cmp("hello", "world"), Ordering::Less);
+        assert_eq!(ct_version_cmp("hello", "world"), Ordering::Less);
 
-        assert_eq!(version_cmp("apple", "ant"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("apple", "ant"), Ordering::Greater);
 
-        assert_eq!(version_cmp("ant", "apple"), Ordering::Less);
+        assert_eq!(ct_version_cmp("ant", "apple"), Ordering::Less);
 
         // Uppercase letters
         assert_eq!(
-            version_cmp("Beef", "apple"),
+            ct_version_cmp("Beef", "apple"),
             Ordering::Less,
             "Uppercase letters are sorted before all lowercase letters"
         );
 
-        assert_eq!(version_cmp("Apple", "apple"), Ordering::Less);
+        assert_eq!(ct_version_cmp("Apple", "apple"), Ordering::Less);
 
-        assert_eq!(version_cmp("apple", "aPple"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("apple", "aPple"), Ordering::Greater);
 
         // Numbers
         assert_eq!(
-            version_cmp("100", "20"),
+            ct_version_cmp("100", "20"),
             Ordering::Greater,
             "Greater numbers are greater even if they start with a smaller digit",
         );
 
         assert_eq!(
-            version_cmp("20", "20"),
+            ct_version_cmp("20", "20"),
             Ordering::Equal,
             "Equal numbers are equal"
         );
 
         assert_eq!(
-            version_cmp("15", "200"),
+            ct_version_cmp("15", "200"),
             Ordering::Less,
             "Small numbers are smaller"
         );
 
         // Comparing numbers with other characters
         assert_eq!(
-            version_cmp("1000", "apple"),
+            ct_version_cmp("1000", "apple"),
             Ordering::Less,
             "Numbers are sorted before other characters"
         );
 
         assert_eq!(
             // spell-checker:disable-next-line
-            version_cmp("file1000", "fileapple"),
+            ct_version_cmp("file1000", "fileapple"),
             Ordering::Less,
             "Numbers in the middle of the name are sorted before other characters"
         );
 
         // Leading zeroes
         assert_eq!(
-            version_cmp("012", "12"),
+            ct_version_cmp("012", "12"),
             Ordering::Equal,
             "A single leading zero does not make a difference"
         );
 
         assert_eq!(
-            version_cmp("000800", "0000800"),
+            ct_version_cmp("000800", "0000800"),
             Ordering::Equal,
             "Multiple leading zeros do not make a difference"
         );
 
         // Numbers and other characters combined
-        assert_eq!(version_cmp("ab10", "aa11"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("ab10", "aa11"), Ordering::Greater);
 
         assert_eq!(
-            version_cmp("aa10", "aa11"),
+            ct_version_cmp("aa10", "aa11"),
             Ordering::Less,
             "Numbers after other characters are handled correctly."
         );
 
         assert_eq!(
-            version_cmp("aa2", "aa100"),
+            ct_version_cmp("aa2", "aa100"),
             Ordering::Less,
             "Numbers after alphabetical characters are handled correctly."
         );
 
         assert_eq!(
-            version_cmp("aa10bb", "aa11aa"),
+            ct_version_cmp("aa10bb", "aa11aa"),
             Ordering::Less,
             "Number is used even if alphabetical characters after it differ."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0010", "aa11aa1"),
+            ct_version_cmp("aa10aa0010", "aa11aa1"),
             Ordering::Less,
             "Second number is ignored if the first number differs."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0010", "aa10aa1"),
+            ct_version_cmp("aa10aa0010", "aa10aa1"),
             Ordering::Greater,
             "Second number is used if the rest is equal."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0010", "aa00010aa1"),
+            ct_version_cmp("aa10aa0010", "aa00010aa1"),
             Ordering::Greater,
             "Second number is used if the rest is equal up to leading zeroes of the first number."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0022", "aa010aa022"),
+            ct_version_cmp("aa10aa0022", "aa010aa022"),
             Ordering::Equal,
             "Test multiple numeric values with leading zeros"
         );
 
         assert_eq!(
-            version_cmp("file-1.4", "file-1.13"),
+            ct_version_cmp("file-1.4", "file-1.13"),
             Ordering::Less,
             "Periods are handled as normal text, not as a decimal point."
         );
@@ -304,42 +304,42 @@ mod tests {
         // u64 == 18446744073709551615 so this should be plenty:
         //        20000000000000000000000
         assert_eq!(
-            version_cmp("aa2000000000000000000000bb", "aa002000000000000000000001bb"),
+            ct_version_cmp("aa2000000000000000000000bb", "aa002000000000000000000001bb"),
             Ordering::Less,
             "Numbers larger than u64::MAX are handled correctly without crashing"
         );
 
         assert_eq!(
-            version_cmp("aa2000000000000000000000bb", "aa002000000000000000000000bb"),
+            ct_version_cmp("aa2000000000000000000000bb", "aa002000000000000000000000bb"),
             Ordering::Equal,
             "Leading zeroes for numbers larger than u64::MAX are \
             handled correctly without crashing"
         );
 
         assert_eq!(
-            version_cmp("  a", "a"),
+            ct_version_cmp("  a", "a"),
             Ordering::Greater,
             "Whitespace is after letters because letters are before non-letters"
         );
 
         assert_eq!(
-            version_cmp("a~", "ab"),
+            ct_version_cmp("a~", "ab"),
             Ordering::Less,
             "A tilde is before other letters"
         );
 
         assert_eq!(
-            version_cmp("a~", "a"),
+            ct_version_cmp("a~", "a"),
             Ordering::Less,
             "A tilde is before the line end"
         );
         assert_eq!(
-            version_cmp("~", ""),
+            ct_version_cmp("~", ""),
             Ordering::Greater,
             "A tilde is after the empty string"
         );
         assert_eq!(
-            version_cmp(".f", ".1"),
+            ct_version_cmp(".f", ".1"),
             Ordering::Greater,
             "if both start with a dot it is ignored for the comparison"
         );
@@ -347,17 +347,17 @@ mod tests {
         // The following tests are incompatible with GNU as of 2021/06.
         // I think that's because of a bug in GNU, reported as https://lists.gnu.org/archive/html/bug-coreutils/2021-06/msg00045.html
         assert_eq!(
-            version_cmp("a..a", "a.+"),
+            ct_version_cmp("a..a", "a.+"),
             Ordering::Less,
             ".a is stripped before the comparison"
         );
         assert_eq!(
-            version_cmp("a.", "a+"),
+            ct_version_cmp("a.", "a+"),
             Ordering::Greater,
             ". is not stripped before the comparison"
         );
         assert_eq!(
-            version_cmp("a\0a", "a"),
+            ct_version_cmp("a\0a", "a"),
             Ordering::Greater,
             "NULL bytes are handled comparison"
         );
@@ -424,59 +424,59 @@ mod tests {
 
     #[test]
     fn test_version_cmp_equal() {
-        assert_eq!(version_cmp("1.2.3", "1.2.3"), Ordering::Equal);
-        assert_eq!(version_cmp("alpha1", "alpha1"), Ordering::Equal);
+        assert_eq!(ct_version_cmp("1.2.3", "1.2.3"), Ordering::Equal);
+        assert_eq!(ct_version_cmp("alpha1", "alpha1"), Ordering::Equal);
         assert_eq!(
-            version_cmp("alpha.beta.gamma", "alpha.beta.gamma"),
+            ct_version_cmp("alpha.beta.gamma", "alpha.beta.gamma"),
             Ordering::Equal
         );
         assert_eq!(
-            version_cmp("1alpha.2beta.3gamma", "1alpha.2beta.3gamma"),
+            ct_version_cmp("1alpha.2beta.3gamma", "1alpha.2beta.3gamma"),
             Ordering::Equal
         );
     }
 
     #[test]
     fn test_version_cmp_less() {
-        assert_eq!(version_cmp("1.0", "1.1"), Ordering::Less);
-        assert_eq!(version_cmp("alpha", "beta"), Ordering::Less);
-        assert_eq!(version_cmp("alpha.beta", "alpha.beta.1"), Ordering::Less);
-        assert_eq!(version_cmp("1.alpha.2", "1.alpha.3"), Ordering::Less);
-        assert_eq!(version_cmp("1.2.3a", "1.2.3b"), Ordering::Less);
+        assert_eq!(ct_version_cmp("1.0", "1.1"), Ordering::Less);
+        assert_eq!(ct_version_cmp("alpha", "beta"), Ordering::Less);
+        assert_eq!(ct_version_cmp("alpha.beta", "alpha.beta.1"), Ordering::Less);
+        assert_eq!(ct_version_cmp("1.alpha.2", "1.alpha.3"), Ordering::Less);
+        assert_eq!(ct_version_cmp("1.2.3a", "1.2.3b"), Ordering::Less);
     }
 
     #[test]
     fn test_version_cmp_greater() {
-        assert_eq!(version_cmp("1.1", "1.0"), Ordering::Greater);
-        assert_eq!(version_cmp("beta", "alpha"), Ordering::Greater);
-        assert_eq!(version_cmp("alpha.beta.1", "alpha.beta"), Ordering::Greater);
-        assert_eq!(version_cmp("1.alpha.3", "1.alpha.2"), Ordering::Greater);
-        assert_eq!(version_cmp("1.2.3b", "1.2.3a"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("1.1", "1.0"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("beta", "alpha"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("alpha.beta.1", "alpha.beta"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("1.alpha.3", "1.alpha.2"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("1.2.3b", "1.2.3a"), Ordering::Greater);
     }
 
     #[test]
     fn test_special_cases() {
-        assert_eq!(version_cmp("", "1"), Ordering::Less);
-        assert_eq!(version_cmp("1", ""), Ordering::Greater);
-        assert_eq!(version_cmp(".", ""), Ordering::Greater);
-        assert_eq!(version_cmp("", "."), Ordering::Less);
-        assert_eq!(version_cmp("..", "."), Ordering::Greater);
-        assert_eq!(version_cmp(".", ".."), Ordering::Less);
+        assert_eq!(ct_version_cmp("", "1"), Ordering::Less);
+        assert_eq!(ct_version_cmp("1", ""), Ordering::Greater);
+        assert_eq!(ct_version_cmp(".", ""), Ordering::Greater);
+        assert_eq!(ct_version_cmp("", "."), Ordering::Less);
+        assert_eq!(ct_version_cmp("..", "."), Ordering::Greater);
+        assert_eq!(ct_version_cmp(".", ".."), Ordering::Less);
 
         // Leading dots
-        assert_eq!(version_cmp(".1", "1"), Ordering::Less);
-        assert_eq!(version_cmp("1", ".1"), Ordering::Greater);
-        assert_eq!(version_cmp(".alpha", "alpha"), Ordering::Less);
-        assert_eq!(version_cmp("alpha", ".alpha"), Ordering::Greater);
+        assert_eq!(ct_version_cmp(".1", "1"), Ordering::Less);
+        assert_eq!(ct_version_cmp("1", ".1"), Ordering::Greater);
+        assert_eq!(ct_version_cmp(".alpha", "alpha"), Ordering::Less);
+        assert_eq!(ct_version_cmp("alpha", ".alpha"), Ordering::Greater);
     }
 
     #[test]
     fn test_file_extension_stripping() {
         let a = "file-1.0.0.tar.gz";
         let b = "file-1.0.1.tar.gz";
-        assert_eq!(version_cmp(a, b), Ordering::Less);
+        assert_eq!(ct_version_cmp(a, b), Ordering::Less);
         assert_eq!(
-            version_cmp(remove_file_ending(a), remove_file_ending(b)),
+            ct_version_cmp(remove_file_ending(a), remove_file_ending(b)),
             Ordering::Less
         );
 
@@ -484,16 +484,16 @@ mod tests {
         let a = "file-1.0.0.tar";
         let b = "file-1.0.1.gz";
         assert_eq!(
-            version_cmp(a, b),
-            version_cmp(remove_file_ending(a), remove_file_ending(b))
+            ct_version_cmp(a, b),
+            ct_version_cmp(remove_file_ending(a), remove_file_ending(b))
         );
     }
 
     #[test]
     fn test_leading_zeros_comparison() {
-        assert_eq!(version_cmp("1.01", "1.1"), Ordering::Equal);
-        assert_eq!(version_cmp("1.010", "1.1"), Ordering::Greater);
-        assert_eq!(version_cmp("1.001", "1.01"), Ordering::Equal);
+        assert_eq!(ct_version_cmp("1.01", "1.1"), Ordering::Equal);
+        assert_eq!(ct_version_cmp("1.010", "1.1"), Ordering::Greater);
+        assert_eq!(ct_version_cmp("1.001", "1.01"), Ordering::Equal);
     }
 
     #[test]

@@ -117,7 +117,7 @@ impl<T> RingBuffer<T> {
 #[cfg(test)]
 mod tests {
 
-    use crate::ringbuffer::RingBuffer;
+    use crate::ct_ringbuffer::RingBuffer;
     use std::collections::VecDeque;
 
     #[test]

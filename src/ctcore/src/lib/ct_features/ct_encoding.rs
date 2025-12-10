@@ -30,7 +30,7 @@ pub enum DecodeError {
 }
 
 #[derive(Debug)]
-pub enum EncodeError {
+pub enum CtEncodeError {
     Z85InputLenNotMultipleOf4,
     InvalidInput,
 }
@@ -59,7 +59,7 @@ const BASE2MSBF: Encoding = new_encoding! {
     bit_order: MostSignificantFirst,
 };
 
-pub fn encode(f: Format, input: &[u8]) -> Result<String, EncodeError> {
+pub fn encode(f: Format, input: &[u8]) -> Result<String, CtEncodeError> {
     Ok(match f {
         Base32 => BASE32.encode(input),
         Base64 => BASE64.encode(input),
@@ -74,7 +74,7 @@ pub fn encode(f: Format, input: &[u8]) -> Result<String, EncodeError> {
             if input.len() % 4 == 0 {
                 z85::encode(input)
             } else {
-                return Err(EncodeError::Z85InputLenNotMultipleOf4);
+                return Err(CtEncodeError::Z85InputLenNotMultipleOf4);
             }
         }
     })
@@ -152,11 +152,11 @@ impl<R: Read> Data<R> {
         decode(self.format, &buf)
     }
 
-    pub fn encode(&mut self) -> Result<String, EncodeError> {
+    pub fn encode(&mut self) -> Result<String, CtEncodeError> {
         let mut buf: Vec<u8> = vec![];
         match self.input.read_to_end(&mut buf) {
             Ok(_) => encode(self.format, buf.as_slice()),
-            Err(_) => Err(EncodeError::InvalidInput),
+            Err(_) => Err(CtEncodeError::InvalidInput),
         }
     }
 }
@@ -276,12 +276,12 @@ mod test {
     //     let input = [
     //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
     //     ];
-    //     let _expected = EncodeError::Z85InputLenNotMultipleOf4;
+    //     let _expected = CtEncodeError::Z85InputLenNotMultipleOf4;
 
     //     let result = encode(Format::Z85, &input);
 
     //     // println!("{:?}", result);
-    //     //assert_eq!(result, EncodeError::Z85InputLenNotMultipleOf4);
+    //     //assert_eq!(result, CtEncodeError::Z85InputLenNotMultipleOf4);
     //     match result {
     //         _expected => println!("Z85InputLenNotMultipleOf4"),
     //         _ => println!("Error"),
@@ -376,12 +376,12 @@ mod test {
     //     let input = [
     //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
     //     ];
-    //     let expected = EncodeError::Z85InputLenNotMultipleOf4;
+    //     let expected = CtEncodeError::Z85InputLenNotMultipleOf4;
 
     //     let result = decode(Format::Z85, &input);
 
     //     // println!("{:?}", result);
-    //     assert!(matches!(result, Err(EncodeError::Z85InputLenNotMultipleOf4)));
+    //     assert!(matches!(result, Err(CtEncodeError::Z85InputLenNotMultipleOf4)));
     //     // match result {
     //     //     _expected => println!("Z85InputLenNotMultipleOf4"),
     //     //     _ => println!("Error"),

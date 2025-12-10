@@ -29,7 +29,7 @@ impl FromStr for Range {
     ///
     /// ```
     /// use std::str::FromStr;
-    /// use ctcore::ranges::Range;
+    /// use ctcore::ct_ranges::Range;
     /// assert_eq!(Range::from_str("5"), Ok(Range { low: 5, high: 5 }));
     /// assert_eq!(Range::from_str("4-"), Ok(Range { low: 4, high: usize::MAX - 1 }));
     /// assert_eq!(Range::from_str("-4"), Ok(Range { low: 1, high: 4 }));
@@ -146,18 +146,18 @@ pub fn complement(ranges: &[Range]) -> Vec<Range> {
 /// Examples:
 ///
 /// ```
-/// let ranges = ctcore::ranges::Range::from_list("11,2,6-8").unwrap();
+/// let ranges = ctcore::ct_ranges::Range::from_list("11,2,6-8").unwrap();
 ///
-/// assert!(!ctcore::ranges::contain(&ranges, 0));
-/// assert!(!ctcore::ranges::contain(&ranges, 1));
-/// assert!(!ctcore::ranges::contain(&ranges, 5));
-/// assert!(!ctcore::ranges::contain(&ranges, 10));
+/// assert!(!ctcore::ct_ranges::contain(&ranges, 0));
+/// assert!(!ctcore::ct_ranges::contain(&ranges, 1));
+/// assert!(!ctcore::ct_ranges::contain(&ranges, 5));
+/// assert!(!ctcore::ct_ranges::contain(&ranges, 10));
 ///
-/// assert!(ctcore::ranges::contain(&ranges, 2));
-/// assert!(ctcore::ranges::contain(&ranges, 6));
-/// assert!(ctcore::ranges::contain(&ranges, 7));
-/// assert!(ctcore::ranges::contain(&ranges, 8));
-/// assert!(ctcore::ranges::contain(&ranges, 11));
+/// assert!(ctcore::ct_ranges::contain(&ranges, 2));
+/// assert!(ctcore::ct_ranges::contain(&ranges, 6));
+/// assert!(ctcore::ct_ranges::contain(&ranges, 7));
+/// assert!(ctcore::ct_ranges::contain(&ranges, 8));
+/// assert!(ctcore::ct_ranges::contain(&ranges, 11));
 /// ```
 pub fn contain(ranges: &[Range], n: usize) -> bool {
     for range in ranges {

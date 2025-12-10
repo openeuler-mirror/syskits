@@ -52,7 +52,7 @@ use std::{
     ops::ControlFlow,
 };
 
-use crate::ct_error::UError;
+use crate::ct_error::CTError;
 
 use self::{
     escape::{parse_escape_code, EscapedChar},
@@ -71,7 +71,7 @@ pub enum FormatError {
 }
 
 impl Error for FormatError {}
-impl UError for FormatError {}
+impl CTError for FormatError {}
 
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
@@ -346,7 +346,7 @@ pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
 /// # Examples
 ///
 /// ```rust
-/// use ctcore::format::{printf, FormatArgument};
+/// use ctcore::ct_format::{printf, FormatArgument};
 ///
 /// printf("hello %s", &[FormatArgument::String("world".into())]).unwrap();
 /// // prints "hello world"
@@ -385,7 +385,7 @@ fn printf_writer<'a>(
 /// # Examples
 ///
 /// ```rust
-/// use ctcore::format::{sprintf, FormatArgument};
+/// use ctcore::ct_format::{sprintf, FormatArgument};
 ///
 /// let s = sprintf("hello %s", &[FormatArgument::String("ctyunos".into())]).unwrap();
 /// let s = std::str::from_utf8(&s).unwrap();
@@ -400,7 +400,7 @@ pub fn sprintf<'a>(
     Ok(writer)
 }
 
-/// A parsed format for a single float value
+/// A parsed ct_format for a single float value
 ///
 /// This is used by `seq`. It can be constructed with [`Format::parse`]
 /// and can write a value with [`Format::fmt`].

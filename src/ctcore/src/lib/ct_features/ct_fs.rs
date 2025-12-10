@@ -45,12 +45,12 @@ macro_rules! has {
 }
 
 /// Information to uniquely identify a file
-pub struct FileInformation(
+pub struct CtFileInformation(
     #[cfg(unix)] nix::sys::stat::FileStat,
     #[cfg(windows)] winapi_util::file::Information,
 );
 
-impl FileInformation {
+impl CtFileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
     pub fn from_file(file: &impl AsRawFd) -> IOResult<Self> {
@@ -169,23 +169,23 @@ impl FileInformation {
 }
 
 #[cfg(unix)]
-impl PartialEq for FileInformation {
+impl PartialEq for CtFileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
     }
 }
 
 #[cfg(target_os = "windows")]
-impl PartialEq for FileInformation {
+impl PartialEq for CtFileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.volume_serial_number() == other.0.volume_serial_number()
             && self.0.file_index() == other.0.file_index()
     }
 }
 
-impl Eq for FileInformation {}
+impl Eq for CtFileInformation {}
 
-impl Hash for FileInformation {
+impl Hash for CtFileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         #[cfg(unix)]
         {
@@ -380,7 +380,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                     followed_symlinks += 1;
                 } else {
                     let file_info =
-                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
+                        CtFileInformation::from_path(result.parent().unwrap(), false).unwrap();
                     let mut path_to_follow = PathBuf::new();
                     for part in &parts {
                         path_to_follow.push(part.as_os_str());
@@ -443,9 +443,9 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
             '-'
         };
 
-        format!("{file_type}r{write}xr{write}xr{write}x")
+        ct_format!("{file_type}r{write}xr{write}xr{write}x")
     } else {
-        format!("r{write}xr{write}xr{write}x")
+        ct_format!("r{write}xr{write}xr{write}x")
     }
 }
 
@@ -561,16 +561,16 @@ pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
 /// If error happens when trying to get files' metadata, returns false
 pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
     infos_refer_to_same_file(
-        FileInformation::from_path(p1, dereference),
-        FileInformation::from_path(p2, dereference),
+        CtFileInformation::from_path(p1, dereference),
+        CtFileInformation::from_path(p2, dereference),
     )
 }
 
 /// Checks if `p1` and `p2` are the same file information.
 /// If error happens when trying to get files' metadata, returns false
 pub fn infos_refer_to_same_file(
-    info1: IOResult<FileInformation>,
-    info2: IOResult<FileInformation>,
+    info1: IOResult<CtFileInformation>,
+    info2: IOResult<CtFileInformation>,
 ) -> bool {
     if let Ok(info1) = info1 {
         if let Ok(info2) = info2 {
@@ -853,7 +853,7 @@ mod tests {
     #[test]
     fn test_from_file() {
         let file = fs::File::open("/etc/hosts").unwrap();
-        let file_info = FileInformation::from_file(&file).unwrap();
+        let file_info = CtFileInformation::from_file(&file).unwrap();
 
         let expected_stat = stat::stat("/etc/hosts").unwrap();
         assert_eq!(file_info.0.st_dev, expected_stat.st_dev);
@@ -863,7 +863,7 @@ mod tests {
 
     #[test]
     fn test_from_path() {
-        let file_info = FileInformation::from_path("/etc/hosts", true).unwrap();
+        let file_info = CtFileInformation::from_path("/etc/hosts", true).unwrap();
 
         let expected_stat = stat::stat("/etc/hosts").unwrap();
         assert_eq!(file_info.0.st_dev, expected_stat.st_dev);
@@ -874,7 +874,7 @@ mod tests {
     #[test]
     fn test_file_size() {
         let file = fs::File::open("/etc/hosts").unwrap();
-        let file_info = FileInformation::from_file(&file).unwrap();
+        let file_info = CtFileInformation::from_file(&file).unwrap();
 
         let expected_size = fs::metadata("/etc/hosts").unwrap().len();
         assert_eq!(file_info.file_size(), expected_size);

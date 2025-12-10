@@ -554,9 +554,9 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::format::num_format::format_float_hexadecimal;
-    use crate::format::num_format::strip_fractional_zeroes_and_dot;
-    use crate::format::num_format::{Case, ForceDecimal};
+    use crate::ct_format::num_format::format_float_hexadecimal;
+    use crate::ct_format::num_format::strip_fractional_zeroes_and_dot;
+    use crate::ct_format::num_format::{Case, ForceDecimal};
 
     use std::io::Cursor;
 

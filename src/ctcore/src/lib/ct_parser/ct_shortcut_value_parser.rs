@@ -14,14 +14,13 @@ use clap::{
 };
 
 #[derive(Clone)]
-pub struct ShortcutValueParser(Vec<PossibleValue>);
+pub struct CtShortcutValueParser(Vec<PossibleValue>);
 
-/// `ShortcutValueParser` is similar to clap's `PossibleValuesParser`: it verifies that the value is
-/// from an enumerated set of `PossibleValue`.
-///
-/// Whereas `PossibleValuesParser` only accepts exact matches, `ShortcutValueParser` also accepts
-/// shortcuts as long as they are unambiguous.
-impl ShortcutValueParser {
+/// ShortcutValueParser类似于clap库中的PossibleValuesParser，
+/// 其作用是验证给定值是否来自于一组枚举的PossibleValue集合。
+/// 与仅接受精确匹配值的PossibleValuesParser不同，
+/// ShortcutValueParser还接受无歧义的快捷方式表示。
+impl CtShortcutValueParser {
     pub fn new(values: impl Into<Self>) -> Self {
         values.into()
     }
@@ -63,7 +62,7 @@ impl ShortcutValueParser {
     }
 }
 
-impl TypedValueParser for ShortcutValueParser {
+impl TypedValueParser for CtShortcutValueParser {
     type Value = String;
 
     fn parse_ref(
@@ -122,7 +121,7 @@ impl TypedValueParser for ShortcutValueParser {
     }
 }
 
-impl<I, T> From<I> for ShortcutValueParser
+impl<I, T> From<I> for CtShortcutValueParser
 where
     I: IntoIterator<Item = T>,
     T: Into<PossibleValue>,
@@ -138,7 +137,7 @@ mod tests {
 
     use clap::{builder::TypedValueParser, error::ErrorKind, Command};
 
-    use super::ShortcutValueParser;
+    use super::CtShortcutValueParser;
 
     #[cfg(test)]
     mod tests {
@@ -149,7 +148,7 @@ mod tests {
 
         #[test]
         fn test_generate_clap_error_basic() {
-            let parser = ShortcutValueParser(vec![
+            let parser = CtShortcutValueParser(vec![
                 PossibleValue::new("option1"),
                 PossibleValue::new("option2"),
             ]);
@@ -164,7 +163,7 @@ mod tests {
 
         #[test]
         fn test_ambiguous_values() {
-            let parser = ShortcutValueParser(vec![
+            let parser = CtShortcutValueParser(vec![
                 PossibleValue::new("start"),
                 PossibleValue::new("stop"),
                 PossibleValue::new("state"),
@@ -180,7 +179,7 @@ mod tests {
 
         #[test]
         fn test_exact_match_but_not_in_list() {
-            let parser = ShortcutValueParser(vec![
+            let parser = CtShortcutValueParser(vec![
                 PossibleValue::new("start"),
                 PossibleValue::new("restart"),
             ]);
@@ -195,7 +194,7 @@ mod tests {
 
         #[test]
         fn test_empty_input() {
-            let parser = ShortcutValueParser(vec![
+            let parser = CtShortcutValueParser(vec![
                 PossibleValue::new("start"),
                 PossibleValue::new("stop"),
             ]);
@@ -209,7 +208,7 @@ mod tests {
 
         #[test]
         fn test_very_long_input() {
-            let parser = ShortcutValueParser(vec![
+            let parser = CtShortcutValueParser(vec![
                 PossibleValue::new("start"),
                 PossibleValue::new("stop"),
             ]);
@@ -224,7 +223,7 @@ mod tests {
 
         #[test]
         fn test_input_with_special_characters() {
-            let parser = ShortcutValueParser(vec![
+            let parser = CtShortcutValueParser(vec![
                 PossibleValue::new("start"),
                 PossibleValue::new("stop"),
             ]);
@@ -240,7 +239,7 @@ mod tests {
     #[test]
     fn test_parse_ref() {
         let cmd = Command::new("cmd");
-        let parser = ShortcutValueParser::new(["abcd"]);
+        let parser = CtShortcutValueParser::new(["abcd"]);
         let values = ["a", "ab", "abc", "abcd"];
 
         for value in values {
@@ -252,7 +251,7 @@ mod tests {
     #[test]
     fn test_parse_ref_with_invalid_value() {
         let cmd = Command::new("cmd");
-        let parser = ShortcutValueParser::new(["abcd"]);
+        let parser = CtShortcutValueParser::new(["abcd"]);
         let invalid_values = ["e", "abe", "abcde"];
 
         for invalid_value in invalid_values {
@@ -264,7 +263,7 @@ mod tests {
     #[test]
     fn test_parse_ref_with_ambiguous_value() {
         let cmd = Command::new("cmd");
-        let parser = ShortcutValueParser::new(["abcd", "abef"]);
+        let parser = CtShortcutValueParser::new(["abcd", "abef"]);
         let ambiguous_values = ["a", "ab"];
 
         for ambiguous_value in ambiguous_values {
@@ -282,7 +281,7 @@ mod tests {
     #[test]
     fn test_parse_ref_with_ambiguous_value_that_is_a_possible_value() {
         let cmd = Command::new("cmd");
-        let parser = ShortcutValueParser::new(["abcd", "abcdefgh"]);
+        let parser = CtShortcutValueParser::new(["abcd", "abcdefgh"]);
         let result = parser.parse_ref(&cmd, None, OsStr::new("abcd"));
         assert_eq!("abcd", result.unwrap());
     }
@@ -292,7 +291,7 @@ mod tests {
     fn test_parse_ref_with_invalid_utf8() {
         use std::os::unix::prelude::OsStrExt;
 
-        let parser = ShortcutValueParser::new(["abcd"]);
+        let parser = CtShortcutValueParser::new(["abcd"]);
         let cmd = Command::new("cmd");
 
         let result = parser.parse_ref(&cmd, None, OsStr::from_bytes(&[0xc3, 0x28]));

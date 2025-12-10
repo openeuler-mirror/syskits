@@ -18,14 +18,14 @@ const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
 const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum QuotingStyle {
+pub enum CtQuotingStyle {
     Shell {
         escape: bool,
         always_quote: bool,
         show_control: bool,
     },
     C {
-        quotes: Quotes,
+        quotes: CtQuotes,
     },
     Literal {
         show_control: bool,
@@ -33,7 +33,7 @@ pub enum QuotingStyle {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Quotes {
+pub enum CtQuotes {
     None,
     Single,
     Double,
@@ -107,7 +107,7 @@ impl EscapedChar {
         }
     }
 
-    fn new_c(c: char, quotes: Quotes) -> Self {
+    fn new_c(c: char, quotes: CtQuotes) -> Self {
         use EscapeState::*;
         let init_state = match c {
             '\x07' => Backslash('a'),
@@ -119,15 +119,15 @@ impl EscapedChar {
             '\r' => Backslash('r'),
             '\\' => Backslash('\\'),
             '\'' => match quotes {
-                Quotes::Single => Backslash('\''),
+                CtQuotes::Single => Backslash('\''),
                 _ => Char('\''),
             },
             '"' => match quotes {
-                Quotes::Double => Backslash('"'),
+                CtQuotes::Double => Backslash('"'),
                 _ => Char('"'),
             },
             ' ' => match quotes {
-                Quotes::None => Backslash(' '),
+                CtQuotes::None => Backslash(' '),
                 _ => Char(' '),
             },
             _ if c.is_ascii_control() => Octal(EscapeOctal::from(c)),
@@ -136,7 +136,7 @@ impl EscapedChar {
         Self { state: init_state }
     }
 
-    fn new_shell(c: char, escape: bool, quotes: Quotes) -> Self {
+    fn new_shell(c: char, escape: bool, quotes: CtQuotes) -> Self {
         use EscapeState::*;
         let init_state = match c {
             _ if !escape && c.is_control() => Char(c),
@@ -149,7 +149,7 @@ impl EscapedChar {
             '\r' => Backslash('r'),
             '\x00'..='\x1F' | '\x7F' => Octal(EscapeOctal::from(c)),
             '\'' => match quotes {
-                Quotes::Single => Backslash('\''),
+                CtQuotes::Single => Backslash('\''),
                 _ => Char('\''),
             },
             _ if SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
@@ -187,7 +187,7 @@ impl Iterator for EscapedChar {
     }
 }
 
-fn shell_without_escape(name: &str, quotes: Quotes, show_control_chars: bool) -> (String, bool) {
+fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) -> (String, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
 
@@ -219,7 +219,7 @@ fn shell_without_escape(name: &str, quotes: Quotes, show_control_chars: bool) ->
     (escaped_str, must_quote)
 }
 
-fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
+fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
     // We need to keep track of whether we are in a dollar expression
     // because e.g. \b\n is escaped as $'\b\n' and not like $'b'$'n'
     let mut in_dollar = false;
@@ -268,9 +268,9 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
     match style {
-        QuotingStyle::Literal { show_control } => {
+        CtQuotingStyle::Literal { show_control } => {
             if *show_control {
                 name.to_string_lossy().into_owned()
             } else {
@@ -280,7 +280,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
                     .collect()
             }
         }
-        QuotingStyle::C { quotes } => {
+        CtQuotingStyle::C { quotes } => {
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
@@ -288,25 +288,25 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
                 .collect();
 
             match quotes {
-                Quotes::Single => format!("'{escaped_str}'"),
-                Quotes::Double => format!("\"{escaped_str}\""),
-                Quotes::None => escaped_str,
+                CtQuotes::Single => format!("'{escaped_str}'"),
+                CtQuotes::Double => format!("\"{escaped_str}\""),
+                CtQuotes::None => escaped_str,
             }
         }
-        QuotingStyle::Shell {
+        CtQuotingStyle::Shell {
             escape,
             always_quote,
             show_control,
         } => {
             let name = name.to_string_lossy();
             let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
-                (Quotes::Single, true)
+                (CtQuotes::Single, true)
             } else if name.contains('\'') {
-                (Quotes::Double, true)
+                (CtQuotes::Double, true)
             } else if *always_quote {
-                (Quotes::Single, true)
+                (CtQuotes::Single, true)
             } else {
-                (Quotes::Single, false)
+                (CtQuotes::Single, false)
             };
 
             let (escaped_str, contains_quote_chars) = if *escape {
@@ -316,15 +316,15 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             };
 
             match (must_quote | contains_quote_chars, quotes) {
-                (true, Quotes::Single) => format!("'{escaped_str}'"),
-                (true, Quotes::Double) => format!("\"{escaped_str}\""),
+                (true, CtQuotes::Single) => format!("'{escaped_str}'"),
+                (true, CtQuotes::Double) => format!("\"{escaped_str}\""),
                 _ => escaped_str,
             }
         }
     }
 }
 
-impl fmt::Display for QuotingStyle {
+impl fmt::Display for CtQuotingStyle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             Self::Shell {
@@ -350,7 +350,7 @@ impl fmt::Display for QuotingStyle {
     }
 }
 
-impl fmt::Display for Quotes {
+impl fmt::Display for CtQuotes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             Self::None => f.write_str("None"),
@@ -362,49 +362,49 @@ impl fmt::Display for Quotes {
 
 #[cfg(test)]
 mod tests {
-    use crate::quoting_style::{escape_name, Quotes, QuotingStyle};
+    use crate::ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle};
     use std::ffi::OsStr;
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
-    fn get_style(s: &str) -> QuotingStyle {
+    fn get_style(s: &str) -> CtQuotingStyle {
         match s {
-            "literal" => QuotingStyle::Literal {
+            "literal" => CtQuotingStyle::Literal {
                 show_control: false,
             },
-            "literal-show" => QuotingStyle::Literal { show_control: true },
-            "escape" => QuotingStyle::C {
-                quotes: Quotes::None,
+            "literal-show" => CtQuotingStyle::Literal { show_control: true },
+            "escape" => CtQuotingStyle::C {
+                quotes: CtQuotes::None,
             },
-            "c" => QuotingStyle::C {
-                quotes: Quotes::Double,
+            "c" => CtQuotingStyle::C {
+                quotes: CtQuotes::Double,
             },
-            "shell" => QuotingStyle::Shell {
+            "shell" => CtQuotingStyle::Shell {
                 escape: false,
                 always_quote: false,
                 show_control: false,
             },
-            "shell-show" => QuotingStyle::Shell {
+            "shell-show" => CtQuotingStyle::Shell {
                 escape: false,
                 always_quote: false,
                 show_control: true,
             },
-            "shell-always" => QuotingStyle::Shell {
+            "shell-always" => CtQuotingStyle::Shell {
                 escape: false,
                 always_quote: true,
                 show_control: false,
             },
-            "shell-always-show" => QuotingStyle::Shell {
+            "shell-always-show" => CtQuotingStyle::Shell {
                 escape: false,
                 always_quote: true,
                 show_control: true,
             },
-            "shell-escape" => QuotingStyle::Shell {
+            "shell-escape" => CtQuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
                 show_control: false,
             },
-            "shell-escape-always" => QuotingStyle::Shell {
+            "shell-escape-always" => CtQuotingStyle::Shell {
                 escape: true,
                 always_quote: true,
                 show_control: false,
@@ -780,33 +780,33 @@ mod tests {
 
     #[test]
     fn test_quoting_style_display() {
-        let style = QuotingStyle::Shell {
+        let style = CtQuotingStyle::Shell {
             escape: true,
             always_quote: false,
             show_control: false,
         };
         assert_eq!(format!("{}", style), "shell-escape");
 
-        let style = QuotingStyle::Shell {
+        let style = CtQuotingStyle::Shell {
             escape: false,
             always_quote: true,
             show_control: false,
         };
         assert_eq!(format!("{}", style), "shell-always-quote");
 
-        let style = QuotingStyle::Shell {
+        let style = CtQuotingStyle::Shell {
             escape: false,
             always_quote: false,
             show_control: true,
         };
         assert_eq!(format!("{}", style), "shell-show-control");
 
-        let style = QuotingStyle::C {
-            quotes: Quotes::Double,
+        let style = CtQuotingStyle::C {
+            quotes: CtQuotes::Double,
         };
         assert_eq!(format!("{}", style), "C");
 
-        let style = QuotingStyle::Literal {
+        let style = CtQuotingStyle::Literal {
             show_control: false,
         };
         assert_eq!(format!("{}", style), "literal");
@@ -814,9 +814,9 @@ mod tests {
 
     #[test]
     fn test_quotes_display() {
-        assert_eq!(format!("{}", Quotes::None), "None");
-        assert_eq!(format!("{}", Quotes::Single), "Single");
-        assert_eq!(format!("{}", Quotes::Double), "Double");
+        assert_eq!(format!("{}", CtQuotes::None), "None");
+        assert_eq!(format!("{}", CtQuotes::Single), "Single");
+        assert_eq!(format!("{}", CtQuotes::Double), "Double");
     }
 
     #[test]
@@ -824,7 +824,7 @@ mod tests {
         let test_cases = vec![
             (
                 OsStr::new("hello world"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: true,
                     always_quote: false,
                     show_control: false,
@@ -833,7 +833,7 @@ mod tests {
             ),
             (
                 OsStr::new("~#$&*()|[]{};\\'\"<>?! "),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: true,
                     always_quote: false,
                     show_control: false,
@@ -842,7 +842,7 @@ mod tests {
             ),
             (
                 OsStr::new("\x07\x08\t\n\r"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: true,
                     always_quote: false,
                     show_control: true,
@@ -851,7 +851,7 @@ mod tests {
             ),
             (
                 OsStr::new("\\'"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: true,
                     always_quote: false,
                     show_control: false,
@@ -873,7 +873,7 @@ mod tests {
         let test_cases = vec![
             (
                 OsStr::new("hello world"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: false,
                     always_quote: false,
                     show_control: false,
@@ -882,7 +882,7 @@ mod tests {
             ),
             (
                 OsStr::new("\x07"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: false,
                     always_quote: false,
                     show_control: false,
@@ -891,7 +891,7 @@ mod tests {
             ),
             (
                 OsStr::new("hello world"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: false,
                     always_quote: false,
                     show_control: false,
@@ -900,7 +900,7 @@ mod tests {
             ),
             (
                 OsStr::new("`hello world`"),
-                QuotingStyle::Shell {
+                CtQuotingStyle::Shell {
                     escape: false,
                     always_quote: false,
                     show_control: false,
@@ -921,29 +921,29 @@ mod tests {
         let test_cases = vec![
             (
                 OsStr::new("hello world"),
-                QuotingStyle::C {
-                    quotes: Quotes::Double,
+                CtQuotingStyle::C {
+                    quotes: CtQuotes::Double,
                 },
                 "\"hello world\"",
             ),
             (
                 OsStr::new("'hello world'"),
-                QuotingStyle::C {
-                    quotes: Quotes::Single,
+                CtQuotingStyle::C {
+                    quotes: CtQuotes::Single,
                 },
                 "'\\'hello world\\''",
             ),
             (
                 OsStr::new("`hello world`"),
-                QuotingStyle::C {
-                    quotes: Quotes::Double,
+                CtQuotingStyle::C {
+                    quotes: CtQuotes::Double,
                 },
                 "\"`hello world`\"",
             ),
             (
                 OsStr::new("hello\\world"),
-                QuotingStyle::C {
-                    quotes: Quotes::None,
+                CtQuotingStyle::C {
+                    quotes: CtQuotes::None,
                 },
                 "hello\\\\world",
             ),
@@ -959,17 +959,17 @@ mod tests {
         let test_cases = vec![
             (
                 OsStr::new("hello world"),
-                QuotingStyle::Literal { show_control: true },
+                CtQuotingStyle::Literal { show_control: true },
                 "hello world",
             ),
             (
                 OsStr::new("\x07"),
-                QuotingStyle::Literal { show_control: true },
+                CtQuotingStyle::Literal { show_control: true },
                 "\u{07}",
             ),
             (
                 OsStr::new("\x07"),
-                QuotingStyle::Literal {
+                CtQuotingStyle::Literal {
                     show_control: false,
                 },
                 "?",

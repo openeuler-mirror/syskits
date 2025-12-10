@@ -16,7 +16,7 @@
 //! # Examples:
 //!
 //! ```
-//! use ctcore::entries::{self, Locate};
+//! use ctcore::ct_entries::{self, Locate};
 //!
 //! let root_group = if cfg!(any(target_os = "linux", target_os = "android")) {
 //!     "root"
@@ -24,18 +24,18 @@
 //!     "wheel"
 //! };
 //!
-//! assert_eq!("root", entries::uid2usr(0).unwrap());
-//! assert_eq!(0, entries::usr2uid("root").unwrap());
-//! assert!(entries::gid2grp(0).is_ok());
-//! assert!(entries::grp2gid(root_group).is_ok());
+//! assert_eq!("root", ct_entries::uid2usr(0).unwrap());
+//! assert_eq!(0, ct_entries::usr2uid("root").unwrap());
+//! assert!(ct_entries::gid2grp(0).is_ok());
+//! assert!(ct_entries::grp2gid(root_group).is_ok());
 //!
-//! assert!(entries::Passwd::locate(0).is_ok());
-//! assert!(entries::Passwd::locate("0").is_ok());
-//! assert!(entries::Passwd::locate("root").is_ok());
+//! assert!(ct_entries::Passwd::locate(0).is_ok());
+//! assert!(ct_entries::Passwd::locate("0").is_ok());
+//! assert!(ct_entries::Passwd::locate("root").is_ok());
 //!
-//! assert!(entries::Group::locate(0).is_ok());
-//! assert!(entries::Group::locate("0").is_ok());
-//! assert!(entries::Group::locate(root_group).is_ok());
+//! assert!(ct_entries::Group::locate(0).is_ok());
+//! assert!(ct_entries::Group::locate("0").is_ok());
+//! assert!(ct_entries::Group::locate(root_group).is_ok());
 //! ```
 
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
@@ -126,7 +126,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     let groups = get_groups()?;
-    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+    let egid = arg_id.unwrap_or_else(crate::ct_features::ct_process::getegid);
     Ok(sort_groups(groups, egid))
 }
 

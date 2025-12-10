@@ -94,7 +94,7 @@ impl<'a, T> ParseError<'a, T> {
     }
 }
 
-/// A number parser for binary, octal, decimal, hexadecimal and single characters.
+/// A number ct_parser for binary, octal, decimal, hexadecimal and single characters.
 ///
 /// Internally, in order to get the maximum possible precision and cover the full
 /// range of u64 and i64 without losing precision for f64, the returned number is
@@ -326,7 +326,7 @@ impl ParsedNumber {
 #[cfg(test)]
 mod tests {
     use super::{ParseError, ParsedNumber};
-    use crate::format::num_parser::Base;
+    use crate::ct_format::num_parser::Base;
 
     #[test]
     fn test_into_f64_decimal() {

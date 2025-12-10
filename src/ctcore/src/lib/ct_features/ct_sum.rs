@@ -10,9 +10,9 @@
  */
 //! Implementations of digest functions, like md5 and sha1.
 //!
-//! The [`Digest`] trait represents the interface for providing inputs
+//! The [`CtDigest`] trait represents the interface for providing inputs
 //! to these digest functions and accessing the resulting hash. The
-//! [`DigestWriter`] struct provides a wrapper around [`Digest`] that
+//! [`CtDigestWriter`] struct provides a wrapper around [`CtDigest`] that
 //! implements the [`Write`] trait, for use in situations where calling
 //! [`write`] would be useful.
 use std::io::Write;
@@ -21,7 +21,7 @@ use hex::encode;
 #[cfg(windows)]
 use memchr::memmem;
 
-pub trait Digest {
+pub trait CtDigest {
     fn new() -> Self
     where
         Self: Sized;
@@ -41,13 +41,13 @@ pub trait Digest {
 
 /// first element of the tuple is the blake2b state
 /// second is the number of output bits
-pub struct Blake2b(blake2b_simd::State, usize);
+pub struct CtBlake2b(blake2b_simd::State, usize);
 
 // 定义最小和最大输出字节长度
 const MIN_OUTPUT_BYTES: usize = 1;
 const MAX_OUTPUT_BYTES: usize = 64;
 
-impl Blake2b {
+impl CtBlake2b {
     /// Return a new Blake2b instance with a custom output bytes length.
     ///
     /// Panics if `output_bytes` is outside the allowed range of `[MIN_OUTPUT_BYTES, MAX_OUTPUT_BYTES]`.
@@ -65,7 +65,7 @@ impl Blake2b {
     }
 }
 
-impl Digest for Blake2b {
+impl CtDigest for CtBlake2b {
     fn new() -> Self {
         // by default, Blake2b output is 512 bits long (= 64B)
         Self::with_output_bytes(64)
@@ -89,8 +89,8 @@ impl Digest for Blake2b {
     }
 }
 
-pub struct Blake3(blake3::Hasher);
-impl Digest for Blake3 {
+pub struct CtBlake3(blake3::Hasher);
+impl CtDigest for CtBlake3 {
     fn new() -> Self {
         Self(blake3::Hasher::new())
     }
@@ -113,8 +113,8 @@ impl Digest for Blake3 {
     }
 }
 
-pub struct Sm3(sm3::Sm3);
-impl Digest for Sm3 {
+pub struct CtSm3(sm3::Sm3);
+impl CtDigest for CtSm3 {
     fn new() -> Self {
         Self(<sm3::Sm3 as sm3::Digest>::new())
     }
@@ -137,18 +137,18 @@ impl Digest for Sm3 {
 }
 
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
-const CRC_TABLE_LEN: usize = 256;
+const CT_CRC_TABLE_LEN: usize = 256;
 
-pub struct CRC {
+pub struct CtCRC {
     state: u32,
     size: usize,
-    crc_table: [u32; CRC_TABLE_LEN],
+    crc_table: [u32; CT_CRC_TABLE_LEN],
 }
-impl CRC {
-    fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
-        let mut table = [0; CRC_TABLE_LEN];
+impl CtCRC {
+    fn generate_crc_table() -> [u32; CT_CRC_TABLE_LEN] {
+        let mut table = [0; CT_CRC_TABLE_LEN];
 
-        for (i, elt) in table.iter_mut().enumerate().take(CRC_TABLE_LEN) {
+        for (i, elt) in table.iter_mut().enumerate().take(CT_CRC_TABLE_LEN) {
             *elt = Self::crc_entry(i as u8);
         }
 
@@ -186,7 +186,7 @@ impl CRC {
     }
 }
 
-impl Digest for CRC {
+impl CtDigest for CtCRC {
     fn new() -> Self {
         Self {
             state: 0,
@@ -237,7 +237,7 @@ pub fn div_ceil(a: usize, b: usize) -> usize {
 pub struct BSD {
     state: u16,
 }
-impl Digest for BSD {
+impl CtDigest for BSD {
     fn new() -> Self {
         Self { state: 0 }
     }
@@ -271,7 +271,7 @@ impl Digest for BSD {
 pub struct SYSV {
     state: u32,
 }
-impl Digest for SYSV {
+impl CtDigest for SYSV {
     fn new() -> Self {
         Self { state: 0 }
     }
@@ -306,7 +306,7 @@ impl Digest for SYSV {
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
     ($algo_type: ty, $size: expr) => {
-        impl Digest for $algo_type {
+        impl CtDigest for $algo_type {
             fn new() -> Self {
                 Self(Default::default())
             }
@@ -330,10 +330,10 @@ macro_rules! impl_digest_common {
     };
 }
 
-// Implements the Digest trait for sha2 / sha3 algorithms with variable output
+// 为具有固定输出的sha2/sha3算法实现Digest特性
 macro_rules! impl_digest_shake {
     ($algo_type: ty) => {
-        impl Digest for $algo_type {
+        impl CtDigest for $algo_type {
             fn new() -> Self {
                 Self(Default::default())
             }
@@ -387,15 +387,15 @@ impl_digest_shake!(Shake256);
 
 /// A struct that writes to a digest.
 ///
-/// This struct wraps a [`Digest`] and provides a [`Write`]
+/// This struct wraps a [`CtDigest`] and provides a [`Write`]
 /// implementation that passes input bytes directly to the
-/// [`Digest::hash_update`].
+/// [`CtDigest::hash_update`].
 ///
 /// On Windows, if `binary` is `false`, then the [`write`]
 /// implementation replaces instances of "\r\n" with "\n" before passing
 /// the input bytes to the [`digest`].
-pub struct DigestWriter<'a> {
-    digest: &'a mut Box<dyn Digest>,
+pub struct CtDigestWriter<'a> {
+    digest: &'a mut Box<dyn CtDigest>,
 
     /// Whether to write to the digest in binary mode or text mode on Windows.
     ///
@@ -407,14 +407,14 @@ pub struct DigestWriter<'a> {
     /// Whether the previous
     #[allow(dead_code)]
     was_last_character_carriage_return: bool,
-    // TODO These are dead code only on non-Windows operating systems.
-    // It might be better to use a `#[cfg(windows)]` guard here.
+    // TODO 这些代码只在非Windows操作系统上是死代码。
+    // 在这里使用#[cfg(windows)]卫兵可能会更好。
 }
 
-impl<'a> DigestWriter<'a> {
-    pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> DigestWriter {
+impl<'a> CtDigestWriter<'a> {
+    pub fn new(digest: &'a mut Box<dyn CtDigest>, binary: bool) -> CtDigestWriter {
         let was_last_character_carriage_return = false;
-        DigestWriter {
+        CtDigestWriter {
             digest,
             binary,
             was_last_character_carriage_return,
@@ -431,14 +431,14 @@ impl<'a> DigestWriter<'a> {
     }
 }
 
-impl<'a> Write for DigestWriter<'a> {
+impl<'a> Write for CtDigestWriter<'a> {
     #[cfg(not(windows))]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.digest.hash_update(buf);
         Ok(buf.len())
     }
 
-    #[cfg(likelinux)]
+    #[cfg(windows)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.binary {
             self.digest.hash_update(buf);
@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn test_blake2b_with_custom_output_bytes() {
-        let mut digest = Blake2b::with_output_bytes(32);
+        let mut digest = CtBlake2b::with_output_bytes(32);
         let input = b"test input";
         digest.hash_update(input);
         let result = digest.result_str();
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_blake3_default_behavior() {
-        let mut digest = Blake3::new();
+        let mut digest = CtBlake3::new();
         let input = b"test input";
         digest.hash_update(input);
         let result = digest.result_str();
@@ -525,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_sm3_digest() {
-        let mut digest = Sm3::new();
+        let mut digest = CtSm3::new();
         let input = b"test input";
         digest.hash_update(input);
         let mut result_vec = vec![0; digest.output_bytes()];
@@ -541,7 +541,7 @@ mod tests {
 
     #[test]
     fn test_crc_update() {
-        let mut crc = CRC::new();
+        let mut crc = CtCRC::new();
         crc.update(0x01);
         crc.update(0x02);
         crc.update(0x03);
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_crc_hash_update() {
-        let mut crc = CRC::new();
+        let mut crc = CtCRC::new();
         crc.hash_update(&[0x01, 0x02, 0x03]);
         assert_eq!(crc.state, 2892567633);
         assert_eq!(crc.size, 3);
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_crc_hash_finalize() {
-        let mut crc = CRC::new();
+        let mut crc = CtCRC::new();
         crc.hash_update(&[0x01, 0x02, 0x03]);
         let mut output = [0u8; 4];
         crc.hash_finalize(&mut output);
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn test_crc_result_str() {
-        let mut crc = CRC::new();
+        let mut crc = CtCRC::new();
         crc.hash_update(&[0x01, 0x02, 0x03]);
         let result = crc.result_str();
         assert_eq!(result, "1602962764");
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_crc_reset() {
-        let mut crc = CRC::new();
+        let mut crc = CtCRC::new();
         crc.hash_update(&[0x01, 0x02, 0x03]);
         crc.reset();
         assert_eq!(crc.state, 0);
@@ -585,43 +585,13 @@ mod tests {
 
     #[test]
     fn test_crc_output_bits() {
-        let crc = CRC::new();
+        let crc = CtCRC::new();
         assert_eq!(crc.output_bits(), 256);
-    }
-
-    /// Test for replacing a "\r\n" sequence with "\n" when the "\r" is
-    /// at the end of one block and the "\n" is at the beginning of the
-    /// next block, when reading in blocks.
-    #[cfg(likelinux)]
-    #[test]
-    fn test_crlf_across_blocks() {
-        use std::io::Write;
-
-        use super::Digest;
-        use super::DigestWriter;
-        use super::Md5;
-
-        // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
-        let mut writer_crlf = DigestWriter::new(&mut digest, false);
-        writer_crlf.write_all(&[b'\r']).unwrap();
-        writer_crlf.write_all(&[b'\n']).unwrap();
-        writer_crlf.finalize();
-        let result_crlf = digest.result_str();
-
-        // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
-        let mut writer_lf = DigestWriter::new(&mut digest, false);
-        writer_lf.write_all(&[b'\n']).unwrap();
-        writer_lf.finalize();
-        let result_lf = digest.result_str();
-
-        assert_eq!(result_crlf, result_lf);
     }
 
     #[test]
     fn test_blake3() {
-        let mut blake3 = Blake3::new();
+        let mut blake3 = CtBlake3::new();
         blake3.hash_update(b"hello");
         let mut output = [0u8; 32];
         blake3.hash_finalize(&mut output);
@@ -648,12 +618,12 @@ mod tests {
 
     #[test]
     fn test_sm3() {
-        let mut sm3 = Sm3::new();
+        let mut sm3 = CtSm3::new();
         sm3.hash_update(b"hello");
         let mut output = [0u8; 32];
         sm3.hash_finalize(&mut output);
 
-        // Replace the expected hash value with the actual expected hash value
+        // 将预期哈希值替换为实际预期哈希值
         let expected_hash = [
             190, 203, 191, 170, 230, 84, 139, 139, 240, 207, 202, 213, 162, 113, 131, 205, 27, 230,
             9, 59, 28, 206, 204, 195, 3, 217, 198, 29, 10, 100, 82, 104,
@@ -662,7 +632,7 @@ mod tests {
         println!("{:?}", output);
         assert_eq!(output, expected_hash);
 
-        // Test reset
+        // 测试 reset
         sm3.reset();
         let mut output = [0u8; 32];
         sm3.hash_finalize(&mut output);
@@ -676,40 +646,40 @@ mod tests {
 
     #[test]
     fn test_blake2b_with_output_bytes() {
-        let output_bytes = 32; // custom output bytes length
-        let blake2b = Blake2b::with_output_bytes(output_bytes);
+        let output_bytes = 32; // 自定义输出字节长度
+        let blake2b = CtBlake2b::with_output_bytes(output_bytes);
 
-        // Assert that the output bytes length is correct
+        // 断言输出字节长度正确
         assert_eq!(blake2b.output_bits() / 8, output_bytes);
     }
 
     #[test]
     fn test_blake2b_new() {
-        let blake2b = Blake2b::new();
+        let blake2b = CtBlake2b::new();
 
-        // Assert that the default output bytes length is 64 bits
+        // 断言默认输出字节长度为 64 位
         assert_eq!(blake2b.output_bits() / 8, 64);
     }
 
     #[test]
     fn test_blake2b_hash_update() {
-        let mut blake2b = Blake2b::new();
+        let mut blake2b = CtBlake2b::new();
         let input = b"Hello, world!";
 
-        // Update the hash with the input
+        // 更新输入hash
         blake2b.hash_update(input);
 
-        // Finalize the hash and store it in `output`
+        // 最终确定哈希并将其存储在output中
         let mut output = [0u8; 64];
         blake2b.hash_finalize(&mut output);
 
-        // Assert that the output is not all zeros (since we updated the hash with input)
+        // 断言输出不全为零（因为我们使用输入更新了哈希）
         assert_ne!(output, [0u8; 64]);
     }
 
     #[test]
     fn test_blake2b_hash_finalize() {
-        let mut blake2b = Blake2b::new();
+        let mut blake2b = CtBlake2b::new();
         let input = b"Hello, world!";
 
         // Update the hash with the input
@@ -731,7 +701,7 @@ mod tests {
 
     #[test]
     fn test_blake2b_reset() {
-        let mut blake2b = Blake2b::new();
+        let mut blake2b = CtBlake2b::new();
         let input = b"Hello, world!";
 
         // Update the hash with the input

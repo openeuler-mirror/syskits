@@ -14,9 +14,9 @@
 // spell-checker:ignore (jargon) TOCTOU
 
 use crate::ct_display::Quotable;
-use crate::ct_error::{strip_errno, UResult, USimpleError};
-pub use crate::features::entries;
-use crate::show_error;
+use crate::ct_error::{strip_errno, CTResult, CtSimpleError};
+pub use crate::ct_features::ct_entries;
+use crate::ct_show_error;
 use clap::{Arg, ArgMatches, Command};
 use libc::{gid_t, uid_t};
 use walkdir::WalkDir;
@@ -64,7 +64,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
 }
 
 /// Perform the change of owner on a path
-/// with the various options
+/// with the various opt_flags
 /// and error messages management
 pub fn wrap_chown<P: AsRef<Path>>(
     path: P,
@@ -100,8 +100,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                             "{}\nfailed to change group of {} from {} to {}",
                             out,
                             path.quote(),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     } else {
                         let uid = meta.uid();
@@ -110,10 +110,10 @@ pub fn wrap_chown<P: AsRef<Path>>(
                             "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             out,
                             path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                            ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            ct_entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
                 };
@@ -130,8 +130,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         format!(
                             "changed group of {} from {} to {}",
                             path.quote(),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     } else {
                         let gid = meta.gid();
@@ -139,10 +139,10 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         format!(
                             "changed ownership of {} from {}:{} to {}:{}",
                             path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                            ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            ct_entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
                 }
@@ -153,14 +153,14 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 format!(
                     "group of {} retained as {}",
                     path.quote(),
-                    entries::gid2grp(dest_gid).unwrap_or_default()
+                    ct_entries::gid2grp(dest_gid).unwrap_or_default()
                 )
             } else {
                 format!(
                     "ownership of {} retained as {}:{}",
                     path.quote(),
-                    entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                    entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    ct_entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                    ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                 )
             };
         }
@@ -168,7 +168,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
     Ok(out)
 }
 
-pub enum IfFrom {
+pub enum CtIfFrom {
     All,
     User(u32),
     Group(u32),
@@ -182,13 +182,13 @@ pub enum TraverseSymlinks {
     All,
 }
 
-pub struct ChownExecutor {
+pub struct CtChownExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
     pub raw_owner: String, // The owner of the file as input by the user in the command line.
     pub traverse_symlinks: TraverseSymlinks,
     pub verbosity: Verbosity,
-    pub filter: IfFrom,
+    pub filter: CtIfFrom,
     pub files: Vec<String>,
     pub recursive: bool,
     pub preserve_root: bool,
@@ -249,14 +249,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         let path_buf = path.to_path_buf();
         if p.parent().is_none() {
             if path_buf.as_os_str() == "/" {
-                show_error!("it is dangerous to operate recursively on '/'");
+                ct_show_error!("it is dangerous to operate recursively on '/'");
             } else {
-                show_error!(
+                ct_show_error!(
                     "it is dangerous to operate recursively on {} (same as '/')",
                     path_buf.quote()
                 );
             }
-            show_error!("use --no-preserve-root to override this failsafe");
+            ct_show_error!("use --no-preserve-root to override this failsafe");
             return true;
         }
     }
@@ -264,8 +264,8 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
-impl ChownExecutor {
-    pub fn exec(&self) -> UResult<()> {
+impl CtChownExecutor {
+    pub fn exec(&self) -> CTResult<()> {
         let mut ret = 0;
         for f in &self.files {
             ret |= self.traverse(f);
@@ -312,13 +312,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        ct_show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        ct_show_error!("{}", e);
                     }
                     1
                 }
@@ -359,7 +359,7 @@ impl ChownExecutor {
                 Err(e) => {
                     ret = 1;
                     if let Some(path) = e.path() {
-                        show_error!(
+                        ct_show_error!(
                             "cannot access '{}': {}",
                             path.display(),
                             if let Some(error) = e.io_error() {
@@ -369,7 +369,7 @@ impl ChownExecutor {
                             }
                         );
                     } else {
-                        show_error!("{}", e);
+                        ct_show_error!("{}", e);
                     }
                     continue;
                 }
@@ -414,13 +414,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        ct_show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        ct_show_error!("{}", e);
                     }
                     1
                 }
@@ -440,7 +440,7 @@ impl ChownExecutor {
             Err(e) => {
                 match self.verbosity.level {
                     VerbosityLevel::Silent => (),
-                    _ => show_error!(
+                    _ => ct_show_error!(
                         "cannot {} {}: {}",
                         if follow { "dereference" } else { "access" },
                         path.quote(),
@@ -456,10 +456,10 @@ impl ChownExecutor {
     #[inline]
     fn matched(&self, uid: uid_t, gid: gid_t) -> bool {
         match self.filter {
-            IfFrom::All => true,
-            IfFrom::User(u) => u == uid,
-            IfFrom::Group(g) => g == gid,
-            IfFrom::UserGroup(u, g) => u == uid && g == gid,
+            CtIfFrom::All => true,
+            CtIfFrom::User(u) => u == uid,
+            CtIfFrom::Group(g) => g == gid,
+            CtIfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
     }
 
@@ -470,22 +470,22 @@ impl ChownExecutor {
                     println!(
                         "ownership of {} retained as {}:{}",
                         path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
                     );
                 }
                 (None, Some(_), Some(gid)) => {
                     println!(
                         "ownership of {} retained as {}",
                         path.quote(),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
                     );
                 }
                 (_, _, _) => {
                     println!(
                         "ownership of {} retained as {}",
                         path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
                     );
                 }
             }
@@ -493,7 +493,7 @@ impl ChownExecutor {
     }
 }
 
-pub mod options {
+pub mod opt_flags {
     pub const HELP: &str = "help";
     pub mod verbosity {
         pub const CHANGES: &str = "changes";
@@ -522,13 +522,13 @@ pub mod options {
     pub const ARG_FILES: &str = "FILE";
 }
 
-pub struct GidUidOwnerFilter {
+pub struct CtGidUidOwnerFilter {
     pub dest_gid: Option<u32>,
     pub dest_uid: Option<u32>,
     pub raw_owner: String,
-    pub filter: IfFrom,
+    pub filter: CtIfFrom,
 }
-type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
+type GidUidFilterOwnerParser = fn(&ArgMatches) -> CTResult<CtGidUidOwnerFilter>;
 
 /// Base implementation for `chgrp` and `chown`.
 ///
@@ -544,11 +544,11 @@ pub fn chown_base(
     add_arg_if_not_reference: &'static str,
     parse_gid_uid_and_filter: GidUidFilterOwnerParser,
     groups_only: bool,
-) -> UResult<()> {
+) -> CTResult<()> {
     let args: Vec<_> = args.collect();
     let mut reference = false;
     let mut help = false;
-    // stop processing options on --
+    // stop processing opt_flags on --
     for arg in args.iter().take_while(|s| *s != "--") {
         if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
             reference = true;
@@ -570,8 +570,8 @@ pub fn chown_base(
         );
     }
     command = command.arg(
-        Arg::new(options::ARG_FILES)
-            .value_name(options::ARG_FILES)
+        Arg::new(opt_flags::ARG_FILES)
+            .value_name(opt_flags::ARG_FILES)
             .value_hint(clap::ValueHint::FilePath)
             .action(clap::ArgAction::Append)
             .required(true)
@@ -580,33 +580,33 @@ pub fn chown_base(
     let matches = command.try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
-        .get_many::<String>(options::ARG_FILES)
+        .get_many::<String>(opt_flags::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
+    let preserve_root = matches.get_flag(opt_flags::preserve_root::PRESERVE);
 
-    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
+    let mut dereference = if matches.get_flag(opt_flags::dereference::DEREFERENCE) {
         Some(true)
-    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+    } else if matches.get_flag(opt_flags::dereference::NO_DEREFERENCE) {
         Some(false)
     } else {
         None
     };
 
-    let mut traverse_symlinks = if matches.get_flag(options::traverse::TRAVERSE) {
+    let mut traverse_symlinks = if matches.get_flag(opt_flags::traverse::TRAVERSE) {
         TraverseSymlinks::First
-    } else if matches.get_flag(options::traverse::EVERY) {
+    } else if matches.get_flag(opt_flags::traverse::EVERY) {
         TraverseSymlinks::All
     } else {
         TraverseSymlinks::None
     };
 
-    let recursive = matches.get_flag(options::RECURSIVE);
+    let recursive = matches.get_flag(opt_flags::RECURSIVE);
     if recursive {
         if traverse_symlinks == TraverseSymlinks::None {
             if dereference == Some(true) {
-                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
+                return Err(CtSimpleError::new(1, "-R --dereference requires -H or -L"));
             }
             dereference = Some(false);
         }
@@ -614,25 +614,25 @@ pub fn chown_base(
         traverse_symlinks = TraverseSymlinks::None;
     }
 
-    let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
+    let verbosity_level = if matches.get_flag(opt_flags::verbosity::CHANGES) {
         VerbosityLevel::Changes
-    } else if matches.get_flag(options::verbosity::SILENT)
-        || matches.get_flag(options::verbosity::QUIET)
+    } else if matches.get_flag(opt_flags::verbosity::SILENT)
+        || matches.get_flag(opt_flags::verbosity::QUIET)
     {
         VerbosityLevel::Silent
-    } else if matches.get_flag(options::verbosity::VERBOSE) {
+    } else if matches.get_flag(opt_flags::verbosity::VERBOSE) {
         VerbosityLevel::Verbose
     } else {
         VerbosityLevel::Normal
     };
-    let GidUidOwnerFilter {
+    let CtGidUidOwnerFilter {
         dest_gid,
         dest_uid,
         raw_owner,
         filter,
     } = parse_gid_uid_and_filter(&matches)?;
 
-    let executor = ChownExecutor {
+    let executor = CtChownExecutor {
         traverse_symlinks,
         dest_gid,
         dest_uid,

@@ -1067,5 +1067,9 @@ mod tests {
         assert_eq!(0x2000_0000, sane_blksize::sane_blksize(0x2000_0000));
         assert_eq!(512, sane_blksize::sane_blksize(0x2000_0001));
     }
-
+    #[test]
+    fn test_get_file_name() {
+        let file_path = PathBuf::from("~/foo.txt");
+        assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
 }

@@ -9,32 +9,20 @@
  * See the Mulan PSL v2 for more details.
  */
 
-pub fn is_wsl_1() -> bool {
-    // #[cfg(target_os = "linux")]
-    // {
-    //     if is_wsl_2() {
-    //         return false;
-    //     }
-    //     if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
-    //         if let Ok(s) = std::str::from_utf8(&b) {
-    //             let a = s.to_ascii_lowercase();
-    //             return a.contains("microsoft") || a.contains("wsl");
-    //         }
-    //     }
-    // }
-    // false
+//拼写检查器：忽略(osrelease)
 
+pub fn ct_wsl_1() -> bool {
     #[cfg(target_os = "linux")]
     {
-        if is_wsl_2() {
+        if ct_wsl_2() {
             return false;
         }
 
         match std::fs::read("/proc/sys/kernel/osrelease") {
-            Ok(b) => match std::str::from_utf8(&b) {
-                Ok(s) => {
-                    let v = s.to_ascii_lowercase();
-                    v.contains("wsl") || v.contains("microsoft")
+            Ok(v) => match std::str::from_utf8(&v) {
+                Ok(str) => {
+                    let s = str.to_ascii_lowercase();
+                    s.contains("wsl") || s.contains("microsoft")
                 }
                 Err(_) => false, // 处理 UTF-8 转换失败的情况
             },
@@ -45,18 +33,12 @@ pub fn is_wsl_1() -> bool {
     false
 }
 
-pub fn is_wsl_2() -> bool {
+pub fn ct_wsl_2() -> bool {
     #[cfg(target_os = "linux")]
     {
-        // if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
-        //     if let Ok(s) = std::str::from_utf8(&b) {
-        //         let a = s.to_ascii_lowercase();
-        //         return a.contains("wsl2");
-        //     }
-        // }
         match std::fs::read("/proc/sys/kernel/osrelease") {
-            Ok(b) => match std::str::from_utf8(&b) {
-                Ok(s) => s.to_ascii_lowercase().contains("wsl2"),
+            Ok(v) => match std::str::from_utf8(&v) {
+                Ok(str) => str.to_ascii_lowercase().contains("wsl2"),
                 Err(_) => false, // 处理 UTF-8 转换失败的情况
             },
             Err(_) => false, // 处理文件读取失败的情况

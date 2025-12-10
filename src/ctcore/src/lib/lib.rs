@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// * feature-gated external crates (re-shared as public internal modules)
+// * 特性门控外部crate（重新作为公共内部模块共享）
 #[cfg(feature = "libc")]
 pub extern crate libc;
 
@@ -25,9 +25,9 @@ pub extern crate libc;
 // ct_parser: 字符串解析模块。包含用于解析和处理字符串数据的相关逻辑和算法，可能是专门针对某种特定格式或结构的字符串解析器。
 
 mod ct_features;
+mod ct_macros;
 mod ct_mods;
 mod ct_parser;
-mod macros;
 
 pub use ctcore_procs::*;
 
@@ -114,20 +114,19 @@ use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 
-/// Execute utility code for `util`.
+/// 执行util的实用程序代码。
 ///
-/// This macro expands to a main function that invokes the `ctmain` function in `util`
-/// Exits with code returned by `ctmain`.
+/// 该宏扩展为一个主函数，调用util中的ctmain函数，以ctmain返回的代码退出。
 #[macro_export]
-macro_rules! bin {
+macro_rules! ct_bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
             // 对SIGPIPE失败/恐慌抑制冗余错误输出
-            ctcore::ct_panic::mute_sigpipe_panic();
+            ctcore::ct_panic::ct_mute_set_panic_hook();
 
             // 执行实用工具代码
-            let code = $util::ctmain(ctcore::args_os());
+            let code = $util::ctmain(ctcore::ct_os_args());
             // （防御性地）在退出前刷新utility的stdout；参见https://github.com/rust-lang/rust/issues/23818
             if let Err(e) = std::io::stdout().flush() {
                 eprintln!("Error flushing stdout: {}", e);
@@ -138,13 +137,11 @@ macro_rules! bin {
     };
 }
 
-/// Generate the usage string for clap.
+/// 为 clap 生成使用说明字符串。
 ///
-/// This function does two things. It indents all but the first line to align
-/// the lines because clap adds "Usage: " to the first line. And it replaces
-/// all occurrences of `{}` with the execution phrase and returns the resulting
-/// `String`. It does **not** support more advanced formatting ct_features such
-/// as `{0}`.
+/// 本函数执行两件事。它缩进除首行之外的所有行以保持对齐，因为 clap 会在首行添加 "Usage: "
+/// 。然后，它将所有出现的 {} 替换为执行短语，并返回生成的 String。
+/// 它不支持更高级的格式化功能，如 {0}。
 pub fn ct_format_usage(s: &str) -> String {
     s.lines() // 分割为行，以处理换行
         .enumerate() // 为每行添加索引
@@ -159,15 +156,15 @@ pub fn ct_format_usage(s: &str) -> String {
         })
         .collect::<Vec<_>>() // 将处理过的行收集回Vec
         .join("\n") // 重新连接为单个字符串
-        .replace("{}", crate::execution_phrase()) // 替换{}
+        .replace("{}", crate::ct_execute_phrase()) // 替换{}
 }
 
-pub fn get_utility_is_second_arg() -> bool {
-    crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
+pub fn ct_get_utility_is_second_arg() -> bool {
+    crate::ct_macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
-pub fn set_utility_is_second_arg() {
-    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
+pub fn ct_set_utility_is_second_arg() {
+    crate::ct_macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
 
 // 调用args_os()可能代价较高，因为它会在迭代前复制整个argv。
@@ -175,7 +172,7 @@ pub fn set_utility_is_second_arg() {
 static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
-    let base_index = if get_utility_is_second_arg() { 1 } else { 0 };
+    let base_index = if ct_get_utility_is_second_arg() { 1 } else { 0 };
     ARGV.get(base_index)
         .or_else(|| ARGV.get(base_index + 1))
         .map_or_else(String::new, |s| s.to_string_lossy().into_owned())
@@ -187,7 +184,7 @@ pub fn ct_util_name() -> &'static str {
 }
 
 static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
-    ARGV.get(..=usize::from(get_utility_is_second_arg()))
+    ARGV.get(..=usize::from(ct_get_utility_is_second_arg()))
         .unwrap_or_else(|| &ARGV[..1]) // 默认使用第一个元素
         .iter()
         .map(|arg| arg.to_string_lossy())
@@ -196,7 +193,7 @@ static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
 });
 
 /// 为“usage”派生完整的执行短语
-pub fn execution_phrase() -> &'static str {
+pub fn ct_execute_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
 
@@ -214,12 +211,12 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
-pub fn args_os() -> impl Iterator<Item = OsString> {
+pub fn ct_os_args() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
 
 /// 从标准输入读取一行，并检查首字符是否为 'y' 或 'Y'
-pub fn read_yes() -> bool {
+pub fn ct_read_true() -> bool {
     let mut s = String::new();
 
     match std::io::stdin().read_line(&mut s) {
@@ -228,32 +225,29 @@ pub fn read_yes() -> bool {
     }
 }
 
-/// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
+/// 使用格式化的字符串提示用户，并在他们回复'y'或'Y'时返回true。
 ///
-/// This macro functions accepts the same syntax as `format!`. The prompt is written to
-/// `stderr`. A space is also printed at the end for nice spacing between the prompt and
-/// the user input. Any input starting with `'y'` or `'Y'` is interpreted as `yes`.
+/// 该宏函数接受与format!相同的语法。提示写入stderr。还会在末尾打印一个空格，以便在提示和用户输入之间有适当的间距。任何以'y'或'Y'开头的输入都被解释为'yes'。
 ///
-/// # Examples
+/// # 示例
 /// ```
-/// use ctcore::prompt_yes;
+/// use ctcore::ct_prompt_yes;
 /// let file = "foo.rs";
-/// prompt_yes!("Do you want to delete '{}'?", file);
+/// ct_prompt_yes!("Do you want to delete '{}'?", file);
 /// ```
-/// will print something like below to `stderr` (with `ct_util_name` substituted by the actual
-/// util name) and will wait for user input.
+/// 将如下内容打印到stderr（其中util_name将被实际的util名称替换），并等待用户输入。
+///
 /// ```txt
-/// ct_util_name: Do you want to delete 'foo.rs'?
 /// ```
 #[macro_export]
-macro_rules! prompt_yes(
+macro_rules! ct_prompt_yes (
     ($($args:tt)+) => ({
         use std::io::Write;
         eprint!("{}: ", ctcore::ct_util_name());
         eprint!($($args)+);
         eprint!(" ");
         ctcore::ct_crash_if_err!(1, std::io::stderr().flush());
-        ctcore::read_yes()
+        ctcore::ct_read_true()
     })
 );
 

@@ -8,6 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+
 /// Encapsulates differences between OSs regarding the access to
 /// file handles / descriptors.
 /// This is useful when dealing with lower level stdin/stdout access.
@@ -35,26 +36,26 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-/// abstraction wrapper for native file handle / file descriptor
-pub struct OwnedFileDescriptorOrHandle {
+/// 用于封装原生文件句柄/文件描述符的抽象层
+pub struct CtOwnedFileDescriptorOrHandle {
     fx: NativeType,
 }
 
-impl OwnedFileDescriptorOrHandle {
-    /// create from underlying native type
+impl CtOwnedFileDescriptorOrHandle {
+    /// 从底层原生类型创建
     pub fn new(new_native_type: NativeType) -> Self {
         Self {
             fx: new_native_type,
         }
     }
 
-    /// create by opening a file
+    /// 通过打开文件来创建
     pub fn open_file(options: &OpenOptions, path: &Path) -> io::Result<Self> {
         let f = options.open(path)?;
         Self::from(f)
     }
 
-    /// conversion from borrowed native type
+    /// 借用原生类型的转换
     ///
     /// e.g. `std::io::stdout()`, `std::fs::File`, ...
     #[cfg(windows)]
@@ -74,32 +75,30 @@ impl OwnedFileDescriptorOrHandle {
         })
     }
 
-    /// instantiates a corresponding `File`
+    /// 实例化相应的File
     pub fn into_file(self) -> File {
         File::from(self.fx)
     }
 
-    /// instantiates a corresponding `Stdio`
+    /// 实例化相应的Stdio
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(self.fx)
     }
 
-    /// clones self. useful when needing another
-    /// owned reference to same file
+    /// 克隆自身。当需要对同一文件的另一个拥有引用时有用
     pub fn try_clone(&self) -> io::Result<Self> {
         self.fx.try_clone().map(Self::new)
     }
 
-    /// provides native type to be used with
-    /// OS specific functions without abstraction
+    /// 提供用于直接与操作系统特定函数交互而不经过抽象层的原生类型
     pub fn as_raw(&self) -> &NativeType {
         &self.fx
     }
 }
 
-/// instantiates a corresponding `Stdio`
-impl From<OwnedFileDescriptorOrHandle> for Stdio {
-    fn from(value: OwnedFileDescriptorOrHandle) -> Self {
+/// 实例化相应的Stdio
+impl From<CtOwnedFileDescriptorOrHandle> for Stdio {
+    fn from(value: CtOwnedFileDescriptorOrHandle) -> Self {
         value.into_stdio()
     }
 }
@@ -119,7 +118,7 @@ mod tests {
         let mut options_builder = OpenOptions::new();
         let options = options_builder.create(true).write(true).read(true);
 
-        let handle = OwnedFileDescriptorOrHandle::open_file(&options, &file_path)?;
+        let handle = CtOwnedFileDescriptorOrHandle::open_file(&options, &file_path)?;
         let mut file = handle.into_file();
         write!(file, "Hello, world!")?;
         file.sync_all()?;
@@ -133,7 +132,7 @@ mod tests {
         let dir = tempdir()?;
         let file_path = dir.path().join("test_file.txt");
         let file = File::create(&file_path)?;
-        let handle = OwnedFileDescriptorOrHandle::from(file)?;
+        let handle = CtOwnedFileDescriptorOrHandle::from(file)?;
 
         let stdio = handle.into_stdio();
 
@@ -167,7 +166,7 @@ mod tests {
         let mut binding = OpenOptions::new();
         let options = binding.read(true); // Not creating the file
 
-        assert!(OwnedFileDescriptorOrHandle::open_file(&options, &file_path).is_err());
+        assert!(CtOwnedFileDescriptorOrHandle::open_file(&options, &file_path).is_err());
     }
 
     #[test]
@@ -179,7 +178,7 @@ mod tests {
         drop(file); // Close the file by dropping it
 
         // Now, the original file descriptor is closed, and attempting to create a handle from the cloned file descriptor
-        let result = OwnedFileDescriptorOrHandle::from(file_clone);
+        let result = CtOwnedFileDescriptorOrHandle::from(file_clone);
 
         // We check if the operation is successful, which it should be, since try_clone() keeps the file accessible
         assert!(
@@ -195,7 +194,7 @@ mod tests {
         let mut file = File::create(&file_path).unwrap();
         writeln!(file, "Original content").unwrap();
 
-        let original = OwnedFileDescriptorOrHandle::from(&file).unwrap();
+        let original = CtOwnedFileDescriptorOrHandle::from(&file).unwrap();
         let clone = original.try_clone().unwrap();
 
         let mut original_file = original.into_file();
@@ -217,7 +216,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("test_file.txt");
         let file = File::create(&file_path).unwrap();
-        let handle = OwnedFileDescriptorOrHandle::from(file).unwrap();
+        let handle = CtOwnedFileDescriptorOrHandle::from(file).unwrap();
 
         let raw_before = handle.as_raw() as *const _; // Take a pointer for comparison
         let cloned_handle = handle.try_clone().unwrap();

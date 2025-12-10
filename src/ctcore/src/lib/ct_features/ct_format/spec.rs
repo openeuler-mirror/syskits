@@ -9,8 +9,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// spell-checker:ignore (vars) intmax ptrdiff padlen
-
 use crate::ct_quoting_style::{escape_name, CtQuotingStyle};
 
 use super::{
@@ -22,10 +20,8 @@ use super::{
 };
 use std::{io::Write, ops::ControlFlow};
 
-/// A parsed specification for formatting a value
-///
-/// This might require more than one argument to resolve width or precision
-/// values that are given as `*`.
+/// 用于格式化值的已解析说明符
+/// 可能需要多个参数来解析以*给出的宽度或精度值
 #[derive(Debug, PartialEq)]
 pub enum Spec {
     Char {
@@ -62,18 +58,17 @@ pub enum Spec {
     },
 }
 
-/// Precision and width specified might use an asterisk to indicate that they are
-/// determined by an argument.
+/// 指定的精度和宽度可能会使用星号表示它们由参数确定。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CanAsterisk<T> {
     Fixed(T),
     Asterisk,
 }
 
-/// Size of the expected type (ignored)
+/// 预期类型大小（被忽略）
 ///
-/// We ignore this parameter entirely, but we do parse it.
-/// It could be used in the future if the need arises.
+/// 我们完全忽略这个参数，但我们确实进行了解析。
+/// 如果将来有需要，可以使用它。
 #[derive(Debug, PartialEq)]
 enum Length {
     /// signed/unsigned char ("hh")
@@ -122,7 +117,7 @@ impl Flags {
         flags
     }
 
-    /// Whether any of the flags is set to true
+    /// 是否设置了任意一个标志为true
     fn any(&self) -> bool {
         self != &Self::default()
     }
@@ -130,11 +125,12 @@ impl Flags {
 
 impl Spec {
     pub fn parse<'a>(rest: &mut &'a [u8]) -> Result<Self, &'a [u8]> {
-        // Based on the C++ reference, the spec ct_format looks like:
+        // 根据 C++ 参考资料，格式规范看起来像这样：
+        //
         //
         //   %[flags][width][.precision][length]specifier
         //
-        // However, we have already parsed the '%'.
+        // 不过，我们已经解析过了 '%'。
         let mut index = 0;
         let start = *rest;
 
@@ -158,9 +154,8 @@ impl Spec {
             None
         };
 
-        // The `0` flag is ignored if `-` is given or a precision is specified.
-        // So the only case for RightZero, is when `-` is not given and the
-        // precision is none.
+        // 如果指定了-或精度，则忽略0标志。
+        // 因此，RightZero的唯一情况是未指定-且精度为无。
         let alignment = if flags.minus {
             NumberAlignment::Left
         } else if precision.is_none() && flags.zero {
@@ -169,12 +164,8 @@ impl Spec {
             NumberAlignment::RightSpace
         };
 
-        // We ignore the length. It's not really relevant to printf
+        // 我们忽略长度。它对 printf 来说并不重要
         let _ = Self::parse_length(rest, &mut index);
-
-        // let Some(type_spec) = rest.get(index) else {
-        //     return Err(&start[..index]);
-        // };
 
         let type_spec = match rest.get(index) {
             Some(type_spec) => type_spec,
@@ -187,7 +178,7 @@ impl Spec {
         *rest = &start[index..];
 
         Ok(match type_spec {
-            // GNU accepts minus, plus and space even though they are not used
+            // GNU接受减号、加号和空格，即使它们没有被使用
             b'c' => {
                 if flags.hash || flags.zero {
                     return Err(&start[..index]);
@@ -243,7 +234,7 @@ impl Spec {
                 }
             }
             c @ (b'o' | b'u' | b'x' | b'X') => {
-                // Normal unsigned integer cannot have a prefix
+                // 普通无符号整数不能有前缀
                 if flags.hash && *c == b'u' {
                     return Err(&start[..index]);
                 }
@@ -301,12 +292,9 @@ impl Spec {
     }
 
     fn parse_length(rest: &mut &[u8], index: &mut usize) -> Option<Length> {
-        // Parse 0..N length options, keep the last one
-        // Even though it is just ignored. We might want to use it later and we
-        // should parse those characters.
-        //
-        // TODO: This needs to be configurable: `seq` accepts only one length
-        //       param
+        // 解析0..N长度选项，保留最后一个
+        // 即使它只是被忽略。我们可能稍后会用到它，我们应该解析那些字符。
+        // 待办事项：这需要可配置：seq只接受一个长度参数
         let mut length = None;
         loop {
             let new_length = rest.get(*index).and_then(|c| {
@@ -360,11 +348,11 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
 
-                // GNU does do this truncation on a byte level, see for instance:
-                //     printf "%.1s" 🙃
-                //     > �
-                // For now, we let printf panic when we truncate within a code point.
-                // TODO: We need to not use Rust's formatting for aligning the output,
+                // GNU确实会在字节级别进行这种截断，例如：
+                // printf "%.1s" 🙃
+                // > � // 目前，当我们在代码点内截断时，让printf恐慌。
+                // 待办事项：我们不需要使用Rust的格式化来对输出进行对齐，
+                // 这样我们就可以直接将字节写入stdout，而不会引发恐慌。
                 // so that we can just write bytes to stdout without panicking.
                 let precision = resolve_asterisk(*precision, &mut args)?;
                 let s = args.get_str();
@@ -494,22 +482,7 @@ fn resolve_asterisk<'a>(
 // 函数首先从所需宽度减去文本长度，计算出要填充的空格数（padlen）。然后，它调用写入器的写入方法，传入文本和计算出的填充长度。
 // 如果 left 为 true，文本将在左侧填充空格；否则，文本将在右侧填充空格。write！宏用于格式化填充后的文本，并将其写入写入器。
 // 最后，函数会返回一个 Result，说明操作是否成功，并使用 map_err 方法将可能出现的 I/O 错误映射到 FormatError 值。
-// fn write_padded(
-//     mut writer: impl Write,
-//     text: &[u8],
-//     width: usize,
-//     left: bool,
-// ) -> Result<(), FormatError> {
-//     let padlen = width.saturating_sub(text.len());
-//     if left {
-//         writer.write_all(text)?;
-//         write!(writer, "{: <padlen$}", "")
-//     } else {
-//         write!(writer, "{: >padlen$}", "")?;
-//         writer.write_all(text)
-//     }
-//     .map_err(FormatError::IoError)
-// }
+
 fn write_padded(
     mut writer_io: impl Write,
     text: &[u8],
@@ -530,14 +503,7 @@ fn write_padded(
 // 该函数检查当前字符是否为星号 (*)，如果是，则吃掉星号并返回一个 CanAsterisk::Asterisk 值。这意味着宽度或精度值由参数决定。
 //
 // 如果当前字符不是星号，函数会调用 eat_number 函数解析数字，并返回一个包含解析数字的 CanAsterisk::Fixed 值。
-// fn eat_asterisk_or_number(rest: &mut &[u8], index: &mut usize) -> Option<CanAsterisk<usize>> {
-//     if let Some(b'*') = rest.get(*index) {
-//         *index += 1;
-//         Some(CanAsterisk::Asterisk)
-//     } else {
-//         eat_number(rest, index).map(CanAsterisk::Fixed)
-//     }
-// }
+
 fn eat_asterisk_or_number(rest: &mut &[u8], index: &mut usize) -> Option<CanAsterisk<usize>> {
     // 检查`rest`是否为空，避免因索引访问而导致的panic
     if rest.is_empty() {
@@ -568,21 +534,7 @@ fn eat_asterisk_or_number(rest: &mut &[u8], index: &mut usize) -> Option<CanAste
  * @return 返回一个选项，如果解析成功，则为包含解析结果的 Some(usize)，
  *         如果无法解析数字（例如，没有数字或解析过程中发生溢出），则为 None。
  */
-// fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
-//     match rest[*index..].iter().position(|b| !b.is_ascii_digit()) {
-//         None | Some(0) => None,
-//         Some(i) => {
-//             // TODO: This might need to handle errors better
-//             // For example in case of overflow.
-//             let parsed = std::str::from_utf8(&rest[*index..(*index + i)])
-//                 .unwrap()
-//                 .parse()
-//                 .unwrap();
-//             *index += i;
-//             Some(parsed)
-//         }
-//     }
-// }
+
 fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
     // 查找第一个非数字字符的位置
     match rest[*index..].iter().position(|b| !b.is_ascii_digit()) {
@@ -919,9 +871,7 @@ mod tests {
     fn test_eat_asterisk_or_number_not_an_asterisk() {
         let mut rest: &[u8] = &mut [b'3', b'5', b'7', b'a'];
         let mut index = 0;
-        // if let Some(eat_asterisk_or_number_value) = eat_asterisk_or_number(&mut rest, &mut index) {
-        //     assert_eq!(eat_asterisk_or_number_value, CanAsterisk::Fixed(357));
-        // }
+
         assert_eq!(
             eat_asterisk_or_number(&mut rest, &mut index),
             Some(CanAsterisk::Fixed(357))

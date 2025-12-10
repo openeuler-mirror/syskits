@@ -8,19 +8,14 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-//! Provides consistent newline/zero terminator handling for `-z`/`--zero` flags.
-//!
-//! See the [`CtLineEnding`] struct for more information.
+
 use std::fmt::Display;
 
-/// Line ending of either `\n` or `\0`
-///
-/// Used by various utilities that have the option to separate lines by nul
-/// characters instead of `\n`. Usually, this is specified with the `-z` or
-/// `--zero` flag.
-///
-/// The [`Display`] implementation writes the character corresponding to the
-/// variant to the formatter.
+/// 行尾字符，可以是\n或\0
+
+/// /// 该枚举由一些具有使用nul字符而非\n分隔行选项的工具使用。通常，这是通过-z或--zero标志指定的。
+
+/// /// 实现了[Display] trait，会将枚举变体对应的字符写入格式化器中。
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum CtLineEnding {
@@ -32,9 +27,9 @@ pub enum CtLineEnding {
 impl Display for CtLineEnding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if *self == CtLineEnding::Newline {
-            writeln!(f) // Writes a newline character to the formatter
+            writeln!(f) // 向格式化器写入换行符
         } else {
-            write!(f, "\0") // Writes a null character to the formatter
+            write!(f, "\0") //向格式化器写入空字符
         }
     }
 }
@@ -46,12 +41,12 @@ impl From<CtLineEnding> for u8 {
 }
 
 impl CtLineEnding {
-    /// Create a [`CtLineEnding`] from a `-z`/`--zero` flag
+    /// 从-z/--zero标志创建一个[CtLineEnding]实例
     ///
-    /// If `is_zero_terminated` is true, [`CtLineEnding::Nul`] is returned,
-    /// otherwise [`CtLineEnding::Newline`].
-    pub fn from_zero_flag(is_zero_terminated: bool) -> Self {
-        match is_zero_terminated {
+    /// 若`is_zero_terminated`为真，则返回表示以`NUL`字符结尾的行的枚举值[`CtLineEnding::Nul`]；
+    /// 否则返回表示以换行符`\n`结尾的行的枚举值[`CtLineEnding::Newline`]。
+    pub fn from_zero_flag(flag_zero: bool) -> Self {
+        match flag_zero {
             true => Self::Nul,
             false => Self::Newline,
         }

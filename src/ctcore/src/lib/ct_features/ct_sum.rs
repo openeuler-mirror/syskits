@@ -8,6 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+
 //! Implementations of digest functions, like md5 and sha1.
 //!
 //! The [`CtDigest`] trait represents the interface for providing inputs

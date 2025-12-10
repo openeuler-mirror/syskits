@@ -33,7 +33,7 @@ impl CtShortcutValueParser {
     ) -> clap::Error {
         let mut error = clap::Error::new(ErrorKind::InvalidValue).with_cmd(command);
 
-        // If an argument is specified, add it to the error context as `InvalidArg`.
+        // 如果指定了参数，将其作为 InvalidArg 添加到错误上下文中。
         if let Some(arg) = argument {
             error.insert(
                 ContextKind::InvalidArg,
@@ -41,13 +41,13 @@ impl CtShortcutValueParser {
             );
         }
 
-        // Add the invalid input value to the error context.
+        // 将无效输入值添加到错误上下文中。
         error.insert(
             ContextKind::InvalidValue,
             ContextValue::String(input_value.to_string()),
         );
 
-        // Collect and add all valid values to the error context.
+        // 收集并添加所有有效值到错误上下文中。
         error.insert(
             ContextKind::ValidValue,
             ContextValue::Strings(
@@ -71,27 +71,6 @@ impl TypedValueParser for CtShortcutValueParser {
         argument: Option<&clap::Arg>,
         input: &std::ffi::OsStr,
     ) -> Result<Self::Value, clap::Error> {
-        // let value = value
-        //     .to_str()
-        //     .ok_or(clap::Error::new(ErrorKind::InvalidUtf8))?;
-        //
-        // let matched_values: Vec<_> = self
-        //     .0
-        //     .iter()
-        //     .filter(|x| x.get_name().starts_with(value))
-        //     .collect();
-        //
-        // match matched_values.len() {
-        //     0 => Err(self.generate_clap_error(cmd, arg, value)),
-        //     1 => Ok(matched_values[0].get_name().to_string()),
-        //     _ => {
-        //         if let Some(direct_match) = matched_values.iter().find(|x| x.get_name() == value) {
-        //             Ok(direct_match.get_name().to_string())
-        //         } else {
-        //             Err(self.generate_clap_error(cmd, arg, value))
-        //         }
-        //     }
-        // }
         let input_str = input
             .to_str()
             .ok_or_else(|| clap::Error::new(ErrorKind::InvalidUtf8))?;

@@ -8,7 +8,6 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-//! Aims to provide platform-independent methods to obtain login records
 //!
 //! **ONLY** support linux, macos and freebsd for the time being
 //!
@@ -44,7 +43,7 @@ use std::path::Path;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
-pub use self::ut::*;
+pub use self::ct_ut::*;
 pub use libc::endutxent;
 pub use libc::getutxent;
 pub use libc::setutxent;
@@ -59,7 +58,7 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use crate::*; // import macros from `../../macros.rs`
+use crate::*; // import macros from `../../ct_macros`
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
@@ -72,7 +71,7 @@ macro_rules! chars2string {
 }
 
 #[cfg(target_os = "linux")]
-mod ut {
+mod ct_ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
     pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
@@ -213,7 +212,7 @@ impl CtUtmpx {
     pub fn exit_status(&self) -> (i16, i16) {
         (0, 0)
     }
-    /// Consumes the `CtUtmpx`, returning the underlying C struct utmpx
+    /// Consumes the `Utmpx`, returning the underlying C struct utmpx
     pub fn into_inner(self) -> utmpx {
         self.inner
     }
@@ -247,7 +246,7 @@ impl CtUtmpx {
                     }
                 }
             } else {
-                // GNU coreutils has this behavior
+                // GNU coreutils具有这种行为
                 return Ok(hostname.to_string());
             }
         }
@@ -260,14 +259,12 @@ impl CtUtmpx {
     /// This will use the default location, or the path [`CtUtmpx::iter_all_records_from`]
     /// was most recently called with.
     ///
-    /// Only one instance of [`UtmpxIter`] may be active at a time. This
+    /// Only one instance of [`CtUtmpxIter`] may be active at a time. This
     /// function will block as long as one is still active. Beware!
-    pub fn iter_all_records() -> UtmpxIter {
-        let iter = UtmpxIter::new();
+    pub fn iter_all_records() -> CtUtmpxIter {
+        let iter = CtUtmpxIter::new();
         unsafe {
-            // This can technically fail, and it would be nice to detect that,
-            // but it doesn't return anything so we'd have to do nasty things
-            // with errno.
+            // 从技术上讲，这可能会失败，检测到这一点会很好，但它什么也不返回，所以我们不得不对errno做一些讨厌的事情。
             setutxent();
         }
         iter
@@ -280,18 +277,15 @@ impl CtUtmpx {
     /// This function affects subsequent calls to [`CtUtmpx::iter_all_records`].
     ///
     /// The same caveats as for [`CtUtmpx::iter_all_records`] apply.
-    pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
-        let iter = UtmpxIter::new();
+    pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> CtUtmpxIter {
+        let iter = CtUtmpxIter::new();
         let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
         unsafe {
-            // In glibc, utmpxname() only fails if there's not enough memory
-            // to copy the string.
-            // Solaris returns 1 on success instead of 0. Supposedly there also
-            // exist systems where it returns void.
-            // GNU who on Debian seems to output nothing if an invalid filename
-            // is specified, no warning or anything.
-            // So this function is pretty crazy and we don't try to detect errors.
-            // Not much we can do besides pray.
+            // 在 glibc 中，utmpxname() 只有在内存不足以复制字符串时才会失败。
+            // Solaris 成功时返回 1 而不是 0。据说还有一些系统返回 void。
+            // 在 Debian 上的 GNU who 如果指定了无效的文件名似乎什么也不输出，没有警告或其他内容。
+            // 所以这个函数非常疯狂，我们不尝试检测错误。
+            // 除了祈祷外，我们无能为力。
             utmpxname(path.as_ptr());
             setutxent();
         }
@@ -299,17 +293,14 @@ impl CtUtmpx {
     }
 }
 
-// On some systems these functions are not thread-safe. On others they're
-// thread-local. Therefore we use a mutex to allow only one guard to exist at
-// a time, and make sure UtmpxIter cannot be sent across threads.
+// 在某些系统上，这些函数不是线程安全的。在其他系统上，它们是线程局部的。
+// 因此，我们使用互斥锁来确保一次只能存在一个guard，并确保UtmpxIter不能跨线程发送。
 //
-// I believe the only technical memory unsafety that could happen is a data
-// race while copying the data out of the pointer returned by getutxent(), but
-// ordinary race conditions are also very much possible.
+// 我认为唯一可能的技术内存不安全性是在从getutxent()返回的指针处复制数据时发生数据竞争，但普通的竞态条件也很可能发生。
 static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 /// Iterator of login records
-pub struct UtmpxIter {
+pub struct CtUtmpxIter {
     #[allow(dead_code)]
     guard: MutexGuard<'static, ()>,
     /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
@@ -317,9 +308,9 @@ pub struct UtmpxIter {
     phantom: PhantomData<std::rc::Rc<()>>,
 }
 
-impl UtmpxIter {
+impl CtUtmpxIter {
     fn new() -> Self {
-        // PoisonErrors can safely be ignored
+        // PoisonErrors可以安全地被忽略
         let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
         Self {
             guard,
@@ -328,7 +319,7 @@ impl UtmpxIter {
     }
 }
 
-impl Iterator for UtmpxIter {
+impl Iterator for CtUtmpxIter {
     type Item = CtUtmpx;
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
@@ -336,10 +327,8 @@ impl Iterator for UtmpxIter {
             if res.is_null() {
                 None
             } else {
-                // The data behind this pointer will be replaced by the next
-                // call to getutxent(), so we have to read it now.
-                // All the strings live inline in the struct as arrays, which
-                // makes things easier.
+                // 此指针后面的data将在下一次调用getutxent()时被替换，所以我们现在必须读取它。
+                // 所有字符串作为数组内联在结构体中，这使得事情变得更容易。
                 Some(CtUtmpx {
                     inner: ptr::read(res as *const _),
                 })
@@ -348,7 +337,7 @@ impl Iterator for UtmpxIter {
     }
 }
 
-impl Drop for UtmpxIter {
+impl Drop for CtUtmpxIter {
     fn drop(&mut self) {
         unsafe {
             endutxent();

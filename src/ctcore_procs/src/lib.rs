@@ -25,14 +25,14 @@ pub fn main(_ct_args: TokenStream, ct_stream: TokenStream) -> TokenStream {
             #my_stream
             let result = ctmain(args);
             match result {
-                Ok(()) => ctcore::ct_error::get_exit_code(),
+                Ok(()) => ctcore::ct_error::get_ct_exit_code(),
                 Err(err) => {
                     let s_err = format!("{}", err);
                     if !s_err.is_empty() {
                         ctcore::ct_show_error!("{}", s_err);
                     }
                     if err.usage() {
-                        eprintln!("Try '{} --help' for more information.", ctcore::execution_phrase());
+                        eprintln!("Try '{} --help' for more information.", ctcore::ct_execute_phrase());
                     }
                     err.code()
                 }
@@ -73,7 +73,7 @@ pub fn ct_help_about(ct_input: TokenStream) -> TokenStream {
 /// 从帮助文件获取用法信息。
 ///
 /// 假定用法信息被Markdown代码围栏包围，可能跨越多行。
-/// 每行的第一个单词被视为工具名称，并替换为 "{}"，以便此函数输出能与 ctcore::ct_format_usage 配合使用。
+/// 每行的第一个单词被视为工具名称，并替换为 "{}"，以便此函数输出能与 ctcore::format_usage 配合使用。
 #[proc_macro]
 pub fn ct_help_usage(ct_input: TokenStream) -> TokenStream {
     // 将输入转换为TokenTree向量

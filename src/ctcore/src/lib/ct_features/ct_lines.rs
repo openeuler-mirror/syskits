@@ -8,6 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+
 //! Iterate over lines, including the line ending character(s).
 //!
 //! This module provides the [`lines`] function, similar to the
@@ -58,23 +59,23 @@ use std::io::BufRead;
 /// assert_eq!(it.next(), Some(Vec::from("z")));
 /// assert_eq!(it.next(), None);
 /// ```
-pub fn lines<B>(reader: B, sep: u8) -> Lines<B>
+pub fn lines<B>(reader: B, sep: u8) -> CtLines<B>
 where
     B: BufRead,
 {
-    Lines { buf: reader, sep }
+    CtLines { buf: reader, sep }
 }
 
 /// An iterator over the lines of an instance of `BufRead`.
 ///
 /// This struct is generally created by calling [`lines`] on a `BufRead`.
 /// Please see the documentation of [`lines`] for more details.
-pub struct Lines<B> {
+pub struct CtLines<B> {
     buf: B,
     sep: u8,
 }
 
-impl<B: BufRead> Iterator for Lines<B> {
+impl<B: BufRead> Iterator for CtLines<B> {
     type Item = std::io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {

@@ -9,9 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-//! Utilities for parsing numbers in various formats
-
-// spell-checker:ignore powf copysign prec inity
+//! 用于以各种格式解析数字的实用程序
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Base {
@@ -35,7 +33,7 @@ impl Base {
     如果输入字符 c 不是当前基数的有效数字，则 digit 方法返回 None。
         */
     pub fn digit(&self, c_char: char) -> Option<u64> {
-        // Inner function to convert a decimal character to u64
+        // 内部函数，将十进制字符转换为u64
         fn from_ct_decimal(c_char: char) -> u64 {
             u64::from(c_char) - u64::from('0')
         }
@@ -70,17 +68,15 @@ impl Base {
     }
 }
 
-/// Type returned if a number could not be parsed in its entirety
+/// 如果无法完整解析数字，则返回此类型
 #[derive(Debug, PartialEq)]
 pub enum ParseError<'a, T> {
-    /// The input as a whole makes no sense
+    /// 输入整体无意义
     CtNotNumeric,
-    /// The beginning of the input made sense and has been parsed,
-    /// while the remaining doesn't.
+    /// 输入的开头部分有意义且已成功解析，但剩余部分无意义。
     CtPartialMatch(T, &'a str),
-    /// The integral part has overflowed the requested type, or
-    /// has overflowed the `u64` internal storage when parsing the
-    /// integral part of a floating point number.
+    /// 整数部分超出了请求的数据类型范围，
+    /// 或者在解析浮点数整数部分时超出了内部 `u64` 存储范围。
     CtOverflow,
 }
 
@@ -94,19 +90,20 @@ impl<'a, T> ParseError<'a, T> {
     }
 }
 
-/// A number ct_parser for binary, octal, decimal, hexadecimal and single characters.
+/// 用于解析二进制、八进制、十进制、十六进制及单个字符的数值解析器。
 ///
-/// Internally, in order to get the maximum possible precision and cover the full
-/// range of u64 and i64 without losing precision for f64, the returned number is
-/// decomposed into:
-///   - A `base` value
-///   - A `neg` sign bit
-///   - A `integral` positive part
-///   - A `fractional` positive part
-///   - A `precision` representing the number of digits in the fractional part
+/// 为了获取最大可能的精度并在不损失 f64 精度的情况下覆盖 u64 和 i64 的完整范围，返回的数值被分解为：
 ///
-/// If the fractional part cannot be represented on a `u64`, parsing continues
-/// silently by ignoring non-significant digits.
+/// - base 值
+///
+/// - neg 符号位
+/// - integral 正整数部分
+/// - fractional 正小数部分
+/// - precision 表示小数部分的位数
+///
+///
+/// 如果小数部分无法用 u64 表示，解析器会静默地忽略非重要数字并继续解析。
+///
 pub struct ParsedNumber {
     base: Base,
     negative: bool,
@@ -123,7 +120,7 @@ impl ParsedNumber {
         }
     }
 
-    /// Parse a number as i64. No fractional part is allowed.
+    /// 将数字解析为 i64。不允许小数部分。
     pub fn parse_i64(input: &str) -> Result<i64, ParseError<'_, i64>> {
         match Self::parse(input, true) {
             Ok(v) => {
@@ -143,7 +140,7 @@ impl ParsedNumber {
         }
     }
 
-    /// Parse a number as u64. No fractional part is allowed.
+    /// 将数字解析为 u64。不允许小数部分。
     pub fn parse_u64(input: &str) -> Result<u64, ParseError<'_, u64>> {
         match Self::parse(input, true) {
             Ok(v) | Err(ParseError::CtPartialMatch(v, _)) if v.negative => {
@@ -166,7 +163,7 @@ impl ParsedNumber {
         }
     }
 
-    /// Parse a number as f64
+    /// 解析一个数为 f64 类型
     pub fn parse_f64(input: &str) -> Result<f64, ParseError<'_, f64>> {
         match Self::parse(input, false) {
             Ok(v) => {
@@ -208,7 +205,7 @@ impl ParsedNumber {
 
     #[allow(clippy::cognitive_complexity)]
     fn parse(input: &str, integral_only: bool) -> Result<Self, ParseError<'_, Self>> {
-        // Parse the "'" prefix separately
+        // 分别解析“'”前缀
         match input.strip_prefix('\'') {
             Some(rest) => {
                 let mut chars = rest.char_indices().fuse();
@@ -234,16 +231,14 @@ impl ParsedNumber {
             }
         };
 
-        // Initial minus sign
+        // 初始负号
         let (negative, unsigned_str) = match input.strip_prefix('-') {
             Some(input) => (true, input),
             None => (false, input),
         };
 
-        // Parse an optional base prefix ("0b" / "0B" / "0" / "0x" / "0X"). "0" is octal unless a
-        // fractional part is allowed in which case it is an insignificant leading 0. A "0" prefix
-        // will not be consumed in case the parsable string contains only "0": the leading extra "0"
-        // will have no influence on the result.
+        // 解析可选的基数前缀（"0b" / "0B" / "0" / "0x" / "0X"）。"0" 表示八进制，除非允许小数部分，此时它是不重要的前导 0。
+        // 若可解析字符串仅包含 "0"，则不会消耗 "0" 前缀：额外的前导 "0" 不会影响结果。
         let (base, rest) = if let Some(rest) = unsigned_str.strip_prefix('0') {
             if let Some(rest) = rest.strip_prefix(['b', 'B']) {
                 (Base::CtBinary, rest)
@@ -261,7 +256,7 @@ impl ParsedNumber {
             return Err(ParseError::CtNotNumeric);
         }
 
-        // Parse the integral part of the number
+        // 解析数字的整数部分
         let mut chars = rest.chars().enumerate().fuse().peekable();
         let mut integral = 0u64;
         while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
@@ -275,8 +270,7 @@ impl ParsedNumber {
             };
         }
 
-        // Parse the fractional part of the number if there can be one and the input contains
-        // a '.' decimal separator.
+        // 若允许小数部分且输入包含 "." 作为小数点，则解析数字的小数部分。
         let (mut fractional, mut precision) = (0u64, 0);
         if matches!(chars.peek(), Some(&(_, '.')))
             && matches!(base, Base::CtDecimal | Base::CtHexadecimal)
@@ -301,12 +295,11 @@ impl ParsedNumber {
             }
         }
 
-        // If nothing has been parsed, declare the parsing unsuccessful
+        // 如果没有解析任何内容，则声明解析不成功
         if let Some((0, _)) = chars.peek() {
             return Err(ParseError::CtNotNumeric);
         }
-        // Return what has been parsed so far. It there are extra characters, mark the
-        // parsing as a partial match.
+        // 返回已解析的部分。如果有额外字符，则标记此次解析为部分匹配。
         let parsed = Self {
             base,
             negative,

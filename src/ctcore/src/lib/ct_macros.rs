@@ -32,11 +32,11 @@
 //! 以下是按用途排序的宏概述
 //!
 //! - 打印错误
-//! - 来自实现crate::ct_error::UError的类型：[ct_show!],[show_if_err!]
-//! - 来自自定义消息：[ct_show_error!]
-//! - 打印警告：[ct_show_warning!]
+//! - 来自实现crate::ct_error::UError的类型：[show!],[show_if_err!]
+//! - 来自自定义消息：[show_error!]
+//! - 打印警告：[show_warning!]
 //! - 终止util执行
-//! - 异常终止程序：[crash!],[ct_crash_if_err!]`
+//! - 异常终止程序：[crash!],[crash_if_err!]`
 
 // 忽略拼写检查器对以下单词的检查：sourcepath、targetpath、rustdoc
 
@@ -46,9 +46,9 @@ use std::sync::atomic::AtomicBool;
 pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 
 ///
-/// 显示一个 crate::ct_error::CTError 并设置全局退出码。
+/// 显示一个 crate::ct_error::UError 并设置全局退出码。
 ///
-/// 将 crate::ct_error::CTError 中包含的错误消息打印到 stderr，并通过 crate::ct_error::set_ct_exit_code 设置退出码。打印的错误消息前会附加调用工具的名称。调用此宏不会完成程序执行。
+/// 将 crate::ct_error::UError 中包含的错误消息打印到 stderr，并通过 crate::ct_error::set_exit_code 设置退出码。打印的错误消息前会附加调用工具的名称。调用此宏不会完成程序执行。
 ///
 /// # 示例
 ///
@@ -67,7 +67,7 @@ pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 /// }
 /// ```
 ///
-/// 如果不使用crate::ct_error::CTError，可以通过以下方式实现相同的行为：
+/// 如果不使用crate::ct_error::UError，可以通过以下方式实现相同的行为：
 ///
 /// ```
 /// # #[macro_use]
@@ -92,9 +92,9 @@ macro_rules! ct_show (
 
 /// 在错误情况下显示错误并设置全局退出码。
 ///
-/// 该宏围绕着 ct_show! 宏，并接受一个 crate::ct_error::UResult 类型而非 crate::ct_error::CTError 类型。
+/// 该宏围绕着 show! 宏，并接受一个 crate::ct_error::UResult 类型而非 crate::ct_error::UError 类型。
 /// 如果 crate::ct_error::UResult 是 Err 变体，
-/// 该宏将调用 ct_show!。可以直接在函数调用的结果上使用它，就像在 install 工具中那样：
+/// 该宏将调用 show!。可以直接在函数调用的结果上使用它，就像在 install 工具中那样：
 ///
 /// ```ignore
 /// show_if_err!(copy(sourcepath, &targetpath, b));
@@ -105,7 +105,7 @@ macro_rules! ct_show (
 /// ```ignore
 /// # #[macro_use]
 /// # extern crate ctcore;
-/// # use ctcore::ct_error::{CTError, UIoError, UResult, USimpleError};
+/// # use ctcore::ct_error::{UError, UIoError, UResult, USimpleError};
 ///
 /// # fn main() {
 /// let is_ok = Ok(1);
@@ -113,7 +113,7 @@ macro_rules! ct_show (
 /// show_if_err!(is_ok);
 ///
 /// let is_err = Err(USimpleError::new(1, "I'm an error").into());
-/// // Calls `ct_show!` on the contained USimpleError
+/// // Calls `show!` on the contained USimpleError
 /// show_if_err!(is_err);
 /// # }
 /// ```
@@ -217,10 +217,9 @@ macro_rules! ct_crash(
 #[macro_export]
 macro_rules! ct_crash_if_err {
     ($exit_code:expr, $exp:expr) => {
-        if let Err(f) = $exp {
-            $crate::ct_crash!($exit_code, "{}", f);
-        } else {
-            $exp.expect("Expected Ok, found Err")
+        match $exp {
+            Ok(v) => v,
+            Err(f) => $crate::ct_crash!($exit_code, "{}", f),
         }
     };
 }

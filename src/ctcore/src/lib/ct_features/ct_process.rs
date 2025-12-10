@@ -18,7 +18,7 @@ use std::process::ExitStatus;
 use std::thread;
 use std::time::{Duration, Instant};
 
-// SAFETY: These functions always succeed and return simple integers.
+// 安全性：这些函数总是成功并返回简单的整数。
 
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
@@ -41,7 +41,7 @@ pub fn getuid() -> uid_t {
 }
 
 /// Missing methods for Child objects
-pub trait ChildExt {
+pub trait CtChildExt {
     /// Send a signal to a Child process.
     ///
     /// Caller beware: if the process already exited then you may accidentally
@@ -56,7 +56,7 @@ pub trait ChildExt {
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>>;
 }
 
-impl ChildExt for Child {
+impl CtChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         if unsafe { libc::kill(self.id() as pid_t, signal as i32) } == 0 {
             Ok(())
@@ -81,7 +81,7 @@ impl ChildExt for Child {
         if timeout == Duration::from_micros(0) {
             return self.wait().map(Some);
         }
-        // .try_wait() doesn't drop stdin, so we do it manually
+        // .try_wait()不会放弃stdin，所以我们手动放弃
         drop(self.stdin.take());
 
         let start = Instant::now();
@@ -94,9 +94,8 @@ impl ChildExt for Child {
                 break;
             }
 
-            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
-            //      (which was the previous solution).  We might want to use a different duration
-            //      here as well
+            // XXX: 这有点恶心，但它比只是为了等待而启动一个线程（这是之前的解决方案）更干净。
+            // 我们可能也想在这里使用不同的持续时间
             thread::sleep(Duration::from_millis(100));
         }
 
@@ -111,7 +110,7 @@ mod tests {
     use std::time::Duration;
     #[test]
     fn test_get_uid_and_gid_functions() {
-        // Unfortunately, we can't directly mock these system calls, but we can ensure they're callable.
+        // 我们不能直接模拟这些系统调用，但我们可以确保它们是可调用的。
         assert_ne!(getegid(), 1);
         assert_ne!(getgid(), 1);
         assert_ne!(getuid(), 1);

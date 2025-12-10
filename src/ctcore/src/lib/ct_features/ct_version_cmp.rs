@@ -13,11 +13,11 @@ use std::cmp::Ordering;
 /// Compares the non-digit parts of a version.
 /// Special cases: ~ are before everything else, even ends ("a~" < "a")
 /// Letters are before non-letters
-fn version_non_digit_cmp(a: &str, b: &str) -> Ordering {
-    let mut a_chars = a.chars();
-    let mut b_chars = b.chars();
+fn ct_version_non_digit_cmp(a: &str, b: &str) -> Ordering {
+    let mut ct_a = a.chars();
+    let mut ct_b = b.chars();
     loop {
-        match (a_chars.next(), b_chars.next()) {
+        match (ct_a.next(), ct_b.next()) {
             (Some(c1), Some(c2)) if c1 == c2 => {}
             (None, None) => return Ordering::Equal,
             (_, Some('~')) => return Ordering::Greater,
@@ -36,28 +36,28 @@ fn version_non_digit_cmp(a: &str, b: &str) -> Ordering {
 }
 
 /// Remove file endings matching the regex (\.[A-Za-z~][A-Za-z0-9~]*)*$
-fn remove_file_ending(a: &str) -> &str {
-    let mut ending_start = None;
-    let mut prev_was_dot = false;
+fn ct_remove_file_ending(a: &str) -> &str {
+    let mut ct_ending_first = None;
+    let mut ct_prev_was_dot = false;
     for (idx, char) in a.char_indices() {
         if char == '.' {
-            if ending_start.is_none() || prev_was_dot {
-                ending_start = Some(idx);
+            if ct_ending_first.is_none() || ct_prev_was_dot {
+                ct_ending_first = Some(idx);
             }
-            prev_was_dot = true;
-        } else if prev_was_dot {
-            prev_was_dot = false;
+            ct_prev_was_dot = true;
+        } else if ct_prev_was_dot {
+            ct_prev_was_dot = false;
             if !char.is_ascii_alphabetic() && char != '~' {
-                ending_start = None;
+                ct_ending_first = None;
             }
         } else if !char.is_ascii_alphanumeric() && char != '~' {
-            ending_start = None;
+            ct_ending_first = None;
         }
     }
-    if prev_was_dot {
-        ending_start = None;
+    if ct_prev_was_dot {
+        ct_ending_first = None;
     }
-    if let Some(ending_start) = ending_start {
+    if let Some(ending_start) = ct_ending_first {
         &a[..ending_start]
     } else {
         a
@@ -65,57 +65,57 @@ fn remove_file_ending(a: &str) -> &str {
 }
 
 pub fn ct_version_cmp(mut a: &str, mut b: &str) -> Ordering {
-    let str_cmp = a.cmp(b);
-    if str_cmp == Ordering::Equal {
-        return str_cmp;
+    let ct_str = a.cmp(b);
+    if ct_str == Ordering::Equal {
+        return ct_str;
     }
 
-    // Special cases:
-    // 1. Empty strings
+    // 特殊情况：
+    // 1. 空字符串
     match (a.is_empty(), b.is_empty()) {
         (true, false) => return Ordering::Less,
         (false, true) => return Ordering::Greater,
         (true, true) => unreachable!(),
         (false, false) => {}
     }
-    // 2. Dots
+    // 2. 点
     match (a == ".", b == ".") {
         (true, false) => return Ordering::Less,
         (false, true) => return Ordering::Greater,
         (true, true) => unreachable!(),
         (false, false) => {}
     }
-    // 3. Two Dots
+    // 3. 两个点
     match (a == "..", b == "..") {
         (true, false) => return Ordering::Less,
         (false, true) => return Ordering::Greater,
         (true, true) => unreachable!(),
         (false, false) => {}
     }
-    // 4. Strings starting with a dot
+    // 4. 以点号开头的字符串
     match (a.starts_with('.'), b.starts_with('.')) {
         (true, false) => return Ordering::Less,
         (false, true) => return Ordering::Greater,
         (true, true) => {
-            // Strip the leading dot for later comparisons
+            // 去除前导点号以便稍后比较
             a = &a[1..];
             b = &b[1..];
         }
         _ => {}
     }
 
-    // Try to strip file extensions
-    let (mut a, mut b) = match (remove_file_ending(a), remove_file_ending(b)) {
+    // 尝试剥离文件扩展名
+    let (mut a, mut b) = match (ct_remove_file_ending(a), ct_remove_file_ending(b)) {
         (a_stripped, b_stripped) if a_stripped == b_stripped => {
-            // If both would be the same after stripping file extensions, don't strip them.
+            // 如果去掉文件扩展名后两者相同，则不要去掉扩展名。
             (a, b)
         }
         stripped => stripped,
     };
 
-    // 1. Compare leading non-numerical part
-    // 2. Compare leading numerical part
-    // 3. Repeat
+    // 1. 比较前面的非数字部分
+    // 2. 比较前面的数字部分
+    // 3. 重复
     while !a.is_empty() || !b.is_empty() {
         let a_numerical_start = a.find(|c: char| c.is_ascii_digit()).unwrap_or(a.len());
         let b_numerical_start = b.find(|c: char| c.is_ascii_digit()).unwrap_or(b.len());
@@ -123,7 +123,7 @@ pub fn ct_version_cmp(mut a: &str, mut b: &str) -> Ordering {
         let a_str = &a[..a_numerical_start];
         let b_str = &b[..b_numerical_start];
 
-        match version_non_digit_cmp(a_str, b_str) {
+        match ct_version_non_digit_cmp(a_str, b_str) {
             Ordering::Equal => {}
             ord => return ord,
         }
@@ -156,14 +156,14 @@ pub fn ct_version_cmp(mut a: &str, mut b: &str) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+    use crate::ct_version_cmp::ct_remove_file_ending;
     use crate::ct_version_cmp::ct_version_cmp;
-    use crate::ct_version_cmp::remove_file_ending;
-    use crate::ct_version_cmp::version_non_digit_cmp;
+    use crate::ct_version_cmp::ct_version_non_digit_cmp;
 
     use std::cmp::Ordering;
     #[test]
     fn test_version_cmp() {
-        // Identical strings
+        // 相同的字符串
         assert_eq!(ct_version_cmp("hello", "hello"), Ordering::Equal);
 
         assert_eq!(ct_version_cmp("file12", "file12"), Ordering::Equal);
@@ -178,12 +178,12 @@ mod tests {
             Ordering::Equal
         );
 
-        // Shortened names
+        // 缩短的名称
         assert_eq!(ct_version_cmp("world", "wo"), Ordering::Greater,);
 
         assert_eq!(ct_version_cmp("hello10wo", "hello10world"), Ordering::Less,);
 
-        // Simple names
+        // 相同名字
         assert_eq!(ct_version_cmp("world", "hello"), Ordering::Greater,);
 
         assert_eq!(ct_version_cmp("hello", "world"), Ordering::Less);
@@ -192,7 +192,7 @@ mod tests {
 
         assert_eq!(ct_version_cmp("ant", "apple"), Ordering::Less);
 
-        // Uppercase letters
+        // 大写字母
         assert_eq!(
             ct_version_cmp("Beef", "apple"),
             Ordering::Less,
@@ -203,7 +203,7 @@ mod tests {
 
         assert_eq!(ct_version_cmp("apple", "aPple"), Ordering::Greater);
 
-        // Numbers
+        // 数字
         assert_eq!(
             ct_version_cmp("100", "20"),
             Ordering::Greater,
@@ -222,7 +222,7 @@ mod tests {
             "Small numbers are smaller"
         );
 
-        // Comparing numbers with other characters
+        // 将数字与其他字符进行比较
         assert_eq!(
             ct_version_cmp("1000", "apple"),
             Ordering::Less,
@@ -365,61 +365,61 @@ mod tests {
     #[test]
     fn test_remove_file_ending_no_dot() {
         let input = "filename";
-        assert_eq!(remove_file_ending(input), "filename");
+        assert_eq!(ct_remove_file_ending(input), "filename");
     }
 
     #[test]
     fn test_remove_single_dot_at_end() {
         let input = "filename.";
-        assert_eq!(remove_file_ending(input), "filename.");
+        assert_eq!(ct_remove_file_ending(input), "filename.");
     }
 
     #[test]
     fn test_remove_multiple_dots_at_end() {
         let input = "filename...";
-        assert_eq!(remove_file_ending(input), "filename...");
+        assert_eq!(ct_remove_file_ending(input), "filename...");
     }
 
     #[test]
     fn test_remove_extension_with_dot() {
         let input = "filename.txt";
-        assert_eq!(remove_file_ending(input), "filename");
+        assert_eq!(ct_remove_file_ending(input), "filename");
     }
 
     #[test]
     fn test_remove_extension_with_special_chars() {
         let input = "filename.tar.gz";
-        assert_eq!(remove_file_ending(input), "filename");
+        assert_eq!(ct_remove_file_ending(input), "filename");
     }
 
     #[test]
     fn test_remove_extension_with_tilde() {
         let input = "filename~backup.txt";
-        assert_eq!(remove_file_ending(input), "filename~backup");
+        assert_eq!(ct_remove_file_ending(input), "filename~backup");
     }
 
     #[test]
     fn test_keep_special_characters_in_name() {
         let input = "file-name.123!";
-        assert_eq!(remove_file_ending(input), "file-name.123!");
+        assert_eq!(ct_remove_file_ending(input), "file-name.123!");
     }
 
     #[test]
     fn test_remove_file_ending_when_dot_not_followed_by_valid_chars() {
         let input = "filename...!";
-        assert_eq!(remove_file_ending(input), "filename...!");
+        assert_eq!(ct_remove_file_ending(input), "filename...!");
     }
 
     #[test]
     fn test_no_change_when_dot_inside_filename() {
         let input = "file.name.txt";
-        assert_eq!(remove_file_ending(input), "file");
+        assert_eq!(ct_remove_file_ending(input), "file");
     }
 
     #[test]
     fn test_empty_string() {
         let input = "";
-        assert_eq!(remove_file_ending(input), "");
+        assert_eq!(ct_remove_file_ending(input), "");
     }
 
     #[test]
@@ -479,7 +479,7 @@ mod tests {
         let b = "file-1.0.1.tar.gz";
         assert_eq!(ct_version_cmp(a, b), Ordering::Less);
         assert_eq!(
-            ct_version_cmp(remove_file_ending(a), remove_file_ending(b)),
+            ct_version_cmp(ct_remove_file_ending(a), ct_remove_file_ending(b)),
             Ordering::Less
         );
 
@@ -488,7 +488,7 @@ mod tests {
         let b = "file-1.0.1.gz";
         assert_eq!(
             ct_version_cmp(a, b),
-            ct_version_cmp(remove_file_ending(a), remove_file_ending(b))
+            ct_version_cmp(ct_remove_file_ending(a), ct_remove_file_ending(b))
         );
     }
 
@@ -501,53 +501,65 @@ mod tests {
 
     #[test]
     fn test_version_non_digit_cmp_equal() {
-        assert_eq!(version_non_digit_cmp("alpha", "alpha"), Ordering::Equal);
-        assert_eq!(version_non_digit_cmp("abc123", "abc123"), Ordering::Equal);
-        assert_eq!(version_non_digit_cmp("~", "~"), Ordering::Equal);
+        assert_eq!(ct_version_non_digit_cmp("alpha", "alpha"), Ordering::Equal);
+        assert_eq!(
+            ct_version_non_digit_cmp("abc123", "abc123"),
+            Ordering::Equal
+        );
+        assert_eq!(ct_version_non_digit_cmp("~", "~"), Ordering::Equal);
     }
 
     #[test]
     fn test_version_non_digit_cmp_greater() {
-        assert_eq!(version_non_digit_cmp("beta", "alpha"), Ordering::Greater);
-        assert_eq!(version_non_digit_cmp("abc", "aaa"), Ordering::Greater);
-        assert_eq!(version_non_digit_cmp("~", "any_character"), Ordering::Less);
+        assert_eq!(ct_version_non_digit_cmp("beta", "alpha"), Ordering::Greater);
+        assert_eq!(ct_version_non_digit_cmp("abc", "aaa"), Ordering::Greater);
         assert_eq!(
-            version_non_digit_cmp("any_character", "~"),
+            ct_version_non_digit_cmp("~", "any_character"),
+            Ordering::Less
+        );
+        assert_eq!(
+            ct_version_non_digit_cmp("any_character", "~"),
             Ordering::Greater
         );
     }
 
     #[test]
     fn test_version_non_digit_cmp_special_cases() {
-        assert_eq!(version_non_digit_cmp("any", ""), Ordering::Greater);
-        assert_eq!(version_non_digit_cmp("", "any"), Ordering::Less);
-        assert_eq!(version_non_digit_cmp("abc", "def~"), Ordering::Less);
-        assert_eq!(version_non_digit_cmp("abc~", "def"), Ordering::Less);
+        assert_eq!(ct_version_non_digit_cmp("any", ""), Ordering::Greater);
+        assert_eq!(ct_version_non_digit_cmp("", "any"), Ordering::Less);
+        assert_eq!(ct_version_non_digit_cmp("abc", "def~"), Ordering::Less);
+        assert_eq!(ct_version_non_digit_cmp("abc~", "def"), Ordering::Less);
     }
 
     #[test]
     fn test_version_non_digit_cmp_mixed_case() {
-        assert_eq!(version_non_digit_cmp("AbC", "abc"), Ordering::Less);
-        assert_eq!(version_non_digit_cmp("abC", "ABC"), Ordering::Greater);
-        assert_eq!(version_non_digit_cmp("ABcd", "abcd"), Ordering::Less);
+        assert_eq!(ct_version_non_digit_cmp("AbC", "abc"), Ordering::Less);
+        assert_eq!(ct_version_non_digit_cmp("abC", "ABC"), Ordering::Greater);
+        assert_eq!(ct_version_non_digit_cmp("ABcd", "abcd"), Ordering::Less);
     }
 
     #[test]
     fn test_version_non_digit_cmp_with_numbers() {
-        assert_eq!(version_non_digit_cmp("alpha1", "alpha"), Ordering::Greater);
-        assert_eq!(version_non_digit_cmp("alpha", "alpha1"), Ordering::Less);
-        assert_eq!(version_non_digit_cmp("alpha1", "alpha~"), Ordering::Greater);
-        assert_eq!(version_non_digit_cmp("alpha~", "alpha1"), Ordering::Less);
+        assert_eq!(
+            ct_version_non_digit_cmp("alpha1", "alpha"),
+            Ordering::Greater
+        );
+        assert_eq!(ct_version_non_digit_cmp("alpha", "alpha1"), Ordering::Less);
+        assert_eq!(
+            ct_version_non_digit_cmp("alpha1", "alpha~"),
+            Ordering::Greater
+        );
+        assert_eq!(ct_version_non_digit_cmp("alpha~", "alpha1"), Ordering::Less);
     }
 
     #[test]
     fn test_version_non_digit_cmp_with_special_characters() {
         assert_eq!(
-            version_non_digit_cmp("alpha~beta", "alpha_beta"),
+            ct_version_non_digit_cmp("alpha~beta", "alpha_beta"),
             Ordering::Less
         );
         assert_eq!(
-            version_non_digit_cmp("alpha_beta", "alpha~beta"),
+            ct_version_non_digit_cmp("alpha_beta", "alpha~beta"),
             Ordering::Greater
         );
     }

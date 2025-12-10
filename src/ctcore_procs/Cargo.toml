@@ -1,15 +1,14 @@
 [package]
 name = "ctcore_procs"
-version = "0.0.1"
-license = "Mulan PSL v2.0"
-description = "ct-utils ~ 'ctcore' proc-macros"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+edition.workspace = true
+keywords.workspace = true
 
-homepage = "https://www.ctyun.cn/developer/"
-repository = "https://work.ctyun.cn/git/syskit/ctyunos_syskit/src/ctcore_procs"
-# readme = "README.md"
-keywords = ["cross-platform", "proc-macros", "ctcore", "cttils"]
-# categories = ["os"]
-edition = "2021"
+description = "ct-utils ~ 'ctcore' proc-macros"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ctcore_procs"
+
 
 [lib]
 proc-macro = true
@@ -17,4 +16,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
-cthelp_parser = { path = "../cthelp_parser", version = "0.0.1" }
+cthelp_parser = { path = "../cthelp_parser"}

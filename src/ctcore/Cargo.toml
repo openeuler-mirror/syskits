@@ -1,16 +1,17 @@
 [package]
 name = "ctcore"
-version = "0.0.1"
-authors = ["CTyunOS Linux developers"]
-license = "MIT"
-description = "ctutils ~ 'core' cttils code library (cross-platform)"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
 
-homepage = "https://github.com/cttils/coreutils"
-repository = "https://github.com/cttils/coreutils/tree/main/src/ctcore"
+description = "ctutils ~ 'core' ctutils code library (cross-platform)"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ctcore"
 # readme = "README.md"
-keywords = ["coreutils", "cttils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
+
 
 [lib]
 path = "src/lib/lib.rs"
@@ -92,7 +93,7 @@ default = ["backup-control",
   "version-cmp",
   "wide",
 ]
-# * non-default features
+# * non-default ct_features
 backup-control = []
 colors = []
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]

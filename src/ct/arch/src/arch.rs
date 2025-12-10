@@ -46,3 +46,90 @@ pub fn ct_app() -> Command {
         .after_help(usage_description)
         .infer_long_args(true)
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_arch_hh_ctmain() {
+        {
+            let args = ["-h", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+
+        {
+            let command = ct_app();
+            let args = vec![ctcore::util_name(), "-h"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+
+    #[test]
+    fn test_arch_v_ctmain() {
+        {
+            let args = ["--version", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::util_name(), "--version"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+
+    #[test]
+    fn test_arch_vv_ctmain() {
+        {
+            let args = ["-V", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::util_name(), "-V"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+    #[test]
+    fn test_arch_ctmain() {
+        let expected_arch = std::env::consts::ARCH;
+        // println!("当前操作系统架构：{}", expected_arch);
+
+        let args = vec![ctcore::util_name()];
+        let result = ct_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                // println!("result:{}", s);
+                // //assert_eq!(s,expected_output);
+            }
+        }
+        assert_eq!(s, expected_arch);
+    }
+}

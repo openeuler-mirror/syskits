@@ -392,7 +392,7 @@ fn format_float_scientific(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    if f.abs() < std::f64::EPSILON {
+    if f.abs() < f64::EPSILON {
         let new_result = match (force_decimal, precision) {
             (ForceDecimal::Yes, 0) => "0.e+00".into(),
             _ => format!("{:.*}e+00", precision, 0.0),
@@ -436,7 +436,7 @@ fn format_float_shortest(
     // 此处的精度是指应显示多少位数，而不是小数部分的位数，这意味着如果我们将其传递给Rust的格式字符串，它总是少一位。
     let precision = precision.saturating_sub(1);
 
-    if f.abs() < std::f64::EPSILON {
+    if f.abs() < f64::EPSILON {
         let new_value = if force_decimal == ForceDecimal::Yes {
             if precision == 0 {
                 "0.".into()
@@ -450,7 +450,7 @@ fn format_float_shortest(
     }
 
     let mut exponent = f.log10().floor() as i32;
-    if f.abs() > std::f64::EPSILON && exponent <= -4 || exponent > precision as i32 {
+    if f.abs() > f64::EPSILON && exponent <= -4 || exponent > precision as i32 {
         // 类似科学记数法（有几个不同之处）
         let mut normalized = f / 10.0_f64.powi(exponent);
 
@@ -501,7 +501,7 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    let (first_digit, mantissa, exponent) = if f.abs() < std::f64::EPSILON {
+    let (first_digit, mantissa, exponent) = if f.abs() < f64::EPSILON {
         (0, 0, 0)
     } else {
         let bits = f.to_bits();

@@ -819,4 +819,165 @@ mod tests {
         assert_eq!(format!("{}", Quotes::Double), "Double");
     }
 
+    #[test]
+    fn test_escape_name_shell_escape_true() {
+        let test_cases = vec![
+            (
+                OsStr::new("hello world"),
+                QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "'hello world'",
+            ),
+            (
+                OsStr::new("~#$&*()|[]{};\\'\"<>?! "),
+                QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "'~#$&*()|[]{};\\'\\\''\"<>?! '",
+            ),
+            (
+                OsStr::new("\x07\x08\t\n\r"),
+                QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control: true,
+                },
+                "''$'\\a\\b\\t\\n\\r'",
+            ),
+            (
+                OsStr::new("\\'"),
+                QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "'\\'\\'''",
+            ),
+        ];
+
+        for (input, style, expected_output) in test_cases {
+            // println!("[{}]",escape_name(input, &style));
+            // println!("[{}]",expected_output);
+            // println!("---------------------------");
+            assert_eq!(escape_name(input, &style), expected_output);
+        }
+    }
+
+    #[test]
+    fn test_escape_name_shell_escape_false() {
+        let test_cases = vec![
+            (
+                OsStr::new("hello world"),
+                QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "'hello world'",
+            ),
+            (
+                OsStr::new("\x07"),
+                QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "?",
+            ),
+            (
+                OsStr::new("hello world"),
+                QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "'hello world'",
+            ),
+            (
+                OsStr::new("`hello world`"),
+                QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                    show_control: false,
+                },
+                "\'`hello world`\'",
+            ),
+        ];
+
+        for (input, style, expected_output) in test_cases {
+            // println!("[{}]",escape_name(input, &style));
+            // println!("{}",expected_output);
+            assert_eq!(escape_name(input, &style), expected_output);
+        }
+    }
+
+    #[test]
+    fn test_escape_name_c_style() {
+        let test_cases = vec![
+            (
+                OsStr::new("hello world"),
+                QuotingStyle::C {
+                    quotes: Quotes::Double,
+                },
+                "\"hello world\"",
+            ),
+            (
+                OsStr::new("'hello world'"),
+                QuotingStyle::C {
+                    quotes: Quotes::Single,
+                },
+                "'\\'hello world\\''",
+            ),
+            (
+                OsStr::new("`hello world`"),
+                QuotingStyle::C {
+                    quotes: Quotes::Double,
+                },
+                "\"`hello world`\"",
+            ),
+            (
+                OsStr::new("hello\\world"),
+                QuotingStyle::C {
+                    quotes: Quotes::None,
+                },
+                "hello\\\\world",
+            ),
+        ];
+
+        for (input, style, expected_output) in test_cases {
+            assert_eq!(escape_name(input, &style), expected_output);
+        }
+    }
+
+    #[test]
+    fn test_escape_name_literal() {
+        let test_cases = vec![
+            (
+                OsStr::new("hello world"),
+                QuotingStyle::Literal { show_control: true },
+                "hello world",
+            ),
+            (
+                OsStr::new("\x07"),
+                QuotingStyle::Literal { show_control: true },
+                "\u{07}",
+            ),
+            (
+                OsStr::new("\x07"),
+                QuotingStyle::Literal {
+                    show_control: false,
+                },
+                "?",
+            ),
+        ];
+
+        for (input, style, expected_output) in test_cases {
+            assert_eq!(escape_name(input, &style), expected_output);
+        }
+    }
 }

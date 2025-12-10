@@ -156,8 +156,8 @@ pub fn ct_version_cmp(mut a: &str, mut b: &str) -> Ordering {
 
 #[cfg(test)]
 mod tests {
-    use crate::ct_version_cmp::remove_file_ending;
     use crate::ct_version_cmp::ct_version_cmp;
+    use crate::ct_version_cmp::remove_file_ending;
     use crate::ct_version_cmp::version_non_digit_cmp;
 
     use std::cmp::Ordering;
@@ -449,7 +449,10 @@ mod tests {
     fn test_version_cmp_greater() {
         assert_eq!(ct_version_cmp("1.1", "1.0"), Ordering::Greater);
         assert_eq!(ct_version_cmp("beta", "alpha"), Ordering::Greater);
-        assert_eq!(ct_version_cmp("alpha.beta.1", "alpha.beta"), Ordering::Greater);
+        assert_eq!(
+            ct_version_cmp("alpha.beta.1", "alpha.beta"),
+            Ordering::Greater
+        );
         assert_eq!(ct_version_cmp("1.alpha.3", "1.alpha.2"), Ordering::Greater);
         assert_eq!(ct_version_cmp("1.2.3b", "1.2.3a"), Ordering::Greater);
     }

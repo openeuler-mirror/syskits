@@ -357,4 +357,9 @@ mod test {
             complement(&[r(2, 4), r(6, usize::MAX - 1)])
         );
     }
+
+    #[test]
+    fn test_range_complement_with_start_and_end() {
+        assert_eq!(vec![r(5, 5)], complement(&[r(1, 4), r(6, usize::MAX - 1)]));
+    }
 }

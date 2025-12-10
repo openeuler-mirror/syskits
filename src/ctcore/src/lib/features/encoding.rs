@@ -323,7 +323,53 @@ mod test {
         assert_eq!(result.unwrap(), expected);
     }
 
+    #[test]
+    fn test_decode_base32_hex() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "91IMOR3F41BMUSJCCG======";
 
+        let result = decode(Format::Base32Hex, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_decode_base16() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "48656C6C6F20576F726C64";
+
+        let result = decode(Format::Base16, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_decode_base_2lsbf() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "0001001010100110001101100011011011110110000001001110101011110110010011100011011000100110";
+
+        let result = decode(Format::Base2Lsbf, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_decode_base_msbf() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "0100100001100101011011000110110001101111001000000101011101101111011100100110110001100100";
+
+        let result = decode(Format::Base2Msbf, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
 
     // #[test]
     // fn test_decode_base_z85() {

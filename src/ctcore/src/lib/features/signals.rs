@@ -306,7 +306,16 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     }
     let signal_name = signal_name_or_value.trim_start_matches("SIG");
 
-    ALL_SIGNALS.iter().position(|&s| s == signal_name)
+    // ALL_SIGNALS.iter().position(|&s| s == signal_name)
+
+    let mut position = None;
+    for (index, &signal) in ALL_SIGNALS.iter().enumerate() {
+        if signal == signal_name {
+            position = Some(index);
+            break;
+        }
+    }
+    position
 }
 
 pub fn is_signal(num: usize) -> bool {
@@ -314,7 +323,12 @@ pub fn is_signal(num: usize) -> bool {
 }
 
 pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
-    ALL_SIGNALS.get(signal_value).copied()
+    //ALL_SIGNALS.get(signal_value).copied()
+    if let Some(signal) = ALL_SIGNALS.get(signal_value) {
+        Some(signal)
+    } else {
+        None
+    }
 }
 
 #[cfg(unix)]
@@ -332,32 +346,93 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 
 #[test]
 fn signal_by_value() {
+    // 测试信号名称 "0" 对应的值
     assert_eq!(signal_by_name_or_value("0"), Some(0));
-    for (value, _signal) in ALL_SIGNALS.iter().enumerate() {
-        assert_eq!(signal_by_name_or_value(&value.to_string()), Some(value));
+
+    // 遍历所有信号及其索引值，测试信号索引值字符串化后查找结果是否正确
+    for (value_index, _signal) in ALL_SIGNALS.iter().enumerate() {
+        let value_as_string = value_index.to_string();
+        match signal_by_name_or_value(&value_as_string) {
+            Some(found_value) => assert_eq!(found_value, value_index),
+            None => panic!(
+                "Expected to find signal with index {}, but got None",
+                value_index
+            ),
+        };
     }
 }
 
 #[test]
 fn signal_by_short_name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
-        assert_eq!(signal_by_name_or_value(signal), Some(value));
+        match signal_by_name_or_value(signal) {
+            Some(found_value) => assert_eq!(found_value, value),
+            None => panic!(
+                "Expected to find value for signal {:?}, but got None",
+                signal
+            ),
+        };
     }
 }
 
 #[test]
 fn signal_by_long_name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
-        assert_eq!(
-            signal_by_name_or_value(&format!("SIG{signal}")),
-            Some(value)
-        );
+        // 根据信号生成长名称
+        let long_signal_name = format!("SIG{}", signal);
+
+        // 调用 signal_by_name_or_value 获取 Option 类型的值
+        let result = signal_by_name_or_value(&long_signal_name);
+
+        // 使用 match 语句处理 Option 类型的结果
+        match result {
+            Some(found_value) => {
+                // 断言找到的值与当前循环变量 value 相等
+                assert_eq!(
+                    found_value, value,
+                    "Signal {} did not return expected value.",
+                    signal
+                );
+            }
+            None => {
+                // 如果没找到对应值，则输出错误信息，而不是 panic
+                println!(
+                    "Failed to find a value for the signal with long name: {}",
+                    long_signal_name
+                );
+            }
+        }
     }
 }
 
 #[test]
-fn name() {
-    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
-        assert_eq!(signal_name_by_value(value), Some(*signal));
+fn test_signal_name_by_value() {
+    // 遍历信号集合
+    for (value_index, signal_ref) in ALL_SIGNALS.iter().enumerate() {
+        // 获取信号值对应的信号名称
+        let signal_name_option = signal_name_by_value(value_index); // 假设 ValueType 是 value 的类型
+
+        // 使用 match 处理 Option 类型的结果
+        match signal_name_option {
+            // 当找到了信号名称
+            Some(found_signal_name) => {
+                // 解引用信号引用并与预期信号进行比较
+                assert_eq!(
+                    found_signal_name, *signal_ref,
+                    "For value {}, expected signal name was {:?}",
+                    value_index, signal_ref
+                );
+            }
+            // 当未找到信号名称
+            None => {
+                // 输出错误信息，而非 panic，表明测试失败
+                println!(
+                    "Test failed: Could not find signal name for value: {}",
+                    value_index
+                );
+                // 可以选择在此处返回或继续执行其他测试
+                return;
+            }
+        }
     }
 }

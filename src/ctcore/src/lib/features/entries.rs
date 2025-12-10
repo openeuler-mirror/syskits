@@ -140,7 +140,7 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
     groups
 }
 
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct Passwd {
     /// AKA passwd.pw_name
     pub name: String,
@@ -385,4 +385,5 @@ mod test {
             }
         }
     }
+
 }

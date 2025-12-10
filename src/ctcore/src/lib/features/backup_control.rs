@@ -483,6 +483,8 @@ mod tests {
     // Required to instantiate mutex in shared context
     use clap::Command;
     use once_cell::sync::Lazy;
+    use std::fs;
+    use std::io::Write;
     use std::sync::Mutex;
 
     // The mutex is required here as by default all tests are run as separate
@@ -687,4 +689,5 @@ mod tests {
 
         assert!(source_is_target_backup(source, target, &suffix));
     }
+
 }

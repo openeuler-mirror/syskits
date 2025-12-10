@@ -156,7 +156,10 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+    use crate::version_cmp::remove_file_ending;
     use crate::version_cmp::version_cmp;
+    use crate::version_cmp::version_non_digit_cmp;
+
     use std::cmp::Ordering;
     #[test]
     fn test_version_cmp() {
@@ -359,4 +362,5 @@ mod tests {
             "NULL bytes are handled comparison"
         );
     }
+ 
 }

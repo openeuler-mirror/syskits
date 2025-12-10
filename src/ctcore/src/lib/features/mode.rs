@@ -191,7 +191,7 @@ pub fn get_umask() -> u32 {
 // Iterate 'args' and delete the first occurrence
 // of a prefix '-' if it's associated with MODE
 // e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
+pub fn __strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     for arg in args {
         if arg == "--" {
             break;
@@ -208,6 +208,38 @@ pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
             }
         }
     }
+    false
+}
+
+pub fn strip_minus_from_mode(args: &mut [String]) -> bool {
+    for arg in args.iter_mut() {
+        if arg == "--" {
+            break;
+        }
+
+        // Check if the argument starts with a minus sign
+        if arg.starts_with('-') {
+            // Get the first character after the minus sign
+            let second_char_opt = arg.chars().nth(1);
+
+            // If there is a second character, check its validity
+            if let Some(second_char) = second_char_opt {
+                // Valid characters for mode flags
+                const VALID_CHARS: &[char] = &[
+                    'r', 'w', 'x', 'X', 's', 't', 'u', 'g', 'o', '0', '1', '2', '3', '4', '5', '6',
+                    '7',
+                ];
+
+                // If the second character is valid, remove the minus sign and return true
+                if VALID_CHARS.contains(&second_char) {
+                    arg.replace_range(0..1, "");
+                    return true;
+                }
+            }
+        }
+    }
+
+    // No valid flag found; return false
     false
 }
 
@@ -235,4 +267,5 @@ mod test {
         assert_eq!(super::parse_mode("+100").unwrap(), 0o766);
         assert_eq!(super::parse_mode("-4").unwrap(), 0o662);
     }
+
 }

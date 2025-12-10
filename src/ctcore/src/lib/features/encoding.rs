@@ -183,3 +183,4 @@ pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::R
 
     Ok(())
 }
+

@@ -111,21 +111,26 @@ impl Range {
         ranges
     }
 }
-
+/// 该函数假设输入范围是按照某种顺序给定的，不要求严格递增，但至少应该是逻辑上连续的。
 pub fn complement(ranges: &[Range]) -> Vec<Range> {
+    // 初始化前一个范围的高值为0，这对应于范围集合开始前的区域。
     let mut prev_high = 0;
+    // 初始化补集向量，预分配足够的空间以减少内存重新分配的需要。
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
     for range in ranges {
+        // 如果当前范围的低值大于前一个范围的高值加1，说明存在一个或多个遗漏的值，需要添加到补集中。
         if range.low > prev_high + 1 {
             complements.push(Range {
                 low: prev_high + 1,
                 high: range.low - 1,
             });
         }
+        // 更新前一个范围的高值为当前范围的高值，用于后续的比较。
         prev_high = range.high;
     }
 
+    // 检查是否需要添加最后一个范围之后的区域到补集中。
     if prev_high < usize::MAX - 1 {
         complements.push(Range {
             low: prev_high + 1,
@@ -237,6 +242,19 @@ mod test {
 
         // With start and end
         assert_eq!(complement(&[r(1, 4), r(6, usize::MAX - 1)]), vec![r(5, 5)]);
+
+        let ranges = vec![Range { low: 1, high: 5 }, Range { low: 7, high: 10 }];
+        let complements = complement(&ranges);
+        assert_eq!(
+            complements,
+            vec![
+                Range { low: 6, high: 6 }, // 从0到1之前
+                Range {
+                    low: 11,
+                    high: 18446744073709551614
+                }  // 从5到7之间
+            ]
+        );
     }
 
     #[test]
@@ -267,4 +285,5 @@ mod test {
             Err("byte/character offset is too large")
         );
     }
+
 }

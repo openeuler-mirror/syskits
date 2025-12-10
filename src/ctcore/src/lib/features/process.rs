@@ -64,16 +64,16 @@ impl ChildExt for Child {
             Err(io::Error::last_os_error())
         }
     }
-
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
-        // Ignore the signal, so we don't go into a signal loop.
-        if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } != 0 {
+        let ignore_signal = unsafe { libc::signal(signal as libc::c_int, libc::SIG_IGN) };
+        if ignore_signal == libc::SIG_ERR {
             return Err(io::Error::last_os_error());
         }
-        if unsafe { libc::kill(0, signal as i32) } == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
+
+        let result = unsafe { libc::kill(0, signal as libc::c_int) };
+        match result {
+            0 => Ok(()),
+            _ => Err(io::Error::last_os_error()),
         }
     }
 
@@ -103,3 +103,5 @@ impl ChildExt for Child {
         Ok(None)
     }
 }
+
+

@@ -421,4 +421,112 @@ mod tests {
         let input = "";
         assert_eq!(remove_file_ending(input), "");
     }
+
+    #[test]
+    fn test_version_cmp_equal() {
+        assert_eq!(version_cmp("1.2.3", "1.2.3"), Ordering::Equal);
+        assert_eq!(version_cmp("alpha1", "alpha1"), Ordering::Equal);
+        assert_eq!(
+            version_cmp("alpha.beta.gamma", "alpha.beta.gamma"),
+            Ordering::Equal
+        );
+        assert_eq!(
+            version_cmp("1alpha.2beta.3gamma", "1alpha.2beta.3gamma"),
+            Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn test_version_cmp_less() {
+        assert_eq!(version_cmp("1.0", "1.1"), Ordering::Less);
+        assert_eq!(version_cmp("alpha", "beta"), Ordering::Less);
+        assert_eq!(version_cmp("alpha.beta", "alpha.beta.1"), Ordering::Less);
+        assert_eq!(version_cmp("1.alpha.2", "1.alpha.3"), Ordering::Less);
+        assert_eq!(version_cmp("1.2.3a", "1.2.3b"), Ordering::Less);
+    }
+
+    #[test]
+    fn test_version_cmp_greater() {
+        assert_eq!(version_cmp("1.1", "1.0"), Ordering::Greater);
+        assert_eq!(version_cmp("beta", "alpha"), Ordering::Greater);
+        assert_eq!(version_cmp("alpha.beta.1", "alpha.beta"), Ordering::Greater);
+        assert_eq!(version_cmp("1.alpha.3", "1.alpha.2"), Ordering::Greater);
+        assert_eq!(version_cmp("1.2.3b", "1.2.3a"), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_special_cases() {
+        assert_eq!(version_cmp("", "1"), Ordering::Less);
+        assert_eq!(version_cmp("1", ""), Ordering::Greater);
+        assert_eq!(version_cmp(".", ""), Ordering::Greater);
+        assert_eq!(version_cmp("", "."), Ordering::Less);
+        assert_eq!(version_cmp("..", "."), Ordering::Greater);
+        assert_eq!(version_cmp(".", ".."), Ordering::Less);
+
+        // Leading dots
+        assert_eq!(version_cmp(".1", "1"), Ordering::Less);
+        assert_eq!(version_cmp("1", ".1"), Ordering::Greater);
+        assert_eq!(version_cmp(".alpha", "alpha"), Ordering::Less);
+        assert_eq!(version_cmp("alpha", ".alpha"), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_file_extension_stripping() {
+        let a = "file-1.0.0.tar.gz";
+        let b = "file-1.0.1.tar.gz";
+        assert_eq!(version_cmp(a, b), Ordering::Less);
+        assert_eq!(
+            version_cmp(remove_file_ending(a), remove_file_ending(b)),
+            Ordering::Less
+        );
+
+        // No stripping when extensions are not equal
+        let a = "file-1.0.0.tar";
+        let b = "file-1.0.1.gz";
+        assert_eq!(
+            version_cmp(a, b),
+            version_cmp(remove_file_ending(a), remove_file_ending(b))
+        );
+    }
+
+    #[test]
+    fn test_leading_zeros_comparison() {
+        assert_eq!(version_cmp("1.01", "1.1"), Ordering::Equal);
+        assert_eq!(version_cmp("1.010", "1.1"), Ordering::Greater);
+        assert_eq!(version_cmp("1.001", "1.01"), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_version_non_digit_cmp_equal() {
+        assert_eq!(version_non_digit_cmp("alpha", "alpha"), Ordering::Equal);
+        assert_eq!(version_non_digit_cmp("abc123", "abc123"), Ordering::Equal);
+        assert_eq!(version_non_digit_cmp("~", "~"), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_version_non_digit_cmp_greater() {
+        assert_eq!(version_non_digit_cmp("beta", "alpha"), Ordering::Greater);
+        assert_eq!(version_non_digit_cmp("abc", "aaa"), Ordering::Greater);
+        assert_eq!(version_non_digit_cmp("~", "any_character"), Ordering::Less);
+        assert_eq!(
+            version_non_digit_cmp("any_character", "~"),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn test_version_non_digit_cmp_special_cases() {
+        assert_eq!(version_non_digit_cmp("any", ""), Ordering::Greater);
+        assert_eq!(version_non_digit_cmp("", "any"), Ordering::Less);
+        assert_eq!(version_non_digit_cmp("abc", "def~"), Ordering::Less);
+        assert_eq!(version_non_digit_cmp("abc~", "def"), Ordering::Less);
+    }
+
+    #[test]
+    fn test_version_non_digit_cmp_mixed_case() {
+        assert_eq!(version_non_digit_cmp("AbC", "abc"), Ordering::Less);
+        assert_eq!(version_non_digit_cmp("abC", "ABC"), Ordering::Greater);
+        assert_eq!(version_non_digit_cmp("ABcd", "abcd"), Ordering::Less);
+    }
+
 }

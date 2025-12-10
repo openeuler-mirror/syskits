@@ -135,12 +135,13 @@ mod tests {
         assert_eq!(None, buf.push_back(1));
         assert_eq!(Some(0), buf.push_back(2));
     }
-
     #[test]
     fn test_from_iter() {
-        let iter = [0, 1, 2].iter();
+        let iter = [0, 1, 2, 3, 4].iter();
         let actual = RingBuffer::from_iter(iter, 2).data;
-        let expected: VecDeque<&i32> = [1, 2].iter().collect();
-        assert_eq!(expected, actual);
+        let expected: VecDeque<&i32> = [3, 4].iter().collect();
+        assert_eq!(actual, expected);
     }
+
+
 }

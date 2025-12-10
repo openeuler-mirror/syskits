@@ -30,6 +30,7 @@ pub trait FromWide {
     fn from_wide(wide: &[u16]) -> Self;
     fn from_wide_null(wide: &[u16]) -> Self;
 }
+
 impl FromWide for String {
     fn from_wide(wide: &[u16]) -> Self {
         if wide.is_empty() {

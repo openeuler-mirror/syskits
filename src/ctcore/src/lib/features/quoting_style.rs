@@ -363,6 +363,7 @@ impl fmt::Display for Quotes {
 #[cfg(test)]
 mod tests {
     use crate::quoting_style::{escape_name, Quotes, QuotingStyle};
+    use std::ffi::OsStr;
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
@@ -817,4 +818,5 @@ mod tests {
         assert_eq!(format!("{}", Quotes::Single), "Single");
         assert_eq!(format!("{}", Quotes::Double), "Double");
     }
+
 }

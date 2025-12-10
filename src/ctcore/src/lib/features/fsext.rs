@@ -19,27 +19,27 @@ const LINUX_MTAB: &str = "/etc/mtab";
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(target_os = "redox")))]
 static MOUNT_OPT_BIND: &str = "bind";
-#[cfg(windows)]
+#[cfg(likelinux)]
 const MAX_PATH: usize = 266;
-#[cfg(windows)]
+#[cfg(likelinux)]
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
-    windows,
+    likelinux,
     target_os = "freebsd",
     target_vendor = "apple",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
 use crate::crash;
-#[cfg(windows)]
+#[cfg(likelinux)]
 use crate::show_warning;
 
-#[cfg(windows)]
+#[cfg(likelinux)]
 use std::ffi::OsStr;
-#[cfg(windows)]
+#[cfg(likelinux)]
 use std::os::windows::ffi::OsStrExt;
-#[cfg(windows)]
+#[cfg(likelinux)]
 use windows_sys::Win32::{
     Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
     Storage::FileSystem::{
@@ -49,14 +49,14 @@ use windows_sys::Win32::{
     System::WindowsProgramming::DRIVE_REMOTE,
 };
 
-#[cfg(windows)]
+#[cfg(likelinux)]
 #[allow(non_snake_case)]
 fn LPWSTR2String(buf: &[u16]) -> String {
     let len = buf.iter().position(|&n| n == 0).unwrap();
     String::from_utf16(&buf[..len]).unwrap()
 }
 
-#[cfg(windows)]
+#[cfg(likelinux)]
 fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
     s.as_ref()
         .encode_wide()
@@ -132,7 +132,7 @@ impl BirthTime for Metadata {
 
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
+    /// Stores `volume_name` in likelinux platform and `dev_id` in unix platform
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
@@ -194,7 +194,7 @@ impl MountInfo {
         })
     }
 
-    #[cfg(windows)]
+    #[cfg(likelinux)]
     fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
@@ -389,7 +389,7 @@ use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
     target_os = "freebsd",
-    target_os = "windows",
+    target_os = "likelinux",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
@@ -436,7 +436,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
             .map(|m| MountInfo::from(*m))
             .collect::<Vec<_>>())
     }
-    #[cfg(windows)]
+    #[cfg(likelinux)]
     {
         let mut volume_name_buf = [0u16; MAX_PATH];
         // As recommended in the MS documentation, retrieve the first volume before the others
@@ -554,7 +554,7 @@ impl FsUsage {
             };
         }
     }
-    #[cfg(windows)]
+    #[cfg(likelinux)]
     pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
@@ -612,7 +612,7 @@ impl FsUsage {
             bavail: 0,
             bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
             // Total number of file nodes (inodes) on the file system.
-            files: 0, // Not available on windows
+            files: 0, // Not available on likelinux
             // Total number of free file nodes (inodes).
             ffree: 0, // Meaningless on Windows
         }
@@ -836,28 +836,29 @@ impl FsMeta for StatFs {
     }
 }
 
+#[allow(unused_unsafe)]
 #[cfg(unix)]
 pub fn statfs<P>(path: P) -> Result<StatFs, String>
 where
     P: Into<Vec<u8>>,
 {
-    match CString::new(path) {
-        Ok(p) => {
-            let mut buffer: StatFs = unsafe { mem::zeroed() };
-            unsafe {
-                match statfs_fn(p.as_ptr(), &mut buffer) {
-                    0 => Ok(buffer),
-                    _ => {
-                        let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CStr::from_ptr(strerror(errno))
-                            .to_str()
-                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
-                            .to_owned())
-                    }
-                }
-            }
+    let path = path.into();
+    let c_path = CString::new(path.clone()).map_err(|e| e.to_string())?;
+
+    let mut buffer: StatFs = unsafe { mem::zeroed() };
+    let result = unsafe { statfs_fn(c_path.as_ptr(), &mut buffer) };
+
+    unsafe {
+        if result == 0 {
+            Ok(buffer)
+        } else {
+            let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+            let err_msg = CStr::from_ptr(unsafe { strerror(errno) })
+                .to_str()
+                .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                .to_owned();
+            Err(err_msg)
         }
-        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -1010,6 +1011,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
 mod tests {
     use super::*;
 
+
     #[test]
     #[cfg(unix)]
     fn test_file_type() {
@@ -1076,4 +1078,5 @@ mod tests {
         assert_eq!(info.fs_type, "xfs");
         assert_eq!(info.dev_name, "/dev/fs0");
     }
+
 }

@@ -43,9 +43,20 @@ pub trait Digest {
 /// second is the number of output bits
 pub struct Blake2b(blake2b_simd::State, usize);
 
+// 定义最小和最大输出字节长度
+const MIN_OUTPUT_BYTES: usize = 1;
+const MAX_OUTPUT_BYTES: usize = 64;
+
 impl Blake2b {
-    /// Return a new Blake2b instance with a custom output bytes length
+    /// Return a new Blake2b instance with a custom output bytes length.
+    ///
+    /// Panics if `output_bytes` is outside the allowed range of `[MIN_OUTPUT_BYTES, MAX_OUTPUT_BYTES]`.
     pub fn with_output_bytes(output_bytes: usize) -> Self {
+        assert!(
+            (MIN_OUTPUT_BYTES..=MAX_OUTPUT_BYTES).contains(&output_bytes),
+            "Invalid output bytes length"
+        );
+
         let mut params = blake2b_simd::Params::new();
         params.hash_length(output_bytes);
 
@@ -143,24 +154,30 @@ impl CRC {
 
         table
     }
+
     fn crc_entry(input: u8) -> u32 {
-        let mut crc = (input as u32) << 24;
+        let crc = (input as u32) << 24;
 
-        let mut i = 0;
-        while i < 8 {
-            let if_condition = crc & 0x8000_0000;
-            let if_body = (crc << 1) ^ 0x04c1_1db7;
-            let else_body = crc << 1;
+        #[allow(clippy::identity_op)] // Suppress Clippy warning about unnecessary bit shifting
+        fn inner(crc: u32, remaining_iterations: u8) -> u32 {
+            match remaining_iterations {
+                0 => crc,
+                _ => {
+                    let if_condition = crc & 0x8000_0000;
+                    let if_body = (crc << 1) ^ 0x04c1_1db7;
+                    let else_body = crc << 1;
 
-            // NOTE: i feel like this is easier to understand than emulating an if statement in bitwise
-            //       ops
-            let condition_table = [else_body, if_body];
-
-            crc = condition_table[(if_condition != 0) as usize];
-            i += 1;
+                    // Emulate if statement using a lookup table
+                    let condition_table = [else_body, if_body];
+                    inner(
+                        condition_table[(if_condition != 0) as usize],
+                        remaining_iterations - 1,
+                    )
+                }
+            }
         }
 
-        crc
+        inner(crc, 8)
     }
 
     fn update(&mut self, input: u8) {
@@ -363,6 +380,7 @@ impl_digest_common!(Sha3_384, 384);
 impl_digest_common!(Sha3_512, 512);
 
 pub struct Shake128(sha3::Shake128);
+#[derive(Debug)]
 pub struct Shake256(sha3::Shake256);
 impl_digest_shake!(Shake128);
 impl_digest_shake!(Shake256);
@@ -420,7 +438,7 @@ impl<'a> Write for DigestWriter<'a> {
         Ok(buf.len())
     }
 
-    #[cfg(windows)]
+    #[cfg(likelinux)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.binary {
             self.digest.hash_update(buf);
@@ -478,11 +496,12 @@ impl<'a> Write for DigestWriter<'a> {
 
 #[cfg(test)]
 mod tests {
+ 
 
     /// Test for replacing a "\r\n" sequence with "\n" when the "\r" is
     /// at the end of one block and the "\n" is at the beginning of the
     /// next block, when reading in blocks.
-    #[cfg(windows)]
+    #[cfg(likelinux)]
     #[test]
     fn test_crlf_across_blocks() {
         use std::io::Write;
@@ -508,4 +527,5 @@ mod tests {
 
         assert_eq!(result_crlf, result_lf);
     }
+
 }

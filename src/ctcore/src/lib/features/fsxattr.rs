@@ -26,7 +26,7 @@ use std::path::Path;
 /// # Returns
 ///
 /// A result indicating success or failure.
-pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+pub fn __copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             xattr::set(&dest, &attr_name, &value)?;
@@ -35,6 +35,30 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     Ok(())
 }
 
+pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    let source_path = source.as_ref();
+    let dest_path = dest.as_ref();
+
+    let attrs = match xattr::list(source_path) {
+        Ok(attrs) => attrs,
+        Err(err) => return Err(err),
+    };
+
+    for attr_name in attrs {
+        let value = match xattr::get(source_path, &attr_name) {
+            Ok(Some(value)) => value,
+            Ok(None) => continue,
+            Err(err) => return Err(err),
+        };
+
+        match xattr::set(dest_path, &attr_name, &value) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        };
+    }
+
+    Ok(())
+}
 /// Retrieves the extended attributes (xattrs) of a given file or directory.
 ///
 /// # Arguments
@@ -44,7 +68,7 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
-pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
+pub fn __retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
     let mut attrs = HashMap::new();
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
@@ -52,6 +76,40 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsS
         }
     }
     Ok(attrs)
+}
+
+pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
+    let source_path = source.as_ref();
+
+    // 获取源文件的所有扩展属性名称列表
+    let attr_names_result = xattr::list(source_path);
+    match attr_names_result {
+        Ok(attr_names) => {
+            let mut attrs = HashMap::new();
+            for attr_name in attr_names {
+                // 对每个属性名称，获取其对应的值
+                let value_result = xattr::get(source_path, &attr_name);
+                match value_result {
+                    Ok(value_option) => {
+                        // 如果存在属性值，则将其插入到HashMap中
+                        if let Some(value) = value_option {
+                            attrs.insert(attr_name, value);
+                        }
+                    }
+                    Err(err) => {
+                        // 如果在获取属性值时发生错误，则返回该错误
+                        return Err(err);
+                    }
+                }
+            }
+            // 所有属性成功获取后，返回包含所有属性的HashMap
+            Ok(attrs)
+        }
+        Err(err) => {
+            // 如果在获取属性名称列表时发生错误，则返回该错误
+            Err(err)
+        }
+    }
 }
 
 /// Applies extended attributes (xattrs) to a given file or directory.

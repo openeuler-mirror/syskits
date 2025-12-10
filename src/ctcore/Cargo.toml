@@ -68,7 +68,6 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 ] }
 
 [features]
-# 添加所有特性到default
 default = ["backup-control",
   "colors",
   "encoding",
@@ -93,7 +92,6 @@ default = ["backup-control",
   "version-cmp",
   "wide",
 ]
-#default = ["backup-control","colors", "encoding", "entries", "fs","fsext","fsxattr","lines","format","mode","perms"]
 # * non-default features
 backup-control = []
 colors = []

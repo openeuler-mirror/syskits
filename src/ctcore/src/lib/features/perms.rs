@@ -654,12 +654,12 @@ pub fn chown_base(
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use std::fs;
     #[cfg(unix)]
     use std::os::unix;
     use std::path::{Component, PathBuf};
     #[cfg(unix)]
     use tempfile::tempdir;
-
     #[test]
     fn test_empty_string() {
         let path = PathBuf::new();
@@ -719,4 +719,5 @@ mod tests {
         assert!(!is_root(&symlink_path, false));
         assert!(is_root(&symlink_path, true));
     }
+
 }

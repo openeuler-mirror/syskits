@@ -635,7 +635,32 @@ pub fn is_symlink_loop(path: &Path) -> bool {
 
     false
 }
+pub fn __is_symlink_loop(path: &Path) -> bool {
+    let mut visited_symlinks = HashSet::new();
+    let mut current_path = path.to_path_buf();
 
+    loop {
+        let metadata = match current_path.symlink_metadata() {
+            Ok(m) => m,
+            Err(_) => return false,
+        };
+
+        let link = match fs::read_link(&current_path) {
+            Ok(l) => l,
+            Err(_) => return false,
+        };
+
+        if !metadata.file_type().is_symlink() {
+            return false;
+        }
+
+        if !visited_symlinks.insert(current_path.clone()) {
+            return true;
+        }
+
+        current_path = link;
+    }
+}
 #[cfg(not(unix))]
 // Hard link comparison is not supported on non-Unix platforms
 pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
@@ -777,6 +802,7 @@ pub mod sane_blksize {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use nix::sys::stat;
     #[cfg(unix)]
     use std::io::Write;
     #[cfg(unix)]
@@ -823,6 +849,7 @@ mod tests {
             test: "\\networkShare/a/foo/bar",
         },
     ];
+
 
     #[test]
     fn test_normalize_path() {

@@ -362,5 +362,63 @@ mod tests {
             "NULL bytes are handled comparison"
         );
     }
- 
+    #[test]
+    fn test_remove_file_ending_no_dot() {
+        let input = "filename";
+        assert_eq!(remove_file_ending(input), "filename");
+    }
+
+    #[test]
+    fn test_remove_single_dot_at_end() {
+        let input = "filename.";
+        assert_eq!(remove_file_ending(input), "filename.");
+    }
+
+    #[test]
+    fn test_remove_multiple_dots_at_end() {
+        let input = "filename...";
+        assert_eq!(remove_file_ending(input), "filename...");
+    }
+
+    #[test]
+    fn test_remove_extension_with_dot() {
+        let input = "filename.txt";
+        assert_eq!(remove_file_ending(input), "filename");
+    }
+
+    #[test]
+    fn test_remove_extension_with_special_chars() {
+        let input = "filename.tar.gz";
+        assert_eq!(remove_file_ending(input), "filename");
+    }
+
+    #[test]
+    fn test_remove_extension_with_tilde() {
+        let input = "filename~backup.txt";
+        assert_eq!(remove_file_ending(input), "filename~backup");
+    }
+
+    #[test]
+    fn test_keep_special_characters_in_name() {
+        let input = "file-name.123!";
+        assert_eq!(remove_file_ending(input), "file-name.123!");
+    }
+
+    #[test]
+    fn test_remove_file_ending_when_dot_not_followed_by_valid_chars() {
+        let input = "filename...!";
+        assert_eq!(remove_file_ending(input), "filename...!");
+    }
+
+    #[test]
+    fn test_no_change_when_dot_inside_filename() {
+        let input = "file.name.txt";
+        assert_eq!(remove_file_ending(input), "file");
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let input = "";
+        assert_eq!(remove_file_ending(input), "");
+    }
 }

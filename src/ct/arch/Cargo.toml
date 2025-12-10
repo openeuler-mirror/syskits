@@ -1,15 +1,15 @@
 [package]
 name = "ct_arch"
-version = "0.0.1"
-authors = ["cttils developers"]
-license = "MIT"
-description = "arch ~ (cttils) display machine architecture"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
 
-homepage = "https://github.com/cttils/coreutils"
-repository = "https://github.com/cttils/coreutils/tree/main/src/ct/arch"
-keywords = ["syskits", "cttils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
+description = "arch ~ (ctutils) display machine architecture"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/arch"
 
 [lib]
 path = "src/arch.rs"

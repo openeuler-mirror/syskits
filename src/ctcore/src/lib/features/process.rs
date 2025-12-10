@@ -104,4 +104,83 @@ impl ChildExt for Child {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+    use std::time::Duration;
+    #[test]
+    fn test_get_uid_and_gid_functions() {
+        // Unfortunately, we can't directly mock these system calls, but we can ensure they're callable.
+        assert_ne!(getegid(), 1);
+        assert_ne!(getgid(), 1);
+        assert_ne!(getuid(), 1);
+    }
+
+    #[test]
+    fn test_geteuid() {
+        let euid = geteuid(); // 假设第一个元素是您关心的 `u32` 类型
+        assert_ne!(euid, 1);
+    }
+
+    #[test]
+    fn test_getegid() {
+        let egid = getegid();
+        assert_ne!(egid, 1);
+    }
+
+    #[test]
+    fn test_getgid() {
+        let gid = getgid();
+        assert_ne!(gid, 1);
+    }
+
+    #[test]
+    fn test_getuid() {
+        let uid = getuid();
+        assert_ne!(uid, 1);
+    }
+    // 这里会kill进程，影响测试，仅单元测试时打开
+    // #[test]
+    // fn test_send_signal() {
+    //     let mut child = Command::new("sleep").arg("10").spawn().unwrap();
+    //     let pid = child.id();
+    //
+    //     // Send SIGINT to the child process
+    //     assert!(child.send_signal(libc::SIGINT as usize).is_ok());
+    //
+    //     // Check if the child process still exists
+    //     assert!(unsafe { libc::kill(pid as pid_t, 0) } == 0);
+    // }
+    //
+    // #[test]
+    // fn test_send_signal_group() {
+    //     let mut child = Command::new("sleep").arg("10").spawn().unwrap();
+    //
+    //     // Send SIGINT to the process group
+    //     assert!(child.send_signal_group(libc::SIGINT as usize).is_ok());
+    //
+    //     // Wait for a short duration to ensure the process group receives the signal
+    //     thread::sleep(Duration::from_secs(1));
+    //
+    //     // Check if the child process still exists
+    //     assert!(unsafe { libc::kill(0, 0) } == 0);
+    // }
+    #[test]
+    fn test_wait_or_timeout() {
+        let mut child = Command::new("sleep").arg("5").spawn().unwrap();
+        let start = Instant::now();
+
+        // Wait for the child process to finish or timeout after 2 seconds
+        let result = child.wait_or_timeout(Duration::from_secs(2));
+        assert!(result.is_ok());
+
+        // Ensure the function returns None due to timeout
+        assert_eq!(result.unwrap(), None);
+
+        // Ensure the elapsed time is greater than or equal to the timeout duration
+        assert!(start.elapsed() >= Duration::from_secs(2));
+    }
+}
+
 

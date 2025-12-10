@@ -1011,6 +1011,36 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_statfs_success() {
+        // Prepare test data
+        let path = "/";
+
+        // Execute the function
+        let result = statfs(path);
+
+        // Assert the result
+        assert!(result.is_ok());
+        let _buffer = result.unwrap();
+        // Add specific assertions for the `StatFs` struct fields
+        // ...
+    }
+
+    #[test]
+    fn test_statfs_error() {
+        // Prepare test data
+        let path = "/nonexistent";
+
+        // Execute the function
+        let result = statfs(path);
+
+        // Assert the result
+        assert!(result.is_err());
+        let _err_msg = result.err().unwrap();
+        // Add specific assertions for the error message
+        // ...
+    }
+
 
     #[test]
     #[cfg(unix)]

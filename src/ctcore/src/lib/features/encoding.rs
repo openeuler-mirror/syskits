@@ -184,3 +184,161 @@ pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::R
     Ok(())
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_encode_base32() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "JBSWY3DPEBLW64TMMQ======";
+
+        let result = encode(Format::Base32, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_encode_base64_url() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "SGVsbG8gV29ybGQ=";
+
+        let result = encode(Format::Base64Url, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_encode_base64() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "SGVsbG8gV29ybGQ=";
+
+        let result = encode(Format::Base64, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_encode_base32_hex() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "91IMOR3F41BMUSJCCG======";
+
+        let result = encode(Format::Base32Hex, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_encode_base16() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "48656C6C6F20576F726C64";
+
+        let result = encode(Format::Base16, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_encode_base_2lsbf() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "0001001010100110001101100011011011110110000001001110101011110110010011100011011000100110";
+
+        let result = encode(Format::Base2Lsbf, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_encode_base_msbf() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "0100100001100101011011000110110001101111001000000101011101101111011100100110110001100100";
+
+        let result = encode(Format::Base2Msbf, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    // #[test]
+    // fn test_encode_base_z85() {
+    //     let input = [
+    //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+    //     ];
+    //     let _expected = EncodeError::Z85InputLenNotMultipleOf4;
+
+    //     let result = encode(Format::Z85, &input);
+
+    //     // println!("{:?}", result);
+    //     //assert_eq!(result, EncodeError::Z85InputLenNotMultipleOf4);
+    //     match result {
+    //         _expected => println!("Z85InputLenNotMultipleOf4"),
+    //         _ => println!("Error"),
+    //     }
+    // }
+
+    #[test]
+    fn test_decode_base32() {
+        let expected = [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100];
+        let input = "JBSWY3DPEBLW64TMMQ======";
+
+        let result = decode(Format::Base32, (&input).as_ref());
+
+        println!("{:?}", result);
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_decode_base64_url() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "SGVsbG8gV29ybGQ=";
+
+        let result = decode(Format::Base64Url, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_decode_base64() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "SGVsbG8gV29ybGQ=";
+
+        let result = decode(Format::Base64, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
+
+
+
+    // #[test]
+    // fn test_decode_base_z85() {
+    //     let input = [
+    //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+    //     ];
+    //     let expected = EncodeError::Z85InputLenNotMultipleOf4;
+
+    //     let result = decode(Format::Z85, &input);
+
+    //     // println!("{:?}", result);
+    //     assert!(matches!(result, Err(EncodeError::Z85InputLenNotMultipleOf4)));
+    //     // match result {
+    //     //     _expected => println!("Z85InputLenNotMultipleOf4"),
+    //     //     _ => println!("Error"),
+    //     // }
+    // }
+}

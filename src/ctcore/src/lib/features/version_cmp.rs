@@ -529,4 +529,23 @@ mod tests {
         assert_eq!(version_non_digit_cmp("ABcd", "abcd"), Ordering::Less);
     }
 
+    #[test]
+    fn test_version_non_digit_cmp_with_numbers() {
+        assert_eq!(version_non_digit_cmp("alpha1", "alpha"), Ordering::Greater);
+        assert_eq!(version_non_digit_cmp("alpha", "alpha1"), Ordering::Less);
+        assert_eq!(version_non_digit_cmp("alpha1", "alpha~"), Ordering::Greater);
+        assert_eq!(version_non_digit_cmp("alpha~", "alpha1"), Ordering::Less);
+    }
+
+    #[test]
+    fn test_version_non_digit_cmp_with_special_characters() {
+        assert_eq!(
+            version_non_digit_cmp("alpha~beta", "alpha_beta"),
+            Ordering::Less
+        );
+        assert_eq!(
+            version_non_digit_cmp("alpha_beta", "alpha~beta"),
+            Ordering::Greater
+        );
+    }
 }

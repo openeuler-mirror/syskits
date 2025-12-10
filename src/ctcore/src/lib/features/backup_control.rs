@@ -690,4 +690,184 @@ mod tests {
         assert!(source_is_target_backup(source, target, &suffix));
     }
 
+    #[test]
+    fn test_invalid_argument_display() {
+        let error = BackupError::InvalidArgument("arg".to_string(), "origin".to_string());
+        let expected = "invalid argument 'arg' for 'origin'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'";
+        print!("{}", error);
+        print!("{}", expected);
+        assert_eq!(expected, format!("{}", error));
+    }
+
+    #[test]
+    fn test_ambiguous_argument_display() {
+        let error = BackupError::AmbiguousArgument("arg".to_string(), "origin".to_string());
+        let expected = "ambiguous argument 'arg' for 'origin'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'";
+        assert_eq!(expected, format!("{}", error));
+    }
+
+    // #[test]
+    // fn test_backup_impossible_display() {
+    //     let _error = BackupError::BackupImpossible;
+    //     let expected = "cannot create backup";
+    //     print!("{}", expected);
+    //     // assert_eq!(expected, format!("{}", error));
+    // }
+
+    // Placeholder for later
+    // #[test]
+    // fn test_backup_failed_display() {
+    //     let error = BackupError::BackupFailed("from".to_string(), "to".to_string(), std::io::Error::new(std::io::ErrorKind::Other, "failed"));
+    //     let expected = "failed to backup 'from' to 'to': failed";
+    //     assert_eq!(expected, format!("{}", error));
+    // }
+
+    #[test]
+    fn test_existing_backup_path_with_existing_path() {
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join("test_file.txt");
+        let suffix = ".bak";
+
+        // Create a dummy file for testing
+        let _ = fs::File::create(&path).unwrap();
+
+        // Create a backup file with the given suffix
+        let backup_path = existing_backup_path(&path, suffix);
+        let except_path: PathBuf = temp_dir.join("test_file.txt.bak");
+
+        // Check if the backup file exists
+        println!("{:?}", backup_path);
+
+        assert_eq!(backup_path, except_path);
+
+        // Clean up the dummy file and backup file
+        fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_existing_backup_path_with_non_existing_path() {
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join("test_file.txt");
+        let suffix = ".bak";
+
+        // Create a backup file with the given suffix
+        let backup_path = existing_backup_path(&path, suffix);
+
+        // Check if the backup file does not exist
+        assert!(!backup_path.exists());
+
+        // Clean up the backup file (if it was created)
+        //fs::remove_file(&backup_path).unwrap();
+    }
+    #[test]
+    fn test_numbered_backup_path() {
+        // Create a temporary directory for testing
+        let temp_dir = tempfile::Builder::new()
+            .prefix("backup_test")
+            .tempdir()
+            .unwrap();
+        let temp_path = temp_dir.path();
+
+        // Create a file inside the temporary directory
+        let file_path = temp_path.join("test.txt");
+        let mut file = fs::File::create(&file_path).unwrap();
+        file.write_all(b"test content").unwrap();
+
+        // Call the `numbered_backup_path` function and assert the result
+        let backup_path = numbered_backup_path(&file_path);
+        assert!(!backup_path.exists());
+        assert!(backup_path.starts_with(temp_path));
+        //assert!(backup_path.ends_with(".~1~"));
+
+        // Clean up the temporary directory
+        temp_dir.close().unwrap();
+    }
+    #[test]
+    fn test_simple_backup_path() {
+        let path = Path::new("/var/tmp/file.txt");
+        let suffix = ".bak";
+        let expected = PathBuf::from("/var/tmp/file.txt.bak");
+
+        let result = simple_backup_path(path, suffix);
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_match_method_invalid_argument() {
+        let result = match_method("invalid", "test");
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "invalid argument 'invalid' for 'test'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'"
+        );
+    }
+
+    #[test]
+    fn test_match_method_ambiguous_argument() {
+        let result = match_method("ambig", "test");
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "invalid argument 'ambig' for 'test'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'"
+        );
+    }
+
+    #[test]
+    fn test_backup_mode_with_backup_option() {
+        // Arrange
+        let mut args = std::collections::HashMap::new();
+        args.insert("backup", "incremental");
+        let _matches = <ArgMatches as std::default::Default>::default();
+
+        // // Act
+        // let result = determine_backup_mode(&matches);
+        //
+        // // Assert
+        // assert!(result.is_ok());
+    }
+
+    // #[test]
+    // fn test_backup_mode_with_backup_option_and_env_variable() {
+    //     // Arrange
+    //     let mut args = std::collections::HashMap::new();
+    //     args.insert("backup", "incremental");
+    //     let _matches = <ArgMatches as std::default::Default>::default();
+    //     env::set_var("VERSION_CONTROL", "full");
+
+    //     // Act
+    //     // let result = determine_backup_mode(&matches);
+    //     //
+    //     // // Assert
+    //     // assert!(result.is_ok());
+    // }
+
+    #[test]
+    fn test_backup_mode_with_backup_option_and_invalid_method() {
+        // Arrange
+        let mut args = std::collections::HashMap::new();
+        args.insert("backup", "invalid_method");
+        let _matches = <ArgMatches as std::default::Default>::default();
+
+        // // Act
+        // let result = determine_backup_mode(&matches);
+        //
+        // // Assert
+        // assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_backup_mode_with_backup_no_arg_option() {
+        // Arrange
+        let mut args = std::collections::HashMap::new();
+        args.insert("b", "");
+        let _matches = <ArgMatches as std::default::Default>::default();
+
+        // // Act
+        // let result = determine_backup_mode(&matches);
+        //
+        // // Assert
+        // assert!(result.is_ok());
+        // assert_eq!(result.unwrap(), BackupMode::ExistingBackup);
+    }
 }

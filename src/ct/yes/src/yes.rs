@@ -156,3 +156,131 @@ pub fn yes_exec(bytes_data: &[u8]) -> io::Result<()> {
     }
 }
 
+#[cfg(unix)]
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use clap::error::ErrorKind;
+
+    use super::*;
+
+    // yes 接口: yes [STRING]...
+    //     or:  yes OPTION
+    //       --help     display this help and exit
+    //       --version  output version information and exit
+    #[test]
+    fn test_ct_app_execution_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--version"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_other_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "-V"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_help() {
+        let command = ct_app();
+
+        // 测试用例2：验证 --help 参数是否正确处理
+        let help_args = vec![ctcore::ct_util_name(), "--help"];
+        let result = command.try_get_matches_from(help_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_ct_app_execution_unsupport_help() {
+        let command = ct_app();
+
+        // 测试用例2：验证 --help 参数是否正确处理
+        let help_args = vec![ctcore::ct_util_name(), "-H"];
+        let result = command.try_get_matches_from(help_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_invalid_argument() {
+        let command = ct_app();
+
+        // 测试用例3：验证当提供未知参数时是否正确报错
+        let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+        let result = command.try_get_matches_from(invalid_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_support_missing_argument() {
+        let command = ct_app();
+
+        // 测试用例4：验证当缺少必需的参数时是否正确报错
+        let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+        let result = command.try_get_matches_from(missing_args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_single_long_string() {
+        let long_string = OsString::from("a".repeat(10_000));
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some([long_string].iter())).unwrap();
+        assert!(v.len() > 10_000);
+    }
+
+    #[test]
+    fn test_multiple_long_strings() {
+        let long_strings = [
+            OsString::from("a".repeat(5000)),
+            OsString::from("b".repeat(5000)),
+            OsString::from("c".repeat(5000)),
+        ];
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some(long_strings.iter())).unwrap();
+        assert!(v.len() > 15_000);
+    }
+
+    #[test]
+    fn test_input_with_special_characters() {
+        let inputs = [
+            OsString::from("hello\nworld"),
+            OsString::from("hello\ttab"),
+            OsString::from("hello\\backslash"),
+        ];
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some(inputs.iter())).unwrap();
+        assert_eq!(
+            String::from_utf8(v).unwrap(),
+            "hello\nworld hello\ttab hello\\backslash\n"
+        );
+    }
+
+    #[test]
+    fn test_repeated_calls() {
+        let inputs = [OsString::from("repeat"), OsString::from("test")];
+        let mut v = Vec::new();
+        for _ in 0..3 {
+            yes_args_into_buff(&mut v, Some(inputs.iter())).unwrap();
+        }
+        assert_eq!(
+            String::from_utf8(v).unwrap(),
+            "repeat test\nrepeat test\nrepeat test\n"
+        );
+    }
+}

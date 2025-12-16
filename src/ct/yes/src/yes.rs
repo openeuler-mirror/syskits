@@ -283,4 +283,117 @@ mod tests {
             "repeat test\nrepeat test\nrepeat test\n"
         );
     }
+
+    #[test]
+    fn test_extreme_small_input() {
+        let inputs = [OsString::from(""), OsString::from(" ")];
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some(inputs.iter())).unwrap();
+        assert_eq!(String::from_utf8(v).unwrap(), "  \n");
+    }
+
+    #[test]
+    fn test_maximum_length_input() {
+        let max_input = OsString::from("x".repeat(65535));
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some([max_input].iter())).unwrap();
+        assert!(v.len() == 65536); // Including the newline
+    }
+
+    #[test]
+    fn test_input_with_unprintable_characters() {
+        let inputs = [OsString::from("\x01\x02\x03")];
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some(inputs.iter())).unwrap();
+        assert_eq!(String::from_utf8(v).unwrap(), "\x01\x02\x03\n");
+    }
+
+    #[test]
+    fn test_large_number_of_small_inputs() {
+        let small_inputs = std::iter::repeat(OsString::from("small"))
+            .take(10_000)
+            .collect::<Vec<_>>();
+        let mut v = Vec::new();
+        yes_args_into_buff(&mut v, Some(small_inputs.iter())).unwrap();
+        assert!(v.len() > 50_000); // 10,000 * "small ".length() + 1 for '\n'
+    }
+
+    #[test]
+    fn test_repeated_calls_memory_leak() {
+        let inputs = [OsString::from("repeat")];
+        let mut v = Vec::new();
+        for _ in 0..100 {
+            yes_args_into_buff(&mut v, Some(inputs.iter())).unwrap();
+        }
+        assert_eq!(v.len(), 700); // 7 characters * 100
+    }
+
+    #[test]
+    fn test_near_ct_buf_size() {
+        let tests = [
+            (YES_BUF_SIZE / 2, YES_BUF_SIZE),
+            (YES_BUF_SIZE - 1, YES_BUF_SIZE - 1),
+            (YES_BUF_SIZE / 4 * 3, YES_BUF_SIZE / 4 * 3),
+        ];
+
+        for (line, final_len) in tests {
+            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            yes_prepare_buff(&mut v);
+            assert_eq!(v.len(), final_len);
+        }
+    }
+
+    // #[test]
+    // #[should_panic]
+    // fn test_empty_vector() {
+    //     let mut v = Vec::new();
+    //     prepare_buff(&mut v);  // 应该在 assert!(!buf.is_empty()) 中触发 panic
+    // }
+
+    #[test]
+    fn test_large_vector() {
+        let line = YES_BUF_SIZE * 2; // 输入超过了 CT_BUF_SIZE
+        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        yes_prepare_buff(&mut v);
+        assert_eq!(v.len(), line); // 由于超过 CT_BUF_SIZE，预期不会更改
+    }
+
+    #[test]
+    fn test_performance_large_input() {
+        let line = 100_000;
+        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        let start = std::time::Instant::now();
+        yes_prepare_buff(&mut v);
+        let duration = start.elapsed();
+        println!("Duration for large input: {:?}", duration);
+        // 可以通过断言确保性能在可接受的范围内
+        assert!(duration < std::time::Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_boundary_conditions() {
+        let tests = [
+            (YES_BUF_SIZE, YES_BUF_SIZE),
+            (YES_BUF_SIZE - 1, YES_BUF_SIZE - 1),
+            (YES_BUF_SIZE - 2, YES_BUF_SIZE - 2),
+        ];
+
+        for (line, final_len) in tests {
+            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            yes_prepare_buff(&mut v);
+            assert_eq!(v.len(), final_len);
+        }
+    }
+
+    #[test]
+    fn test_minimum_length() {
+        let tests = [(1, YES_BUF_SIZE)];
+
+        for (line, final_len) in tests {
+            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            yes_prepare_buff(&mut v);
+            assert_eq!(v.len(), final_len);
+        }
+    }
+
 }

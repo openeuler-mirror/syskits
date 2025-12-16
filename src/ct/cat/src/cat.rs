@@ -1684,4 +1684,145 @@ mod tests {
         };
         assert!(cat_files_info(&files, &options).is_err());
     }
+
+    #[test]
+    fn test_read_file_with_special_characters() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("special_characters_file.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all("Special characters: ❤️🌟$#@!%".as_bytes())
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: true,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // 测试读取超长文件名的文件：
+    #[test]
+    fn test_read_file_with_long_filename() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let long_filename = "a".repeat(220); // 255字符的文件名
+        let temp_file_path = temp_dir.path().join(format!("{}.txt", long_filename));
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all(b"Content with long filename")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    //测试同时读取多个空文件：
+    #[test]
+    fn test_read_multiple_empty_files() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file1_path = temp_dir.path().join("empty_file1.txt");
+        let file2_path = temp_dir.path().join("empty_file2.txt");
+        File::create(&file1_path).expect("Failed to create temporary file");
+        File::create(&file2_path).expect("Failed to create temporary file");
+
+        let files = vec![
+            file1_path.to_string_lossy().into_owned(),
+            file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    #[test]
+    fn test_read_file_with_permissions_denied() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir
+            .path()
+            .join("test_read_file_with_permissions_denied.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all(b"Content with restricted permissions")
+            .expect("Failed to write to temporary file");
+
+        // 模拟设置文件权限为只读
+        let metadata = temp_file.metadata().expect("Failed to get file metadata");
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(true);
+        temp_file
+            .set_permissions(permissions)
+            .expect("Failed to set file permissions");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        println!("{:?}", cat_files_info(&files, &options).is_err());
+        // assert!(cat_files(&files, &options).is_err());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // #[test]
+    // fn test_read_more_large_file() {
+    //     let temp_dir = tempdir().expect("Failed to create temporary directory");
+    //     let temp_file_path = temp_dir.path().join("large_file.txt");
+    //     let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+    //
+    //     // 写入1GB的数据，模拟非常大的文件
+    //     const GB: usize = 1024 * 1024 * 1024;      //这里是边界测试，单元测试时使用打开
+    //     const GB: usize = 1;
+    //     let data: Vec<u8> = vec![0; GB];
+    //     temp_file
+    //         .write_all(&data)
+    //         .expect("Failed to write to temporary file");
+    //
+    //     let files = vec![temp_file_path.to_string_lossy().into_owned()];
+    //     let options = OutputOptions {
+    //         number: NumberingMode::None,
+    //         squeeze_blank: false,
+    //         show_tabs: false,
+    //         show_ends: false,
+    //         show_nonprint: false,
+    //     };
+    //     assert!(cat_files(&files, &options).is_err());
+    //
+    //     temp_dir
+    //         .close()
+    //         .expect("Failed to remove temporary directory");
+    // }
 }

@@ -750,3 +750,169 @@ fn cat_write_end_of_line<W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::fs;
+    use std::io::{self, Write};
+    use std::io::{stdout, BufWriter};
+
+    // Usage: target/debug/syskits cat [OPTION]... [FILE]...
+    //
+    // Options:
+    // -A, --show-all          equivalent to -vET
+    // -b, --number-nonblank   number nonempty output lines, overrides -n
+    // -e                      equivalent to -vE
+    // -E, --show-ends         display $ at end of each line
+    // -n, --number            number all output lines
+    // -s, --squeeze-blank     suppress repeated empty output lines
+    // -t                      equivalent to -vT
+    // -T, --show-tabs         display TAB characters at ^I
+    // -v, --show-nonprinting  use ^ and M- notation, except for LF (\n) and TAB (\t)
+    // -u                      (ignored)
+    // -h, --help              Print help
+    // -V, --version           Print version
+    #[test]
+    fn test_ct_app_execution_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--version"];
+
+        // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_other_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "-V"];
+
+        // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_help() {
+        let command = ct_app();
+
+        // 测试用例2：验证 --help 参数是否正确处理
+        let help_args = vec![ctcore::ct_util_name(), "--help"];
+        let result = command.try_get_matches_from(help_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_ct_app_execution_unsupport_help() {
+        let command = ct_app();
+
+        // 测试用例2：验证 --help 参数是否正确处理
+        let help_args = vec![ctcore::ct_util_name(), "-H"];
+        let result = command.try_get_matches_from(help_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_write_nonprint_to_end_29() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = &[9u8];
+        let tab = b"tab";
+        super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+        assert_eq!(writer.buffer(), tab);
+    }
+
+    #[test]
+    fn test_ct_app_invalid_argument() {
+        let command = ct_app();
+
+        // 测试用例3：验证当提供未知参数时是否正确报错
+        let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+        let result = command.try_get_matches_from(invalid_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_support_missing_argument() {
+        let command = ct_app();
+
+        // 测试用例4：验证当缺少必需的参数时是否正确报错
+        let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+        let result = command.try_get_matches_from(missing_args);
+        assert!(result.is_ok());
+    }
+
+    fn get_command() -> Command {
+        ct_app()
+    }
+
+    #[test]
+    fn test_options_file() {
+        // 创建文件并写入内容
+        fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+            let mut file = File::create(filename)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            Ok(())
+        }
+
+        // 删除指定文件
+        fn base_delete_file(filename: &str) -> io::Result<()> {
+            fs::remove_file(filename)?;
+            Ok(())
+        }
+
+        let filename = "test_options_file.txt";
+        let content = "Test cat hello world";
+        // let expected_output = "Test test_base_common_handle_input_encode_base16";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), filename];
+        let matches = command.try_get_matches_from(args);
+
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        // assert_eq!(s, expected_output);
+        assert!(matches.is_ok());
+    }
+
+    #[test]
+    fn test_options_show_all() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-A"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_ALL));
+    }
+
+    #[test]
+    fn test_write_nonprint_to_end_new_line() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"\n";
+        let tab = b"";
+        super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+        assert_eq!(writer.buffer().len(), 0);
+    }
+
+}

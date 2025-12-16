@@ -1016,4 +1016,148 @@ mod tests {
         assert!(matches.get_flag(opt_flags::CAT_SQUEEZE_BLANK));
     }
 
+    #[test]
+    fn test_options_squeeze_blank_whole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--squeeze-blank"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SQUEEZE_BLANK));
+    }
+
+    #[test]
+    fn test_options_show_nonprinting_tabs() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-t"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_NON_PRINTING_TABS));
+    }
+
+    #[test]
+    fn test_options_show_tabs() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-T"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_TABS));
+    }
+
+    #[test]
+    fn test_options_show_tabs_whole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--show-tabs"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_TABS));
+    }
+
+    #[test]
+    fn test_options_show_nonprinting() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-v"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_NON_PRINTING));
+    }
+
+    #[test]
+    fn test_options_show_nonprinting_whole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--show-nonprinting"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_NON_PRINTING));
+    }
+
+    #[test]
+    fn test_options_ignored_u() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-u"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_IGNORED_U));
+    }
+
+    use tempfile::tempdir;
+
+    // Test case: Test reading an empty file
+    #[test]
+    fn test_read_empty_file() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("empty_file.txt");
+        File::create(&temp_file_path).expect("Failed to create empty file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading multiple files with default options
+    #[test]
+    fn test_read_multiple_files_default_options() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file1_path = temp_dir.path().join("temp_file1.txt");
+        let mut temp_file1 =
+            File::create(&temp_file1_path).expect("Failed to create temporary file");
+        temp_file1
+            .write_all(b"File 1\n")
+            .expect("Failed to write to temporary file");
+
+        let temp_file2_path = temp_dir.path().join("temp_file2.txt");
+        let mut temp_file2 =
+            File::create(&temp_file2_path).expect("Failed to create temporary file");
+        temp_file2
+            .write_all(b"File 2\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![
+            temp_file1_path.to_string_lossy().into_owned(),
+            temp_file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading a non-existent file
+    #[test]
+    fn test_read_nonexistent_file() {
+        let files = vec!["nonexistent_file.txt".to_string()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_err());
+    }
+
 }

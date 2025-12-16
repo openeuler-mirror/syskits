@@ -224,3 +224,653 @@ pub fn handle_base_input<R: Read>(
     }
 }
 
+#[cfg(test)]
+
+mod test {
+    use super::*;
+
+    use crate::{base_common, BASE32_ABOUT, BASE32_USAGE};
+    use ctcore::ct_encoding::Format;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::fs::File;
+    use std::io::stdin;
+    use std::io::{self, Write};
+
+    // 创建文件并写入内容
+    fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        Ok(())
+    }
+
+    // 删除指定文件
+    fn base_delete_file(filename: &str) -> io::Result<()> {
+        fs::remove_file(filename)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_base_common_handle_input_encode_base16() {
+        let filename = "base_common_Base16.txt";
+        let content = "Test  test_base_common_handle_input_encode_base16";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let format = Format::Base16;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output = "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_encode_base32() {
+        let filename = "base_common_Base32.txt";
+        let content = "Test test_base_common_handle_input_encode_base32";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let format = Format::Base32;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output =
+            "KRSXG5BAORSXG5C7MJQXGZK7MNXW23LPNZPWQYLOMRWGKX3JNZYHK5C7MVXGG33EMVPWEYLTMUZTE===";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+    #[test]
+    fn test_base_common_handle_input_encode_base32hex() {
+        let filename = "base_common_Base32Hex.txt";
+        let content = "Test test_base_common_handle_input_encode_base32hex";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let format = Format::Base32Hex;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output = "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_encode_base64() {
+        let filename = "base_common_Base64.txt";
+        let content = "Test test_base_common_handle_input_encode_base64";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let format = Format::Base64;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output = "VGVzdCB0ZXN0X2Jhc2VfY29tbW9uX2hhbmRsZV9pbnB1dF9lbmNvZGVfYmFzZTY0";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+    #[test]
+    fn test_base_common_handle_input_encode_base64url() {
+        let filename = "base_common_Base64Url.txt";
+        let content = "Test test_base_common_handle_input_encode_base64url";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let format = Format::Base64Url;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output =
+            "VGVzdCB0ZXN0X2Jhc2VfY29tbW9uX2hhbmRsZV9pbnB1dF9lbmNvZGVfYmFzZTY0dXJs";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_decode_base16() {
+        let filename = "base_common_decode_Base16.txt";
+        let content =
+        "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "-d", filename];
+        let format = Format::Base16;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output = "Test  test_base_common_handle_input_encode_base16";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_decode_base16_wrap() {
+        let filename = "base_common_decode_Base16_wrap.txt";
+        let content =
+            "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--decode", "--wrap=8", filename];
+        let format = Format::Base16;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+        let expected_output = "Test  test_base_common_handle_input_encode_base16";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_decode_base32() {
+        let filename = "base_common_decode_Base32.txt";
+        let expected_output = "Test test_base_common_handle_input_encode_base32";
+        let content =
+            "KRSXG5BAORSXG5C7MJQXGZK7MNXW23LPNZPWQYLOMRWGKX3JNZYHK5C7MVXGG33EMVPWEYLTMUZTE===";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "-d", filename];
+        let format = Format::Base32;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_decode_base32_wrap() {
+        let filename = "base_common_decode_Base32_wrap.txt";
+        let expected_output = "Test test_base_common_handle_input_encode_base32";
+        let content =
+            "KRSXG5BAORSXG5C7MJQXGZK7MNXW23LPNZPWQYLOMRWGKX3JNZYHK5C7MVXGG33EMVPWEYLTMUZTE===";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--decode", "--wrap=8", filename];
+        let format = Format::Base32;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+    #[test]
+    fn test_base_common_handle_input_decode_base32hex() {
+        let filename = "base_common_decode_Base32hex.txt";
+        let expected_output = "Test test_base_common_handle_input_encode_base32hex";
+        let content =
+            "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "-d", filename];
+        let format = Format::Base32Hex;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_base_common_handle_input_decode_base32hex_wrap() {
+        let filename = "base_common_decode_Base32hex_wrap.txt";
+        let expected_output = "Test test_base_common_handle_input_encode_base32hex";
+        let content =
+            "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--decode", "--wrap=8", filename];
+        let format = Format::Base32Hex;
+        let config: base_common::BaseConfig = base_common::base_parsing_command_args(
+            args.iter().map(|s| OsString::from(s)),
+            BASE32_ABOUT,
+            BASE32_USAGE,
+        )
+        .expect("parse_base_cmd_args Failed");
+
+        let stdin_raw = stdin();
+        let mut input: Box<dyn Read> =
+            base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
+
+        let result = base_common::handle_base_input(
+            &mut input,
+            format,
+            config.base_wrap_cols,
+            config.base_ignore_garbage,
+            config.base_decode,
+        );
+
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+ 
+}

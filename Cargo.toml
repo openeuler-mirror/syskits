@@ -44,6 +44,7 @@ ctdoc = ["zip", "dep:cthelp_parser"]
 feat_common_core = [
   "arch",
   "base32",
+  "cat",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -161,6 +162,7 @@ cthelp_parser = { optional = true, version = ">=0.0.1", path = "src/cthelp_parse
 
 arch = { optional = true, package = "ct_arch", path = "src/ct/arch" }
 base32 = { optional = true, package = "ct_base32", path = "src/ct/base32" }
+cat = { optional = true, package = "ct_cat", path = "src/ct/cat" }
 
 [dev-dependencies]
 chrono = { workspace = true }

@@ -1,0 +1,30 @@
+[package]
+name = "ct_cat"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "cat ~ (ctutils) concatenate and display input"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/cat"
+
+[lib]
+path = "src/cat.rs"
+
+[dependencies]
+clap = { workspace = true }
+thiserror = { workspace = true }
+ctcore = { workspace = true, features = ["fs", "pipes"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
+[[bin]]
+name = "cat"
+path = "src/main.rs"

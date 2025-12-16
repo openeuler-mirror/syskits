@@ -96,3 +96,413 @@ fn base32_args_init() -> Vec<Arg> {
     args
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::fs::File;
+    use std::io::{self, Write};
+
+   // 创建文件并写入内容
+    fn create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        Ok(())
+    }
+
+    // 删除指定文件
+    fn delete_file(filename: &str) -> io::Result<()> {
+        fs::remove_file(filename)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_valid_ctmain() {
+        let filename = "test_valid_ctmain.txt";
+        let content = "Test decode base32";
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        let expected_output = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE===";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+                //assert_eq!(s,expected_output);
+            }
+        }
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+    #[test]
+    fn test_valid_wrap_ctmain() {
+        let filename = "test_valid_wrap_ctmain.txt";
+        let content = "Test decode base32 Test decode base32";
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--wrap=8", filename];
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        let expected_output = "KRSXG5BAMRSWG33EMUQGEYLTMUZTEICUMVZXIIDEMVRW6ZDFEBRGC43FGMZA====";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+                //assert_eq!(s,expected_output);
+            }
+        }
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_invalid_ctmain() {
+        let filename = "test_invalid_ctmain.txt";
+        let content = "";
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        let expected_output = ""; // 预期输出结果为空
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+                //assert_eq!(s,expected_output);
+            }
+        }
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_invalid_wrap_ctmain() {
+        let filename = "test_invalid_ctmain.txt";
+        let content = "";
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--wrap=8", filename];
+
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        let expected_output = ""; // 预期输出结果为空
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+                //assert_eq!(s,expected_output);
+            }
+        }
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_invalid_input_ctmain() {
+        let filename = "test_invalid_input_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE===";
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), filename];
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        let expected_output = "JNJFGWCHGVBECTKSKNLUOMZTIVGVKUKHIVMUYVCNKVNFIRJ5HU6Q====";
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+                //assert_eq!(s,expected_output);
+            }
+        }
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_decoding_d_ctmain() {
+        let filename = "test_decoding_d_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "-d", filename];
+        //let args = ["--wrap", ""];
+        let result: CTResult<String> = base32_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        let expected_output = "Test decode base32";
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_decoding_ctmain() {
+        let filename = "test_decoding_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--decode", filename];
+        //let args = ["--wrap", ""];
+        let result: CTResult<String> = base32_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        let expected_output = "Test decode base32";
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_decoding_wrap_ctmain() {
+        let filename = "test_decoding_wrap_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--wrap=64", "-d", filename];
+        //let args = ["--wrap", ""];
+        let result: CTResult<String> = base32_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        let expected_output = "Test decode base32";
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_decoding_ignore_ctmain() {
+        let filename = "test_decoding_ignore_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), " --ignore-garbage", "-d", filename];
+        //let args = ["--wrap", ""];
+        let result: CTResult<String> = base32_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        let expected_output = "";
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_decoding_i_ctmain() {
+        let filename = "test_decoding_i_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), " -i", "-d", filename];
+        //let args = ["--wrap", ""];
+        let result: CTResult<String> = base32_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        let expected_output = "";
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(s, expected_output);
+    }
+
+}

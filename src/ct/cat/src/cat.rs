@@ -915,4 +915,105 @@ mod tests {
         assert_eq!(writer.buffer().len(), 0);
     }
 
+    #[test]
+    fn test_options_show_all_whole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--show-all"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_ALL));
+    }
+
+    #[test]
+    fn test_options_number_nonblank() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-b"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_NUMBER_NO_NBLANK));
+    }
+
+    #[test]
+    fn test_options_number_nonblankwhole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--number-nonblank"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_NUMBER_NO_NBLANK));
+    }
+
+    #[test]
+    fn test_write_nonprint_to_end_0_to_8() {
+        for byte in 0u8..=8u8 {
+            let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+            let in_buf = &[byte];
+            let tab = b"";
+            super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+            assert_eq!(writer.buffer(), [b'^', byte + 64]);
+        }
+    }
+
+    #[test]
+    fn test_options_show_nonprinting_ends() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-e"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_NON_PRINTING_ENDS));
+    }
+
+    #[test]
+    fn test_options_show_ends() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-E"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_ENDS));
+    }
+
+    #[test]
+    fn test_options_show_ends_whole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--show-ends"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SHOW_ENDS));
+    }
+
+    #[test]
+    fn test_options_number() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-n"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_NUMBER));
+    }
+
+    #[test]
+    fn test_options_number_whole() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "--number"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_NUMBER));
+    }
+
+    #[test]
+    fn test_options_squeeze_blank() {
+        let command = get_command();
+
+        let args = vec![ctcore::ct_util_name(), "-s"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::CAT_SQUEEZE_BLANK));
+    }
+
 }

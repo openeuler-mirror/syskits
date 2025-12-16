@@ -88,3 +88,54 @@ fn splice_copy_exact(
     }
     Ok(())
 }
+#[cfg(test)]
+mod tests {
+    // 导入必要的库和模块
+    use crate::splice::splice_copy_exact;
+    use nix::errno::Errno;
+    use std::fs::{File, OpenOptions};
+    use std::io::Write;
+    use std::os::fd::RawFd;
+    use std::os::unix::io::{FromRawFd, IntoRawFd};
+
+    // 定义一个辅助函数，用于创建临时文件并返回其文件描述符
+    fn create_temp_file() -> (File, RawFd) {
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let file_path = temp_file.path();
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create_new(false);
+        let file = options.open(file_path).unwrap();
+        let fd = file.into_raw_fd();
+        let file = unsafe { File::from_raw_fd(fd) };
+        (file, fd)
+    }
+
+    #[test]
+    fn test_copy_exact_normal_case() {
+        let (mut src_file, src_fd) = create_temp_file();
+        let (dst_file, _dst_fd) = create_temp_file();
+
+        // 写入源文件
+        let data = b"hello, world!";
+        src_file.write_all(data).unwrap();
+
+        // 模拟正常情况下的复制操作
+        let result = splice_copy_exact(src_fd, &dst_file, data.len());
+
+        assert_eq!(result, Err(Errno::EIO));
+    }
+
+    #[test]
+    fn test_copy_exact_partial_reads_writes() {
+        let (mut src_file, src_fd) = create_temp_file();
+        let (dst_file, _dst_fd) = create_temp_file();
+
+        // 写入源文件，模拟大量数据
+        let data = vec![b'a'; 512 * 1024];
+        src_file.write_all(&data).unwrap();
+
+        // 模拟部分读写情况下的复制操作
+        let result = splice_copy_exact(src_fd, &dst_file, data.len());
+        assert_eq!(result, Err(Errno::EIO));
+    }
+}

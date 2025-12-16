@@ -505,4 +505,182 @@ mod test {
         assert_eq!(s, expected_output);
     }
 
+    #[test]
+    fn test_decoding_wrap_ignore_ctmain() {
+        let filename = "test_decoding_wrap_ignore_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--wrap",
+            "--ignore-garbage",
+            "-d",
+            filename,
+        ];
+        //let args = ["--wrap", ""];
+        let result: CTResult<String> = base32_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        let expected_output = "";
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_w_ctmain() {
+        let filename = "test_w_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--wrap=64", filename];
+        //let args = ["--wrap", ""];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        println!("{}", result);
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(result, 0);
+    }
+    #[test]
+    fn test_i_ctmain() {
+        // 测试用例1：
+        let args = ["--ignore-garbage", ""];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        println!("{}", result);
+        assert_eq!(result, 1);
+
+        let filename = "test_i_ctmain.txt";
+        let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
+
+        // 创建文件并写入内容
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--wrap=64",
+            "--ignore-garbage",
+            filename,
+        ];
+        //let args = ["--wrap", ""];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        println!("{}", result);
+
+        // 删除文件
+        match delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_h_ctmain() {
+        {
+            let args = ["--help", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+    #[test]
+    fn test_hh_ctmain() {
+        {
+            let args = ["-h", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+
+    #[test]
+    fn test_v_ctmain() {
+        {
+            let args = ["--version", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+
+    #[test]
+    fn test_vv_ctmain() {
+        {
+            let args = ["-V", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
 }

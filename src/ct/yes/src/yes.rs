@@ -396,4 +396,94 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_odd_and_even_lengths() {
+        let tests = [
+            (3, 3), // Odd length that does not grow
+            (6, 6), // Even length that does not grow
+        ];
+
+        for (line, final_len) in tests {
+            let v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            assert_eq!(v.len(), final_len);
+        }
+    }
+
+    #[test]
+    fn test_large_input_performance() {
+        let line = YES_BUF_SIZE * 10; // Huge input size
+        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        let start = std::time::Instant::now();
+        yes_prepare_buff(&mut v);
+        let duration = start.elapsed();
+        assert!(
+            duration < std::time::Duration::from_secs(1),
+            "Performance issue with very large input"
+        );
+    }
+
+    #[test]
+    fn test_repeated_calls2() {
+        let line = 100;
+        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        for _ in 0..10 {
+            // Repeat multiple times
+            yes_prepare_buff(&mut v);
+        }
+        assert_eq!(v.len(), line * (YES_BUF_SIZE / line)); // Check after repeated buffer preparations
+    }
+
+    #[test]
+    fn test_base_prepare_buffer() {
+        let tests = [
+            (2, 16384),
+            (3, 16383),
+            (4, 16384),
+            (5, 16380),
+            (150, 16350),
+            (1000, 16000),
+            (4093, 16372),
+            (4099, 12297),
+            (4111, 12333),
+            (8191, 16382),
+            (8192, 16384),
+            (8193, 8193),
+            (10000, 10000),
+            (15000, 15000),
+            (25000, 25000),
+        ];
+
+        for (line, final_len) in tests {
+            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            yes_prepare_buff(&mut v);
+            assert_eq!(v.len(), final_len);
+        }
+    }
+
+    #[test]
+    fn test_base_args_into_buf() {
+        {
+            let mut v = Vec::with_capacity(YES_BUF_SIZE);
+            yes_args_into_buff(&mut v, Some([OsString::from("foo")].iter())).unwrap();
+            assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
+        }
+
+        {
+            let mut v = Vec::with_capacity(YES_BUF_SIZE);
+            yes_args_into_buff(
+                &mut v,
+                Some(
+                    [
+                        OsString::from("fooa"),
+                        OsString::from("barb    bazz"),
+                        OsString::from("quxw"),
+                    ]
+                    .iter(),
+                ),
+            )
+            .unwrap();
+            assert_eq!(String::from_utf8(v).unwrap(), "fooa barb    bazz quxw\n");
+        }
+    }
+
 }

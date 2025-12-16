@@ -1383,4 +1383,305 @@ mod tests {
         assert!(cat_files_info(&files, &options).is_err());
     }
 
+    // Test case: Test reading multiple files with squeezing blank lines and showing ends
+    #[test]
+    fn test_read_multiple_files_with_squeezing_blank_lines_and_showing_ends() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+
+        // Create first temporary file
+        let temp_file1_path = temp_dir.path().join("temp_file1.txt");
+        let mut temp_file1 =
+            File::create(&temp_file1_path).expect("Failed to create temporary file");
+        temp_file1
+            .write_all(b"Line 1\n\n\nLine 2\n\n\n")
+            .expect("Failed to write to temporary file");
+
+        // Create second temporary file
+        let temp_file2_path = temp_dir.path().join("temp_file2.txt");
+        let mut temp_file2 =
+            File::create(&temp_file2_path).expect("Failed to create temporary file");
+        temp_file2
+            .write_all(b"\n\nLine 3\n\n\nLine 4\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![
+            temp_file1_path.to_string_lossy().into_owned(),
+            temp_file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: true,
+            show_tabs: false,
+            show_ends: true,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading multiple files with line numbering and showing ends
+    #[test]
+    fn test_read_multiple_files_with_line_numbering_and_showing_ends() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+
+        // Create first temporary file
+        let temp_file1_path = temp_dir.path().join("temp_file1.txt");
+        let mut temp_file1 =
+            File::create(&temp_file1_path).expect("Failed to create temporary file");
+        temp_file1
+            .write_all(b"Line 1\nLine 2\nLine 3\n")
+            .expect("Failed to write to temporary file");
+
+        // Create second temporary file
+        let temp_file2_path = temp_dir.path().join("temp_file2.txt");
+        let mut temp_file2 =
+            File::create(&temp_file2_path).expect("Failed to create temporary file");
+        temp_file2
+            .write_all(b"Line 4\nLine 5\nLine 6\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![
+            temp_file1_path.to_string_lossy().into_owned(),
+            temp_file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::All,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: true,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading multiple files with showing non-printable characters
+    #[test]
+    fn test_read_multiple_files_with_showing_nonprintable_characters() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+
+        // Create first temporary file
+        let temp_file1_path = temp_dir.path().join("temp_file1.txt");
+        let mut temp_file1 =
+            File::create(&temp_file1_path).expect("Failed to create temporary file");
+        temp_file1
+            .write_all(b"Line 1\nLine \x07 2\nLine 3\n")
+            .expect("Failed to write to temporary file");
+
+        // Create second temporary file
+        let temp_file2_path = temp_dir.path().join("temp_file2.txt");
+        let mut temp_file2 =
+            File::create(&temp_file2_path).expect("Failed to create temporary file");
+        temp_file2
+            .write_all(b"Line 4\nLine 5\x0b\nLine 6\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![
+            temp_file1_path.to_string_lossy().into_owned(),
+            temp_file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: true,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading multiple files with squeezing blank lines and showing tabs and ends
+    #[test]
+    fn test_read_tabs_and_ends() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+
+        // Create first temporary file
+        let temp_file1_path = temp_dir.path().join("temp_file1.txt");
+        let mut temp_file1 =
+            File::create(&temp_file1_path).expect("Failed to create temporary file");
+        temp_file1
+            .write_all(b"Line 1\n\n\nLine 2\t\t\n\n\n")
+            .expect("Failed to write to temporary file");
+
+        // Create second temporary file
+        let temp_file2_path = temp_dir.path().join("temp_file2.txt");
+        let mut temp_file2 =
+            File::create(&temp_file2_path).expect("Failed to create temporary file");
+        temp_file2
+            .write_all(b"\n\nLine 3\t\t\n\n\nLine 4\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![
+            temp_file1_path.to_string_lossy().into_owned(),
+            temp_file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: true,
+            show_tabs: true,
+            show_ends: true,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading a file with only whitespace characters
+    #[test]
+    fn test_read_file_with_whitespace() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("whitespace_file.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all(b"   \n\t   \n  ")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading a file and displaying non-printable characters
+    #[test]
+    fn test_read_file_with_non_printable_characters() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("non_printable_file.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all(b"Non-printable\x01\x02\x03Characters")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: true,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading multiple files and concatenating them
+    #[test]
+    fn test_read_multiple_files() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file1_path = temp_dir.path().join("file1.txt");
+        let file2_path = temp_dir.path().join("file2.txt");
+        let mut file1 = File::create(&file1_path).expect("Failed to create temporary file");
+        let mut file2 = File::create(&file2_path).expect("Failed to create temporary file");
+        file1
+            .write_all(b"Content from file1")
+            .expect("Failed to write to temporary file");
+        file2
+            .write_all(b"Content from file2")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![
+            file1_path.to_string_lossy().into_owned(),
+            file2_path.to_string_lossy().into_owned(),
+        ];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test reading a large file
+    #[test]
+    fn test_read_large_file() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("large_file.txt");
+        let content = "A".repeat(10_000); // Create a large string with 10,000 'A's
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all(content.as_bytes())
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    #[test]
+    fn test_read_file_with_tabs_and_newlines() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("tab_and_newline_file.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+        temp_file
+            .write_all(b"Line 1\tLine 2\nLine 3\tLine 4\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: true,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    #[test]
+    fn test_read_nonex_file() {
+        let files = vec!["nonexistent_file.txt".to_string()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: false,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_err());
+    }
 }

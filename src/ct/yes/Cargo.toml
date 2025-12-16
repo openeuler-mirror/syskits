@@ -1,0 +1,30 @@
+[package]
+name = "ct_yes"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+description = "yes ~ (ctutils) repeatedly display a line with STRING (or 'y')"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/yes"
+
+[lib]
+path = "src/yes.rs"
+
+[dependencies]
+clap = { workspace = true }
+itertools = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+ctcore = { workspace = true, features = ["pipes", "signals"] }
+nix = { workspace = true }
+
+[target.'cfg(not(unix))'.dependencies]
+ctcore = { workspace = true, features = ["pipes"] }
+
+[[bin]]
+name = "yes"
+path = "src/main.rs"

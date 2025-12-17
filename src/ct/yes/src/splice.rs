@@ -1460,4 +1460,22 @@ mod tests {
         ));
     }
 
+   #[test]
+    fn test_maybe_unsupported_with_eaddrinuse() {
+        let error = Errno::EADDRINUSE.into(); // Address already in use error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_eintr() {
+        let error = Errno::EINTR.into();
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
 }

@@ -1197,4 +1197,158 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_from_nix_error_to_io_error_elibacc() {
+        let nix_error = nix::Error::ELIBACC;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_elibbad() {
+        let nix_error = nix::Error::ELIBBAD;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_elibscn() {
+        let nix_error = nix::Error::ELIBSCN;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_elibmax() {
+        let nix_error = nix::Error::ELIBMAX;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_elibexec() {
+        let nix_error = nix::Error::ELIBEXEC;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eilseq() {
+        let nix_error = nix::Error::EILSEQ;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_erestart() {
+        let nix_error = nix::Error::ERESTART;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_emsgsize() {
+        let nix_error = nix::Error::EMSGSIZE;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eprototype() {
+        let nix_error = nix::Error::EPROTOTYPE;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enoprotoopt() {
+        let nix_error = nix::Error::ENOPROTOOPT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是 Uncategorized
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eprotonosupport() {
+        let nix_error = nix::Error::EPROTONOSUPPORT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
 }

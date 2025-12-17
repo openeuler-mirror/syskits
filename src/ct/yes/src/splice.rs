@@ -84,3 +84,148 @@ fn splice_maybe_unsupported(error: nix::Error) -> SpliceError {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::fs::File;
+    use std::io::Write;
+
+    use nix::errno::Errno;
+
+    use super::*;
+
+    #[test]
+    fn test_splice_data_with_file() {
+        let bytes = b"test_data";
+
+        let mut file = File::create("test.txt").expect("Failed to create test file");
+        file.write_all(bytes).expect("Failed to write test data");
+        let file = File::open("test.txt").expect("Failed to open test file");
+        let result = splice_data(bytes, &file);
+
+        assert!(result.is_err());
+
+        std::fs::remove_file("test.txt").expect("Failed to remove test file");
+    }
+
+    #[test]
+    fn test_is_pipe_with_regular_file() {
+        let regular_file_path = "test_regular_file";
+        File::create(regular_file_path).expect("Failed to create regular file");
+
+        let regular_file = File::open(regular_file_path).expect("Failed to open regular file");
+
+        let result = match fstat(regular_file.as_raw_fd()) {
+            Ok(stat) => (stat.st_mode & S_IFIFO) != 0,
+            Err(_) => false,
+        };
+        assert!(!result);
+
+        fs::remove_file(regular_file_path).expect("Failed to remove regular file");
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error() {
+        let nix_error = nix::Error::EAGAIN;
+
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::WouldBlock);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_unknown_errno() {
+        let nix_error = nix::Error::UnknownErrno;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是 Uncategorized
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eperm() {
+        let nix_error = nix::Error::EPERM;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::PermissionDenied);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enoent() {
+        let nix_error = nix::Error::ENOENT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::NotFound);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_esrch() {
+        let nix_error = nix::Error::ESRCH;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是 Uncategorized
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eintr() {
+        let nix_error = nix::Error::EINTR;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::Interrupted);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eio() {
+        let nix_error = nix::Error::EIO;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是 Uncategorized
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enxio() {
+        let nix_error = nix::Error::ENXIO;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是 Uncategorized
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+}

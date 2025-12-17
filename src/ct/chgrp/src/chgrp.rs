@@ -385,4 +385,91 @@ mod tests {
         assert_eq!(result, 1);
     }
 
+    #[test]
+    fn test_recursive_whole_ctmain() {
+        // 测试用例：有效输入 --recursive
+        let args = vec![ctcore::ct_util_name(), "--recursive"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_verbose_ctmain() {
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "-v"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_verbose_whole_ctmain() {
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "--verbose"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_chgrp_invalid_user_id_ctmain() {
+        let dir_path = "test_chgrp_invalid_user_id_ctmain";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chcon_invalid_user_id.txt";
+
+        // 创建二级目录
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // 创建文件路径
+        let file_path = format!("{}/{}", subdir_path, file_name);
+
+        // 创建文件并写入内容
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
+                               // Remove the directory hierarchy
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
+    #[test]
+    fn test_chgrp_h_r_ctmain() {
+        let dir_path = "test_chgrp_h_r_ctmain";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chcon_invalid_user_id.txt";
+
+        // 创建二级目录
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // 创建文件路径
+        let file_path = format!("{}/{}", subdir_path, file_name);
+
+        // 创建文件并写入内容
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-h",
+            "-R",
+            "invalid_user_id",
+            dir_path,
+        ];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
+                               // Remove the directory hierarchy
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
 }

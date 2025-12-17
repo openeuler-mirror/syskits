@@ -86,3 +86,100 @@ pub(crate) fn report_full_error(mut err: &dyn std::error::Error) -> String {
     desc
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ct_app;
+    use clap::error::ErrorKind;
+    use selinux::errors::Error::PathIsInvalid;
+
+    #[test]
+    fn test_missing_context_error() {
+        let error = Error::MissingContext;
+        let result = report_full_error(&error);
+        assert_eq!(result, "No context is specified");
+    }
+
+    #[test]
+    fn test_io_error_source() {
+        let error = Error::from_io("read", io::Error::new(io::ErrorKind::Other, "IO error"));
+        let result = report_full_error(&error);
+        assert_eq!(result, "read failed. IO error");
+    }
+
+    #[test]
+    fn test_osstring_error_source() {
+        let error = Error::from_io1(
+            "write",
+            OsString::from("file.txt"),
+            io::Error::new(io::ErrorKind::Other, "IO error"),
+        );
+        let result = report_full_error(&error);
+        assert_eq!(result, "write failed on 'file.txt'. IO error");
+    }
+
+    #[test]
+    fn test_arguments_mismatch_error() {
+        let error = Error::ArgumentsMismatch("Invalid number of arguments".to_string());
+        let result = report_full_error(&error);
+        assert_eq!(result, "Invalid number of arguments");
+    }
+
+    #[test]
+    fn test_out_of_range_error() {
+        let error = Error::OutOfRange;
+        let result = report_full_error(&error);
+        assert_eq!(result, "Data is out of range");
+    }
+
+    #[test]
+    fn test_clap_error_source() {
+        let error = Error::CommandLine(clap::Error::raw(
+            ErrorKind::MissingRequiredArgument,
+            "Missing required argument",
+        ));
+        let result = report_full_error(&error);
+        assert_eq!(result, "error: Missing required argument");
+    }
+    #[test]
+    fn test_clap_error_source_with_subcommand() {
+        let subcommand = ct_app();
+        let error = Error::CommandLine(
+            clap::Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "Missing required argument",
+            )
+            .with_cmd(&subcommand),
+        );
+        let result = report_full_error(&error);
+        assert_eq!(result, "error: Missing required argument");
+    }
+
+    #[test]
+    fn test_missing_files_error() {
+        let error = Error::MissingFiles;
+        let result = report_full_error(&error);
+        assert_eq!(result, "No files are specified");
+    }
+
+    #[test]
+    fn test_io1_error_source() {
+        let error = Error::Io1 {
+            operation: "write",
+            operand1: OsString::from("file.txt"),
+            source: io::Error::new(io::ErrorKind::Other, "IO error"),
+        };
+        let result = report_full_error(&error);
+        assert_eq!(result, "write failed on 'file.txt'. IO error");
+    }
+
+    #[test]
+    fn test_selinux_error_source() {
+        let error = Error::SELinux {
+            operation: "read",
+            source: PathIsInvalid("SELinux error".parse().unwrap()),
+        };
+        let result = report_full_error(&error);
+        assert_eq!(result, "read failed. path is invalid: 'SELinux error'");
+    }
+}

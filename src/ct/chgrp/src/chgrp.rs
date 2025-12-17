@@ -1,0 +1,185 @@
+/*
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
+ *     syskits is licensed under Mulan PSL v2.
+ *    You can use this software according to the terms and conditions of the Mulan PSL V2
+ *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *    See the Mulan PSL v2 for more details.
+ *
+ */
+
+// spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
+
+use ctcore::ct_display::Quotable;
+pub use ctcore::ct_entries;
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_perms::{chown_base, opt_flags, CtGidUidOwnerFilter, CtIfFrom};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+
+use std::fs;
+use std::os::unix::fs::MetadataExt;
+
+const CHGRP_ABOUT: &str = ct_help_about!("chgrp.md");
+const CHGRP_USAGE: &str = ct_help_usage!("chgrp.md");
+
+/**
+ * 根据命令行参数解析目标GID和UID。
+ *
+ * 此函数用于处理`chgrp`命令的相关参数，根据这些参数确定要更改的组ID（GID）和所有者信息。
+ * 如果提供了引用文件参数，则从该文件的元数据中读取GID，并尝试将其转换为组名；
+ * 如果没有提供引用文件，但提供了组名参数，则尝试将组名转换为GID。
+ */
+fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFilter> {
+    // 初始化用于存储原始组名或ID的变量
+    let mut chgrp_raw_group: String = String::new();
+
+    // 处理引用文件参数，如果存在的话
+    let dest_gid = if let Some(file) = args_match.get_one::<String>(opt_flags::REFERENCE) {
+        // 尝试从文件元数据中获取GID，并尝试将其转换为组名
+        fs::metadata(file)
+            .map(|meta| {
+                let gid = meta.gid();
+                chgrp_raw_group = ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
+                Some(gid)
+            })
+            .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?
+    } else {
+        // 处理组名参数
+        let group_info = args_match
+            .get_one::<String>(opt_flags::ARG_GROUP)
+            .map(|s| s.as_str())
+            .unwrap_or_default();
+        chgrp_raw_group = group_info.to_string();
+        if group_info.is_empty() {
+            None
+        } else {
+            // 尝试将组名转换为GID，如果失败则返回错误
+            match ct_entries::grp2gid(group_info) {
+                Ok(g) => Some(g),
+                _ => {
+                    return Err(CtSimpleError::new(
+                        1,
+                        format!("invalid group: {}", group_info.quote()),
+                    ))
+                }
+            }
+        }
+    };
+    // 构造并返回`CtGidUidOwnerFilter`实例
+    Ok(CtGidUidOwnerFilter {
+        dest_gid,
+        dest_uid: None,
+        raw_owner: chgrp_raw_group,
+        filter: CtIfFrom::All,
+    })
+}
+
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    chown_base(
+        ct_app(),
+        args,
+        opt_flags::ARG_GROUP,
+        chgrp_parse_gid_and_uid,
+        true,
+    )
+}
+
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = CHGRP_ABOUT;
+    let usage_description = ct_format_usage(CHGRP_USAGE);
+
+    let args = vec![
+        Arg::new(opt_flags::HELP)
+            .long(opt_flags::HELP)
+            .help("Print help information.")
+            .action(ArgAction::Help),
+        Arg::new(opt_flags::verbosity::CHANGES)
+            .short('c')
+            .long(opt_flags::verbosity::CHANGES)
+            .help("like verbose but report only when a change is made")
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::verbosity::SILENT)
+            .short('f')
+            .long(opt_flags::verbosity::SILENT)
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::verbosity::QUIET)
+            .long(opt_flags::verbosity::QUIET)
+            .help("suppress most error messages")
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::verbosity::VERBOSE)
+            .short('v')
+            .long(opt_flags::verbosity::VERBOSE)
+            .help("output a diagnostic for every file processed")
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::dereference::DEREFERENCE)
+            .long(opt_flags::dereference::DEREFERENCE)
+            .action(ArgAction::SetTrue),
+
+       Arg::new(opt_flags::dereference::NO_DEREFERENCE)
+           .short('h')
+           .long(opt_flags::dereference::NO_DEREFERENCE)
+           .help(
+               "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
+           )
+           .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::preserve_root::PRESERVE)
+            .long(opt_flags::preserve_root::PRESERVE)
+            .help("fail to operate recursively on '/'")
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::preserve_root::NO_PRESERVE)
+            .long(opt_flags::preserve_root::NO_PRESERVE)
+            .help("do not treat '/' specially (the default)")
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::REFERENCE)
+            .long(opt_flags::REFERENCE)
+            .value_name("RFILE")
+            .value_hint(clap::ValueHint::FilePath)
+            .help("use RFILE's group rather than specifying GROUP values"),
+
+        Arg::new(opt_flags::RECURSIVE)
+            .short('R')
+            .long(opt_flags::RECURSIVE)
+            .help("operate on files and directories recursively")
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::traverse::TRAVERSE)
+            .short(opt_flags::traverse::TRAVERSE.chars().next().unwrap())
+            .help("if a command line argument is a symbolic link to a directory, traverse it")
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::traverse::NO_TRAVERSE)
+            .short(opt_flags::traverse::NO_TRAVERSE.chars().next().unwrap())
+            .help("do not traverse any symbolic links (default)")
+            .overrides_with_all([opt_flags::traverse::TRAVERSE, opt_flags::traverse::EVERY])
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::traverse::EVERY)
+            .short(opt_flags::traverse::EVERY.chars().next().unwrap())
+            .help("traverse every symbolic link to a directory encountered")
+            .action(ArgAction::SetTrue),
+
+
+    ];
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .infer_long_args(true)
+        .disable_help_flag(true)
+        .args(&args)
+}
+

@@ -260,4 +260,86 @@ mod tests {
         let executable = command.try_get_matches_from(args);
         assert!(executable.is_ok());
     }
+
+    #[test]
+    fn test_ct_app_long_option_login() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--login"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_lookup() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--lookup"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_process() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--process"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_count() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--count"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_runlevel() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--runlevel"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_short() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--short"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_time() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--time"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_users() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--users"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_mesg() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--mesg"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_file() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--file"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
 }

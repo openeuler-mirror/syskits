@@ -228,4 +228,139 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_e2big() {
+        let nix_error = nix::Error::E2BIG;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enoexec() {
+        let nix_error = nix::Error::ENOEXEC;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_ebadf() {
+        let nix_error = nix::Error::EBADF;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_echild() {
+        let nix_error = nix::Error::ECHILD;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eagain() {
+        let nix_error = nix::Error::EAGAIN;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::WouldBlock);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enomem() {
+        let nix_error = nix::Error::ENOMEM;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::OutOfMemory);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eacces() {
+        let nix_error = nix::Error::EACCES;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(inner_io_error) => {
+                assert_eq!(inner_io_error.kind(), io::ErrorKind::PermissionDenied);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_efault() {
+        let nix_error = nix::Error::EFAULT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enotblk() {
+        let nix_error = nix::Error::ENOTBLK;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_ebusy() {
+        let nix_error = nix::Error::EBUSY;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
 }

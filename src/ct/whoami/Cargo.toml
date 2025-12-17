@@ -1,0 +1,33 @@
+[package]
+name = "ct_whoami"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+homepage.workspace = true
+
+description = "whoami ~ (ctutils) display user name of current effective user ID"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/whoami"
+
+[lib]
+path = "src/whoami.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "process"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_NetworkManagement_NetManagement",
+    "Win32_System_WindowsProgramming",
+    "Win32_Foundation",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[[bin]]
+name = "whoami"
+path = "src/main.rs"

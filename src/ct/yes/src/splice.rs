@@ -1351,4 +1351,113 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_from_nix_error_to_io_error_esocktnosupport() {
+        let nix_error = nix::Error::ESOCKTNOSUPPORT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eopnotsupp() {
+        let nix_error = nix::Error::EOPNOTSUPP;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_einval() {
+        let error = Errno::EINVAL.into();
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Unsupported
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_enosys() {
+        let error = Errno::ENOSYS.into();
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Unsupported
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_ebadf() {
+        let error = Errno::EBADF.into();
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Unsupported
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_other_error() {
+        let error = nix::Error::E2BIG.into(); // Random error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_enomem() {
+        let error = Errno::ENOMEM.into(); // Out of memory error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_eperm() {
+        let error = Errno::EPERM.into(); // Permission denied error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_esrch() {
+        let error = Errno::ESRCH.into(); // No such process error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_efault() {
+        let error = Errno::EFAULT.into(); // Bad address error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
+    #[test]
+    fn test_maybe_unsupported_with_econnreset() {
+        let error = Errno::ECONNRESET.into(); // Connection reset by peer error
+        assert!(matches!(
+            splice_maybe_unsupported(error),
+            SpliceError::Io(_)
+        ));
+    }
+
 }

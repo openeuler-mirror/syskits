@@ -777,4 +777,144 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_from_nix_error_to_io_error_elnrng() {
+        let nix_error = nix::Error::ELNRNG;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_eunatch() {
+        let nix_error = nix::Error::EUNATCH;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enocsi() {
+        let nix_error = nix::Error::ENOCSI;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_el2hlt() {
+        let nix_error = nix::Error::EL2HLT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_ebade() {
+        let nix_error = nix::Error::EBADE;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_ebadr() {
+        let nix_error = nix::Error::EBADR;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_exfull() {
+        let nix_error = nix::Error::EXFULL;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_enoano() {
+        let nix_error = nix::Error::ENOANO;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_ebadrqc() {
+        let nix_error = nix::Error::EBADRQC;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_nix_error_to_io_error_ebadslt() {
+        let nix_error = nix::Error::EBADSLT;
+        let custom_error: SpliceError = nix_error.into();
+        match custom_error {
+            SpliceError::Io(_) => {
+                assert!(true); // 不进行断言，因为我们期望的是在rust不稳定
+            }
+            _ => {
+                assert!(false); // 其他类型错误，测试失败
+            }
+        }
+    }
+
 }

@@ -842,3 +842,132 @@ impl<'t> ChconSELinuxSecurityContext<'t> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::fs::File;
+    use std::io::Write;
+
+    #[test]
+    fn test_ct_app_execution_help() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --help
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_ct_app_execution_help_invalid() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --help
+        let args = vec![ctcore::ct_util_name(), "-H"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(
+            executable.unwrap_err().kind(),
+            ErrorKind::MissingRequiredArgument
+        );
+    }
+
+    #[test]
+    fn test_ct_app_execution_version() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --help
+        let args = vec![ctcore::ct_util_name(), "--version"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_version_valid() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --help
+        let args = vec![ctcore::ct_util_name(), "-V"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_dereference_true() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --dereference
+        let args = vec![ctcore::ct_util_name(), "--dereference"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::dereference::DEREFERENCE));
+    }
+
+    #[test]
+    fn test_ct_app_execution_dereference_false() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --no-dereference
+        let args = vec![ctcore::ct_util_name(), "-h"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::dereference::NO_DEREFERENCE));
+        assert!(!matches.get_flag(opt_flags::dereference::DEREFERENCE));
+    }
+
+    #[test]
+    fn test_ct_app_execution_dereference_whole_false() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --no-dereference
+        let args = vec![ctcore::ct_util_name(), "--no-dereference"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::dereference::NO_DEREFERENCE));
+        assert!(!matches.get_flag(opt_flags::dereference::DEREFERENCE));
+    }
+
+    #[test]
+    fn test_ct_app_execution_preserve_root_true() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --preserve-root
+        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::preserve_root::PRESERVE_ROOT));
+    }
+
+    #[test]
+    fn test_ct_app_execution_preserve_root_false() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --no-preserve-root
+        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::preserve_root::NO_PRESERVE_ROOT));
+        assert!(!matches.get_flag(opt_flags::preserve_root::PRESERVE_ROOT));
+    }
+
+    #[test]
+    fn test_ct_app_execution_recursive() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --recursive
+        let args = vec![ctcore::ct_util_name(), "-R"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::RECURSIVE));
+    }
+
+
+}

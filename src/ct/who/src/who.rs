@@ -134,3 +134,130 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+    use clap::error::ErrorKind;
+
+    use super::*;
+
+    // who 接口: who [OPTION]... [ FILE | ARG1 ARG2 ]
+    //   -a, --all         same as -b -d --login -p -r -t -T -u
+    //   -b, --boot        time of last system boot
+    //   -d, --dead        print dead processes
+    //   -H, --heading     print line of column headings
+    //   -l, --login       print system login processes
+    //       --lookup      attempt to canonicalize hostnames via DNS
+    //   -m                only hostname and user associated with stdin
+    //   -p, --process     print active processes spawned by init
+    //   -q, --count       all login names and number of users logged on
+    //   -r, --runlevel    print current runlevel
+    //   -s, --short       print only name, line, and time (default)
+    //   -t, --time        print last system clock change
+    //   -T, -w, --mesg    add user's message status as +, - or ?
+    //   -u, --users       list users logged in
+    //       --message     same as -T
+    //       --writable    same as -T
+    //       --help     display this help and exit
+    #[test]
+    fn test_ct_app_execution_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--version"];
+
+        // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_other_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "-V"];
+
+        // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_ct_app_execution_help() {
+        let command = ct_app();
+
+        // 测试用例2：验证 --help 参数是否正确处理
+        let help_args = vec![ctcore::ct_util_name(), "--help"];
+        let result = command.try_get_matches_from(help_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_ct_app_execution_unsupport_help() {
+        let command = ct_app();
+
+        // 测试用例2：验证 --help 参数是否正确处理
+        let help_args = vec![ctcore::ct_util_name(), "-H"];
+        let result = command.try_get_matches_from(help_args);
+        assert!(result.is_ok());
+        // assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_invalid_argument() {
+        let command = ct_app();
+
+        // 测试用例3：验证当提供未知参数时是否正确报错
+        let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+        let result = command.try_get_matches_from(invalid_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_support_missing_argument() {
+        let command = ct_app();
+
+        // 测试用例4：验证当缺少必需的参数时是否正确报错
+        let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+        let result = command.try_get_matches_from(missing_args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_all() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--all"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_boot() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--boot"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_dead() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--dead"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_long_option_heading() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--heading"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+}

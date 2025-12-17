@@ -294,4 +294,126 @@ mod tests {
 
         assert!(matches.get_flag(flags::MULTIPLE));
     }
+
+    #[test]
+    fn test_flags_name() {
+        let command = ct_app();
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-a",
+            "path/to/name1",
+            "path/to/name2",
+        ];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(flags::MULTIPLE));
+    }
+
+    #[test]
+    fn test_flags_suffix() {
+        let command = ct_app();
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--suffix=SUFFIX",
+            "/usr/bin/sort.txt",
+        ];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        match matches.get_one::<String>(flags::SUFFIX) {
+            Some(suffix) => {
+                assert_eq!(suffix, "SUFFIX");
+            }
+            None => {
+                assert!(false);
+            }
+        }
+    }
+    #[test]
+    fn test_flags_zero() {
+        let command = ct_app();
+
+        let args = vec![ctcore::ct_util_name(), "-z"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(flags::ZERO));
+    }
+
+    #[test]
+    fn test_basename_regular_input_with_valid_suffix() {
+        let input = "/path/to/file.txt";
+        let expected_result = "file";
+        let suffix = ".txt";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_input_matches_suffix_exactly() {
+        let input = "/path/to/file.txt";
+        let expected_result = "file.txt";
+        let suffix = "file.txt";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_hidden_file_with_valid_suffix() {
+        let input = "/path/to/.txt";
+        let expected_result = ".txt";
+        let suffix = ".txt";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_no_suffix_provided() {
+        let input = "/path/to/file";
+        let expected_result = "file";
+        let suffix = "";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_empty_input_and_suffix() {
+        let input = "";
+        let expected_result = "";
+        let suffix = "";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_trailing_slash_in_input() {
+        let input = "/path/to/file.txt/";
+        let expected_result = "file";
+        let suffix = ".txt";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_multiple_consecutive_slashes_in_input() {
+        let input = "//path//to//file.txt";
+        let expected_result = "file";
+        let suffix = ".txt";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }    
 }

@@ -1,0 +1,23 @@
+[package]
+name = "ct_who"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+homepage.workspace = true
+
+description = "who ~ (ctutils) display information about currently logged-in users"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/who"
+
+[lib]
+path = "src/who.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["utmpx"] }
+
+[[bin]]
+name = "who"
+path = "src/main.rs"

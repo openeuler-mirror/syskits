@@ -37,9 +37,18 @@ test_unimplemented = []
 # * 仅在启用了 `--feature ctdoc` 时构建 `ctdoc`
 ctdoc = ["zip", "dep:cthelp_parser"]
 
+# "feat_selinux" == 启用对SELinux安全上下文的支持；使用 `--features feat_selinux`
+# 注意：
+# * selinux(-sys) crate在编译时需要访问C工具链中的 `libselinux` 头文件和共享库。
+# * 运行编译了 `feat_selinux` 的ctutils需要SELinux启用的内核。
+feat_selinux = [
+  "selinux",
+  "feat_require_selinux",
+]
+
 ##
 ## 功能集
-## (常见/核心和Tier1) 功能集
+## (常见/核心) 功能集
 # "feat_common_core" == 可在大多数目标上构建/运行的基线核心实用工具集
 feat_common_core = [
   "arch",
@@ -51,6 +60,7 @@ feat_common_core = [
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
 feat_os_unix = [
+  "feat_selinux",
   "feat_common_core",
 ]
 
@@ -58,6 +68,9 @@ feat_os_unix = [
 feat_os_windows = [
   "feat_common_core",  
 ]
+
+# "feat_require_selinux" == 依赖SELinux的实用工具集。
+feat_require_selinux = ["chcon"]
 
 [workspace.dependencies]
 bigdecimal = "0.4"

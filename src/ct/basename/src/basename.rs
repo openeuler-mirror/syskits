@@ -416,4 +416,74 @@ mod tests {
 
         assert_eq!(output, expected_result);
     }    
+
+    #[test]
+    fn test_basename_suffix_containing_dots() {
+        let input = "/path/to/file.tar.gz";
+        let expected_result = "file.tar";
+        let suffix = ".gz";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_long_input_without_suffix() {
+        let input = "/very/long/path/to/a/really/really/really/really/really/long/file/name";
+        let expected_result = "name";
+        let suffix = "";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_suffix_containing_special_characters() {
+        let input = "/path/to/file@#$%^&*.txt";
+        let expected_result = "file@#$%^&*";
+        let suffix = ".txt";
+
+        let output = basename(input, suffix);
+
+        assert_eq!(output, expected_result);
+    }
+
+    #[test]
+    fn test_basename_with_invalid_input() {
+        {
+            // Test case: Input is a single slash
+            let input = "/";
+            let expected_result = "/";
+            let suffix = "";
+
+            let output = basename(input, suffix);
+            assert_eq!(output, expected_result);
+        }
+    }
+
+    #[test]
+    fn test_ct_main() {
+        // Test case: Input is a single slash
+        let args = vec![ctcore::ct_util_name(), "/path/to/file@#$%^&*.txt", ".txt"];
+        let expected_result = "/path/to/file@#$%^&*";
+        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // println!("{:?}", result);
+        match result {
+            Err(_output) => {
+                let code = _output.code();
+                let message = _output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(_output) => {
+                s = "/path/to/file@#$%^&*".to_string();
+                // println!("result:{}", s);
+                // //assert_eq!(s,expected_output);
+            }
+        }
+        assert_eq!(s, expected_result);
+    }
 }

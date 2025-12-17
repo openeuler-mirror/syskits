@@ -56,6 +56,7 @@ feat_common_core = [
   "cat",
   "yes",
   "chcon",
+  "base64",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -161,6 +162,7 @@ digest = "0.10.7"
 
 ctcore = { version = ">=0.0.1", package = "ctcore", path = "src/ctcore" }
 ctcore_procs = { version = ">=0.0.1", package = "ctcore_procs", path = "src/ctcore_procs" }
+ct_base32 = { version = ">=0.0.1", path = "src/ct/base32" }
 
 [dependencies]
 clap = { workspace = true }
@@ -180,6 +182,7 @@ base32 = { optional = true, package = "ct_base32", path = "src/ct/base32" }
 cat = { optional = true, package = "ct_cat", path = "src/ct/cat" }
 yes = { optional = true, package = "ct_yes", path = "src/ct/yes" }
 chcon = { optional = true, package = "ct_chcon", path = "src/ct/chcon" }
+base64 = { optional = true, package = "ct_base64", path = "src/ct/base64" }
 
 [dev-dependencies]
 chrono = { workspace = true }

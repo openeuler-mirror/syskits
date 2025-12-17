@@ -307,4 +307,82 @@ mod tests {
         assert!(matches.get_flag(opt_flags::RECURSIVE));
     }
 
+    #[test]
+    fn test_version_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "--version"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_help_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_help_invalid_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "-H"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_version_valid_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "-V"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_dereference_true_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "--dereference"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_dereference_false_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "-h"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_dereference_whole_false_ctmain() {
+        // 测试用例：有效输入 --no-dereference
+        let args = vec![ctcore::ct_util_name(), "--no-dereference"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_preserve_root_true_ctmain() {
+        // 测试用例：有效输入 --preserve-root
+        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_preserve_root_false_ctmain() {
+        // 测试用例：有效输入 --no-preserve-root
+        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_recursive_ctmain() {
+        // 测试用例：有效输入 --recursive
+        let args = vec![ctcore::ct_util_name(), "-R"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
 }

@@ -969,5 +969,91 @@ mod tests {
         assert!(matches.get_flag(opt_flags::RECURSIVE));
     }
 
+    #[test]
+    fn test_ct_app_execution_recursive_whole() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --recursive
+        let args = vec![ctcore::ct_util_name(), "--recursive"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::RECURSIVE));
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_ct_app_execution_verbose() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "-v"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::VERBOSE));
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_ct_app_execution_verbose_whole() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "--verbose"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(opt_flags::VERBOSE));
+    }
+
+    ///////////////////////////////////////////
+    #[test]
+    fn test_version_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "--version"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_help_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_help_invalid_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "-H"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_version_valid_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "-V"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_dereference_true_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "--dereference"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_dereference_false_ctmain() {
+        let args = vec![ctcore::ct_util_name(), "-h"];
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_dereference_whole_false_ctmain() {
+        // 测试用例：有效输入 --no-dereference
+        let args = vec![ctcore::ct_util_name(), "--no-dereference"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
 
 }

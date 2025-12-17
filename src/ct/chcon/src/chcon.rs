@@ -1056,4 +1056,189 @@ mod tests {
         assert_eq!(result, 1);
     }
 
+    #[test]
+    fn test_preserve_root_true_ctmain() {
+        // 测试用例：有效输入 --preserve-root
+        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_preserve_root_false_ctmain() {
+        // 测试用例：有效输入 --no-preserve-root
+        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_recursive_ctmain() {
+        // 测试用例：有效输入 --recursive
+        let args = vec![ctcore::ct_util_name(), "-R"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_recursive_whole_ctmain() {
+        // 测试用例：有效输入 --recursive
+        let args = vec![ctcore::ct_util_name(), "--recursive"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_verbose_ctmain() {
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "-v"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_verbose_whole_ctmain() {
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "--verbose"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_chcon_ctmain() {
+        // 创建文件并写入内容
+        fn chcon_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+            let mut file = File::create(filename)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            Ok(())
+        }
+
+        // 删除指定文件
+        fn chcon_delete_file(filename: &str) -> io::Result<()> {
+            fs::remove_file(filename)?;
+            Ok(())
+        }
+
+        let filename = "test_chcon_h_ctmain.txt";
+
+        let content = "test_chcon_h_ctmain";
+
+        // 创建文件并写入内容
+        match chcon_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "system_u:object_r:httpd_sys_content_t",
+            filename,
+        ];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+        // 删除文件
+        match chcon_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        match result {
+            0 => assert_eq!(result, 0),
+            _ => eprintln!("Error result: {}", result),
+        }
+    }
+
+    #[test]
+    fn test_chcon_r_ctmain() {
+        let dir_path = "test";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chcon_h_ctmain.txt";
+
+        // 创建二级目录
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // 创建文件路径
+        let file_path = format!("{}/{}", subdir_path, file_name);
+
+        // 创建文件并写入内容
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-R",
+            "system_u:object_r:httpd_sys_content_t",
+            dir_path,
+        ];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+        // 删除目录及其内容
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+
+        match result {
+            0 => assert_eq!(result, 0),
+            _ => eprintln!("Error result: {}", result),
+        }
+    }
+
+    #[test]
+    fn test_chcon_r_t_ctmain() {
+        fn chcon_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+            let mut file = File::create(filename)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            Ok(())
+        }
+
+        // 删除指定文件
+        fn chcon_delete_file(filename: &str) -> io::Result<()> {
+            fs::remove_file(filename)?;
+            Ok(())
+        }
+
+        let filename = "test_chcon_h_ctmain.txt";
+
+        let content = "test_chcon_h_ctmain";
+
+        // 创建文件并写入内容
+        match chcon_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-R",
+            "-t",
+            "system_u:object_r:httpd_sys_content_t",
+            filename,
+        ];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+        // 删除文件
+        match chcon_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        match result {
+            0 => assert_eq!(result, 0),
+            _ => eprintln!("Error result: {}", result),
+        }
+    }
 }

@@ -183,3 +183,115 @@ fn basename(fullname: &str, suffix: &str) -> String {
     result
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_ct_app_execution_version() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--version"];
+
+        // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_basename_h_ctmain() {
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+
+    #[test]
+    fn test_basename_hh_ctmain() {
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+
+    #[test]
+    fn test_basename_hhh_ctmain() {
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-H"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+    }
+
+    #[test]
+    fn test_ct_app_invalid_argument() {
+        let command = ct_app();
+
+        // 测试用例：验证当提供未知参数时是否正确报错
+        let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+        let result = command.try_get_matches_from(invalid_args);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_support_missing_argument() {
+        let command = ct_app();
+
+        // 测试用例：验证当缺少必需的参数时是否正确报错
+        let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+        let result = command.try_get_matches_from(missing_args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_basename_v_ctmain() {
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+
+    #[test]
+    fn test_basename_vv_ctmain() {
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+
+    #[test]
+    fn test_flags_multiple() {
+        let command = ct_app();
+
+        let args = vec![ctcore::ct_util_name(), "-a"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(flags::MULTIPLE));
+    }
+}

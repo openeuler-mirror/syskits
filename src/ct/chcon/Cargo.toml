@@ -1,0 +1,27 @@
+[package]
+name = "ct_chcon"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "chcon ~ (ctutils) change file security context"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/chcon"
+
+[lib]
+path = "src/chcon.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "fs", "perms"] }
+selinux = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+fts-sys = { workspace = true }
+
+[[bin]]
+name = "chcon"
+path = "src/main.rs"

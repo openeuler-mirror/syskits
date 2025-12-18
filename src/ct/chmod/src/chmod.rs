@@ -1756,4 +1756,297 @@ mod tests {
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         assert_eq!(final_mode & 0o777, 0o745);
     }
+
+    #[test]
+    fn test_chmod_file_no_changes_flag() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // Set initial file permissions
+        let initial_mode = 0o644;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // Create Chmoder instance with changes flag set to false
+        let chmoder = Chmoder {
+            changes: false,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // Call chmod_file method
+        let result = chmoder.chmod_file(test_file_path);
+        assert!(result.is_ok());
+
+        // Verify file permissions remain unchanged
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o644, initial_mode);
+    }
+
+    #[test]
+    fn test_chmod_file_invalid_mode_string() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // Set initial file permissions
+        let initial_mode = 0o600;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // Create Chmoder instance with invalid mode string
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("invalid_mode_string".to_string()),
+        };
+
+        // Call chmod_file method
+        let result = chmoder.chmod_file(test_file_path);
+        assert!(result.is_ok());
+
+        let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        let dir_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+        assert_eq!(dir_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_file_no_fmode_specified() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // Set initial file permissions
+        let initial_mode = 0o600;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // Create Chmoder instance with fmode set to None
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: None,
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // Call chmod_file method
+        let result = chmoder.chmod_file(test_file_path);
+        assert!(result.is_ok());
+
+        let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        let dir_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o745);
+        assert_eq!(dir_final_mode & 0o777, 0o745);
+    }
+
+    #[test]
+    fn test_chmod_file_no_cmode_specified() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // Set initial file permissions
+        let initial_mode = 0o600;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // Create Chmoder instance with cmode set to None
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: None,
+        };
+
+        // Call chmod_file method
+        let result = chmoder.chmod_file(test_file_path);
+        assert!(result.is_ok());
+
+        // Verify file permissions have been changed according to fmode
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_file_both_fmode_and_cmode_specified() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // Set initial file permissions
+        let initial_mode = 0o600;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // Create Chmoder instance with both fmode and cmode specified
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // Call chmod_file method
+        let result = chmoder.chmod_file(test_file_path);
+        assert!(result.is_ok());
+
+        // Verify file permissions have been changed according to fmode
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_walk_dir_nonexistent_directory() {
+        let non_existent_dir_path = Path::new("/nonexistent/directory");
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_walk_dir(non_existent_dir_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_walk_dir_file_instead_of_directory() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_walk_dir(test_file_path);
+        assert!(result.is_ok());
+        // Verify file and directory permissions have been changed
+        let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        let dir_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+        assert_eq!(dir_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_walk_dir_single_level_recursive() {
+        let temp_dir = Builder::new()
+            .prefix("test_walk_dir_single_level_recursive")
+            .tempdir()
+            .unwrap();
+        let single_level_dir_path = temp_dir.path().join("single_level_dir");
+
+        // Create a directory and a file within it
+        fs::create_dir(&single_level_dir_path).unwrap();
+        let test_file_path = single_level_dir_path.join("test_walk_dir_single_level_recursive.txt");
+        File::create(&test_file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_walk_dir(single_level_dir_path.as_path());
+        assert!(result.is_ok());
+
+        // Verify file and directory permissions have been changed
+        let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        let dir_final_mode = fs::metadata(single_level_dir_path)
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+        assert_eq!(dir_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_file_symlink() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_symlink")
+            .tempdir()
+            .unwrap();
+        let symlink_target_path = temp_dir.path().join("symlink_target.txt");
+        let symlink_path = temp_dir.path().join("test_chmod_file_symlink.txt");
+
+        // Create a target file and a symlink pointing to it
+        File::create(&symlink_target_path).unwrap();
+        std::os::unix::fs::symlink(symlink_target_path, symlink_path.clone()).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(symlink_path.as_path());
+        assert!(result.is_ok());
+
+        // Verify symlink permissions have been changed
+        let symlink_final_mode = fs::symlink_metadata(symlink_path)
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(symlink_final_mode & 0o777, 0o777);
+    }
+
+    #[test]
+    fn test_chmod_file_preserve_root() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_preserve_root")
+            .tempdir()
+            .unwrap();
+        let root_dir_path = temp_dir.path().join("root");
+        let test_file_path = root_dir_path.join("test_chmod_file_preserve_root.txt");
+
+        // Create a dummy root directory and a file within it
+        fs::create_dir_all(&root_dir_path).unwrap();
+        File::create(&test_file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: true,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(root_dir_path.as_path());
+        assert!(result.is_ok());
+
+        // Verify file and root directory permissions are unchanged
+        let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        let root_dir_final_mode = fs::metadata(root_dir_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+        assert_eq!(root_dir_final_mode & 0o777, 0o644);
+    }
+
 }

@@ -1148,4 +1148,100 @@ mod tests {
         assert_eq!(a, ["w", "dir/"]);
     }
 
+    #[test]
+    fn test_extract_negative_modes_case7() {
+        // Negative modes with numeric mode
+        let (c, a) = extract_negative_modes(["-w", "-r", "0644"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "0644"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case8() {
+        // Negative modes mixed with positive modes
+        let (c, a) = extract_negative_modes(["-w", "+x", "-r", "file"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "+x", "file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case9() {
+        // Negative modes before and after double hyphen
+        let (c, a) =
+            extract_negative_modes(["-w", "--", "-r", "file", "-x"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(a, ["w", "--", "-r", "file", "-x"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case10() {
+        // Negative modes without any file argument
+        let (c, a) = extract_negative_modes(["-w", "-r"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case11() {
+        // Single negative mode with file argument
+        let (c, a) = extract_negative_modes(["-w", "file"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(a, ["w", "file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case12() {
+        // Single negative mode without any file argument
+        let (c, a) = extract_negative_modes(["-w"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(a, ["w"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case13() {
+        // No negative modes, only file arguments
+        let (c, a) = extract_negative_modes(["file1", "file2"].iter().map(OsString::from));
+        assert_eq!(c, None);
+        assert_eq!(a, ["file1", "file2"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case14() {
+        // Negative modes with symbolic owner/group/user permissions
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "-u=rwx", "-g=rx", "-o=x"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r,-u=rwx,-g=rx,-o=x".to_string()));
+        assert_eq!(a, ["w"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case15() {
+        // Negative modes with special characters in file names
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "file space", "file#special"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "file space", "file#special"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case16() {
+        // Negative modes with multiple double hyphens
+        let (c, a) = extract_negative_modes(
+            ["-w", "--", "-r", "--", "test_extract_negative_modes_case16"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(
+            a,
+            ["w", "--", "-r", "--", "test_extract_negative_modes_case16"]
+        );
+    }
+
 }

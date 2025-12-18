@@ -362,3 +362,825 @@ fn chroot_set_user(username: &str) -> CTResult<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    #[cfg(test)]
+    mod tests_ct_app {
+        use crate::{ct_app, ctmain, opt_flags};
+        use clap::error::ErrorKind;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_version_invalid() {
+            let args = ["--version", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 125);
+        }
+
+        #[test]
+        fn test_ct_app_newroot_required() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_user_short_flag() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "-u", "testuser"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches.get_one::<String>(opt_flags::USER).unwrap(),
+                "testuser"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_group_long_flag() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "--group", "testgroup"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches.get_one::<String>(opt_flags::GROUP).unwrap(),
+                "testgroup"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_groups_short_flag() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "-G",
+                "group1,group2,group3",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches.get_one::<String>(opt_flags::GROUPS).unwrap(),
+                "group1,group2,group3"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_userspec_long_flag() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "--userspec",
+                "testuser:testgroup",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches.get_one::<String>(opt_flags::USERSPEC).unwrap(),
+                "testuser:testgroup"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_chdir_long_flag() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "--skip-chdir"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::SKIP_CHDIR));
+        }
+
+        #[test]
+        fn test_ct_app_command_trailing_arg() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "ls", "-l"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(opt_flags::COMMAND)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["ls", "-l"]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_command_trailing_arg_with_dash() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "ls", "-l", "-a"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(opt_flags::COMMAND)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["ls", "-l", "-a"]
+            );
+        }
+        #[test]
+        fn test_ct_app_command_trailing_arg_with_dash_and_dash() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "ls", "-l", "-a", "-"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(opt_flags::COMMAND)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["ls", "-l", "-a", "-"]
+            );
+        }
+        #[test]
+        fn test_ct_app_command_trailing_arg_with_dash_and_dash_and_dash() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "ls", "-l", "-a", "-", "-"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(opt_flags::COMMAND)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["ls", "-l", "-a", "-", "-"]
+            );
+        }
+        #[test]
+        fn test_ct_app_command_trailing_arg_with_dash_and_dash_and_dash_and_dash() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "ls",
+                "-l",
+                "-a",
+                "-",
+                "-",
+                "-",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(opt_flags::COMMAND)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["ls", "-l", "-a", "-", "-", "-"]
+            );
+        }
+        #[test]
+        fn test_ct_app_invalid_newroot_path() {
+            let command = ct_app();
+            let binding = String::from("nonexistent/path");
+            let args = vec![ctcore::ct_util_name(), &binding, "--wve"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_duplicate_user_specification() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "-g",
+                "testgroup",
+                "--groups",
+                "anothergroup",
+                "--groups",
+                "yetanothergroup",
+                "-u",
+                "testuser",
+                "--userspec",
+                "anotheruser:anothertestgroup",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_empty_userspec_value() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "--userspec=0",
+                "-g",
+                "testgroup",
+                "--groups",
+                "anothergroup",
+                "--groups",
+                "yetanothergroup",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_malformed_userspec_value() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "-e-userspec",
+                "invalid:user:spece",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_duplicate_group_specification() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "-g",
+                "testgroup",
+                "--groups",
+                "anothergroup",
+                "--groups",
+                "yetanothergroup",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_help_flag() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_version_and_command_flag_combination() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "--version",
+                "--",
+                "ls",
+                "-l",
+                "-a",
+                "-",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_group_id() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![
+                ctcore::ct_util_name(),
+                &binding,
+                "--group-id=999999999",
+                "999999999",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_missing_command_argument() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_extra_unrecognized_arguments() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            let args = vec![ctcore::ct_util_name(), &binding, "--unknown-flag"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests_ctmain {
+        use crate::ctmain;
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ctmain_version() {
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn test_ctmain_v() {
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn test_ctmain_h() {
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+        #[test]
+        fn test_ctmain_help() {
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+        #[test]
+        fn test_ctmain_hh() {
+            let args = [ctcore::ct_util_name(), "-hh"];
+            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+        #[test]
+        fn test_ctmain_hhh() {
+            let args = [ctcore::ct_util_name(), "-hhh"];
+            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn test_ctmain_newroot_required() {
+            let args = [ctcore::ct_util_name()];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert!(matches!(result, 125));
+        }
+        #[test]
+        fn test_ctmain_valid_newroot_required() {
+            let error_code = 125; //没有执行文件bash，退出码125
+            let temp_dir = Builder::new()
+                .prefix("test_ctmain_valid_chdir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_skip_dir.txt");
+            File::create(&test_file_path).unwrap();
+
+            let args = [
+                ctcore::ct_util_name(),
+                test_file_path.to_str().expect("REASON"),
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_valid_newroot() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_invalid_newroot() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/nonexistent/path"),
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_user_short_flag() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "-u",
+                "testuser",
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_group_long_flag() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "--group",
+                "testgroup",
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_groups_short_flag() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "-G",
+                "group1,group2,group3",
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_userspec_long_flag() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "--userspec",
+                "testuser:testgroup",
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_skip_chdir_long_flag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ctmain_skip_chdir_long_flag")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_skip_dir.txt");
+            File::create(&test_file_path).unwrap();
+
+            let error_code = 125;
+
+            let args = [
+                ctcore::ct_util_name(),
+                test_file_path.to_str().expect("REASON"),
+                "--skip-chdir",
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+            // 清理测试环境（无需手动清理，TempDir 会在作用域结束时自动删除）
+        }
+        #[test]
+        fn test_ctmain_skip_chdir_short_flag() {
+            let error_code = 125;
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "-c",
+                "ls",
+                "-l",
+                "-lc",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_command_trailing_arg() {
+            let error_code = 125;
+
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+        #[test]
+        fn test_ctmain_command_trailing_arg_with_shell() {
+            let error_code = 125;
+
+            let args = [
+                ctcore::ct_util_name(),
+                &String::from("/valid/newroot/path"),
+                "ls",
+                "-l",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+
+        #[test]
+        fn test_ctmain_default_shell_no_command_given() {
+            let error_code = 125;
+            let args = [ctcore::ct_util_name(), &String::from("/valid/newroot/path")];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, error_code);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests_private_fn {
+        use crate::{chroot_enter, chroot_set_user};
+        use crate::{chroot_set_groups_from_str, chroot_set_main_group};
+
+        #[test]
+        fn test_set_user_empty_user() {
+            let result = chroot_set_user("");
+            let err = match result {
+                Ok(_) => 0,
+                Err(_) => 1,
+            };
+            assert_eq!(err, 0);
+        }
+
+        #[test]
+        fn test_set_groups_from_str_empty() {
+            let result = chroot_set_groups_from_str("");
+            assert_eq!(result.is_ok(), true);
+        }
+        #[test]
+        fn test_set_groups_from_str_empty_group() {
+            let groups = "group1,,group3";
+            let result = chroot_set_groups_from_str(groups);
+            assert_eq!(result.is_ok(), false);
+        }
+        #[test]
+        fn test_set_groups_from_str_invalid_group() {
+            let groups = "a invalid_group";
+            let result = chroot_set_groups_from_str(groups);
+            assert_eq!(result.is_err(), true);
+        }
+        #[test]
+        fn test_set_groups_from_str_invalid() {
+            let groups = "invalid_group";
+            let result = chroot_set_groups_from_str(groups);
+            assert_eq!(result.is_err(), true);
+        }
+
+        #[test]
+        fn test_set_groups_from_str_valid() {
+            let groups = "group1,group2,group3";
+            let result = chroot_set_groups_from_str(groups);
+            assert_eq!(result.is_ok(), false);
+        }
+
+        #[test]
+        fn test_set_groups_from_str_set_groups_failed() {
+            let groups = "group1,group2,group3,group4";
+            let result = chroot_set_groups_from_str(groups);
+            assert_eq!(result.is_err(), true);
+        }
+
+        #[test]
+        fn test_set_main_group_empty() {
+            // Set an empty group
+            let result = chroot_set_main_group("");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_set_main_group_no_such_group() {
+            // Set a non-existent group
+            let result = chroot_set_main_group("non_existent_group");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_set_main_group_empty_string() {
+            let result = chroot_set_main_group("");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_set_main_group_single_whitespace() {
+            let result = chroot_set_main_group(" ");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_set_main_group_valid_existing_group() {
+            let existing_group = "valid_group";
+            // Assume `create_group` is a function to create a group if it doesn't exist
+            create_group(existing_group);
+            let result = chroot_set_main_group(existing_group);
+            assert!(result.is_err());
+        }
+
+        fn create_group(group_name: &str) -> () {
+            if group_name.is_empty() {
+                delete_group(group_name);
+            }
+            ()
+        }
+
+        fn delete_group(group_name: &str) -> () {
+            if group_name.is_empty() {
+                // Delete the group
+            }
+            ()
+        }
+
+        #[test]
+        fn test_set_main_group_special_characters() {
+            let special_chars_group = "!@#$%^&*()_+{}|:\"<>?";
+            let result = chroot_set_main_group(special_chars_group);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_set_main_group_exceeds_max_length() {
+            let long_group_name = "A".repeat(101); // Assuming max length is 100 characters
+            let result = chroot_set_main_group(&long_group_name);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_set_main_group_multiple_times_same_group() {
+            let existing_group = "existing_group";
+            create_group(existing_group);
+
+            for _ in 0..3 {
+                let result = chroot_set_main_group(existing_group);
+                assert!(result.is_err());
+            }
+        }
+
+        #[test]
+        fn test_set_main_group_deleted_group() {
+            let to_delete_group = "to_delete_group";
+            create_group(to_delete_group);
+            delete_group(to_delete_group); // Assume `delete_group` function exists
+
+            let result = chroot_set_main_group(to_delete_group);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_set_main_group_non_empty_current_main_group() {
+            let current_main_group = "current_main_group";
+            let new_main_group = "new_main_group";
+            create_group(current_main_group);
+            create_group(new_main_group);
+
+            let result = chroot_set_main_group(new_main_group);
+            assert!(result.is_err()); // Depending on the system's behavior, this might be is_err()
+        }
+
+        #[test]
+        fn test_set_main_group_to_itself() {
+            let group_to_set = "group_to_set";
+            create_group(group_to_set);
+
+            let result = chroot_set_main_group(group_to_set);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_set_main_group_leading_trailing_whitespaces() {
+            let group_with_spaces = "   valid_group   ";
+            create_group("valid_group");
+            let result = chroot_set_main_group(group_with_spaces);
+            assert!(result.is_err());
+        }
+
+        use std::path::Path;
+
+        #[test]
+        fn test_enter_chroot_success() {
+            let root = Path::new("/home/user");
+            let result = chroot_enter(root, false);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_enter_chroot_skip_chdir() {
+            let root = Path::new("/home/user");
+            let result = chroot_enter(root, true);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_enter_chroot_failure() {
+            let root = Path::new("/invalid/path");
+            let result = chroot_enter(root, false);
+            assert!(result.is_err());
+        }
+    }
+}

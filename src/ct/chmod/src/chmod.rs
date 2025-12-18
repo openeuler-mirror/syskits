@@ -1477,4 +1477,283 @@ mod tests {
         // 清理测试环境（无需手动清理，TempDir 会在作用域结束时自动删除）
     }
 
+    #[test]
+    fn test_walk_dir() {
+        // 创建临时目录结构
+        let temp_dir = Builder::new().prefix("walk_dir_test").tempdir().unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_path = sub_dir_path.join("test_walk_dir.txt");
+        File::create(&test_file_path).unwrap();
+
+        // 设置初始文件和目录权限
+        let initial_dir_mode = 0o700;
+        let initial_file_mode = 0o600;
+        fs::set_permissions(&sub_dir_path, Permissions::from_mode(initial_dir_mode)).unwrap();
+        fs::set_permissions(&test_file_path, Permissions::from_mode(initial_file_mode)).unwrap();
+
+        // 创建 Chmoder 实例
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // 调用 walk_dir 方法
+        let result = chmoder.chmod_walk_dir(temp_dir.path());
+        assert!(result.is_ok());
+
+        // 验证目录和文件权限已更改
+        let final_dir_mode = fs::metadata(&sub_dir_path).unwrap().permissions().mode();
+        let final_file_mode = fs::metadata(&test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_dir_mode & 0o777, 0o644);
+        assert_eq!(final_file_mode & 0o777, 0o644);
+
+        // 清理测试环境（无需手动清理，TempDir 会在作用域结束时自动删除）
+    }
+
+    #[test]
+    fn test_chmod_file() {
+        // 使用 NamedTempFile 创建临时文件
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // 设置初始文件权限
+        let initial_mode = 0o600;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // 创建 Chmoder 实例
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // 调用 chmod_file 方法
+        let result = chmoder.chmod_file(test_file_path);
+        assert!(result.is_ok());
+
+        // 验证文件权限已更改
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o644);
+
+        // 清理测试环境（NamedTempFile 会在作用域结束时自动删除）
+    }
+
+    #[test]
+    fn test_change_file() {
+        // 使用 NamedTempFile 创建临时文件
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        // 设置初始文件权限
+        let initial_mode = 0o600;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // 创建 Chmoder 实例
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // 调用 change_file 方法
+        let result = chmoder.change_file(initial_mode, 0o644, test_file_path);
+        assert!(result.is_ok());
+
+        // 验证文件权限已更改
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_walk_dir_empty_directory() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let empty_dir_path = temp_dir.path().join("empty_dir");
+
+        // Create an empty directory
+        fs::create_dir(&empty_dir_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_walk_dir(empty_dir_path.as_path());
+        assert!(result.is_ok());
+
+        let file_final_mode = fs::metadata(empty_dir_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_change_file_invalid_mode() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let test_file_path = temp_dir.path().join("test_change_file_invalid_mode.txt");
+        File::create(&test_file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("invalid_mode".to_string()),
+        };
+
+        let result = chmoder.change_file(0o600, 0o644, test_file_path.as_path());
+
+        println!("Result: {:?}", result);
+        assert!(result.is_ok());
+
+        let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_multiple_files() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let file1_path = temp_dir.path().join("test_chmod_multiple_files1.txt");
+        let file2_path = temp_dir.path().join("test_chmod_multiple_files2.txt");
+        File::create(&file1_path).unwrap();
+        File::create(&file2_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod(&[
+            file1_path.to_str().unwrap().to_string(),
+            file2_path.to_str().unwrap().to_string(),
+        ]);
+        assert!(result.is_ok());
+
+        // Verify both files' permissions have been changed
+        let file1_final_mode = fs::metadata(file1_path).unwrap().permissions().mode();
+        let file2_final_mode = fs::metadata(file2_path).unwrap().permissions().mode();
+        assert_eq!(file1_final_mode & 0o777, 0o644);
+        assert_eq!(file2_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_recursive_single_level() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let dir_path = temp_dir.path().join("dir");
+        let file_path = dir_path.join("test_chmod_recursive_single_level.txt");
+        fs::create_dir_all(&dir_path).unwrap();
+        File::create(&file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod(&[dir_path.to_str().unwrap().to_string()]);
+        assert!(result.is_ok());
+
+        // Verify the file's permission within the directory has been changed
+        let file_final_mode = fs::metadata(file_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_recursive_multi_level() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let dir_path = temp_dir.path().join("dir1/dir2");
+        let file_path = dir_path.join("test_chmod_recursive_multi_level.txt");
+        fs::create_dir_all(&dir_path).unwrap();
+        File::create(&file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod(&[temp_dir.path().join("dir1").to_str().unwrap().to_string()]);
+        assert!(result.is_ok());
+
+        // Verify the file's permission within the nested directory has been changed
+        let file_final_mode = fs::metadata(file_path).unwrap().permissions().mode();
+        assert_eq!(file_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_file_with_fmode_only() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let test_file_path = temp_dir.path().join("test_chmod_file_with_fmode_only.txt");
+        File::create(&test_file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: None,
+        };
+
+        let result = chmoder.chmod_file(test_file_path.as_path());
+        assert!(result.is_ok());
+
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_file_with_cmode_only() {
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+        let test_file_path = temp_dir.path().join("test_chmod_file_with_cmode_only.txt");
+        File::create(&test_file_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: None,
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(test_file_path.as_path());
+        assert!(result.is_ok());
+
+        let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o745);
+    }
 }

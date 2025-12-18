@@ -1037,4 +1037,115 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn test_ct_app_arg_missing_value_for_reference() {
+        let command = ct_app();
+
+        // 测试用例：缺少 --reference 参数的值
+        let args = vec![ctcore::ct_util_name(), "--reference"];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn test_ct_app_arg_empty_value_for_mode() {
+        let command = ct_app();
+
+        // 测试用例：指定空字符串作为 --mode 的值
+        let args = vec![ctcore::ct_util_name(), "--mode", ""];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+    #[test]
+    fn test_ct_app_arg_help() {
+        let command = ct_app();
+
+        // 测试用例：请求帮助信息（--help 或 -h）
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+    #[test]
+    fn test_ct_app_arg_version() {
+        let command = ct_app();
+
+        // 测试用例：请求版本信息（--version）
+        let args = vec![ctcore::ct_util_name(), "--version"];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    #[test]
+    fn test_extract_negative_modes_case1() {
+        // "chmod -w -r file" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
+        // Therefore, "w" is added as pseudo mode to pass clap.
+
+        let (c, a) = extract_negative_modes(["-w", "-r", "file"].iter().map(OsString::from));
+
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case2() {
+        // "chmod -w file -r" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
+        // Therefore, "w" is added as pseudo mode to pass clap.
+
+        let (c, a) = extract_negative_modes(["-w", "file", "-r"].iter().map(OsString::from));
+
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case3() {
+        // "chmod -w -- -r file" becomes "chmod -w -r file", where "-r" is interpreted as file.
+        // Again, "w" is needed as pseudo mode.
+
+        let (c, a) = extract_negative_modes(["-w", "--", "-r", "f"].iter().map(OsString::from));
+
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(a, ["w", "--", "-r", "f"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case4() {
+        // "chmod -- -r file" becomes "chmod -r file".
+
+        let (c, a) = extract_negative_modes(["--", "-r", "file"].iter().map(OsString::from));
+
+        assert_eq!(c, None);
+        assert_eq!(a, ["--", "-r", "file"]);
+    }
+
+    // Additional test cases (10 examples)
+    #[test]
+    fn test_extract_negative_modes_case5() {
+        // Multiple negative modes with multiple files
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "-x", "file1", "file2"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r,-x".to_string()));
+        assert_eq!(a, ["w", "file1", "file2"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case6() {
+        // Negative modes followed by a directory
+        let (c, a) = extract_negative_modes(["-w", "-r", "dir/"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "dir/"]);
+    }
+
 }

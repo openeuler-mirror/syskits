@@ -1266,4 +1266,418 @@ mod test {
         }
     }
 
+    #[test]
+    fn test_basenc_vv_ctmain() {
+        {
+            let args = ["-V", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+    //////////////////////////////////////////////////////
+    #[test]
+    fn test_basenc_encode_base16_ignore() {
+        let filename = "test_basenc_encode_base16_ignore.txt";
+        let content = "Test  test_base_common_handle_input_encode_base16";
+        let expected_output = "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--ignore-garbage",
+            "--base16",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_encode_base32_ignore() {
+        let filename = "test_basenc_encode_base32_ignore.txt";
+        let content = "Test test_base_common_handle_input_encode_base32";
+        let expected_output =
+            "KRSXG5BAORSXG5C7MJQXGZK7MNXW23LPNZPWQYLOMRWGKX3JNZYHK5C7MVXGG33EMVPWEYLTMUZTE===";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--ignore-garbage",
+            "--base32",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+    #[test]
+    fn test_basenc_encode_base32hex_ignore() {
+        let filename = "test_basenc_encode_base32hex_ignore.txt";
+        let content = "Test test_base_common_handle_input_encode_base32hex";
+        let expected_output =
+             "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--ignore-garbage",
+            "--base32hex",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_encode_base64_ignore() {
+        let filename = "test_basenc_encode_base64_ignore.txt";
+        let content = "Test test_base_common_handle_input_encode_base64";
+        let expected_output = "VGVzdCB0ZXN0X2Jhc2VfY29tbW9uX2hhbmRsZV9pbnB1dF9lbmNvZGVfYmFzZTY0";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--ignore-garbage",
+            "--base64",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+    #[test]
+    fn test_basenc_encode_base64url_ignore() {
+        let filename = "test_basenc_encode_base64url_ignore.txt";
+        let content = "Test test_base_common_handle_input_encode_base64url";
+
+        let expected_output =
+            "VGVzdCB0ZXN0X2Jhc2VfY29tbW9uX2hhbmRsZV9pbnB1dF9lbmNvZGVfYmFzZTY0dXJs";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--ignore-garbage",
+            "--base64url",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base16_ignore() {
+        let filename = "test_basenc_decode_base16_ignore.txt";
+        let content =
+             "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+        let expected_output = "Test  test_base_common_handle_input_encode_base16";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-d",
+            "--ignore-garbage",
+            "--base16",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base16_wrap_ignore() {
+        let filename = "test_basenc_decode_base16_wrap_ignore.txt";
+        let content =
+             "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+        let expected_output = "Test  test_base_common_handle_input_encode_base16";
+
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-d",
+            "--ignore-garbage",
+            "--base16",
+            "--wrap=8",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base32_ignore() {
+        let filename = "test_basenc_decode_base32_ignore.txt";
+        let expected_output = "Test test_base_common_handle_input_encode_base32";
+        let content =
+            "KRSXG5BAORSXG5C7MJQXGZK7MNXW23LPNZPWQYLOMRWGKX3JNZYHK5C7MVXGG33EMVPWEYLTMUZTE===";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-d",
+            "--ignore-garbage",
+            "--base32",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base32_wrap_ignore() {
+        let filename = "test_basenc_decode_base32_wrap_ignore.txt";
+        let expected_output = "Test test_base_common_handle_input_encode_base32";
+        let content =
+            "KRSXG5BAORSXG5C7MJQXGZK7MNXW23LPNZPWQYLOMRWGKX3JNZYHK5C7MVXGG33EMVPWEYLTMUZTE===";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        // 测试用例1：有效输入
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-d",
+            "--ignore-garbage",
+            "--base32",
+            "--wrap=8",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
 }

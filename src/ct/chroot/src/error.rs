@@ -211,4 +211,66 @@ mod tests {
         assert_eq!(error.code(), 125);
     }
 
+    #[test]
+    fn test_code_for_command_failed_error() {
+        let error_message = "user not found";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::CommandFailed("ls".into(), os_error.into());
+        assert_eq!(error.code(), 126);
+    }
+
+    #[test]
+    fn test_code_for_command_not_found_error() {
+        let error_message = "user not found";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::CommandNotFound("nonexistent_command".into(), os_error.into());
+        assert_eq!(error.code(), 127);
+    }
+
+    #[test]
+    fn test_code_for_invalid_userspec_error() {
+        let error = ChrootError::InvalidUserspec("user:group".into());
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_code_for_missing_new_root_error() {
+        let error = ChrootError::MissingNewRoot;
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_code_for_no_such_group_error() {
+        let error = ChrootError::NoSuchGroup("unknown_group".into());
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_code_for_no_such_directory_error() {
+        let error = ChrootError::NoSuchDirectory("/nonexistent/directory".into());
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_code_for_set_gid_failed_error() {
+        let error_message = "user not found";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::SetGidFailed("1000".into(), os_error.into());
+        assert_eq!(error.code(), 125);
+    }
+
+    // #[test]
+    // fn test_code_for_set_groups_failed_error() {
+    //
+    //     let error = ChrootError::SetGroupsFailed(Error::default());
+    //     assert_eq!(error.code(), 125);
+    // }
+
+    #[test]
+    fn test_code_for_set_user_failed_error() {
+        let error_message = "user not found";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::SetUserFailed("nonexistent_user".into(), os_error.into());
+        assert_eq!(error.code(), 125);
+    }
 }

@@ -190,4 +190,34 @@ mod tests {
         assert_eq!(result, Some(Err(())));
         assert_eq!(incomplete.is_empty(), false);
     }
+
+    #[test]
+    fn test_try_complete_offsets_empty_input() {
+        let mut incomplete = Utf8Incomplete::new(&[0xC2, 0x80]); // Incomplete UTF-8 sequence
+        let input: &[u8] = &[]; // Empty input
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 0);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.is_empty(), false);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_full_input() {
+        let mut incomplete = Utf8Incomplete::new(&[0xC2, 0x80]); // Incomplete UTF-8 sequence
+        let input = &[0x61, 0x62, 0x63, 0x64, 0x65]; // Full input
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 2);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.is_empty(), false);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_long_input() {
+        let mut incomplete = Utf8Incomplete::new(&[0xC2, 0x80]); // Incomplete UTF-8 sequence
+        let input = &[0x61; 100]; // Long input
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 2);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.is_empty(), false);
+    }
 }

@@ -423,4 +423,43 @@ mod tests {
         assert!(executable.is_ok());
     }
 
+    #[test]
+    fn test_ct_app_short_option_s() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "-s"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_short_option_t() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "-t"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_short_option_u() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "-u"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_short_option_uppercase_t() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "-T"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_short_option_w() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "-w"];
+        let executable = command.try_get_matches_from(args);
+        assert!(executable.is_ok());
+    }
 }

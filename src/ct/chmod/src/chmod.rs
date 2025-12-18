@@ -1244,4 +1244,117 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_extract_negative_modes_case17() {
+        // Negative modes followed by a command option (e.g., -v for verbose)
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "-v", "test_extract_negative_modes_case17"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "-v", "test_extract_negative_modes_case17"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case18() {
+        // Negative modes with leading and trailing whitespace
+        let (c, a) = extract_negative_modes(
+            [" -w ", " -r ", "test_extract_negative_modes_case18"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, None);
+        assert_eq!(a, [" -w ", " -r ", "test_extract_negative_modes_case18"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case19() {
+        // Negative modes with mixed case (e.g., -W, -R)
+        let (c, a) = extract_negative_modes(
+            ["-W", "-R", "test_extract_negative_modes_case19"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, None);
+        assert_eq!(a, ["-W", "-R", "test_extract_negative_modes_case19"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case20() {
+        // Negative modes followed by a relative path
+        let (c, a) = extract_negative_modes(["-w", "-r", "subdir/file"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "subdir/file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case21() {
+        // Negative modes with symbolic links
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "symlink -> realfile"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "symlink -> realfile"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case22() {
+        // Negative modes followed by an absolute path
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "/absolute/path/to/file"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "/absolute/path/to/file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case23() {
+        // Negative modes followed by a UNC path (Windows-specific)
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "\\\\server\\share\\file"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "\\\\server\\share\\file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case24() {
+        // Negative modes with non-ASCII characters in file names
+        let (c, a) =
+            extract_negative_modes(["-w", "-r", "ファイル名.txt"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "ファイル名.txt"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case25() {
+        // Negative modes with relative path
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "../relative/path/file"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "../relative/path/file"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case26() {
+        // Negative modes with absolute path
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "/absolute/path/file"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "/absolute/path/file"]);
+    }
+
 }

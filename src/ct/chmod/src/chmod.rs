@@ -1357,4 +1357,124 @@ mod tests {
         assert_eq!(a, ["w", "/absolute/path/file"]);
     }
 
+    #[test]
+    fn test_extract_negative_modes_case27() {
+        // Negative modes with multiple double hyphens
+        let (c, a) =
+            extract_negative_modes(["-w", "--", "-r", "--", "file"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(a, ["w", "--", "-r", "--", "file"]);
+    }
+    #[test]
+    fn test_extract_negative_modes_case28() {
+        // Negative modes with non-standard characters in file names
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "file_with_!@#$%^&*()_+{}|:\"<>?~`.txt"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "file_with_!@#$%^&*()_+{}|:\"<>?~`.txt"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case29() {
+        // Negative modes with symbolic links
+        let (c, a) = extract_negative_modes(["-w", "-r", "symlink"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "symlink"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case30() {
+        // Negative modes with FIFO (named pipe)
+        let (c, a) = extract_negative_modes(["-w", "-r", "fifo_pipe"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "fifo_pipe"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case31() {
+        // Negative modes with device file
+        let (c, a) = extract_negative_modes(["-w", "-r", "/dev/null"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "/dev/null"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case32() {
+        // Negative modes with socket file
+        let (c, a) =
+            extract_negative_modes(["-w", "-r", "socket_file.sock"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "socket_file.sock"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case33() {
+        // Negative modes with empty string as file argument
+        let (c, a) = extract_negative_modes(["-w", "-r", ""].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", ""]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case34() {
+        // Negative modes with spaces in file names
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", "file with spaces.txt"]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "file with spaces.txt"]);
+    }
+
+    #[test]
+    fn test_extract_negative_modes_case35() {
+        // Negative modes with special characters in file names (escaped)
+        let (c, a) = extract_negative_modes(
+            ["-w", "-r", r#"file\ with\ spaces.txt"#]
+                .iter()
+                .map(OsString::from),
+        );
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, ["w", "file\\ with\\ spaces.txt"]);
+    }
+
+    #[test]
+    fn test_chmod() {
+        // 创建临时目录
+        let temp_dir = Builder::new().prefix("chmod_test").tempdir().unwrap();
+
+        // 在临时目录下创建测试文件
+        let test_file_path = temp_dir.path().join("test_chmod.txt");
+        File::create(&test_file_path).unwrap();
+
+        // 设置初始文件权限
+        let initial_mode = 0o600;
+        fs::set_permissions(&test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+
+        // 创建 Chmoder 实例
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: true,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        // 调用 chmod 方法
+        let result = chmoder.chmod(&[test_file_path.to_str().unwrap().to_string()]);
+        assert!(result.is_ok());
+
+        // 验证文件权限已更改
+        let final_mode = fs::metadata(&test_file_path).unwrap().permissions().mode();
+        assert_eq!(final_mode & 0o777, 0o644);
+
+        // 清理测试环境（无需手动清理，TempDir 会在作用域结束时自动删除）
+    }
+
 }

@@ -434,3 +434,417 @@ impl Chmoder {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::ffi::OsString;
+    use std::fs::File;
+    use std::fs::{self, Permissions};
+    use std::io;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::{Builder, NamedTempFile};
+
+    #[cfg(test)]
+    mod tests_ctmain {
+        use super::*;
+
+        use std::ffi::OsString;
+        use std::fs::File;
+
+        use std::io;
+        use std::io::Write;
+
+        #[test]
+        fn test_ctmain_arg_changes() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--changes"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+
+        #[test]
+        fn test_ctmain_arg_c() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "-c"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+
+        #[test]
+        fn test_ctmain_arg_quiet() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--quiet"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_silent() {
+            // 测试用例2：别名输入
+            let args = vec![ctcore::ct_util_name(), "--silent"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_verbose() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--verbose"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_no_preserve_root() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_preserve_root() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_recursive() {
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--recursive"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_r() {
+            // 测试用例2：短选项输入
+            let args = vec![ctcore::ct_util_name(), "-R"];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_reference() {
+            // 测试用例1：有效输入
+            let reference_file = "/path/to/reference_file";
+            let args = vec![ctcore::ct_util_name(), "--reference", reference_file];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_mode() {
+            // 创建文件并写入内容
+            fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+                let mut file = File::create(filename)?;
+                file.write_all(content.as_bytes())?;
+                file.sync_all()?;
+                Ok(())
+            }
+
+            // 删除指定文件
+            fn base_delete_file(filename: &str) -> io::Result<()> {
+                fs::remove_file(filename)?;
+                Ok(())
+            }
+
+            let filename = "test_ctmain_arg_mode.txt";
+            let content = "Test test_base_common_handle_input_encode_base16";
+            // let expected_output = "Test test_base_common_handle_input_encode_base16";
+            // 创建文件并写入内容
+            match base_create_file_with_content(filename, content) {
+                Ok(_) => println!("File '{}' created successfully.", filename),
+                Err(e) => eprintln!("Error creating file: {}", e),
+            }
+
+            // 测试用例1：有效输入
+            let mode_value = "0644";
+            let args = vec![ctcore::ct_util_name(), mode_value, filename];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+
+            // 删除文件
+            match base_delete_file(filename) {
+                Ok(_) => println!("File '{}' deleted successfully.", filename),
+                Err(e) => eprintln!("Error deleting file: {}", e),
+            }
+        }
+        #[test]
+        fn test_ctmain_arg_file() {
+            // 测试用例1：单个文件输入
+            let file_path = "/path/to/file1";
+            let args = vec![ctcore::ct_util_name(), file_path];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_multimple_file() {
+            // 测试用例2：多个文件输入
+            let file_path1 = "/path/to/file1";
+            let file_path2 = "/path/to/file2";
+            let args = vec![ctcore::ct_util_name(), file_path1, file_path2];
+
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+
+        #[test]
+        fn test_ctmain_arg_mutually_exclusive_preserve_root_and_no_preserve_root() {
+            // 测试用例：同时指定 --preserve-root 和 --no-preserve-root
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve-root",
+                "--no-preserve-root",
+                "0644",
+                "/path/to/file",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        // #[test]
+        // fn test_ctmain_arg_required_mode_or_file() {
+        //
+        //
+        //     // 测试用例：既不指定 --mode 也不指定文件
+        //     let args = vec![ctcore::util_name()];
+        //     let result = command.try_get_matches_from(args);
+        //
+        //     //assert!(result.is_err());
+        //     assert_eq!(result.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
+        // }
+        #[test]
+        fn test_ctmain_arg_invalid_mode_value() {
+            // 测试用例：指定无效的 --mode 值
+            let args = vec![ctcore::ct_util_name(), "--mode", "invalid_mode"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_reference_without_mode() {
+            // 测试用例：单独指定 --reference 而不指定 --mode
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reference",
+                "/path/to/reference_file",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_mode_and_reference_together() {
+            // 测试用例：同时指定 --mode 和 --reference
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--mode",
+                "0644",
+                "--reference",
+                "/path/to/reference_file",
+                "/path/to/file",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_recursive_and_single_file() {
+            // 测试用例：指定 --recursive 但只有一个文件
+            let args = vec![ctcore::ct_util_name(), "--recursive", "/path/to/file"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_recursive_and_multiple_files() {
+            // 测试用例：指定 --recursive 并有多个文件
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--recursive",
+                "/path/to/file1",
+                "/path/to/file2",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_multiple_options() {
+            // 测试用例：同时指定多个选项
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--verbose",
+                "--changes",
+                "--preserve-root",
+                "--mode",
+                "0644",
+                "/path/to/file",
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+
+        #[test]
+        fn test_ctmain_arg_missing_value_for_reference() {
+            // 测试用例：缺少 --reference 参数的值
+            let args = vec![ctcore::ct_util_name(), "--reference"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+
+        #[test]
+        fn test_ctmain_arg_empty_value_for_mode() {
+            // 测试用例：指定空字符串作为 --mode 的值
+            let args = vec![ctcore::ct_util_name(), "--mode", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 1);
+        }
+        #[test]
+        fn test_ctmain_arg_help() {
+            // 测试用例：请求帮助信息（--help 或 -h）
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+        #[test]
+        fn test_ctmain_arg_version() {
+            // 测试用例：请求版本信息（--version）
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+            assert_eq!(result, 0);
+        }
+    }
+    #[test]
+    fn test_ct_app_arg_changes() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--changes"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::CHANGES));
+    }
+
+    #[test]
+    fn test_ct_app_arg_c() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "-c"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::CHANGES));
+    }
+
+    #[test]
+    fn test_ct_app_arg_quiet() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--quiet"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::QUIET));
+    }
+    #[test]
+    fn test_ct_app_arg_silent() {
+        let command = ct_app();
+        // 测试用例2：别名输入
+        let args = vec![ctcore::ct_util_name(), "--silent"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::QUIET));
+    }
+    #[test]
+    fn test_ct_app_arg_verbose() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--verbose"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::VERBOSE));
+    }
+    #[test]
+    fn test_ct_app_arg_no_preserve_root() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::NO_PRESERVE_ROOT));
+    }
+    #[test]
+    fn test_ct_app_arg_preserve_root() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::PRESERVE_ROOT));
+    }
+    #[test]
+    fn test_ct_app_arg_recursive() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let args = vec![ctcore::ct_util_name(), "--recursive"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::RECURSIVE));
+    }
+    #[test]
+    fn test_ct_app_arg_r() {
+        let command = ct_app();
+        // 测试用例2：短选项输入
+        let args = vec![ctcore::ct_util_name(), "-R"];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(chmod_flags::RECURSIVE));
+    }
+    #[test]
+    fn test_ct_app_arg_reference() {
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let reference_file = "/path/to/reference_file";
+        let args = vec![ctcore::ct_util_name(), "--reference", reference_file];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert_eq!(
+            matches.get_one::<String>(chmod_flags::REFERENCE).unwrap(),
+            reference_file
+        );
+    }
+
+}

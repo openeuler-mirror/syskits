@@ -925,4 +925,345 @@ mod test {
         assert_eq!(s, expected_output);
     }
 
+    #[test]
+    fn test_basenc_decode_base2msbf() {
+        let filename = "test_basenc_decode_base2msbf.txt";
+        let expected_output = "Test Base2Msbf";
+
+        let content =
+             "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--decode", "--base2msbf", filename];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base2lsbf_wrap() {
+        let filename = "test_basenc_decode_base2lsbf_wrap.txt";
+        let expected_output = "Test Base2Lsbf";
+
+        let content =
+             "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--decode",
+            "--base2lsbf",
+            "--wrap=8",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                // println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base2msbf_wrap() {
+        let filename = "test_basenc_decode_base2msbf_wrap.txt";
+        let expected_output = "Test Base2Msbf";
+
+        let content =
+             "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--decode",
+            "--base2msbf",
+            "--wrap=8",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_encode_basez85() {
+        let filename = "test_basenc_encode_basez85.txt";
+        let content = "TestBZ85";
+
+        let expected_output = "raQb)lrVua";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--z85", filename];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_encode_basez85_wrap() {
+        let filename = "test_basenc_encode_basez85_wrap.txt";
+        let content = "TestBZ85";
+
+        let expected_output = "raQb)lrVua";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--wrap=6", "--z85", filename];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                // println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_basez85() {
+        let filename = "test_basenc_decode_basez85.txt";
+        let expected_output = "TestBZ85";
+
+        let content = "raQb)lrVua";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![ctcore::ct_util_name(), "--decode", "--z85", filename];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_basez85_wrap() {
+        let filename = "test_basenc_decode_basez85_wrap.txt";
+        let expected_output = "TestBZ85";
+
+        let content = "raQb)lrVua";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--decode",
+            "--z85",
+            "--wrap=8",
+            filename,
+        ];
+        let result = basenc_main(args.iter().map(|s| OsString::from(s)));
+        let mut s = String::new();
+        // 使用模式匹配提取字段值
+        match result {
+            Err(output) => {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {}", code);
+                println!("Error message: {}", message);
+            }
+            Ok(output) => {
+                s = output.to_string();
+                // println!("result:{}", s);
+                // println!("{}", expected_output);
+            }
+        }
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_h_ctmain() {
+        {
+            let args = ["--help", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+    #[test]
+    fn test_basenc_hh_ctmain() {
+        {
+            let args = ["-h", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+
+    #[test]
+    fn test_basenc_v_ctmain() {
+        {
+            let args = ["--version", ""];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            println!("{}", result);
+            assert_eq!(result, 1);
+        }
+        {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            // let result = ct_main(args.iter().map(|s| OsString::from(s)));
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+
 }

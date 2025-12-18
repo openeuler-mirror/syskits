@@ -596,4 +596,12 @@ mod tests {
         let boottime = when - 10000; // Boot was also before 'when'
         assert_eq!(idle_string_local(when, boottime, now), " old ");
     }
+
+    #[test]
+    fn test_boottime_after_when() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now - 3000; // 3000 seconds ago
+        let boottime = now - 2000; // Boot time is after 'when'
+        assert_eq!(idle_string_local(when, boottime, now), " old ");
+    }
 }

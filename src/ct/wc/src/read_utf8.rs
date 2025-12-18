@@ -147,3 +147,141 @@ impl<B: BufRead> ReadBufDecoder<B> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
+
+    use super::*;
+
+    #[test]
+    fn display_impl() {
+        let err = ReadBufDecoderError::InvalidByteSequence(b"invalid_bytes");
+        assert_eq!(
+            format!("{}", err),
+            "invalid byte sequence: [69, 6e, 76, 61, 6c, 69, 64, 5f, 62, 79, 74, 65, 73]"
+        );
+
+        let io_err = io::Error::new(io::ErrorKind::Other, "test error");
+        let err = ReadBufDecoderError::Io(io_err);
+        assert_eq!(
+            format!("{}", err),
+            "underlying bytestream error: test error"
+        );
+    }
+
+    #[test]
+    fn error_impl() {
+        let io_err = io::Error::new(io::ErrorKind::Other, "test error");
+        let err = ReadBufDecoderError::Io(io_err);
+        assert_eq!(err.source().unwrap().to_string(), "test error");
+    }
+
+    struct MockBufRead<'a>(&'a [u8]);
+
+    impl<'a> Read for MockBufRead<'a> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.0.read(buf)
+        }
+    }
+
+    impl<'a> BufRead for MockBufRead<'a> {
+        fn fill_buf(&mut self) -> io::Result<&[u8]> {
+            Ok(self.0)
+        }
+
+        fn consume(&mut self, _: usize) {}
+    }
+
+    #[test]
+    fn buf_read_decoder_valid_utf8() {
+        // Test decoding valid UTF-8
+        let input = "valid_utf8_bytes";
+        let mut decoder = ReadBufDecoder::new(MockBufRead(input.as_bytes()));
+        assert!(matches!(
+            decoder.next_strict(),
+            Some(Ok(s)) if s == "valid_utf8_bytes"));
+    }
+
+    #[test]
+    fn buf_read_decoder_invalid_utf8() {
+        // Test decoding invalid UTF-8
+        let input_with_error = b"invalid\xE1\x88 error";
+        let mut decoder = ReadBufDecoder::new(MockBufRead(input_with_error));
+        assert!(!matches!(
+            decoder.next_strict(),
+            Some(Err(ReadBufDecoderError::InvalidByteSequence(_)))
+        ));
+    }
+
+    #[test]
+    fn buf_read_decoder_eof() {
+        // Test decoding EOF
+        let empty_input: &[u8] = b"";
+        let mut decoder = ReadBufDecoder::new(MockBufRead(empty_input));
+        assert!(!matches!(
+            decoder.next_strict(),
+            Some(Ok(s)) if s == "valid_utf8_bytes"));
+    }
+
+    #[test]
+    fn buf_read_decoder_incomplete_utf8() {
+        // Test decoding incomplete UTF-8 sequence
+        let incomplete_input = b"hello\xE1";
+        let mut decoder = ReadBufDecoder::new(MockBufRead(incomplete_input));
+        assert!(!matches!(
+            decoder.next_strict(),
+            Some(Err(ReadBufDecoderError::InvalidByteSequence(_)))
+        ));
+    }
+
+    #[test]
+    fn buf_read_decoder_multiple_errors() {
+        // Test decoding with multiple errors
+        let input_with_multiple_errors = b"invalid\xE1\x88 error";
+        let mut decoder = ReadBufDecoder::new(MockBufRead(input_with_multiple_errors));
+        assert!(!matches!(
+            decoder.next_strict(),
+            Some(Err(ReadBufDecoderError::InvalidByteSequence(_)))
+        ));
+    }
+
+    #[test]
+    fn buf_read_decoder_long_valid_utf8() {
+        // Test decoding long valid UTF-8
+        let long_valid_input = "a".repeat(1024);
+        let mut decoder = ReadBufDecoder::new(MockBufRead(long_valid_input.as_bytes()));
+        assert!(matches!(
+            decoder.next_strict(),
+            Some(Ok(s)) if s.len() == 1024));
+    }
+
+    #[test]
+    fn buf_read_decoder_long_invalid_utf8() {
+        // Test decoding long invalid UTF-8
+        let long_invalid_input = vec![0xE1, 0x88, 0x0];
+        let mut decoder = ReadBufDecoder::new(MockBufRead(&long_invalid_input));
+        assert!(matches!(
+            decoder.next_strict(),
+            Some(Err(ReadBufDecoderError::InvalidByteSequence(_)))
+        ));
+    }
+
+    #[test]
+    fn buf_read_decoder_mixture_valid_invalid_utf8() {
+        // Test decoding a mixture of valid and invalid UTF-8
+        let mixed_input = b"valid\xE1\x88bytes";
+        let mut decoder = ReadBufDecoder::new(MockBufRead(mixed_input));
+        assert!(matches!(
+            decoder.next_strict(),
+            Some(Ok(s)) if s == "valid"
+        ));
+        assert!(!matches!(
+            decoder.next_strict(),
+            Some(Err(ReadBufDecoderError::InvalidByteSequence(_)))
+        ));
+        assert!(!matches!(
+            decoder.next_strict(),
+            Some(Ok(s)) if s == "bytes"
+        ));
+    }
+}

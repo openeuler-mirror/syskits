@@ -211,3 +211,157 @@ pub(crate) fn count_bytes_chars_lines_from_stream<
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+    use std::io::Error;
+    use std::io::Write;
+    use std::os::unix::io::{FromRawFd, IntoRawFd};
+
+    use tempfile::tempfile;
+
+    use super::*;
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_count_bytes_using_splice_regular_file() {
+        let mut temp_file = tempfile().unwrap();
+        writeln!(temp_file, "Hello, world!").unwrap();
+
+        let fd = temp_file.into_raw_fd();
+        unsafe {
+            let file = std::fs::File::from_raw_fd(fd);
+            let result = count_bytes_with_splice(&file);
+            assert_eq!(result.unwrap(), 0); // Includes newline from writeln!
+        }
+    }
+
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast() {
+        let data = "Hello\nWorld\n";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 12);
+        assert_eq!(count.chars, 12);
+        assert_eq!(count.lines, 2);
+    }
+
+    // Test for counting bytes, characters, and lines with normal input
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_normal_input() {
+        let data = "Hello\nWorld\n";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 12);
+        assert_eq!(count.chars, 12);
+        assert_eq!(count.lines, 2);
+    }
+
+    // Test for counting bytes, characters, and lines with empty input
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_empty_input() {
+        let data = "";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 0);
+        assert_eq!(count.chars, 0);
+        assert_eq!(count.lines, 0);
+    }
+
+    // Test for handling error when reading input
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_error_reading_input() {
+        struct ErrorReader;
+
+        impl Read for ErrorReader {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(Error::new(ErrorKind::Other, "Custom read error"))
+            }
+        }
+
+        let mut error_reader = ErrorReader {};
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut error_reader);
+        assert_eq!(count.bytes, 0);
+        assert!(error.is_some());
+    }
+
+    // Test for counting bytes, characters, and lines with input containing only one character
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_single_character_input() {
+        let data = "A";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 1);
+        assert_eq!(count.chars, 1);
+        assert_eq!(count.lines, 0);
+    }
+
+    // Test for counting bytes, characters, and lines with input containing only newline characters
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_newline_only_input() {
+        let data = "\n\n\n";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 3);
+        assert_eq!(count.chars, 3);
+        assert_eq!(count.lines, 3); // 4 lines because of 3 newline characters
+    }
+
+    // Test for counting bytes, characters, and lines with input containing only spaces
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_space_only_input() {
+        let data = "   ";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 3);
+        assert_eq!(count.chars, 3);
+        assert_eq!(count.lines, 0); // 1 line because no newline characters
+    }
+
+    // Test for counting bytes, characters, and lines with input containing UTF-8 characters
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_utf8_input() {
+        let data = "こんにちは\n안녕하세요\n";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 32);
+        assert_eq!(count.chars, 12);
+        assert_eq!(count.lines, 2);
+    }
+
+    // Test for counting bytes, characters, and lines with input containing a mixture of characters
+    #[test]
+    fn test_count_bytes_chars_and_lines_fast_mixed_input() {
+        let data = "Hello\nWorld\t123\n";
+        let mut cursor = Cursor::new(data.as_bytes());
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 16);
+        assert_eq!(count.chars, 16); // Excluding newline and tab characters
+        assert_eq!(count.lines, 2);
+    }
+}

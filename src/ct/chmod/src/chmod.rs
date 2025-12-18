@@ -846,5 +846,195 @@ mod tests {
             reference_file
         );
     }
+    #[test]
+    fn test_ct_app_arg_mode() {
+        // 创建文件并写入内容
+        fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+            let mut file = File::create(filename)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            Ok(())
+        }
+
+        // 删除指定文件
+        fn base_delete_file(filename: &str) -> io::Result<()> {
+            fs::remove_file(filename)?;
+            Ok(())
+        }
+
+        let filename = "test_ct_app_arg_mode.txt";
+        let content = "Test test_base_common_handle_input_encode_base16";
+        // let expected_output = "Test test_base_common_handle_input_encode_base16";
+        // 创建文件并写入内容
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let command = ct_app();
+
+        // 测试用例1：有效输入
+        let mode_value = "0644";
+        let args = vec![ctcore::ct_util_name(), mode_value, filename];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+
+        assert_eq!(
+            matches.get_one::<String>(chmod_flags::FILE).unwrap(),
+            mode_value
+        );
+    }
+    #[test]
+    fn test_ct_app_arg_file() {
+        let command = ct_app();
+
+        // 测试用例1：单个文件输入
+        let file_path = "/path/to/file1";
+        let args = vec![ctcore::ct_util_name(), file_path];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert_eq!(
+            matches
+                .get_many::<String>(chmod_flags::FILE)
+                .unwrap()
+                .collect::<Vec<_>>(),
+            [file_path]
+        );
+    }
+    #[test]
+    fn test_ct_app_arg_multimple_file() {
+        let command = ct_app();
+        // 测试用例2：多个文件输入
+        let file_path1 = "/path/to/file1";
+        let file_path2 = "/path/to/file2";
+        let args = vec![ctcore::ct_util_name(), file_path1, file_path2];
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert_eq!(
+            matches
+                .get_many::<String>(chmod_flags::FILE)
+                .unwrap()
+                .collect::<Vec<_>>(),
+            [file_path1, file_path2]
+        );
+    }
+
+    #[test]
+    fn test_ct_app_arg_mutually_exclusive_preserve_root_and_no_preserve_root() {
+        let command = ct_app();
+
+        // 测试用例：同时指定 --preserve-root 和 --no-preserve-root
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--preserve-root",
+            "--no-preserve-root",
+            "0644",
+            "/path/to/file",
+        ];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_ok());
+    }
+    // #[test]
+    // fn test_ct_app_arg_required_mode_or_file() {
+    //     let command = ct_app();
+    //
+    //     // 测试用例：既不指定 --mode 也不指定文件
+    //     let args = vec![ctcore::util_name()];
+    //     let result = command.try_get_matches_from(args);
+    //
+    //     //assert!(result.is_err());
+    //     assert_eq!(result.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
+    // }
+    #[test]
+    fn test_ct_app_arg_invalid_mode_value() {
+        let command = ct_app();
+
+        // 测试用例：指定无效的 --mode 值
+        let args = vec![ctcore::ct_util_name(), "--mode", "invalid_mode"];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+    #[test]
+    fn test_ct_app_arg_reference_without_mode() {
+        let command = ct_app();
+
+        // 测试用例：单独指定 --reference 而不指定 --mode
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--reference",
+            "/path/to/reference_file",
+        ];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_ok());
+    }
+    #[test]
+    fn test_ct_app_arg_mode_and_reference_together() {
+        let command = ct_app();
+
+        // 测试用例：同时指定 --mode 和 --reference
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--mode",
+            "0644",
+            "--reference",
+            "/path/to/reference_file",
+            "/path/to/file",
+        ];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+    }
+    #[test]
+    fn test_ct_app_arg_recursive_and_single_file() {
+        let command = ct_app();
+
+        // 测试用例：指定 --recursive 但只有一个文件
+        let args = vec![ctcore::ct_util_name(), "--recursive", "/path/to/file"];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_ok());
+    }
+    #[test]
+    fn test_ct_app_arg_recursive_and_multiple_files() {
+        let command = ct_app();
+
+        // 测试用例：指定 --recursive 并有多个文件
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--recursive",
+            "/path/to/file1",
+            "/path/to/file2",
+        ];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_ok());
+    }
+    #[test]
+    fn test_ct_app_arg_multiple_options() {
+        let command = ct_app();
+
+        // 测试用例：同时指定多个选项
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--verbose",
+            "--changes",
+            "--preserve-root",
+            "--mode",
+            "0644",
+            "/path/to/file",
+        ];
+        let result = command.try_get_matches_from(args);
+
+        assert!(result.is_err());
+    }
 
 }

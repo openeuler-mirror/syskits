@@ -470,3 +470,130 @@ impl Who {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use ctcore::ct_utmpx::time::OffsetDateTime;
+
+    use super::*;
+
+    #[test]
+    fn test_idle_string() {
+        let boot_time = time::OffsetDateTime::now_utc().unix_timestamp() - 500;
+        let when = time::OffsetDateTime::now_utc().unix_timestamp() - 60;
+        assert_eq!(
+            idle_string_local(when, boot_time, when + 60).to_string(),
+            "00:01"
+        );
+    }
+
+    #[test]
+    fn test_print_line() {
+        let who = Who {
+            is_do_lookup: false,
+            is_short_list: false,
+            is_short_output: false,
+            is_include_idle: false,
+            is_include_heading: false,
+            is_include_mesg: false,
+            is_include_exit: false,
+            is_need_boottime: false,
+            is_need_deadprocs: false,
+            is_need_login: false,
+            is_need_initspawn: false,
+            is_need_clockchange: false,
+            is_need_runlevel: false,
+            is_need_users: false,
+            is_my_line_only: false,
+            who_args: Vec::new(),
+        };
+        let user = "testuser";
+        let state = '+';
+        let line = "tty1";
+        let time = "Apr 7 14:23";
+        let idle = "00:05";
+        let pid = "1234";
+        let comment = "testing";
+        let exit = "0";
+
+        // This will print to stdout, we would need to capture stdout in a real test to assert on it
+        who.print_line(user, state, line, time, idle, pid, comment, exit);
+    }
+
+    #[test]
+    fn test_exec() {
+        let mut who = Who {
+            is_do_lookup: false,
+            is_short_list: true,
+            is_short_output: false,
+            is_include_idle: false,
+            is_include_heading: false,
+            is_include_mesg: false,
+            is_include_exit: false,
+            is_need_boottime: false,
+            is_need_deadprocs: false,
+            is_need_login: false,
+            is_need_initspawn: false,
+            is_need_clockchange: false,
+            is_need_runlevel: false,
+            is_need_users: false,
+            is_my_line_only: false,
+            who_args: vec!["/var/log/wtmp".to_string()],
+        };
+
+        assert_eq!(who.exec().is_ok(), true);
+    }
+
+    #[test]
+    fn test_idle_exactly_60_seconds() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now - 60; // Exactly 60 seconds ago
+        let boottime = when - 100; // Booted well before 'when'
+        assert_eq!(idle_string_local(when, boottime, now), "00:01");
+    }
+
+    #[test]
+    fn test_idle_boundary_24_hours() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now - 24 * 3600; // Exactly 24 hours ago
+        let boottime = when - 1000; // Booted well before 'when'
+        assert_eq!(idle_string_local(when, boottime, now), " old ");
+    }
+
+    #[test]
+    fn test_simultaneous_times() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        assert_eq!(idle_string_local(now, now, now), " old ");
+    }
+
+    #[test]
+    fn test_when_in_future() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now + 100; // 100 seconds in the future
+        let boottime = now - 1000; // Booted well before 'now'
+        assert_eq!(idle_string_local(when, boottime, now), " old ");
+    }
+
+    #[test]
+    fn test_recent_idle_short() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now - 30; // 30 seconds ago
+        let boottime = when - 100; // System booted 100 seconds before 'when'
+        assert_eq!(idle_string_local(when, boottime, now), "  .  ");
+    }
+
+    #[test]
+    fn test_recent_idle_long() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now - 3700; // 1 hour and 10 minutes ago
+        let boottime = when - 5000; // System booted well before 'when'
+        assert_eq!(idle_string_local(when, boottime, now), "01:01");
+    }
+
+    #[test]
+    fn test_idle_old() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let when = now - 90000; // More than a day ago
+        let boottime = when - 10000; // Boot was also before 'when'
+        assert_eq!(idle_string_local(when, boottime, now), " old ");
+    }
+}

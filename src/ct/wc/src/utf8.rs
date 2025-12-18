@@ -91,3 +91,103 @@ impl Utf8Incomplete {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty() {
+        let incomplete = Utf8Incomplete::empty();
+        assert_eq!(incomplete.buffer, [0, 0, 0, 0]);
+        assert_eq!(incomplete.buffer_len, 0);
+    }
+
+    #[test]
+    fn test_new() {
+        let incomplete = Utf8Incomplete::new(b"abcd");
+        assert_eq!(incomplete.buffer, [97, 98, 99, 100]);
+        assert_eq!(incomplete.buffer_len, 4);
+    }
+
+    #[test]
+    fn test_take_buffer() {
+        let mut incomplete = Utf8Incomplete::new(b"abcd");
+        let buffer = incomplete.take_buffer();
+        assert_eq!(buffer, [97, 98, 99, 100]);
+        assert_eq!(incomplete.buffer_len, 0);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_not_enough_input() {
+        let mut incomplete = Utf8Incomplete::new(b"\xc2");
+        let input = b"hello";
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 0);
+        assert_eq!(result, Some(Err(())));
+        assert_eq!(incomplete.buffer, [194, 104, 101, 108]);
+        assert_eq!(incomplete.buffer_len, 1);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_invalid_input() {
+        let mut incomplete = Utf8Incomplete::new(b"\xc2");
+        let input = b"\x80hello";
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 3);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.buffer, [194, 128, 104, 101]);
+        assert_eq!(incomplete.buffer_len, 4);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_valid_input() {
+        let mut incomplete = Utf8Incomplete::new(b"\xc2");
+        let input = b"\x80hello";
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 3);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.buffer, [194, 128, 104, 101]);
+        assert_eq!(incomplete.buffer_len, 4);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_incomplete_input() {
+        let mut incomplete = Utf8Incomplete::new(b"\xc2\x80");
+        let input = b"hello";
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 2);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.buffer, [194, 128, 104, 101]);
+        assert_eq!(incomplete.buffer_len, 4);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_complete_utf8() {
+        let mut incomplete = Utf8Incomplete::new("hell".as_bytes());
+        let input = " world".as_bytes();
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 0);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.is_empty(), false);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_incomplete_utf8() {
+        let mut incomplete = Utf8Incomplete::new(&[0xC2, 0x80]);
+        let input = "hello".as_bytes();
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 2);
+        assert_eq!(result, Some(Ok(())));
+        assert_eq!(incomplete.is_empty(), false);
+    }
+
+    #[test]
+    fn test_try_complete_offsets_not_enough_input2() {
+        let mut incomplete = Utf8Incomplete::new(&[0xC2]); // Incomplete UTF-8 sequence
+        let input = "hello".as_bytes();
+        let (consumed, result) = incomplete.try_complete_offsets(input);
+        assert_eq!(consumed, 0);
+        assert_eq!(result, Some(Err(())));
+        assert_eq!(incomplete.is_empty(), false);
+    }
+}

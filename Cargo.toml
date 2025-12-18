@@ -63,6 +63,7 @@ feat_common_core = [
   "who",
   "chmod",
   "basenc",
+  "wc",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -195,6 +196,7 @@ basename = { optional = true, package = "ct_basename", path = "src/ct/basename" 
 who = { optional = true, package = "ct_who", path = "src/ct/who" }
 chmod = { optional = true, package = "ct_chmod", path = "src/ct/chmod" }
 basenc = { optional = true, package = "ct_basenc", path = "src/ct/basenc" }
+wc = { optional = true, package = "ct_wc", path = "src/ct/wc" }
 
 [dev-dependencies]
 chrono = { workspace = true }

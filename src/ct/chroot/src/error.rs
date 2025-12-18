@@ -94,3 +94,121 @@ impl Display for ChrootError {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cannot_enter_error() {
+        let error_message = "permission denied";
+        let os_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, error_message);
+        let error = ChrootError::CannotEnter("/path/to/chroot".into(), os_error.into());
+
+        assert_eq!(
+            format!("{}", error),
+            "cannot chroot to '/path/to/chroot': permission denied"
+        );
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_command_failed_error() {
+        let error_message = "command exited with status 1";
+        let os_error = std::io::Error::new(std::io::ErrorKind::Other, error_message);
+        let error = ChrootError::CommandFailed("ls".into(), os_error.into());
+
+        assert_eq!(
+            format!("{}", error),
+            "failed to run command 'ls': command exited with status 1"
+        );
+        assert_eq!(error.code(), 126);
+    }
+
+    #[test]
+    fn test_command_not_found_error() {
+        let error_message = "executable not found in $PATH";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::CommandNotFound("nonexistent_command".into(), os_error.into());
+
+        assert_eq!(
+            format!("{}", error),
+            "failed to run command 'nonexistent_command': executable not found in $PATH"
+        );
+        assert_eq!(error.code(), 127);
+    }
+
+    #[test]
+    fn test_invalid_userspec_error() {
+        let error = ChrootError::InvalidUserspec("user:group".into());
+
+        assert_eq!(format!("{}", error), "invalid userspec: 'user:group'");
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_no_such_group_error() {
+        let error = ChrootError::NoSuchGroup("unknown_group".into());
+
+        assert_eq!(format!("{}", error), "no such group: unknown_group");
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_no_such_directory_error() {
+        let error = ChrootError::NoSuchDirectory("/nonexistent/directory".into());
+
+        assert_eq!(
+            format!("{}", error),
+            "cannot change root directory to '/nonexistent/directory': no such directory"
+        );
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_set_gid_failed_error() {
+        let error_message = "operation not permitted";
+        let os_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, error_message);
+        let error = ChrootError::SetGidFailed("1000".into(), os_error.into());
+
+        assert_eq!(
+            format!("{}", error),
+            "cannot set gid to 1000: operation not permitted"
+        );
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_set_groups_failed_error() {
+        let error_message = "failed to read /etc/group";
+        let os_error = std::io::Error::new(std::io::ErrorKind::Other, error_message);
+        let error = ChrootError::SetGroupsFailed(os_error.into());
+
+        assert_eq!(
+            format!("{}", error),
+            "cannot set groups: failed to read /etc/group"
+        );
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_set_user_failed_error() {
+        let error_message = "user not found";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::SetUserFailed("nonexistent_user".into(), os_error.into());
+
+        assert_eq!(
+            format!("{}", error),
+            "cannot set user to nonexistent_user: user not found"
+        );
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_code_for_cannot_enter_error() {
+        let error_message = "user not found";
+        let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
+        let error = ChrootError::CannotEnter("/path/to/chroot".into(), os_error.into());
+        assert_eq!(error.code(), 125);
+    }
+
+}

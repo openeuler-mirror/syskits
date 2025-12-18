@@ -2049,4 +2049,281 @@ mod tests {
         assert_eq!(root_dir_final_mode & 0o777, 0o644);
     }
 
+    #[test]
+    fn test_chmod_file_read_only_file_system() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_read_only_file_system")
+            .tempdir()
+            .unwrap();
+        let test_file_path = temp_dir
+            .path()
+            .join("test_chmod_file_read_only_file_system.txt");
+
+        // Create a file on a read-only file system (e.g., a mounted CD-ROM or a read-only memory stick)
+        let readonly_file_system_path = "/mnt/readonly";
+        let test_file_path_on_ro_fs =
+            Path::new(readonly_file_system_path).join(test_file_path.file_name().unwrap());
+
+        // Assume the file system is already mounted and the path exists
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(&test_file_path_on_ro_fs);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_chmod_file_insufficient_permissions() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_insufficient_permissions")
+            .tempdir()
+            .unwrap();
+        let test_file_path = temp_dir
+            .path()
+            .join("test_chmod_file_insufficient_permissions.txt");
+
+        // Create a file with restricted permissions
+        File::create(&test_file_path).unwrap();
+        let restricted_mode = 0o000;
+        fs::set_permissions(
+            test_file_path.clone(),
+            Permissions::from_mode(restricted_mode),
+        )
+        .unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(test_file_path.as_path());
+        assert!(result.is_ok());
+
+        assert_eq!(
+            fs::metadata(test_file_path).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+    }
+
+    #[test]
+    fn test_chmod_file_large_file() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_large_file")
+            .tempdir()
+            .unwrap();
+        let large_file_path = temp_dir.path().join("large_file.txt");
+
+        // Create a large file (e.g., 1 GB)
+        let file_size = 1_073_741_824; // 1 GB
+        let large_file = File::create(large_file_path.clone()).unwrap();
+        large_file.set_len(file_size).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(large_file_path.as_path());
+        assert!(result.is_ok());
+
+        // Verify file permissions have been changed
+        let large_file_final_mode = fs::metadata(large_file_path).unwrap().permissions().mode();
+        assert_eq!(large_file_final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chmod_file_hidden_file() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_hidden_file")
+            .tempdir()
+            .unwrap();
+        let hidden_file_path = temp_dir.path().join(".hidden_file.txt");
+
+        // Create a hidden file
+        File::create(hidden_file_path.clone()).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(hidden_file_path.as_path());
+        assert!(result.is_ok());
+
+        // Verify hidden file permissions have been changed
+        let hidden_file_final_mode = fs::metadata(hidden_file_path).unwrap().permissions().mode();
+        assert_eq!(hidden_file_final_mode & 0o777, 0o644);
+    }
+
+    // #[test]   /* 这里有引入外部libc库，仅单元测试时使用 */
+    // fn test_chmod_file_special_device_file() {
+    //     let temp_dir = Builder::new()
+    //         .prefix("test_chmod_file_special_device_file")
+    //         .tempdir()
+    //         .unwrap();
+    //     let special_device_file_path = temp_dir.path().join("test_chmod_file_special_device_file");
+    //
+    //     // Create a special device file (e.g., a block device)
+    //     let device_type = libc::S_IFBLK; // Block device
+    //     let device_major = 1; // Major number (e.g., for /dev/sda)
+    //     let device_minor = 0; // Minor number (e.g., for /dev/sda)
+    //     unsafe {
+    //         let fd = libc::mknod(
+    //             special_device_file_path.to_str().unwrap().as_ptr() as *const libc::c_char,
+    //             device_type | 0o600, // Set initial mode to 0o600
+    //             ((device_major as u64) << 8) | (device_minor as u64),
+    //         );
+    //         assert!(fd >= 0);
+    //     }
+    //
+    //     let chmoder = Chmoder {
+    //         changes: true,
+    //         quiet: false,
+    //         verbose: true,
+    //         preserve_root: false,
+    //         recursive: false,
+    //         fmode: Some(0o500),
+    //         cmode: Some("u+rwx,g=r,o=rx".to_string()),
+    //     };
+    //
+    //     let result = chmoder.chmod_file(special_device_file_path.as_path());
+    //     assert!(result.is_ok());
+    //
+    //     // Verify special device file permissions have been changed
+    //     let special_device_file_final_mode = fs::metadata(special_device_file_path)
+    //         .unwrap()
+    //         .permissions()
+    //         .mode();
+    //     assert_eq!(special_device_file_final_mode & 0o777, 0o500);
+    // }
+    //
+    // #[test]
+    // fn test_chmod_file_fifo() {
+    //     let temp_dir = Builder::new()
+    //         .prefix("chmod_file_fifo_s")
+    //         .tempdir()
+    //         .unwrap();
+    //     let fifo_path = temp_dir.path().join("chmod_file_fifo_s");
+    //
+    //     // Create a FIFO (named pipe)
+    //     let mode = 0o600; // Set initial mode to 0o600
+    //     let result = unsafe {
+    //         libc::mkfifo(
+    //             fifo_path.to_string_lossy().as_bytes().as_ptr() as *const libc::c_char,
+    //             mode,
+    //         )
+    //     };
+    //     assert_eq!(result, 0);
+    //
+    //     let chmoder = Chmoder {
+    //         changes: true,
+    //         quiet: false,
+    //         verbose: true,
+    //         preserve_root: false,
+    //         recursive: false,
+    //         fmode: Some(0o600),
+    //         cmode: Some("u+rwx,g=r,o=rx".to_string()),
+    //     };
+    //
+    //     let result = chmoder.chmod_file(fifo_path.as_path());
+    //     assert!(result.is_ok());
+    //
+    //     // Verify FIFO permissions have been changed
+    //     let fifo_final_mode = fs::metadata(fifo_path).unwrap().permissions().mode();
+    //     assert_eq!(fifo_final_mode & 0o777, 0o600);
+    // }
+    #[test]
+    fn test_chmod_file_nonexistent_file() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_nonexistent_file")
+            .tempdir()
+            .unwrap();
+        let nonexistent_file_path = temp_dir.path().join("test_chmod_file_nonexistent_file.txt");
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(nonexistent_file_path.as_path());
+        assert!(result.is_err());
+
+        // No need to clean up as TempDir will be automatically deleted
+    }
+
+    #[test]
+    fn test_chmod_file_directory_without_recursive_flag() {
+        let temp_dir = Builder::new()
+            .prefix("test_chmod_file_directory_without_recursive_flag")
+            .tempdir()
+            .unwrap();
+        let test_dir_path = temp_dir
+            .path()
+            .join("test_chmod_file_directory_without_recursive_flag");
+
+        // Create a directory
+        fs::create_dir(&test_dir_path).unwrap();
+
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(test_dir_path.as_path());
+        assert!(result.is_ok());
+
+        assert_eq!(
+            fs::metadata(test_dir_path).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+    }
+
+    #[test]
+    fn test_chmod_file_empty_string_path() {
+        let chmoder = Chmoder {
+            changes: true,
+            quiet: false,
+            verbose: true,
+            preserve_root: false,
+            recursive: false,
+            fmode: Some(0o644),
+            cmode: Some("u+rwx,g=r,o=rx".to_string()),
+        };
+
+        let result = chmoder.chmod_file(Path::new(""));
+        assert!(result.is_err());
+    }
 }

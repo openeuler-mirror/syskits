@@ -1,0 +1,24 @@
+[package]
+name = "ct_basenc"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "basenc ~ (ctutils) decode/encode input"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/basenc"
+
+[lib]
+path = "src/basenc.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["encoding"] }
+ct_base32 = { workspace = true }
+
+[[bin]]
+name = "basenc"
+path = "src/main.rs"

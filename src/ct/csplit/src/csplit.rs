@@ -702,3 +702,12680 @@ fn csplit_args_init() -> Vec<Arg> {
     args
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::path::Path;
+
+    mod tests_ct_app {
+        use super::*;
+        use crate::opt_flags::DIGITS;
+        use crate::opt_flags::KEEP_FILES;
+        use crate::opt_flags::PREFIX;
+
+        use crate::opt_flags::SUFFIX_FORMAT;
+        use clap::error::ErrorKind;
+        use std::fs;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0d", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0d";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%01d", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%01d";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%02d", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%02d";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%03d", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%03d";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0x", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0x";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1x", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1x";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2x", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2x";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3x", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3x";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0o", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0o";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1o", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1o";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2o", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2o";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3o", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3o";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0f", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0f";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1f", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1f";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2f", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2f";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3f", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3f";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0s", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0s";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1s", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1s";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2s", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2s";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3s", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3s";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0c", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0c";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1c", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1c";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2c", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2c";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3c", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3c";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0e", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0e";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1e", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1e";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2e", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2e";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3e", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3e";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0g", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0g";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1g", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1g";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2g", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2g";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3g", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3g";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_0u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0u", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0u";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_1u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%1u", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%1u";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_2u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%2u", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%2u";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_3u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%3u", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%3u";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_whole_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%#", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%#";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_whole_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%+#&*^^*%@#", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%+#&*^^*%@#";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_whole_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--suffix-format",
+                "%0@!+#&*^^*%@#", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0@!+#&*^^*%@#";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "-b",
+                "%#", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%#";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "-b",
+                "%+#&*^^*%@#", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%+#&*^^*%@#";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_format_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "-b",
+                "%0@!+#&*^^*%@#", // Example format string
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "%0@!+#&*^^*%@#";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--prefix",
+                "custom_aprefix", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "custom_aprefix";
+
+            let file_path = Path::new("custom_aprefix00");
+
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path = Path::new("custom_aprefix01");
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--prefix",
+                "001", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "001";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--prefix",
+                "2024-04-18_", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "2024-04-18_";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_string_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--prefix",
+                "custom_prefix_1234_", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "custom_prefix_1234_";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_string_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--prefix",
+                "custom_prefix_2024-04-17_", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "custom_prefix_2024-04-17_";
+            let file_path = Path::new("custom_prefix_2024-04-17_00");
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("custom_prefix_2024-04-17_01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_name_other() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "--prefix",
+                "uuuser_&*^#28340#!@#()", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "uuuser_&*^#28340#!@#()";
+
+            let file_path = Path::new("uuuser_&*^#28340#!@#()00");
+
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("user_&*^#28340#!@#()01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'a'",
+                "-f",
+                "user_&*^#28332340#!@#()", // Example prefix
+            ];
+            let result = command.try_get_matches_from(args);
+            let expected_result = "user_&*^#28332340#!@#()";
+
+            let file_path = Path::new("user_&*^#28332340#!@#()00");
+
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("user_&*^#28332340#!@#()01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "-k"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(KEEP_FILES));
+        }
+        #[test]
+        fn test_ct_app_keep_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--keep-files"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(KEEP_FILES));
+        }
+
+        #[test]
+        fn test_ct_app_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--suppress-matched",
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::SUPPRESS_MATCHED));
+        }
+
+        #[test]
+        fn test_ct_app_suppress_matched_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--suppress-matched",
+                "--keep-files",
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::SUPPRESS_MATCHED));
+        }
+
+        #[test]
+        fn test_ct_app_keep_files_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--keep-files",
+                "--suppress-matched",
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::SUPPRESS_MATCHED));
+        }
+
+        #[test]
+        fn test_ct_app_k_keep_files_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "-k",
+                "--keep-files",
+                "--suppress-matched",
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_digits_0() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--digits=0"];
+
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = "0";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_digits_1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--digits=1"];
+
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = "1";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_digits_2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--digits=2"];
+
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = "2";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_digits_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--digits=3"];
+
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = "3";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_digits_n_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "-n", "3"];
+
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = "3";
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_quiet() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "-s"];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::QUIET));
+        }
+
+        #[test]
+        fn test_ct_app_quiet_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--quiet"];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::QUIET));
+        }
+
+        #[test]
+        fn test_ct_app_silent_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "--silent"];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::QUIET));
+        }
+
+        #[test]
+        fn test_ct_app_quiet_silent_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--quite",
+                "--silent",
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_elide_empty_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), filename1, "'//'", "-z"];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::ELIDE_EMPTY_FILES));
+        }
+
+        #[test]
+        fn test_ct_app_elide_empty_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--elide-empty-files",
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::ELIDE_EMPTY_FILES));
+        }
+
+        #[test]
+        fn test_ct_app_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--file",
+                "path/to/test_file.txt",
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_pattern() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "--pattern",
+                "pattern1",
+                "--pattern",
+                "pattern2", // Two example patterns
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+    }
+
+    mod tests_ct_main {
+        use super::*;
+
+        use std::ffi::OsString;
+
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ct_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.usage(), false);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.usage(), false);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        fn remove_tem_file(name: String) {
+            let file_path = Path::new(&name);
+            match fs::remove_file(file_path) {
+                Ok(()) => {
+                    // println!("文件删除成功");
+                }
+                Err(_e) => {
+                    // eprintln!("File remove fail: {}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%0d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-b",
+                "%01d", // Example format string
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_0u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_1u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_2u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_3u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_whole_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_whole_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_whole_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suffix_format_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefixx", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("custom_prefixx00");
+
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("custom_prefixx01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "001", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("00100");
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("00101");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "2024-04-13_", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("2024-04-13_00");
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("2024-04-13_01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix_string_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix_1234_", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("custom_prefix_1234_00");
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("custom_prefix_1234_01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix_string_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix_2024-04-18_", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("custom_prefix_2024-04-18_00");
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("custom_prefix_2024-04-18_01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix_name_other() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "useraa_&*^#28340#!@#()", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("useraa_&*^#28340#!@#()00");
+
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("useraa_&*^#28340#!@#()01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_prefix() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-f",
+                "auser_&*^#28340#!@#()", // Example prefix
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            let file_path = Path::new("auser_&*^#28340#!@#()00");
+
+            match fs::remove_file(file_path) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            let file_path2 = Path::new("auser_&*^#28340#!@#()01");
+            match fs::remove_file(file_path2) {
+                Ok(()) => println!("文件删除成功"),
+                Err(e) => eprintln!("删除文件时出错: {}", e),
+            }
+
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ct_main_keep_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--suppress-matched",
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_suppress_matched_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--suppress-matched",
+                "--keep-files",
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_keep_files_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--keep-files",
+                "--suppress-matched",
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_k_keep_files_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-k",
+                "--keep-files",
+                "--suppress-matched",
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    assert_eq!(1, output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_digits_0() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_digits_1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx0".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_digits_2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_digits_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx001".to_string());
+            remove_tem_file("xx000".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_digits_n_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx001".to_string());
+            remove_tem_file("xx000".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_quiet() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_quiet_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_silent_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_quiet_silent_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--quite",
+                "--silent",
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(_output) => {
+                    println!("");
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_elide_empty_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_elide_empty_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--elide-empty-files",
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            match result {
+                Err(output) => {
+                    panic!("ct_main exec Failed ,code:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "'//'",
+                "--file",
+                "path/to/test_file.txt",
+            ];
+
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(_output) => {
+                    println!("");
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_pattern() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "--pattern",
+                "pattern1",
+                "--pattern",
+                "pattern2", // Two example patterns
+            ];
+            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(_output) => {
+                    println!("");
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+    }
+
+    mod tests_input_splitter {
+        use super::*;
+
+        #[test]
+        #[allow(clippy::cognitive_complexity)]
+        fn input_splitter() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            input_splitter.csplit_set_size_of_buffer(2);
+            assert_eq!(input_splitter.csplit_buffer_len(), 0);
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 2);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(
+                        input_splitter.csplit_add_line_to_buffer(2, line),
+                        Some(String::from("aaa"))
+                    );
+                    assert_eq!(input_splitter.csplit_buffer_len(), 2);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            input_splitter.csplit_rewind_buffer();
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((3, Ok(line))) => {
+                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            assert!(input_splitter.next().is_none());
+        }
+
+        #[test]
+        fn test_input_splitter_initialization_and_buffer_setting() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            input_splitter.csplit_set_size_of_buffer(2);
+            assert_eq!(input_splitter.csplit_buffer_len(), 0);
+        }
+
+        #[test]
+        fn test_input_splitter_next_for_first_items() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+        }
+
+        #[test]
+        fn test_input_splitter_next_for_two_items() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+            input_splitter.next();
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+        }
+
+        #[test]
+        fn test_input_splitter_next_for_third_item_and_buffer_overflow() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Skip the first two items (assumed to be tested in a separate test)
+            input_splitter.next();
+            input_splitter.next();
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(2, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+        }
+
+        #[test]
+        fn test_input_splitter_next_after_rewind_buffer_and_remaining_items() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Set up the buffer with the first three items and rewind it (assumed to be tested in separate tests)
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.csplit_rewind_buffer();
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                } // item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                } // item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((3, Ok(line))) => {
+                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+            };
+
+            assert!(input_splitter.next().is_none());
+        }
+
+        #[test]
+        #[allow(clippy::cognitive_complexity)]
+        fn input_splitter_interrupt_rewind() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            input_splitter.csplit_set_size_of_buffer(3);
+            assert_eq!(input_splitter.csplit_buffer_len(), 0);
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 2);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(2, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 3);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            input_splitter.csplit_rewind_buffer();
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 3);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 2);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            match input_splitter.next() {
+                Some((3, Ok(line))) => {
+                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                item => panic!("wrong item: {item:?}"),
+            };
+
+            assert!(input_splitter.next().is_none());
+        }
+
+        #[test]
+        fn test_input_signal_splitter_initialization_and_buffer_setting() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            input_splitter.csplit_set_size_of_buffer(3);
+            assert_eq!(input_splitter.csplit_buffer_len(), 0);
+        }
+        #[test]
+        fn test_input_splitter_next_and_add_line_to_buffer_for_first_item() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+            };
+        }
+        #[test]
+        fn test_input_splitter_next_and_add_line_to_buffer_for_second_item() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Skip the first item (assumed to be tested in a separate test)
+            input_splitter.next();
+
+            match input_splitter.next() {
+                Some((1, Ok(line))) => {
+                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+            };
+        }
+        #[test]
+        fn test_input_splitter_next_and_add_line_to_buffer_for_third_item() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Skip the first two items (assumed to be tested in separate tests)
+            input_splitter.next();
+            input_splitter.next();
+
+            match input_splitter.next() {
+                Some((2, Ok(line))) => {
+                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(2, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+            };
+        }
+        #[test]
+        fn test_input_splitter_rewind_buffer() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Add all three items to the buffer (assumed to be tested in separate tests)
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.next();
+
+            input_splitter.csplit_rewind_buffer();
+
+            assert_eq!(input_splitter.csplit_buffer_len(), 0); // Replace with the correct expected value after buffer rewind
+        }
+        #[test]
+        fn test_input_splitter_next_and_add_line_to_buffer_after_rewind_for_first_item() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Add all three items to the buffer and rewind it (assumed to be tested in separate tests)
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.csplit_rewind_buffer();
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
+                    assert_eq!(input_splitter.csplit_buffer_len(), 3);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+            };
+        }
+        #[test]
+        fn test_input_splitter_next_for_first_item_again_after_rewind_and_add_line_to_buffer() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Add all three items to the buffer, rewind it, and add the first item again (assumed to be tested in separate tests)
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.csplit_rewind_buffer();
+            input_splitter.next();
+            input_splitter.csplit_add_line_to_buffer(0, String::from("aaa"));
+
+            match input_splitter.next() {
+                Some((0, Ok(line))) => {
+                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 2);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 1);
+                }
+            };
+        }
+        #[test]
+        fn test_input_splitter_next_for_remaining_items_after_rewind_and_multiple_next_calls() {
+            let input = vec![
+                Ok(String::from("aaa")),
+                Ok(String::from("bbb")),
+                Ok(String::from("ccc")),
+                Ok(String::from("ddd")),
+            ];
+            let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
+
+            // Add all three items to the buffer, rewind it, and call `next()` multiple times (assumed to be tested in separate tests)
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.csplit_rewind_buffer();
+            input_splitter.next();
+            input_splitter.next();
+            input_splitter.next();
+
+            match input_splitter.next() {
+                Some((3, Ok(line))) => {
+                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+                // item => panic!("wrong item: {item:?}"),
+                _item => {
+                    assert_eq!(input_splitter.csplit_buffer_len(), 0);
+                }
+            };
+
+            assert!(input_splitter.next().is_none());
+        }
+    }
+
+    mod tests_csplit {
+        use super::*;
+
+        use std::ffi::OsString;
+
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        fn remove_tem_file(name: String) {
+            let file_path = Path::new(&name);
+            match fs::remove_file(file_path) {
+                Ok(()) => {
+                    // println!("文件删除成功");
+                }
+                Err(_e) => {
+                    // eprintln!("File remove fail: {}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%1d"];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx001".to_string());
+            remove_tem_file("xx000".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx01".to_string());
+            remove_tem_file("xx00".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx000".to_string());
+            remove_tem_file("xx001".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx000".to_string());
+            remove_tem_file("xx001".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_0u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_1u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_2u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_3u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_whole_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_whole_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_whole_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suffix_format_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("custom_prefix00".to_string());
+            remove_tem_file("custom_prefix01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "001111", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("00111100".to_string());
+            remove_tem_file("00111101".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "2024-04-18_", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("2024-04-18_00".to_string());
+            remove_tem_file("2024-04-18_01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix_string_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix_13234_", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("custom_prefix_13234_00".to_string());
+            remove_tem_file("custom_prefix_13234_01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix_string_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix_2024-04-25_", // Example prefix
+            ];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("custom_prefix_2024-04-25_00".to_string());
+            remove_tem_file("custom_prefix_2024-04-25_01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix_name_other() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "auser_&*^#28340#!@#()", // Example prefix
+            ];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("auser_&*^#28340#!@#()00".to_string());
+            remove_tem_file("auser_&*^#28340#!@#()01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_prefix() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-f",
+                "cuser_&*^#28340#!@#()", // Example prefix
+            ];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("cuser_&*^#28340#!@#()00".to_string());
+            remove_tem_file("cuser_&*^#28340#!@#()01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_csplit_keep_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--suppress-matched",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_suppress_matched_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--suppress-matched",
+                "--keep-files",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_keep_files_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--keep-files",
+                "--suppress-matched",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_digits_0() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_digits_1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_digits_2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_digits_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_digits_n_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx000".to_string());
+            remove_tem_file("xx001".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_quiet() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_quiet_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_silent_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_elide_empty_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_csplit_elide_empty_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--elide-empty-files",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
+                eprintln!("Error: {}", err);
+            });
+
+            remove_tem_file("xx00".to_string());
+            remove_tem_file("xx01".to_string());
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_fn_do_csplit {
+
+        use super::*;
+
+        use std::ffi::OsString;
+
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+        #[test]
+        fn test_do_do_csplit_suffix_format_0d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_do_csplit_suffix_format_1d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%1d"];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3d() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx000".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3x() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3o() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+            remove_tem_file("xx1".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        fn remove_tem_file(name: String) {
+            let file_path = Path::new(&name);
+            match fs::remove_file(file_path) {
+                Ok(()) => {
+                    // println!("文件删除成功");
+                }
+                Err(_e) => {
+                    // eprintln!("File remove fail: {}", e)
+                }
+            }
+        }
+        #[test]
+        fn test_do_csplit_suffix_format_1s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3c() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_0u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_1u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_2u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_3u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_whole_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_whole_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_whole_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_special1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_special2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suffix_format_special3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("custom_prefix00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "001111", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("00111100".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "2024-04-18_", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("2024-04-18_00".to_string());
+            remove_tem_file("2024-04-18_01".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix_string_number() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix_13234_", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("custom_prefix_13234_00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix_string_time() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "custom_prefix_2024-04-25_", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("custom_prefix_2024-04-25_00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix_name_other() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--prefix",
+                "auser_&*^#28340#!@#()", // Example prefix
+            ];
+
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("auser_&*^#28340#!@#()00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_prefix() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "-f",
+                "cuser_&*^#28340#!@#()", // Example prefix
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("cuser_&*^#28340#!@#()00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+        #[test]
+        fn test_do_csplit_keep_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--suppress-matched",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_suppress_matched_keep_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--suppress-matched",
+                "--keep-files",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_keep_files_suppress_matched() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--keep-files",
+                "--suppress-matched",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_digits_0() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_digits_1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx0".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_digits_2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_digits_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx000".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_digits_n_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx000".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_quiet() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_quiet_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_silent_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_elide_empty_files() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+
+        #[test]
+        fn test_do_csplit_elide_empty_files_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_do_csplit_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "/bbbb/",
+                "--elide-empty-files",
+            ];
+            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+
+            // get the file to split
+            let binding = matches.expect("REASON");
+            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+
+            let matches_patterns = binding.clone();
+
+            // get the patterns to split on
+            let patterns: Vec<String> = matches_patterns
+                .get_many::<String>(opt_flags::PATTERN)
+                .unwrap()
+                .map(|s| s.to_string())
+                .collect();
+
+            let matches_options = binding.clone();
+            let options = CsplitOptions::new(&matches_options);
+
+            let file = File::open(file_name)
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let binding = file.expect("REASON");
+            let file_meta = binding
+                .metadata()
+                .map_err_context(|| format!("cannot access {}", file_name.quote()));
+            let file_metadata = file_meta.expect("REASON");
+            if !file_metadata.is_file() {
+                eprintln!("not a regular file");
+            }
+
+            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut split_writer = SplitWriter::new(&options);
+            let patterns: Vec<patterns::CsplitPattern> =
+                patterns::get_patterns(&patterns[..]).unwrap();
+            let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+
+            remove_tem_file("xx00".to_string());
+
+            assert!(ret.is_ok());
+        }
+    }
+}

@@ -1,0 +1,585 @@
+/*
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
+ *     syskits is licensed under Mulan PSL v2.
+ *    You can use this software according to the terms and conditions of the Mulan PSL V2
+ *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *    See the Mulan PSL v2 for more details.
+ *
+ */
+//!
+//! 我们通过在两个线程之间拆分排序和写入任务以及读取和解析任务来提高性能。
+//! 线程通过通道进行通信。在阅读器->分拣器的方向上，每个文件有一个通道，但从sort返回阅读器只有
+//! 从sort返回阅读器的通道只有一个。到sort的通道用于发送读取的数据块。
+//! 当读取的数据行数耗尽后，sort需要下一个数据块时，就会从通道中读取下一个数据块。
+//！从上一次读取的文件中读取下一个数据块。从sort返回到阅读器的通道有两个目的： 允许阅读器重用内存分配，并告诉阅读器下一步读取哪个文件。
+
+use std::cmp::Ordering;
+use std::ffi::OsString;
+use std::fs::{self, File};
+use std::io::{BufWriter, Read, Write};
+use std::iter;
+use std::path::{Path, PathBuf};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::rc::Rc;
+use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
+use std::thread::{self, JoinHandle};
+
+use compare::Compare;
+use itertools::Itertools;
+
+use ctcore::ct_error::CTResult;
+
+use crate::chunks::{self, Chunk, ChunkRecycled};
+use crate::tmp_dir::TmpDirWrapper;
+use crate::{sort_compare_by, sort_open};
+use crate::{SortError, SortGlobalConfigs, SortOutput};
+
+/// 如果输出文件也出现在输入文件中，则复制输出文件的内容
+/// 并用该副本替换输入文件中出现的输出文件。
+fn merge_replace_output_file_in_input_files(
+    files: &mut [OsString],
+    output: Option<&str>,
+    tmp_dir: &mut TmpDirWrapper,
+) -> CTResult<()> {
+    let mut copy: Option<PathBuf> = None;
+    if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
+        for file in files {
+            if let Ok(file_path) = Path::new(file).canonicalize() {
+                if file_path == output_path {
+                    match &copy {
+                        Some(copy) => {
+                            *file = copy.clone().into_os_string();
+                        }
+                        _ => {
+                            let (_file, copy_path) = tmp_dir.next_file()?;
+                            std::fs::copy(file_path, &copy_path)
+                                .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
+                            *file = copy_path.clone().into_os_string();
+                            copy = Some(copy_path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 合并预先排序的 `Box<dyn Read>`s。
+///
+/// 如果 `settings.merge_batch_size` 大于 `files` 的长度，将使用中间文件。
+/// 如果 `settings.compress_prog` 为 `Some`，中间文件将被压缩。
+pub fn merge<'a>(
+    files: &mut [OsString],
+    settings: &'a SortGlobalConfigs,
+    output: Option<&str>,
+    tmp_dir: &mut TmpDirWrapper,
+) -> CTResult<MergeFileMerger<'a>> {
+    merge_replace_output_file_in_input_files(files, output, tmp_dir)?;
+    match settings.compress_prog {
+        Some(_) => merge_with_file_limit::<_, _, MergeWriteableCompressedTmpFile>(
+            files
+                .iter()
+                .map(|file| sort_open(file).map(|file| PlainMergeInput { inner: file })),
+            settings,
+            tmp_dir,
+        ),
+        None => merge_with_file_limit::<_, _, MergeWriteablePlainTmpFile>(
+            files
+                .iter()
+                .map(|file| sort_open(file).map(|file| PlainMergeInput { inner: file })),
+            settings,
+            tmp_dir,
+        ),
+    }
+}
+
+// 合并已排序的`MergeInput`s。
+pub fn merge_with_file_limit<
+    'a,
+    M: MergeInput + 'static,
+    F: ExactSizeIterator<Item = CTResult<M>>,
+    Tmp: MergeWriteableTmpFile + 'static,
+>(
+    files: F,
+    settings: &'a SortGlobalConfigs,
+    tmp_dir: &mut TmpDirWrapper,
+) -> CTResult<MergeFileMerger<'a>> {
+    if files.len() > settings.merge_batch_size {
+        let mut remaining_files_len = files.len();
+        let batches = files.chunks(settings.merge_batch_size);
+        let mut batches = batches.into_iter();
+        let mut temporary_files_vec = vec![];
+        while remaining_files_len != 0 {
+            // Work around the fact that `Chunks` is not an `ExactSizeIterator`.
+            remaining_files_len = remaining_files_len.saturating_sub(settings.merge_batch_size);
+            let merger = merge_without_limit(batches.next().unwrap(), settings)?;
+            let mut tmp_file =
+                Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+            merger.write_all_to(settings, tmp_file.as_write())?;
+            temporary_files_vec.push(tmp_file.finished_writing()?);
+        }
+        assert!(batches.next().is_none());
+        merge_with_file_limit::<_, _, Tmp>(
+            temporary_files_vec
+                .into_iter()
+                .map(Box::new(|c: Tmp::Closed| c.reopen())
+                    as Box<
+                        dyn FnMut(
+                            Tmp::Closed,
+                        )
+                            -> CTResult<<Tmp::Closed as MergeClosedTmpFile>::Reopened>,
+                    >),
+            settings,
+            tmp_dir,
+        )
+    } else {
+        merge_without_limit(files, settings)
+    }
+}
+
+/// 合并文件时不限制同时打开的文件数量。
+///
+/// 调用者有责任确保 `files` 只产生我们允许同时打开的尽可能多的文件。
+/// 允许同时打开的文件数量。
+fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = CTResult<M>>>(
+    files: F,
+    sort_settings: &SortGlobalConfigs,
+) -> CTResult<MergeFileMerger> {
+    let (request_sender, request_receiver) = channel();
+    let mut reader_files_vec = Vec::with_capacity(files.size_hint().0);
+    let mut loaded_receivers_vec = Vec::with_capacity(files.size_hint().0);
+    for (file_number, file) in files.enumerate() {
+        let (sender, receiver) = sync_channel(2);
+        loaded_receivers_vec.push(receiver);
+        reader_files_vec.push(Some(MergeReaderFile {
+            file: file?,
+            sender,
+            carry_over: vec![],
+        }));
+        // 发送初始块以触发每个文件的读取
+        request_sender
+            .send((file_number, ChunkRecycled::new(8 * 1024)))
+            .unwrap();
+    }
+
+    // 为每个文件发送第二个数据块
+    for file_number in 0..reader_files_vec.len() {
+        request_sender
+            .send((file_number, ChunkRecycled::new(8 * 1024)))
+            .unwrap();
+    }
+
+    let reader_join_handle = thread::spawn({
+        let settings = sort_settings.clone();
+        move || {
+            reader(
+                &request_receiver,
+                &mut reader_files_vec,
+                &settings,
+                settings.line_ending.into(),
+            )
+        }
+    });
+
+    let mut mergeable_files_vec = vec![];
+
+    for (file_number, receiver) in loaded_receivers_vec.into_iter().enumerate() {
+        if let Ok(chunk) = receiver.recv() {
+            mergeable_files_vec.push(MergeableFile {
+                current_chunk: Rc::new(chunk),
+                file_number,
+                line_idx: 0,
+                receiver,
+            });
+        }
+    }
+
+    Ok(MergeFileMerger {
+        heap: binary_heap_plus::BinaryHeap::from_vec_cmp(
+            mergeable_files_vec,
+            MergeFileComparator {
+                settings: sort_settings,
+            },
+        ),
+        request_sender,
+        prev: None,
+        reader_join_handle,
+    })
+}
+
+/// 阅读器线程上代表输入文件的结构体
+struct MergeReaderFile<M: MergeInput> {
+    file: M,
+    sender: SyncSender<Chunk>,
+    carry_over: Vec<u8>,
+}
+
+/// 在阅读器线程上运行的函数。
+fn reader(
+    chunk_recycled_receiver: &Receiver<(usize, ChunkRecycled)>,
+    files: &mut [Option<MergeReaderFile<impl MergeInput>>],
+    sort_settings: &SortGlobalConfigs,
+    separator: u8,
+) -> CTResult<()> {
+    for (file_idx, recycled_chunk) in chunk_recycled_receiver {
+        if let Some(MergeReaderFile {
+            file,
+            sender,
+            carry_over,
+        }) = &mut files[file_idx]
+        {
+            let should_continue = chunks::chunk_read(
+                sender,
+                recycled_chunk,
+                None,
+                carry_over,
+                file.as_read(),
+                &mut iter::empty(),
+                separator,
+                sort_settings,
+            )?;
+            if !should_continue {
+                // 用 `None` 替换文件，将其从列表中删除。
+                let MergeReaderFile { file, .. } = files[file_idx].take().unwrap();
+                // 根据 `MergeInput` 的类型，这可能会删除文件：
+                file.finished_reading()?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 主线程上代表输入文件的结构体
+pub struct MergeableFile {
+    current_chunk: Rc<Chunk>,
+    line_idx: usize,
+    receiver: Receiver<Chunk>,
+    file_number: usize,
+}
+
+/// 一个用于跟踪我们遇到的前一行的结构。
+///
+/// 这是重复数据删除所必需的。
+struct MergePreviousLine {
+    chunk: Rc<Chunk>,
+    line_idx: usize,
+    file_number: usize,
+}
+
+/// 合并文件。这不是一个迭代器，因为存在寿命问题。
+pub struct MergeFileMerger<'a> {
+    heap: binary_heap_plus::BinaryHeap<MergeableFile, MergeFileComparator<'a>>,
+    request_sender: Sender<(usize, ChunkRecycled)>,
+    prev: Option<MergePreviousLine>,
+    reader_join_handle: JoinHandle<CTResult<()>>,
+}
+
+impl<'a> MergeFileMerger<'a> {
+    /// 将合并后的内容写入输出文件。
+    pub fn write_all(self, settings: &SortGlobalConfigs, output: SortOutput) -> CTResult<()> {
+        let mut out = output.into_write();
+        self.write_all_to(settings, &mut out)
+    }
+
+    pub fn write_all_to(
+        mut self,
+        settings: &SortGlobalConfigs,
+        out: &mut impl Write,
+    ) -> CTResult<()> {
+        while self.write_next(settings, out) {}
+        drop(self.request_sender);
+        self.reader_join_handle.join().unwrap()
+    }
+
+    fn write_next(&mut self, settings: &SortGlobalConfigs, out: &mut impl Write) -> bool {
+        if let Some(file) = self.heap.peek() {
+            let prev = self.prev.replace(MergePreviousLine {
+                chunk: file.current_chunk.clone(),
+                line_idx: file.line_idx,
+                file_number: file.file_number,
+            });
+
+            file.current_chunk.with_dependent(|_, contents| {
+                let current_line = &contents.lines[file.line_idx];
+                if settings.is_unique {
+                    if let Some(prev) = &prev {
+                        let cmp = sort_compare_by(
+                            &prev.chunk.lines()[prev.line_idx],
+                            current_line,
+                            settings,
+                            prev.chunk.line_data(),
+                            file.current_chunk.line_data(),
+                        );
+                        if cmp == Ordering::Equal {
+                            return;
+                        }
+                    }
+                }
+                current_line.print(out, settings);
+            });
+
+            let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
+
+            if was_last_line_for_file {
+                match file.receiver.recv() {
+                    Ok(next_chunk) => {
+                        let mut file = self.heap.peek_mut().unwrap();
+                        file.current_chunk = Rc::new(next_chunk);
+                        file.line_idx = 0;
+                    }
+                    _ => {
+                        self.heap.pop();
+                    }
+                }
+            } else {
+                // 这将导致比较使用不同的行，堆将重新调整。
+                self.heap.peek_mut().unwrap().line_idx += 1;
+            }
+
+            if let Some(prev) = prev {
+                if let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk) {
+                    // 如果没有任何内容再引用前一个分块，这意味着前一行
+                    // 是该语块的最后一行。我们就可以回收该块。
+                    self.request_sender
+                        .send((prev.file_number, prev_chunk.recycle()))
+                        .ok();
+                }
+            }
+        }
+        !self.heap.is_empty()
+    }
+}
+
+/// 按当前行比较文件。
+struct MergeFileComparator<'a> {
+    settings: &'a SortGlobalConfigs,
+}
+
+impl<'a> Compare<MergeableFile> for MergeFileComparator<'a> {
+    fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
+        let mut cmp = sort_compare_by(
+            &a.current_chunk.lines()[a.line_idx],
+            &b.current_chunk.lines()[b.line_idx],
+            self.settings,
+            a.current_chunk.line_data(),
+            b.current_chunk.line_data(),
+        );
+        if cmp == Ordering::Equal {
+            // 为了保证排序的稳定性，我们还需要考虑文件编号、
+            // 因为编号较低的文件中的行会被认为是 "较早 "的。
+            cmp = a.file_number.cmp(&b.file_number);
+        }
+        // BinaryHeap 是一个最大堆。我们将其用作最小堆，因此需要颠倒排序。
+        cmp.reverse()
+    }
+}
+
+// 等待子代退出并检查其退出代码。
+fn merge_check_child_success(mut child: Child, program: &str) -> CTResult<()> {
+    match child.wait().map(|e| e.code()) {
+        Ok(Some(0)) | Ok(None) | Err(_) => Ok(()),
+        _ => Err(SortError::SortCompressProgTerminatedAbnormally {
+            prog: program.to_owned(),
+        }
+        .into()),
+    }
+}
+
+/// 可以写入的临时文件。
+pub trait MergeWriteableTmpFile: Sized {
+    type Closed: MergeClosedTmpFile;
+    type InnerWrite: Write;
+    fn create(file: (File, PathBuf), compress_prog: Option<&str>) -> CTResult<Self>;
+    /// 关闭临时文件。
+    fn finished_writing(self) -> CTResult<Self::Closed>;
+    fn as_write(&mut self) -> &mut Self::InnerWrite;
+}
+
+/// 一个（暂时）关闭但可以重新打开的临时文件。
+pub trait MergeClosedTmpFile {
+    type Reopened: MergeInput;
+    /// 重新打开临时文件。
+    fn reopen(self) -> CTResult<Self::Reopened>;
+}
+
+/// A pre-sorted input for merging.
+pub trait MergeInput: Send {
+    type InnerRead: Read;
+    /// 清理这个 `MergeInput` 。
+    /// 实现可以删除后备文件。
+    fn finished_reading(self) -> CTResult<()>;
+    fn as_read(&mut self) -> &mut Self::InnerRead;
+}
+
+pub struct MergeWriteablePlainTmpFile {
+    path: PathBuf,
+    file: BufWriter<File>,
+}
+
+pub struct MergeClosedPlainTmpFile {
+    path: PathBuf,
+}
+
+pub struct MergePlainTmpMergeInput {
+    path: PathBuf,
+    file: File,
+}
+
+impl MergeWriteableTmpFile for MergeWriteablePlainTmpFile {
+    type Closed = MergeClosedPlainTmpFile;
+    type InnerWrite = BufWriter<File>;
+
+    fn create((file, path): (File, PathBuf), _: Option<&str>) -> CTResult<Self> {
+        Ok(Self {
+            file: BufWriter::new(file),
+            path,
+        })
+    }
+
+    fn finished_writing(self) -> CTResult<Self::Closed> {
+        Ok(MergeClosedPlainTmpFile { path: self.path })
+    }
+
+    fn as_write(&mut self) -> &mut Self::InnerWrite {
+        &mut self.file
+    }
+}
+
+impl MergeClosedTmpFile for MergeClosedPlainTmpFile {
+    type Reopened = MergePlainTmpMergeInput;
+    fn reopen(self) -> CTResult<Self::Reopened> {
+        Ok(MergePlainTmpMergeInput {
+            file: File::open(&self.path)
+                .map_err(|error| SortError::SortOpenTmpFileFailed { error })?,
+            path: self.path,
+        })
+    }
+}
+
+impl MergeInput for MergePlainTmpMergeInput {
+    type InnerRead = File;
+
+    fn finished_reading(self) -> CTResult<()> {
+        // 我们忽略删除临时文件的失败、
+        // 因为在执行结束时会出现竞赛，整个
+        // 临时目录可能已经删除。
+        let _ = fs::remove_file(self.path);
+        Ok(())
+    }
+
+    fn as_read(&mut self) -> &mut Self::InnerRead {
+        &mut self.file
+    }
+}
+
+pub struct MergeWriteableCompressedTmpFile {
+    path: PathBuf,
+    compress_prog: String,
+    child: Child,
+    child_stdin: BufWriter<ChildStdin>,
+}
+
+pub struct MergeClosedCompressedTmpFile {
+    path: PathBuf,
+    compress_prog: String,
+}
+
+pub struct MergeCompressedTmpMergeInput {
+    path: PathBuf,
+    compress_prog: String,
+    child: Child,
+    child_stdout: ChildStdout,
+}
+
+impl MergeWriteableTmpFile for MergeWriteableCompressedTmpFile {
+    type Closed = MergeClosedCompressedTmpFile;
+    type InnerWrite = BufWriter<ChildStdin>;
+
+    fn create((file, path): (File, PathBuf), compress_prog: Option<&str>) -> CTResult<Self> {
+        let compress_prog = compress_prog.unwrap();
+        let mut command = Command::new(compress_prog);
+        command.stdin(Stdio::piped()).stdout(file);
+        let mut child =
+            command
+                .spawn()
+                .map_err(|err| SortError::SortCompressProgExecutionFailed {
+                    code: err.raw_os_error().unwrap(),
+                })?;
+        let child_stdin = child.stdin.take().unwrap();
+        Ok(Self {
+            path,
+            compress_prog: compress_prog.to_owned(),
+            child,
+            child_stdin: BufWriter::new(child_stdin),
+        })
+    }
+
+    fn finished_writing(self) -> CTResult<Self::Closed> {
+        drop(self.child_stdin);
+        merge_check_child_success(self.child, &self.compress_prog)?;
+        Ok(MergeClosedCompressedTmpFile {
+            path: self.path,
+            compress_prog: self.compress_prog,
+        })
+    }
+
+    fn as_write(&mut self) -> &mut Self::InnerWrite {
+        &mut self.child_stdin
+    }
+}
+
+impl MergeClosedTmpFile for MergeClosedCompressedTmpFile {
+    type Reopened = MergeCompressedTmpMergeInput;
+
+    fn reopen(self) -> CTResult<Self::Reopened> {
+        let mut cmd = Command::new(&self.compress_prog);
+        let file = File::open(&self.path).unwrap();
+        cmd.stdin(file).stdout(Stdio::piped()).arg("-d");
+        let mut child = cmd
+            .spawn()
+            .map_err(|err| SortError::SortCompressProgExecutionFailed {
+                code: err.raw_os_error().unwrap(),
+            })?;
+        let child_stdout = child.stdout.take().unwrap();
+        Ok(MergeCompressedTmpMergeInput {
+            path: self.path,
+            compress_prog: self.compress_prog,
+            child,
+            child_stdout,
+        })
+    }
+}
+
+impl MergeInput for MergeCompressedTmpMergeInput {
+    type InnerRead = ChildStdout;
+
+    fn finished_reading(self) -> CTResult<()> {
+        drop(self.child_stdout);
+        merge_check_child_success(self.child, &self.compress_prog)?;
+        let _ = fs::remove_file(self.path);
+        Ok(())
+    }
+
+    fn as_read(&mut self) -> &mut Self::InnerRead {
+        &mut self.child_stdout
+    }
+}
+
+pub struct PlainMergeInput<R: Read + Send> {
+    inner: R,
+}
+
+impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
+    type InnerRead = R;
+    fn finished_reading(self) -> CTResult<()> {
+        Ok(())
+    }
+    fn as_read(&mut self) -> &mut Self::InnerRead {
+        &mut self.inner
+    }
+}
+

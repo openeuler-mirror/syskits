@@ -1468,5 +1468,257 @@ mod tests {
             }
         }
 
+        #[test]
+        fn test_ct_main_change_short_c() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-c", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_access_short_u() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-u", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_ignore_short_uppercase_i() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-I", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_sort_long() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--sort=size", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_size_short() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-S", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_time_sort_short() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-t", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_extension_short() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-X", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_none_sort_short() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-U", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    //println!("{:?}, {:?}", file_vec, dir_vec);
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_dereference_all_short() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-L", &dir_name];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_dereference_dir_args_long() {
+            let file_name = "test_dir_file";
+            let tmp_dir = TempDir::with_prefix("test_dir-").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join(file_name);
+            File::create(&test_file_path).unwrap();
+            let dir_name = temp_dir_path.to_str().unwrap();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--dereference-command-line-symlink-to-dir",
+                &dir_name,
+            ];
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    panic!("err: {}", output)
+                }
+                Ok((file_vec, dir_vec)) => {
+                    assert!(file_vec.is_empty());
+                    assert!(!dir_vec.is_empty());
+                    assert_eq!(1, dir_vec.len());
+                }
+            }
+        }
+
     }
 }

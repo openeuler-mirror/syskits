@@ -453,4 +453,13 @@ mod tests {
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
     }
+
+   #[test]
+    fn test_line_number_zero_separate() {
+        let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "0".to_string()];
+        match get_patterns(input.as_slice()) {
+            Err(CsplitError::LineNumberIsZero) => (),
+            _ => panic!("expected LineNumberIsZero error"),
+        }
+    }
 }

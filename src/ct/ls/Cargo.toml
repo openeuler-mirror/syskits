@@ -1,0 +1,51 @@
+[package]
+name = "ct_ls"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "ls ~ (ctutils) display directory contents"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/ls"
+
+[lib]
+path = "src/ls.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["env"] }
+chrono = { workspace = true }
+unicode-width = { workspace = true }
+number_prefix = { workspace = true }
+uutils_term_grid = { workspace = true }
+terminal_size = { workspace = true }
+glob = { workspace = true }
+lscolors = { workspace = true }
+ctcore = { workspace = true, features = [
+    "colors",
+    "entries",
+    "fs",
+    "fsxattr",
+    "quoting-style",
+    "version-cmp",
+] }
+once_cell = { workspace = true }
+selinux = { workspace = true, optional = true }
+hostname = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+exacl = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+users = "0.11"
+
+[[bin]]
+name = "ls"
+path = "src/main.rs"
+
+[features]
+feat_selinux = ["selinux"]
+feat_acl = ["exacl"]

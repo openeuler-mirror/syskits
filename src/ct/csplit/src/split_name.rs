@@ -154,4 +154,81 @@ mod tests {
             _ => panic!("should fail with InvalidNumber"),
         };
     }
+
+    #[test]
+    fn invalid_suffix_format1() {
+        let split_name = SplitName::new(None, Some(String::from("no conversion string")), None);
+        match split_name {
+            Err(CsplitError::SuffixFormatIncorrect) => (),
+            _ => panic!("should fail with SuffixFormatIncorrect"),
+        };
+    }
+
+    #[test]
+    fn invalid_suffix_format2() {
+        let split_name = SplitName::new(None, Some(String::from("%042a")), None);
+        match split_name {
+            Err(CsplitError::SuffixFormatIncorrect) => (),
+            _ => panic!("should fail with SuffixFormatIncorrect"),
+        };
+    }
+
+    #[test]
+    fn default_formatter() {
+        let split_name = SplitName::new(None, None, None).unwrap();
+        assert_eq!(split_name.get(2), "xx02");
+    }
+
+    #[test]
+    fn default_formatter_with_prefix() {
+        let split_name = SplitName::new(Some(String::from("aaa")), None, None).unwrap();
+        assert_eq!(split_name.get(2), "aaa02");
+    }
+
+    #[test]
+    fn default_formatter_with_width() {
+        let split_name = SplitName::new(None, None, Some(String::from("5"))).unwrap();
+        assert_eq!(split_name.get(2), "xx00002");
+    }
+
+    #[test]
+    fn no_padding_decimal() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%d-")), None).unwrap();
+        assert_eq!(split_name.get(2), "xxcst-2-");
+    }
+
+    #[test]
+    fn zero_padding_decimal1() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%03d-")), None).unwrap();
+        assert_eq!(split_name.get(2), "xxcst-002-");
+    }
+
+    #[test]
+    fn zero_padding_decimal2() {
+        let split_name = SplitName::new(
+            Some(String::from("pre-")),
+            Some(String::from("cst-%03d-post")),
+            None,
+        )
+        .unwrap();
+        assert_eq!(split_name.get(2), "pre-cst-002-post");
+    }
+
+    #[test]
+    fn zero_padding_decimal3() {
+        let split_name = SplitName::new(
+            None,
+            Some(String::from("cst-%03d-")),
+            Some(String::from("42")),
+        )
+        .unwrap();
+        assert_eq!(split_name.get(2), "xxcst-002-");
+    }
+
+    #[test]
+    fn zero_padding_decimal4() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%03i-")), None).unwrap();
+        assert_eq!(split_name.get(2), "xxcst-002-");
+    }
+
 }

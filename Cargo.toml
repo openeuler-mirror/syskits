@@ -78,6 +78,7 @@ feat_common_core = [
   "cksum",
   "vdir",
   "csplit",
+  "dir",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -220,6 +221,7 @@ ls = { optional = true, package = "ct_ls", path = "src/ct/ls" }
 cksum = { optional = true, package = "ct_cksum", path = "src/ct/cksum" }
 vdir = { optional = true, package = "ct_vdir", path = "src/ct/vdir" }
 csplit = { optional = true, package = "ct_csplit", path = "src/ct/csplit" }
+dir = { optional = true, package = "ct_dir", path = "src/ct/dir" }
 
 [dev-dependencies]
 chrono = { workspace = true }

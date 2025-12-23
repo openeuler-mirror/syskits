@@ -1,0 +1,27 @@
+[package]
+name = "ct_cksum"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "cksum ~ (ctutils) display CRC and size of input"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/cksum"
+
+[lib]
+path = "src/cksum.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["encoding", "sum"] }
+hex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "cksum"
+path = "src/main.rs"

@@ -2189,5 +2189,121 @@ mod tests {
             assert!(matches.is_ok());
             assert!(matches.unwrap().contains_id(dir_flags::format::DIR_LONG));
         }
+
+            #[test]
+        fn test_ct_app_across_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-x"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::format::DIR_ACROSS));
+        }
+
+        #[test]
+        fn test_ct_app_tab_size_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-T", "4"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert_eq!(
+                matches
+                    .unwrap()
+                    .get_one::<String>(dir_flags::format::DIR_TAB_SIZE)
+                    .unwrap(),
+                "4"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_tab_size_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--tabsize=8"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert_eq!(
+                matches
+                    .unwrap()
+                    .get_one::<String>(dir_flags::format::DIR_TAB_SIZE)
+                    .unwrap(),
+                "8"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_commas_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-m"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::format::DIR_COMMAS));
+        }
+
+        #[test]
+        fn test_ct_app_one_line_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-1"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::format::DIR_ONE_LINE));
+        }
+
+        #[test]
+        fn test_ct_app_long_no_group_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-o"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::format::DIR_LONG_NO_GROUP));
+        }
+
+        #[test]
+        fn test_ct_app_long_no_owner_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-g"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::format::DIR_LONG_NO_OWNER));
+        }
+
+        #[test]
+        fn test_ct_app_long_no_owner_short_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-g", "--help"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_err());
+            assert_eq!(
+                matches.unwrap_err().kind(),
+                clap::error::ErrorKind::DisplayHelp
+            );
+        }
+
+        #[test]
+        fn test_ct_app_long_numeric_uid_gid_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-n"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::format::DIR_LONG_NUMERIC_UID_GID));
+        }
+
+        #[test]
+        fn test_ct_app_long_numeric_uid_gid_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--numeric-uid-gid"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::format::DIR_LONG_NUMERIC_UID_GID));
+        }
+
     }
 }

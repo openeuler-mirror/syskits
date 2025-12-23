@@ -231,4 +231,64 @@ mod tests {
         assert_eq!(split_name.get(2), "xxcst-002-");
     }
 
+   #[test]
+    fn zero_padding_decimal5() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%03u-")), None).unwrap();
+        assert_eq!(split_name.get(2), "xxcst-002-");
+    }
+
+    #[test]
+    fn zero_padding_octal() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%03o-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-052-");
+    }
+
+    #[test]
+    fn zero_padding_lower_hex() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%03x-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-02a-");
+    }
+
+    #[test]
+    fn zero_padding_upper_hex() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%03X-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-02A-");
+    }
+
+    #[test]
+    fn alternate_form_octal() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%#10o-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-       052-");
+    }
+
+    #[test]
+    fn alternate_form_lower_hex() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%#10x-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-      0x2a-");
+    }
+
+    #[test]
+    fn alternate_form_upper_hex() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%#10X-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-      0X2A-");
+    }
+
+    #[test]
+    fn left_adjusted_decimal1() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%-10d-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-42        -");
+    }
+
+    #[test]
+    fn left_adjusted_decimal2() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%-10i-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-42        -");
+    }
+
+    #[test]
+    fn left_adjusted_decimal3() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%-10u-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-42        -");
+    }
+
 }

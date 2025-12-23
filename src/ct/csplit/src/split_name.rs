@@ -77,3 +77,81 @@ impl SplitName {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use crate::csplit_error::CsplitError;
+    use crate::split_name::SplitName;
+
+    #[test]
+    fn test_split_name_new_default_prefix_and_format() {
+        let split_name = SplitName::new(None, None, None).unwrap();
+        assert_eq!("xx", String::from_utf8(split_name.prefix).unwrap());
+    }
+
+    #[test]
+    fn test_split_name_new_custom_prefix_no_format() {
+        let split_name = SplitName::new(Some("abc".to_string()), None, None).unwrap();
+        assert_eq!("abc", String::from_utf8(split_name.prefix).unwrap());
+    }
+
+    #[test]
+    fn test_split_name_new_no_prefix_custom_format() {
+        let split_name = SplitName::new(None, Some("%03u".to_string()), None).unwrap();
+        assert_eq!("xx", String::from_utf8(split_name.prefix).unwrap());
+    }
+
+    #[test]
+    fn test_split_name_new_no_prefix_no_format_custom_n_digits() {
+        let split_name = SplitName::new(None, None, Some("3".to_string())).unwrap();
+        assert_eq!("xx", String::from_utf8(split_name.prefix).unwrap());
+    }
+
+    #[test]
+    fn test_split_name_new_custom_prefix_format_and_n_digits() {
+        let split_name = SplitName::new(
+            Some("def".to_string()),
+            Some("ghi-%04d".to_string()),
+            Some("5".to_string()),
+        )
+        .unwrap();
+        assert_eq!("def", String::from_utf8(split_name.prefix).unwrap());
+    }
+
+    #[test]
+    fn test_split_name_get_i_equals_0() {
+        let split_name = SplitName::new(None, None, None).unwrap();
+        let filename = split_name.get(0);
+        assert_eq!("xx00", filename);
+    }
+
+    #[test]
+    fn test_split_name_get_i_equals_10() {
+        let split_name = SplitName::new(None, None, None).unwrap();
+        let filename = split_name.get(10);
+        assert_eq!("xx10", filename);
+    }
+
+    #[test]
+    fn test_split_name_get_i_equals_100() {
+        let split_name = SplitName::new(None, None, None).unwrap();
+        let filename = split_name.get(100);
+        assert_eq!("xx100", filename);
+    }
+
+    #[test]
+    fn test_split_name_get_i_equals_42_with_custom_format() {
+        let split_name = SplitName::new(None, Some(String::from("%03d")), None).unwrap();
+        let filename = split_name.get(42);
+        assert_eq!("xx042", filename);
+    }
+
+    #[test]
+    fn invalid_number() {
+        let split_name = SplitName::new(None, None, Some(String::from("bad")));
+        match split_name {
+            Err(CsplitError::InvalidNumber(_)) => (),
+            _ => panic!("should fail with InvalidNumber"),
+        };
+    }
+}

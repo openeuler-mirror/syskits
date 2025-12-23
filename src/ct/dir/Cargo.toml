@@ -1,0 +1,26 @@
+[package]
+name = "ct_dir"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "shortcut to ls -C -b"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/ls"
+[lib]
+path = "src/dir.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["env"] }
+ctcore = { workspace = true, features = ["entries", "fs", "quoting-style"] }
+ct_ls = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "dir"
+path = "src/main.rs"

@@ -672,22 +672,22 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<CtQuoting
         "shell" => Some(CtQuotingStyle::Shell {
             escape: false,
             always_quote: false,
-            show_control: show_control,
+            show_control,
         }),
         "shell-always" => Some(CtQuotingStyle::Shell {
             escape: false,
             always_quote: true,
-            show_control: show_control,
+            show_control,
         }),
         "shell-escape" => Some(CtQuotingStyle::Shell {
             escape: true,
             always_quote: false,
-            show_control: show_control,
+            show_control,
         }),
         "shell-escape-always" => Some(CtQuotingStyle::Shell {
             escape: true,
             always_quote: true,
-            show_control: show_control,
+            show_control,
         }),
         "c" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::Double,
@@ -750,7 +750,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> CtQu
             CtQuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
-                show_control: show_control,
+                show_control,
             }
         } else {
             CtQuotingStyle::Literal { show_control }

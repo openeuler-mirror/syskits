@@ -31,6 +31,7 @@ pub enum CsplitPattern {
     SkipToMatch(Regex, i32, CsplitExecutePattern),
 }
 
+#[allow(clippy::to_string_trait_impl)]
 impl ToString for CsplitPattern {
     fn to_string(&self) -> String {
         match self {

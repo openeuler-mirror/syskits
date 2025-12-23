@@ -2289,3 +2289,12060 @@ fn cp_disk_usage_directory(path: &Path) -> io::Result<u64> {
     Ok(total)
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_cp_fn {
+
+        use std::fs;
+
+        use crate::cp_aligned_ancestors;
+        use crate::cp_disk_usage;
+        use crate::cp_disk_usage_directory;
+
+        use crate::cp_localize_to_target;
+
+        use crate::CpOffloadReflinkDebug;
+        use crate::CpPreserve;
+        use crate::CpSparseDebug;
+
+        use std::cmp::Ordering;
+        use std::fs::File;
+        use std::path::{Path, PathBuf};
+        use tempfile::Builder;
+        #[test]
+        fn test_cp_localize_to_target() {
+            let root = Path::new("a/source/");
+            let source = Path::new("a/source/c.txt");
+            let target = Path::new("target/");
+            let actual = cp_localize_to_target(root, source, target).unwrap();
+            let expected = Path::new("target/c.txt");
+            assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_aligned_ancestors() {
+            let actual = cp_aligned_ancestors(Path::new("a/b/c"), Path::new("d/a/b/c"));
+            let expected = vec![
+                (Path::new("a"), Path::new("d/a")),
+                (Path::new("a/b"), Path::new("d/a/b")),
+            ];
+            assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_cmp() {
+            let no1 = CpPreserve::No { explicit: false };
+            let no2 = CpPreserve::No { explicit: true };
+
+            let yes1 = CpPreserve::Yes { required: false };
+            let yes2 = CpPreserve::Yes { required: true };
+
+            // Test cases for comparing `No` instances
+            assert_eq!(no1.cmp(&no1), Ordering::Equal);
+            assert_eq!(no1.cmp(&no2), Ordering::Equal); // `explicit` field is ignored in comparison
+
+            // Test cases for comparing `No` with `Yes`
+            assert_eq!(no1.cmp(&yes1), Ordering::Less);
+            assert_eq!(no2.cmp(&yes2), Ordering::Less);
+
+            // Test cases for comparing `Yes` instances
+            assert_eq!(yes1.cmp(&yes1), Ordering::Equal);
+            assert_eq!(yes1.cmp(&yes2), Ordering::Less);
+
+            // Additional test cases for mixed comparisons
+            assert_eq!(yes2.cmp(&no1), Ordering::Greater);
+            assert_eq!(yes2.cmp(&no2), Ordering::Greater);
+        }
+
+        #[test]
+        fn test_partial_cmp() {
+            let result = 1.0.partial_cmp(&2.0);
+            assert_eq!(result, Some(Ordering::Less));
+
+            let result = 1.0.partial_cmp(&1.0);
+            assert_eq!(result, Some(Ordering::Equal));
+
+            let result = 2.0.partial_cmp(&1.0);
+            assert_eq!(result, Some(Ordering::Greater));
+
+            let result = f64::NAN.partial_cmp(&1.0);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_offload_reflink_debug_to_string() {
+            // Test cases for each variant of OffloadReflinkDebug
+            assert_eq!(CpOffloadReflinkDebug::No.to_string(), "no");
+            assert_eq!(CpOffloadReflinkDebug::Yes.to_string(), "yes");
+            assert_eq!(CpOffloadReflinkDebug::Avoided.to_string(), "avoided");
+            assert_eq!(
+                CpOffloadReflinkDebug::Unsupported.to_string(),
+                "unsupported"
+            );
+            assert_eq!(CpOffloadReflinkDebug::Unknown.to_string(), "unknown");
+        }
+
+        #[test]
+        fn test_sparse_debug_to_string() {
+            // Test cases for each variant of SparseDebug
+            assert_eq!(CpSparseDebug::No.to_string(), "no");
+            assert_eq!(CpSparseDebug::Zeros.to_string(), "zeros");
+            assert_eq!(CpSparseDebug::SeekHole.to_string(), "SEEK_HOLE");
+            assert_eq!(
+                CpSparseDebug::SeekHoleZeros.to_string(),
+                "SEEK_HOLE + zeros"
+            );
+            assert_eq!(CpSparseDebug::Unsupported.to_string(), "unsupported");
+            assert_eq!(CpSparseDebug::Unknown.to_string(), "unknown");
+        }
+
+        #[test]
+        fn test_disk_usage_with_recursive_false() {
+            // Create a temporary directory and file
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+
+            // Call the disk_usage function
+            let paths = vec![test_file_1.as_path().to_path_buf()];
+            let result = cp_disk_usage(&paths, false);
+
+            // println!("{}", result.unwrap());
+            // Check that the total size is equal to the size of the file
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_disk_usage_with_recursive_true() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+
+            // Call the disk_usage function
+            let paths = vec![test_file_1.as_path().to_path_buf()];
+            let result = cp_disk_usage(&paths, true);
+
+            // println!("{}", result.unwrap());
+
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_disk_usage_with_empty_paths() {
+            // Call the disk_usage function with an empty paths vector
+            let paths = vec![];
+            let result = cp_disk_usage(&paths, true);
+
+            // Check that the total size is zero
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_disk_usage_with_nonexistent_path() {
+            // Create a path to a nonexistent file or directory
+            let nonexistent_path = PathBuf::from("/path/to/nonexistent");
+
+            // Call the disk_usage function
+            let paths = vec![nonexistent_path];
+            let result = cp_disk_usage(&paths, true);
+
+            // println!("--------------->{:?}", result);
+            match result {
+                Err(output) => {
+                    // println!("output{:?}", output.kind());
+                    assert_eq!(output.kind(), std::io::ErrorKind::NotFound);
+                }
+                Ok(_) => {
+                    panic!("disk_usage should return an error for a nonexistent path");
+                }
+            }
+        }
+
+        #[test]
+        fn test_disk_usage_directory_with_recursive_true() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+
+            // Call the disk_usage function
+
+            let result = cp_disk_usage_directory(sub_dir_path.as_path());
+
+            // println!("{}", result.unwrap());
+
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_disk_usage_directory_with_empty_paths() {
+            // Call the disk_usage function with an empty paths vector
+            let paths = Path::new("a/b/c.txt");
+            let result = cp_disk_usage_directory(paths);
+
+            match result {
+                Err(output) => {
+                    println!("output{:?}", output.kind());
+                    assert_eq!(output.kind(), std::io::ErrorKind::NotFound);
+                }
+                Ok(_) => {
+                    panic!("disk_usage should return an error for a nonexistent path");
+                }
+            }
+        }
+        use std::borrow::Borrow;
+        #[test]
+        fn test_disk_usage_directory_with_nonexistent_path() {
+            // Create a path to a nonexistent file or directory
+            let nonexistent_path = PathBuf::from("/path/to/nonexistent");
+
+            // Call the disk_usage function
+            let result = cp_disk_usage_directory(nonexistent_path.borrow());
+
+            match result {
+                Err(output) => {
+                    // println!("output{:?}", output.kind());
+                    assert_eq!(output.kind(), std::io::ErrorKind::NotFound);
+                }
+                Ok(_) => {
+                    panic!("disk_usage should return an error for a nonexistent path");
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests_ctmain {
+        use crate::cp_main;
+
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ctmain_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_g_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-g", filename1, filename2];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        //////////////////////////////////////////////
+
+        #[test]
+        fn test_ctmain_d_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-d", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ad_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-ad", filename1, filename2];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_d_links_invalid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-d",
+                filename1,
+                filename2,
+                "extra_arg",
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--preserve", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_all_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=all",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_all_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=all",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_d_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-d", filename1, filename2];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ad_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-ad", filename1, filename2];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_adr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-adr", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_adrf_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-adrf", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_adrfv_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-adrfv", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_mode_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_mode_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_ownership_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=timestamps",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=timestamps",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_a_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_preserve_mode_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_u_preserve_ownership_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=ownership",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_u_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_u_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                "-u",
+                ctcore::ct_util_name(),
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_p_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_aru_preserve_ownership_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-uar",
+                "--preserve=ownership",
+                filename1,
+                filename2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_aru_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_aru_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_aru_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aru",
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_aru_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aru",
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_aru_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                "-aru",
+                ctcore::ct_util_name(),
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_aru_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aru",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_aup_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aup",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        ///////////////
+
+        #[test]
+        fn test_ctmain_no_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--no-preserve",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_p_no_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "--no-preserve",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_parents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--parents", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_p_parents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "--parents",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_hard_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-H", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_dereference_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-L", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_l_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-L",
+                "--dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_no_dereference_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-P", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_no_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--no-dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_p_no_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-P",
+                "--no-dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_archive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-a", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_archive_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--archive", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_reflink_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reflink=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_reflink_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reflink=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_reflink_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reflink=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_reflink_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--reflink=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_reflink_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--reflink=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_u_reflink_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--reflink=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_attributes_only_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--attributes-only",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_copy_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_u_update_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_single_source_single_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_multiple_sources_single_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+            let sub_dir1 = sub_dir_path.to_str().unwrap();
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, filename2, sub_dir1];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_single_source_multiple_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+            let sub_dir1 = sub_dir_path.to_str().unwrap();
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+            let sub_dir2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                filename2,
+                sub_dir1,
+                sub_dir2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_multiple_sources_multiple_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+            let sub_dir1 = sub_dir_path.to_str().unwrap();
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+            let sub_dir2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                filename2,
+                sub_dir1,
+                sub_dir2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_absolute_vs_relative() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_special_characters() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                r#"source\path with spaces and !@#$%^&*().txt"#,
+                r#"dest/path/with/special_chars/!@#$%^&*().txt"#,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_empty() {
+            let args = vec![ctcore::ct_util_name()];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_paths_missing() {
+            let args = vec![ctcore::ct_util_name(), ""];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    // panic!("ct_main returned an error:{}", output.code());
+                    assert_eq!(1, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_x_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ax_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_sparse_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sparse=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_x_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ax_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_x_sparse_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--sparse=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ax_sparse_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--sparse=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_x_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ax_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_x_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ax_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--context", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_af_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--context",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(_output) => {
+                    assert_eq!(1, 1);
+                    // panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_x_suffix_valid_input() {
+            let temp_dir1 = Builder::new()
+                .prefix("test_ctmain_x_suffix_valid_input1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path1 = temp_dir1.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let test_file_1 = sub_dir_path1.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir2 = Builder::new()
+                .prefix("test_ctmain_x_suffix_valid_input2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path2 = temp_dir2.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path2).unwrap();
+            let test_file_2 = sub_dir_path2.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ax_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_update_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--update", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_update_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--update",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_update_s_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_update_as_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aS",
+                "--update",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_s_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_as_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aS",
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_update_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_update_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "-S",
+                "--update=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_update_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_update_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "-S",
+                "--update=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-b", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-ab", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_force_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-f", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_force_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-af", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_force_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--force", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_force_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_f_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-f",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_af_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_f_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-f",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_af_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_f_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-f",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_af_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_force_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--force",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_force_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_force_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--force",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_force_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_force_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--force",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_force_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_symbolic_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-s", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_symbolic_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-as", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_symbolic_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--symbolic-link",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_symbolic_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--symbolic-link",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_verbose_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-v", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_verbose_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--verbose", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_verbose_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-av", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_a_verbose_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--verbose",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--recursive", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--recursive",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_r_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-r", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ar_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-ar", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--debug", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--debug",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_r_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ar_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_r_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                "--debug",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ar_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--debug",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_r_debug_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                "--debug",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ar_debug_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--debug",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_no_clobber_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-n", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_a_no_clobber_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-an", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_no_clobber_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--no-clobber", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_no_clobber_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--no-clobber",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-l", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-al", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--link", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-a", "--link", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        // #[test]
+        // fn test_ctmain_interactive_valid_input() {
+        //     let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_1 = sub_dir_path.join("tests_file1.txt");
+        //     File::create(&test_file_1).unwrap();
+        //     let filename1 = test_file_1.to_str().unwrap();
+        //
+        //     let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_2 = sub_dir_path.join("tests_file2.txt");
+        //     File::create(&test_file_2).unwrap();
+        //     let filename2 = test_file_2.to_str().unwrap();
+        //
+        //
+        //
+        //     let args = vec![ctcore::util_name(), "-i", filename1, filename2];
+        //
+        //     let result = ct_main(args.iter().map(|s| OsString::from(s)));
+        //     match result {
+        //         Err(output) => {
+        //             panic!("ct_main returned an error:{}", output.code());
+        //         }
+        //         Ok(output) => {
+        //             assert_eq!(output, 0);
+        //         }
+        //     }
+        // }
+        //
+        // #[test]
+        // fn test_ctmain_a_interactive_valid_input() {
+        //     let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_1 = sub_dir_path.join("tests_file1.txt");
+        //     File::create(&test_file_1).unwrap();
+        //     let filename1 = test_file_1.to_str().unwrap();
+        //
+        //     let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_2 = sub_dir_path.join("tests_file2.txt");
+        //     File::create(&test_file_2).unwrap();
+        //     let filename2 = test_file_2.to_str().unwrap();
+        //
+        //
+        //
+        //     let args = vec![ctcore::util_name(), "-ai", filename1, filename2];
+        //
+        //     let result = ct_main(args.iter().map(|s| OsString::from(s)));
+        //     match result {
+        //         Err(output) => {
+        //             panic!("ct_main returned an error:{}", output.code());
+        //         }
+        //         Ok(output) => {
+        //             assert_eq!(output, 0);
+        //         }
+        //     }
+        // }
+
+        // #[test]
+        // fn test_ctmain_interactive_whole_valid_input() {
+        //     let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_1 = sub_dir_path.join("tests_file1.txt");
+        //     File::create(&test_file_1).unwrap();
+        //     let filename1 = test_file_1.to_str().unwrap();
+        //
+        //     let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_2 = sub_dir_path.join("tests_file2.txt");
+        //     File::create(&test_file_2).unwrap();
+        //     let filename2 = test_file_2.to_str().unwrap();
+        //
+        //
+        //
+        //     let args = vec![ctcore::util_name(), "--interactive", filename1, filename2];
+        //
+        //     let result = ct_main(args.iter().map(|s| OsString::from(s)));
+        //     match result {
+        //         Err(output) => {
+        //             panic!("ct_main returned an error:{}", output.code());
+        //         }
+        //         Ok(output) => {
+        //             assert_eq!(output, 0);
+        //         }
+        //     }
+        // }
+
+        // #[test]
+        // fn test_ctmain_a_interactive_whole_valid_input() {
+        //     let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_1 = sub_dir_path.join("tests_file1.txt");
+        //     File::create(&test_file_1).unwrap();
+        //     let filename1 = test_file_1.to_str().unwrap();
+        //
+        //     let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+        //     let sub_dir_path = temp_dir.path().join("sub_dir");
+        //     fs::create_dir(&sub_dir_path).unwrap();
+        //     let test_file_2 = sub_dir_path.join("tests_file2.txt");
+        //     File::create(&test_file_2).unwrap();
+        //     let filename2 = test_file_2.to_str().unwrap();
+        //
+        //
+        //
+        //     let args = vec![
+        //         ctcore::util_name(),
+        //         "-a",
+        //         "--interactive",
+        //         filename1,
+        //         filename2,
+        //     ];
+        //
+        //     let result = ct_main(args.iter().map(|s| OsString::from(s)));
+        //     match result {
+        //         Err(output) => {
+        //             panic!("ct_main returned an error:{}", output.code());
+        //         }
+        //         Ok(output) => {
+        //             assert_eq!(output, 0);
+        //         }
+        //     }
+        // }
+
+        #[test]
+        fn test_ctmain_no_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-T", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_no_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-aT", filename1, filename2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_no_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--no-target-directory",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_no_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--no-target-directory",
+                filename1,
+                filename2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-t", &temp_dir_1, &temp_dir_2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-at", &temp_dir_1, &temp_dir_2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_r_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-rt", &temp_dir_1, &temp_dir_2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ar_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-art", &temp_dir_1, &temp_dir_2];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new()
+                .prefix("test_ctmain_target_directory_whole_valid_input")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("test_ctmain_target_directory_whole_valid_input")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_a_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_ar_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_arf_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arf",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_arfv_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arfv",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_arfv_whole_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--archive",
+                "--recursive",
+                "--force",
+                "--verbose",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_arfvi_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arfvi",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_arfvi_whole_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--archive",
+                "--recursive",
+                "--force",
+                "--verbose",
+                "--interactive",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_arfviuln_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arfviuln",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ctmain_arfviuln_whole_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--archive",
+                "--recursive",
+                "--force",
+                "--verbose",
+                "--interactive",
+                "--attributes-only",
+                "--link",
+                "--no-clobber",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    panic!("ct_main returned an error:{}", output.code());
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        ////////////////////////////////////////////
+    }
+    #[cfg(test)]
+    mod tests_ct_app {
+        use crate::{ct_app, opt_flags};
+        use clap::error::ErrorKind;
+        use std::fs;
+        use std::fs::File;
+        use std::path::PathBuf;
+
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_g_bar_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-g", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ag_bar_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-ag", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_progress_bar_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--progress", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_progress_bar_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--progress",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_d_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-d", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ad_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-ad", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_d_links_invalid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-d",
+                filename1,
+                filename2,
+                "extra_arg",
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--preserve", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_all_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=all",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_all_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=all",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-d", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ad_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-ad", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_adr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-adr", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_adrf_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-adrf", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_adrfv_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-adrfv", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_mode_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_mode_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_ownership_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=timestamps",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=timestamps",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_a_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_preserve_mode_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=mode",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_u_preserve_ownership_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=ownership",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_u_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_u_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                "-u",
+                ctcore::ct_util_name(),
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_p_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_aru_preserve_ownership_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-uar",
+                "--preserve=ownership",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_aru_preserve_timestamps_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_aru_preserve_context_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--preserve=context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_aru_preserve_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aru",
+                "--preserve=link",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_aru_preserve_links_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aru",
+                "--preserve=links",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_aru_preserve_xattr_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                "-aru",
+                ctcore::ct_util_name(),
+                "--preserve=xattr",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_aru_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aru",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_aup_preserve_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aup",
+                "--preserve-default-attributes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        ///////////////
+
+        #[test]
+        fn test_ct_app_no_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--no-preserve",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_p_no_preserve_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "--no-preserve",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--parents", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_p_parents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "--parents",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_hard_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-H", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::CLI_SYMBOLIC_LINKS)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_dereference_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-L", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::DEREFERENCE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::DEREFERENCE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_l_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-L",
+                "--dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::DEREFERENCE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_no_dereference_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-P", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_DEREFERENCE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_no_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--no-dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_DEREFERENCE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_p_no_dereference_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-P",
+                "--no-dereference",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_DEREFERENCE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_archive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-a", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::ARCHIVE).unwrap());
+        }
+        #[test]
+        fn test_ct_app_archive_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--archive", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::ARCHIVE).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_reflink_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reflink=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reflink_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reflink=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reflink_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reflink=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_reflink_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--reflink=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_reflink_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--reflink=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_reflink_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-u",
+                "--reflink=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_attributes_only_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--attributes-only",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ATTRIBUTES_ONLY)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_copy_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-c", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_u_update_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_single_source_single_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_multiple_sources_single_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+            let sub_dir1 = sub_dir_path.to_str().unwrap();
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), filename1, filename2, sub_dir1];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_single_source_multiple_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+            let sub_dir1 = sub_dir_path.to_str().unwrap();
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+            let sub_dir2 = sub_dir_path.to_str().unwrap();
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                filename2,
+                sub_dir1,
+                sub_dir2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_multiple_sources_multiple_dest() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+            let sub_dir1 = sub_dir_path.to_str().unwrap();
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+            let sub_dir2 = sub_dir_path.to_str().unwrap();
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                filename2,
+                sub_dir1,
+                sub_dir2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_absolute_vs_relative() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            // ... 进一步验证绝对路径和相对路径均能正确解析 ...
+        }
+
+        #[test]
+        fn test_ct_app_paths_special_characters() {
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                r#"source\path with spaces and !@#$%^&*().txt"#,
+                r#"dest/path/with/special_chars/!@#$%^&*().txt"#,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_empty() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name()];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_paths_missing() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), ""];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_x_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ax_one_file_system_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--one-file-system",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_sparse_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sparse=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_x_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ax_sparse_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--sparse=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_x_sparse_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--sparse=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ax_sparse_auto_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--sparse=auto",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_x_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ax_sparse_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--sparse=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_x_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ax_copy_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--copy-contents",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--context", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_af_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_x_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ax_contents_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--context",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_x_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-x",
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ax_suffix_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ax",
+                "--suffix=SUFFIX",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--update", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_update_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--update",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_s_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_as_default_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aS",
+                "--update",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_s_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_as_update_none_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-aS",
+                "--update=none",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_update_never_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "-S",
+                "--update=never",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--update=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_update_always_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "-S",
+                "--update=always",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-b", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-ab", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_force_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-f", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_force_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-af", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_force_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--force", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_force_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_f_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-f",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_af_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_f_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-f",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_af_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_f_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-f",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_af_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-af",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_force_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--force",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_force_backup_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                "--backup",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_force_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--force",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_force_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_force_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--force",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_a_force_backup_remove_destination_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--force",
+                "--backup",
+                "--remove-destination",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_symbolic_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-s", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_symbolic_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-as", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_symbolic_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--symbolic-link",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_symbolic_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--symbolic-link",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_verbose_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-v", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+
+            assert!(result.unwrap().get_one::<bool>(opt_flags::VERBOSE).unwrap());
+        }
+        #[test]
+        fn test_ct_app_verbose_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--verbose", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::VERBOSE).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_verbose_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-av", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+
+            assert!(result.unwrap().get_one::<bool>(opt_flags::VERBOSE).unwrap());
+        }
+        #[test]
+        fn test_ct_app_a_verbose_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--verbose",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::VERBOSE).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--recursive", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--recursive",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_r_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-r", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ar_recursive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-ar", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::STRIP_TRAILING_SLASHES)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::STRIP_TRAILING_SLASHES)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--debug", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::DEBUG).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--debug",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::DEBUG).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_r_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ar_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_r_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                "--debug",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ar_debug_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--debug",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_r_debug_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                "--debug",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_ar_debug_strip_trailing_slashes_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--debug",
+                "--strip-trailing-slashes",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::RECURSIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_no_clobber_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-n", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_CLOBBER)
+                .unwrap());
+        }
+        #[test]
+        fn test_ct_app_a_no_clobber_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-an", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_CLOBBER)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_no_clobber_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--no-clobber", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_CLOBBER)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_no_clobber_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--no-clobber",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_CLOBBER)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-l", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::LINK).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_link_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-al", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::LINK).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--link", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::LINK).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_link_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-a", "--link", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::LINK).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_interactive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-i", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::INTERACTIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_interactive_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-ai", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::INTERACTIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_interactive_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--interactive",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::INTERACTIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_interactive_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--interactive",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::INTERACTIVE)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_no_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-T", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_no_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-aT", filename1, filename2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_no_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--no-target-directory",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_a_no_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("tests_file2").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--no-target-directory",
+                filename1,
+                filename2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-t", &temp_dir_1, &temp_dir_2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_a_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-at", &temp_dir_1, &temp_dir_2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_r_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-rt", &temp_dir_1, &temp_dir_2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_ar_target_directory_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app1").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-art", &temp_dir_1, &temp_dir_2];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_target_directory_whole_valid_input")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_target_directory_whole_valid_input")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_a_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_ar_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-ar",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_arf_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arf",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_arfv_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arfv",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_arfv_whole_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--archive",
+                "--recursive",
+                "--force",
+                "--verbose",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_arfvi_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arfvi",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_arfvi_whole_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--archive",
+                "--recursive",
+                "--force",
+                "--verbose",
+                "--interactive",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+
+        #[test]
+        fn test_ct_app_arfviuln_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-arfviuln",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+        #[test]
+        fn test_ct_app_arfviuln_whole_target_directory_whole_valid_input() {
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path1 = temp_dir.path().join("sub_dir1");
+            fs::create_dir(&sub_dir_path1).unwrap();
+            let temp_dir_1 = sub_dir_path1.to_str().unwrap();
+
+            let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir2");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let temp_dir_2 = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--archive",
+                "--recursive",
+                "--force",
+                "--verbose",
+                "--interactive",
+                "--attributes-only",
+                "--link",
+                "--no-clobber",
+                "--target-directory",
+                &temp_dir_1,
+                &temp_dir_2,
+            ];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+                    .unwrap(),
+                &sub_dir_path1
+            );
+        }
+    }
+}

@@ -76,6 +76,7 @@ feat_common_core = [
   "cp",
   "ls",
   "cksum",
+  "vdir",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -184,6 +185,8 @@ ctcore = { version = ">=0.0.1", package = "ctcore", path = "src/ctcore" }
 ctcore_procs = { version = ">=0.0.1", package = "ctcore_procs", path = "src/ctcore_procs" }
 ct_base32 = { version = ">=0.0.1", path = "src/ct/base32" }
 
+ct_ls = { version = ">=0.0.1", path = "src/ct/ls" }
+
 [dependencies]
 clap = { workspace = true }
 once_cell = { workspace = true }
@@ -214,6 +217,7 @@ chroot = { optional = true, package = "ct_chroot", path = "src/ct/chroot" }
 cp = { optional = true, package = "ct_cp", path = "src/ct/cp" }
 ls = { optional = true, package = "ct_ls", path = "src/ct/ls" }
 cksum = { optional = true, package = "ct_cksum", path = "src/ct/cksum" }
+vdir = { optional = true, package = "ct_vdir", path = "src/ct/vdir" }
 
 [dev-dependencies]
 chrono = { workspace = true }

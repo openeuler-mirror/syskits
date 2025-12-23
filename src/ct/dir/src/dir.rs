@@ -2305,5 +2305,100 @@ mod tests {
                 .contains_id(dir_flags::format::DIR_LONG_NUMERIC_UID_GID));
         }
 
+        #[test]
+        fn test_ct_app_quoting_style_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--quoting-style=literal"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_QUOTING_STYLE));
+        }
+
+        #[test]
+        fn test_ct_app_literal_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-N"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::quoting::DIR_LITERAL));
+        }
+
+        #[test]
+        fn test_ct_app_escape_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-b"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::quoting::DIR_ESCAPE));
+        }
+
+        #[test]
+        fn test_ct_app_c_quoting_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-Q"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::quoting::DIR_C));
+        }
+
+        #[test]
+        fn test_ct_app_hide_control_chars_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-q"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::DIR_HIDE_CONTROL_CHARS));
+        }
+
+        #[test]
+        fn test_ct_app_show_control_chars_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--show-control-chars"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::DIR_SHOW_CONTROL_CHARS));
+        }
+
+        #[test]
+        fn test_ct_app_time_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--time=access"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_TIME));
+        }
+
+        #[test]
+        fn test_ct_app_change_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-c"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::time::DIR_CHANGE));
+        }
+
+        #[test]
+        fn test_ct_app_access_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::time::DIR_ACCESS));
+        }
+
+        #[test]
+        fn test_ct_app_hide_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--hide=*"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_HIDE));
+        }
     }
 }

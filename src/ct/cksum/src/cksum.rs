@@ -1,0 +1,493 @@
+/*
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
+ *     syskits is licensed under Mulan PSL v2.
+ *    You can use this software according to the terms and conditions of the Mulan PSL V2
+ *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *    See the Mulan PSL v2 for more details.
+ *
+ */
+
+// spell-checker:ignore (ToDO) fname, algo
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use ctcore::{
+    ct_encoding,
+    ct_error::{CTError, CTResult, CtSimpleError, FromIo},
+    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show,
+    ct_sum::{
+        div_ceil, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224, Sha256,
+        Sha384, Sha512, BSD, SYSV,
+    },
+};
+use hex::decode;
+use hex::encode;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt::Display;
+use std::fs::File;
+use std::io::{self, stdin, stdout, BufReader, Read, Write};
+use std::iter;
+use std::path::Path;
+
+const CKSUM_USAGE: &str = ct_help_usage!("cksum.md");
+const CKSUM_ABOUT: &str = ct_help_about!("cksum.md");
+const CKSUM_AFTER_HELP: &str = ct_help_section!("after help", "cksum.md");
+
+const CKSUM_ALGORITHM_OPTIONS_SYSV: &str = "sysv";
+const CKSUM_ALGORITHM_OPTIONS_BSD: &str = "bsd";
+const CKSUM_ALGORITHM_OPTIONS_CRC: &str = "crc";
+const CKSUM_ALGORITHM_OPTIONS_MD5: &str = "md5";
+const CKSUM_ALGORITHM_OPTIONS_SHA1: &str = "sha1";
+const CKSUM_ALGORITHM_OPTIONS_SHA224: &str = "sha224";
+const CKSUM_ALGORITHM_OPTIONS_SHA256: &str = "sha256";
+const CKSUM_ALGORITHM_OPTIONS_SHA384: &str = "sha384";
+const CKSUM_ALGORITHM_OPTIONS_SHA512: &str = "sha512";
+const CKSUM_ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
+const CKSUM_ALGORITHM_OPTIONS_SM3: &str = "sm3";
+
+#[derive(Debug)]
+enum CkSumError {
+    RawMultipleFiles,
+}
+
+#[derive(Debug, PartialEq)]
+enum CksumOutputFormat {
+    Hexadecimal,
+    Raw,
+    Base64,
+}
+
+impl CTError for CkSumError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::RawMultipleFiles => 1,
+        }
+    }
+}
+
+impl Error for CkSumError {}
+
+impl Display for CkSumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RawMultipleFiles => {
+                write!(f, "the --raw option is not supported with multiple files")
+            }
+        }
+    }
+}
+
+fn cksum_detect_algo(
+    prgm: &str,
+    len: Option<usize>,
+) -> (&'static str, Box<dyn CtDigest + 'static>, usize) {
+    match prgm {
+        CKSUM_ALGORITHM_OPTIONS_SYSV => (
+            CKSUM_ALGORITHM_OPTIONS_SYSV,
+            Box::new(SYSV::new()) as Box<dyn CtDigest>,
+            512,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_BSD => (
+            CKSUM_ALGORITHM_OPTIONS_BSD,
+            Box::new(BSD::new()) as Box<dyn CtDigest>,
+            1024,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_CRC => (
+            CKSUM_ALGORITHM_OPTIONS_CRC,
+            Box::new(CtCRC::new()) as Box<dyn CtDigest>,
+            256,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_MD5 => (
+            CKSUM_ALGORITHM_OPTIONS_MD5,
+            Box::new(Md5::new()) as Box<dyn CtDigest>,
+            128,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_SHA1 => (
+            CKSUM_ALGORITHM_OPTIONS_SHA1,
+            Box::new(Sha1::new()) as Box<dyn CtDigest>,
+            160,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_SHA224 => (
+            CKSUM_ALGORITHM_OPTIONS_SHA224,
+            Box::new(Sha224::new()) as Box<dyn CtDigest>,
+            224,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_SHA256 => (
+            CKSUM_ALGORITHM_OPTIONS_SHA256,
+            Box::new(Sha256::new()) as Box<dyn CtDigest>,
+            256,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_SHA384 => (
+            CKSUM_ALGORITHM_OPTIONS_SHA384,
+            Box::new(Sha384::new()) as Box<dyn CtDigest>,
+            384,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_SHA512 => (
+            CKSUM_ALGORITHM_OPTIONS_SHA512,
+            Box::new(Sha512::new()) as Box<dyn CtDigest>,
+            512,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_BLAKE2B => (
+            CKSUM_ALGORITHM_OPTIONS_BLAKE2B,
+            Box::new(if let Some(length) = len {
+                CtBlake2b::with_output_bytes(length)
+            } else {
+                CtBlake2b::new()
+            }) as Box<dyn CtDigest>,
+            512,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_SM3 => (
+            CKSUM_ALGORITHM_OPTIONS_SM3,
+            Box::new(CtSm3::new()) as Box<dyn CtDigest>,
+            512,
+        ),
+        _ => unreachable!("unknown algorithm: clap should have prevented this case"),
+    }
+}
+
+struct CksumOptions {
+    algo_name: &'static str,
+    digest: Box<dyn CtDigest + 'static>,
+    output_bits: usize,
+    untagged: bool,
+    length: Option<usize>,
+    output_format: CksumOutputFormat,
+}
+
+/// Calculate checksum
+///
+/// # Arguments
+///
+/// * `options` - CLI options for the assigning checksum algorithm
+/// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
+#[allow(clippy::cognitive_complexity)]
+/**
+ * 计算文件或标准输入的校验和。
+ *
+ * @param mut options 包含校验和计算选项的结构体。
+ * @param files 一个迭代器，提供要计算校验和的文件名或“-”表示标准输入。
+ * @return CTResult<()>，成功时返回Ok(())，错误时返回Err(Box<CkSumError>)。
+ */
+fn cksum<'a, I>(mut cksum_opts: CksumOptions, cksum_files: I) -> CTResult<()>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
+    // 将文件名迭代器收集到一个向量中，方便后续处理
+    let f: Vec<_> = cksum_files.collect();
+
+    // 检查是否以原始格式计算多个文件的校验和，这是不被支持的
+    if cksum_opts.output_format == CksumOutputFormat::Raw && f.len() > 1 {
+        return Err(Box::new(CkSumError::RawMultipleFiles));
+    }
+
+    // 遍历文件列表，对每个文件或标准输入计算校验和
+    for file_name in f {
+        let filename = Path::new(file_name);
+        let stdin_buffer;
+        let file_buffer;
+        let not_file = filename == OsStr::new("-");
+
+        // 根据文件名是否为“-”，或者是否为目录，选择不同的读取方式
+        let mut file = BufReader::new(if not_file {
+            stdin_buffer = stdin();
+            Box::new(stdin_buffer) as Box<dyn Read>
+        } else if filename.is_dir() {
+            // 如果是目录，则使用空读取器
+            Box::new(BufReader::new(io::empty())) as Box<dyn Read>
+        } else {
+            // 尝试打开文件
+            file_buffer = match File::open(filename) {
+                Ok(file) => file,
+                Err(err) => {
+                    ct_show!(err.map_err_context(|| filename.to_string_lossy().to_string()));
+                    continue;
+                }
+            };
+            Box::new(file_buffer) as Box<dyn Read>
+        });
+
+        // 计算校验和
+        let (sum_hex, sz) =
+            cksum_digest_read(&mut cksum_opts.digest, &mut file, cksum_opts.output_bits)
+                .map_err_context(|| "failed to read input".to_string())?;
+
+        // 如果是目录，打印错误信息并继续处理下一个文件
+        if filename.is_dir() {
+            ct_show!(CtSimpleError::new(
+                1,
+                format!("{}: Is a directory", filename.display())
+            ));
+            continue;
+        }
+
+        // 根据输出格式和算法，格式化校验和结果
+        let sum = match cksum_opts.output_format {
+            CksumOutputFormat::Raw => {
+                // 对于原始格式，根据算法类型转换校验和字符串为字节序列
+                let bytes = match cksum_opts.algo_name {
+                    CKSUM_ALGORITHM_OPTIONS_CRC => {
+                        sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
+                    }
+                    CKSUM_ALGORITHM_OPTIONS_SYSV | CKSUM_ALGORITHM_OPTIONS_BSD => {
+                        sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
+                    }
+                    _ => decode(sum_hex).unwrap(),
+                };
+                // 输出原始格式的校验和，然后立即返回
+                stdout().write_all(&bytes)?;
+                return Ok(());
+            }
+            CksumOutputFormat::Hexadecimal => sum_hex,
+            CksumOutputFormat::Base64 => match cksum_opts.algo_name {
+                CKSUM_ALGORITHM_OPTIONS_CRC
+                | CKSUM_ALGORITHM_OPTIONS_SYSV
+                | CKSUM_ALGORITHM_OPTIONS_BSD => sum_hex,
+                _ => ct_encoding::encode(ct_encoding::Format::Base64, &decode(sum_hex).unwrap())
+                    .unwrap(),
+            },
+        };
+
+        let bsd_width = 5;
+        // 根据算法和是否为标准输入，格式化并输出校验和结果
+        match (cksum_opts.algo_name, not_file) {
+            (CKSUM_ALGORITHM_OPTIONS_SYSV, true) => println!(
+                "{} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, cksum_opts.output_bits)
+            ),
+            (CKSUM_ALGORITHM_OPTIONS_SYSV, false) => println!(
+                "{} {} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, cksum_opts.output_bits),
+                filename.display()
+            ),
+            (CKSUM_ALGORITHM_OPTIONS_BSD, true) => println!(
+                "{:0bsd_width$} {:bsd_width$}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, cksum_opts.output_bits)
+            ),
+            (CKSUM_ALGORITHM_OPTIONS_BSD, false) => println!(
+                "{:0bsd_width$} {:bsd_width$} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, cksum_opts.output_bits),
+                filename.display()
+            ),
+            (CKSUM_ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
+            (CKSUM_ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (CKSUM_ALGORITHM_OPTIONS_BLAKE2B, _) if !cksum_opts.untagged => {
+                if let Some(length) = cksum_opts.length {
+                    // 输出BLAKE2b算法的校验和，可选的长度参数
+                    println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
+                } else {
+                    println!("BLAKE2b ({}) = {sum}", filename.display());
+                }
+            }
+            _ => {
+                // 根据是否标记，以不同的格式输出校验和
+                if cksum_opts.untagged {
+                    println!("{sum}  {}", filename.display());
+                } else {
+                    println!(
+                        "{} ({}) = {sum}",
+                        cksum_opts.algo_name.to_ascii_uppercase(),
+                        filename.display()
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn cksum_digest_read<T: Read>(
+    cksum_digest: &mut Box<dyn CtDigest>,
+    buf_reader: &mut BufReader<T>,
+    output_bits: usize,
+) -> io::Result<(String, usize)> {
+    cksum_digest.reset();
+
+    // 从reader中读取字节并将其写入digest。
+    // 如果binary为false且操作系统为Windows，则DigestWriter会在将字节写入digest前将"\r\n"替换为"\n"。否则，它会直接按原样插入字节。
+    // 为了支持替换"\r\n"，我们必须调用finalize()，以应对从reader中读取的最后一个字符为"\r"的可能性。
+    // （该字符会被DigestWriter缓冲，仅在后续字符为"\n"时才被写出。
+    // 但当"\r"是最后一个读取到的字符时，我们需要强制将其写出。）
+    let mut digest_writer = CtDigestWriter::new(cksum_digest, true);
+    let output_size = std::io::copy(buf_reader, &mut digest_writer)? as usize;
+    digest_writer.finalize();
+
+    if cksum_digest.output_bits() > 0 {
+        Ok((cksum_digest.result_str(), output_size))
+    } else {
+        // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
+        let mut bytes = vec![0; (output_bits + 7) / 8];
+        cksum_digest.hash_finalize(&mut bytes);
+        Ok((encode(bytes), output_size))
+    }
+}
+
+mod opt_flags {
+    pub const ALGORITHM: &str = "algorithm";
+    pub const FILE: &str = "file";
+    pub const UNTAGGED: &str = "untagged";
+    pub const TAG: &str = "tag";
+    pub const LENGTH: &str = "length";
+    pub const RAW: &str = "raw";
+    pub const BASE64: &str = "base64";
+}
+
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    cksum_main(args).map(|_| ())
+}
+
+pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
+    let matches = ct_app().try_get_matches_from(args)?;
+
+    let algo_name: &str = match matches.get_one::<String>(opt_flags::ALGORITHM) {
+        Some(v) => v,
+        None => CKSUM_ALGORITHM_OPTIONS_CRC,
+    };
+
+    let input_length = matches.get_one::<usize>(opt_flags::LENGTH);
+    let length = if let Some(length) = input_length {
+        match length.to_owned() {
+            0 => None,
+            n if n % 8 != 0 => {
+                // GNU's implementation seem to use these quotation marks
+                // in their error messages, so we do the same.
+                ctcore::ct_show_error!("invalid length: \u{2018}{length}\u{2019}");
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "length is not a multiple of 8",
+                )
+                .into());
+            }
+            n if n > 512 => {
+                ctcore::ct_show_error!("invalid length: \u{2018}{length}\u{2019}");
+
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                )
+                .into());
+            }
+            n => {
+                if algo_name != CKSUM_ALGORITHM_OPTIONS_BLAKE2B {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--length is only supported with --algorithm=blake2b",
+                    )
+                    .into());
+                }
+
+                // Divide by 8, as our blake2b implementation expects bytes
+                // instead of bits.
+                Some(n / 8)
+            }
+        }
+    } else {
+        None
+    };
+
+    let (name, algo, bits) = cksum_detect_algo(algo_name, length);
+
+    let output_format = if matches.get_flag(opt_flags::RAW) {
+        CksumOutputFormat::Raw
+    } else if matches.get_flag(opt_flags::BASE64) {
+        CksumOutputFormat::Base64
+    } else {
+        CksumOutputFormat::Hexadecimal
+    };
+
+    let opts = CksumOptions {
+        algo_name: name,
+        digest: algo,
+        output_bits: bits,
+        length,
+        untagged: matches.get_flag(opt_flags::UNTAGGED),
+        output_format,
+    };
+
+    match matches.get_many::<String>(opt_flags::FILE) {
+        Some(files) => cksum(opts, files.map(OsStr::new))?,
+        None => cksum(opts, iter::once(OsStr::new("-")))?,
+    };
+
+    Ok(0)
+}
+
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = CKSUM_ABOUT;
+    let usage_description = ct_format_usage(CKSUM_USAGE);
+
+    let args = args_init();
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .infer_long_args(true)
+        .args_override_self(true)
+        .args(&args)
+        .after_help(CKSUM_AFTER_HELP)
+}
+
+fn args_init() -> Vec<Arg> {
+    let args = vec![
+        Arg::new(opt_flags::FILE)
+            .hide(true)
+            .action(clap::ArgAction::Append)
+            .value_hint(clap::ValueHint::FilePath),
+        Arg::new(opt_flags::ALGORITHM)
+            .long(opt_flags::ALGORITHM)
+            .short('a')
+            .help("select the digest type to use. See DIGEST below")
+            .value_name("ALGORITHM")
+            .value_parser([
+                CKSUM_ALGORITHM_OPTIONS_SYSV,
+                CKSUM_ALGORITHM_OPTIONS_BSD,
+                CKSUM_ALGORITHM_OPTIONS_CRC,
+                CKSUM_ALGORITHM_OPTIONS_MD5,
+                CKSUM_ALGORITHM_OPTIONS_SHA1,
+                CKSUM_ALGORITHM_OPTIONS_SHA224,
+                CKSUM_ALGORITHM_OPTIONS_SHA256,
+                CKSUM_ALGORITHM_OPTIONS_SHA384,
+                CKSUM_ALGORITHM_OPTIONS_SHA512,
+                CKSUM_ALGORITHM_OPTIONS_BLAKE2B,
+                CKSUM_ALGORITHM_OPTIONS_SM3,
+            ]),
+        Arg::new(opt_flags::UNTAGGED)
+            .long(opt_flags::UNTAGGED)
+            .help("create a reversed style checksum, without digest type")
+            .action(ArgAction::SetTrue)
+            .overrides_with(opt_flags::TAG),
+        Arg::new(opt_flags::TAG)
+            .long(opt_flags::TAG)
+            .help("create a BSD style checksum, undo --untagged (default)")
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::LENGTH)
+            .long(opt_flags::LENGTH)
+            .value_parser(value_parser!(usize))
+            .short('l')
+            .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+            .action(ArgAction::Set),
+        Arg::new(opt_flags::RAW)
+            .long(opt_flags::RAW)
+            .help("emit a raw binary digest, not hexadecimal")
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::BASE64)
+            .long(opt_flags::BASE64)
+            .help("emit a base64 digest, not hexadecimal")
+            .action(ArgAction::SetTrue)
+            // Even though this could easily just override an earlier '--raw',
+            // GNU cksum does not permit these flags to be combined:
+            .conflicts_with(opt_flags::RAW),
+    ];
+    args
+}
+

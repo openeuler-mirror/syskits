@@ -41,13 +41,15 @@ ctdoc = ["zip", "dep:cthelp_parser"]
 # "feat_acl" == 启用对ACLs（访问控制列表）的支持；使用 `--features feat_acl`
 # 注意：
 # * 在linux上，posix-acl/acl-sys crate在编译时需要访问C工具链中的 `libacl` 头文件和共享库。
-feat_acl = ["cp/feat_acl"]
+feat_acl = ["cp/feat_acl", "ls/feat_acl"]
+
 # "feat_selinux" == 启用对SELinux安全上下文的支持；使用 `--features feat_selinux`
 # 注意：
 # * selinux(-sys) crate在编译时需要访问C工具链中的 `libselinux` 头文件和共享库。
 # * 运行编译了 `feat_selinux` 的ctutils需要SELinux启用的内核。
 feat_selinux = [
   "cp/selinux",
+  "ls/selinux",
   "selinux",
   "feat_require_selinux",
 ]
@@ -72,6 +74,7 @@ feat_common_core = [
   "wc",
   "chroot",
   "cp",
+  "ls",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -208,6 +211,7 @@ basenc = { optional = true, package = "ct_basenc", path = "src/ct/basenc" }
 wc = { optional = true, package = "ct_wc", path = "src/ct/wc" }
 chroot = { optional = true, package = "ct_chroot", path = "src/ct/chroot" }
 cp = { optional = true, package = "ct_cp", path = "src/ct/cp" }
+ls = { optional = true, package = "ct_ls", path = "src/ct/ls" }
 
 [dev-dependencies]
 chrono = { workspace = true }

@@ -219,3 +219,238 @@ fn validate_line_numbers(csplit_patterns: &[CsplitPattern]) -> Result<(), Csplit
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bad_pattern() {
+        let input = vec!["bad".to_string()];
+        assert!(get_patterns(input.as_slice()).is_err());
+    }
+
+    #[test]
+    fn test_up_to_line_pattern() {
+        let input: Vec<String> = vec!["24", "42", "{*}", "50", "{4}"]
+            .into_iter()
+            .map(|v| v.to_string())
+            .collect();
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 3);
+        match patterns.first() {
+            Some(CsplitPattern::UpToLine(24, CsplitExecutePattern::Times(1))) => (),
+            _ => panic!("expected UpToLine pattern"),
+        };
+        match patterns.get(1) {
+            Some(CsplitPattern::UpToLine(42, CsplitExecutePattern::Always)) => (),
+            _ => panic!("expected UpToLine pattern"),
+        };
+        match patterns.get(2) {
+            Some(CsplitPattern::UpToLine(50, CsplitExecutePattern::Times(5))) => (),
+            _ => panic!("expected UpToLine pattern"),
+        };
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_up_to_match_pattern() {
+        let input: Vec<String> = vec![
+            "/test1.*end$/",
+            "/test2.*end$/",
+            "{*}",
+            "/test3.*end$/",
+            "{4}",
+            "/test4.*end$/+3",
+            "/test5.*end$/-3",
+        ]
+        .into_iter()
+        .map(|v| v.to_string())
+        .collect();
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 5);
+        match patterns.first() {
+            Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test1.*end$");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        };
+        match patterns.get(1) {
+            Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Always)) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test2.*end$");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        };
+        match patterns.get(2) {
+            Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(5))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test3.*end$");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        };
+        match patterns.get(3) {
+            Some(CsplitPattern::UpToMatch(reg, 3, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test4.*end$");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        };
+        match patterns.get(4) {
+            Some(CsplitPattern::UpToMatch(reg, -3, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test5.*end$");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        };
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_skip_to_match_pattern() {
+        let input: Vec<String> = vec![
+            "%test1.*end$%",
+            "%test2.*end$%",
+            "{*}",
+            "%test3.*end$%",
+            "{4}",
+            "%test4.*end$%+3",
+            "%test5.*end$%-3",
+        ]
+        .into_iter()
+        .map(|v| v.to_string())
+        .collect();
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 5);
+        match patterns.first() {
+            Some(CsplitPattern::SkipToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test1.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+        match patterns.get(1) {
+            Some(CsplitPattern::SkipToMatch(reg, 0, CsplitExecutePattern::Always)) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test2.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+        match patterns.get(2) {
+            Some(CsplitPattern::SkipToMatch(reg, 0, CsplitExecutePattern::Times(5))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test3.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+        match patterns.get(3) {
+            Some(CsplitPattern::SkipToMatch(reg, 3, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test4.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+        match patterns.get(4) {
+            Some(CsplitPattern::SkipToMatch(reg, -3, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test5.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+    }
+
+    #[test]
+    fn test_skip_to_match_pattern_test1() {
+        let input: Vec<String> = vec!["%test1.*end$%".parse().unwrap()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 1);
+        match patterns.first() {
+            Some(CsplitPattern::SkipToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test1.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+    }
+    #[test]
+    fn test_skip_to_match_pattern_test2() {
+        let input: Vec<String> = vec!["%test2.*end$%".parse().unwrap()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 1);
+
+        // match patterns.first() {
+        //     Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Always)) => {
+        //         let parsed_reg = format!("{reg}");
+        //         assert_eq!(parsed_reg, "test2.*end$");
+        //     }
+        //     _ => panic!("expected SkipToMatch pattern"),
+        // };
+    }
+    #[test]
+    fn test_skip_to_match_pattern_test3() {
+        let input: Vec<String> = vec!["%test3.*end$%".parse().unwrap()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 1);
+        // match patterns.first() {
+        //     Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(5))) => {
+        //         let parsed_reg = format!("{reg}");
+        //         assert_eq!(parsed_reg, "test3.*end$");
+        //     }
+        //     _ => panic!("expected SkipToMatch pattern"),
+        // };
+    }
+    #[test]
+    fn test_skip_to_match_pattern_test4() {
+        let input: Vec<String> = vec!["%test4.*end$%+3".parse().unwrap()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 1);
+        match patterns.first() {
+            Some(CsplitPattern::SkipToMatch(reg, 3, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test4.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+    }
+
+    #[test]
+    fn test_skip_to_match_pattern_test5() {
+        let input: Vec<String> = vec!["%test5.*end$%-3".to_string()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        assert_eq!(patterns.len(), 1);
+        match patterns.first() {
+            Some(CsplitPattern::SkipToMatch(reg, -3, CsplitExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test5.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+    }
+
+    #[test]
+    fn test_line_number_zero() {
+        let patterns = vec![CsplitPattern::UpToLine(0, CsplitExecutePattern::Times(1))];
+        match validate_line_numbers(&patterns) {
+            Err(CsplitError::LineNumberIsZero) => (),
+            _ => panic!("expected LineNumberIsZero error"),
+        }
+    }
+
+    #[test]
+    fn test_line_number_smaller_than_previous() {
+        let input: Vec<String> = vec!["10".to_string(), "5".to_string()];
+        match get_patterns(input.as_slice()) {
+            Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
+            _ => panic!("expected LineNumberSmallerThanPrevious error"),
+        }
+    }
+
+    #[test]
+    fn test_line_number_smaller_than_previous_separate() {
+        let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "5".to_string()];
+        match get_patterns(input.as_slice()) {
+            Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
+            _ => panic!("expected LineNumberSmallerThanPrevious error"),
+        }
+    }
+}

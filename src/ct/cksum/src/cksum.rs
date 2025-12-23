@@ -491,3 +491,3305 @@ fn args_init() -> Vec<Arg> {
     args
 }
 
+#[cfg(test)]
+mod tests {
+    #[cfg(test)]
+    mod tests_ct_app {
+        use crate::ct_app;
+        use crate::opt_flags;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_file_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", "test.txt"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--algorithm", "SHA256"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_untagged_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--untagged"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_tag_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--tag"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_length_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--length", "256"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_raw_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--raw"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_base64_arg() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--base64"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_multiple_files() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                "file1.txt",
+                "--file",
+                "file2.txt",
+                "--file",
+                "file3.txt",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_algorithm() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--algorithm", "invalid-algo"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_untagged_and_tag_both_set() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--untagged", "--tag"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_length_out_of_range() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--length", "1025"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_length_not_multiple_of_8() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--length", "29"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_raw_and_base64_both_set() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--raw", "--base64"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_default_algorithm() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_none());
+        }
+
+        #[test]
+        fn test_ct_app_empty_file_argument() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", ""];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_nonexistent_file() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", "/nonexistent/file.txt"];
+            let result = command.try_get_matches_from(args);
+
+            // clap does not validate file existence at parse time; this should succeed
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_short_form_algorithm() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-a", "SHA256"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_short_form_length() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-l", "256"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_short_form_untagged() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_short_form_tag() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-t"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_short_form_raw() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_short_form_base64() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-b"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_multiple_options() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm",
+                "SHA256",
+                "--untagged",
+                "--length",
+                "256",
+                "--raw",
+                "--file",
+                "test.txt",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests_ct_main {
+        use crate::cksum_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_ct_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_file_arg() {
+            let args = vec![ctcore::ct_util_name(), "--file", "test.txt"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_algorithm_arg() {
+            let args = vec![ctcore::ct_util_name(), "--algorithm", "SHA256"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_length_arg() {
+            let args = vec![ctcore::ct_util_name(), "--length", "256"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_multiple_files() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                "file1.txt",
+                "--file",
+                "file2.txt",
+                "--file",
+                "file3.txt",
+            ];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_invalid_algorithm() {
+            let args = vec![ctcore::ct_util_name(), "--algorithm", "invalid-algo"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_length_out_of_range() {
+            let args = vec![ctcore::ct_util_name(), "--length", "1025"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_length_not_multiple_of_8() {
+            let args = vec![ctcore::ct_util_name(), "--length", "29"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_raw_and_base64_both_set() {
+            let args = vec![ctcore::ct_util_name(), "--raw", "--base64"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_empty_file_argument() {
+            let args = vec![ctcore::ct_util_name(), "--file", ""];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_nonexistent_file() {
+            let args = vec![ctcore::ct_util_name(), "--file", "/nonexistent/file.txt"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_short_form_algorithm() {
+            let args = vec![ctcore::ct_util_name(), "-a", "SHA256"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_short_form_length() {
+            let args = vec![ctcore::ct_util_name(), "-l", "256"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_short_form_untagged() {
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_short_form_tag() {
+            let args = vec![ctcore::ct_util_name(), "-t"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_short_form_raw() {
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_short_form_base64() {
+            let args = vec![ctcore::ct_util_name(), "-b"];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_multiple_options() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm",
+                "SHA256",
+                "--untagged",
+                "--length",
+                "256",
+                "--raw",
+                "--file",
+                "test.txt",
+            ];
+            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests_ct_app_algorithm {
+        use std::fs;
+        use std::fs::File;
+
+        use crate::ct_app;
+        use crate::opt_flags;
+
+        use tempfile::Builder;
+        #[test]
+        fn test_ct_app_algorithm_sysv() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sysv")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sysv.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sysv",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sysv_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sysv_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sysv_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sysv",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_bsd() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_bsd")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_bsd.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "bsd",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_bsd_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_bsd_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_bsd_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=bsd",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_crc() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_crc")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_crc.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "crc",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_crc_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_crc_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_crc_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=crc",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_md5() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_md5")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_md5.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "md5",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_md5_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_md5_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_md5_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=md5",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_sha1() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha1.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha1",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sha1_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha1_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha1_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sha1",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_sha224() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha224")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha224.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha224",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sha224_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha224_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha224_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sha224",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_sha256() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha256")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha256.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sha256_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha256_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha256_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sha256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_sha384() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha384")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha384.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha384",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sha384_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha384_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha384_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sha384",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_sha512() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha512")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha512.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha512",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sha512_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sha512_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sha512_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sha512",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_blake2b() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_blake2b")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_blake2b.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "blake2b",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_blake2b_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_blake2b_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_blake2b_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=blake2b",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_algorithm_sm3() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sm3")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sm3.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sm3",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+        #[test]
+        fn test_ct_app_algorithm_sm3_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_algorithm_sm3_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_algorithm_sm3_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--algorithm=sm3",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+    }
+    #[cfg(test)]
+    mod tests_ct_app_arguments {
+        use crate::{ct_app, opt_flags};
+        use clap::error::ErrorKind;
+
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ct_app_tag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new().prefix("test_ct_app_tag").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_tag.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--tag",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_untagged() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_untagged")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_untagged.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--untagged",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_length() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_length")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_length.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-l",
+                "128",
+                "-a",
+                "blake2b",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_length_whole() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_length_whole")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_length_whole.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "blake2b",
+                "--length=256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+            assert!(matches.get_one::<String>(opt_flags::ALGORITHM).is_some());
+        }
+
+        #[test]
+        fn test_ct_app_length_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_length_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_length_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--raw",
+                "-a",
+                "blake2b",
+                "--length=256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--base64",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_base64_tag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_base64_tag")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_base64_tag.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--base64",
+                "--tag",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_base64_untag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_base64_untag")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_base64_untag.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--base64",
+                "--untagged",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_base64_tag_untag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_base64_tag_untag")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_base64_tag_untag.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--tag",
+                "--base64",
+                "--untagged",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new().prefix("test_ct_app_raw").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--raw",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_raw_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_raw_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_raw_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--raw",
+                "--base64",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_raw_tag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_raw_tag")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_raw_tag.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--raw",
+                "--tag",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_tag_untag() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_tag_untag")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_tag_untag.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--untagged",
+                "--tag",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+
+        #[test]
+        fn test_ct_app_raw_untagged() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_ct_app_raw_untagged")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_ct_app_raw_untagged.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--raw",
+                "--untagged",
+                test_file_path.to_str().unwrap(),
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.args_present());
+        }
+    }
+
+    #[cfg(test)]
+    mod tests_detect_algo {
+
+        use crate::cksum_detect_algo;
+        use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
+        use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
+        use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
+        use crate::CKSUM_ALGORITHM_OPTIONS_MD5;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA1;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA224;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA256;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA384;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
+
+        #[test]
+        fn test_detect_algo_sysv() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SYSV, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SYSV);
+
+            assert_eq!(output_size, 512);
+        }
+
+        #[test]
+        fn test_detect_algo_bsd() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_BSD, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_BSD);
+            assert_eq!(output_size, 1024);
+        }
+
+        #[test]
+        fn test_detect_algo_crc() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_CRC, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_CRC);
+            // assert_digest_output(digest, CRC::new(), 256);
+            assert_eq!(output_size, 256);
+        }
+
+        #[test]
+        fn test_detect_algo_md5() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_MD5, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_MD5);
+            // assert_digest_output(digest, Md5::new(), 128);
+            assert_eq!(output_size, 128);
+        }
+
+        #[test]
+        fn test_detect_algo_sha1() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SHA1, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SHA1);
+            // assert_digest_output(digest, Sha1::new(), 160);
+            assert_eq!(output_size, 160);
+        }
+
+        #[test]
+        fn test_detect_algo_sha224() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SHA224, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SHA224);
+            // assert_digest_output(digest, Sha224::new(), 224);
+            assert_eq!(output_size, 224);
+        }
+
+        #[test]
+        fn test_detect_algo_sha256() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SHA256, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SHA256);
+            // assert_digest_output(digest, Sha256::new(), 256);
+            assert_eq!(output_size, 256);
+        }
+
+        #[test]
+        fn test_detect_algo_sha384() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SHA384, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SHA384);
+
+            assert_eq!(output_size, 384);
+        }
+
+        #[test]
+        fn test_detect_algo_sha512() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SHA512, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SHA512);
+
+            assert_eq!(output_size, 512);
+        }
+
+        #[test]
+        fn test_detect_algo_blake2b_with_length() {
+            let length = 64;
+            let (name, _, output_size) =
+                cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_BLAKE2B, Some(length));
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_BLAKE2B);
+
+            assert_eq!(output_size, 512); // Output size should always be 512 for Blake2b
+        }
+
+        #[test]
+        fn test_detect_algo_blake2b_without_length() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_BLAKE2B, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_BLAKE2B);
+
+            assert_eq!(output_size, 512);
+        }
+
+        #[test]
+        fn test_detect_algo_sm3() {
+            let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SM3, None);
+            assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SM3);
+
+            assert_eq!(output_size, 512);
+        }
+    }
+
+    #[cfg(test)]
+    mod test_cksum {
+        use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
+        use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
+        use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
+        use crate::CKSUM_ALGORITHM_OPTIONS_MD5;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA1;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA224;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA256;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA384;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
+        use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
+        use crate::{cksum, cksum_detect_algo, ct_app, opt_flags, CksumOptions, CksumOutputFormat};
+        use std::ffi::OsStr;
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_calculate_checksum_sysv_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sysv")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sysv.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sysv",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SYSV;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sysv_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sysv_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sysv_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sysv_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sysv",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SYSV;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sysv_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sysv_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sysv_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sysv_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sysv",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SYSV;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sysv_base64 error");
+                }
+            };
+        }
+        #[test]
+        fn test_calculate_checksum_bsd_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_bsd_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_bsd_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "bsd",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_BSD;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_bsd_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_bsd_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_bsd_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_bsd_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "bsd",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_BSD;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_bsd_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_bsd_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_bsd_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_bsd_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "bsd",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_BSD;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_bsd_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_crc_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_crc_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_crc_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "crc",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_CRC;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_crc_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_crc_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_crc_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_crc_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "crc",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_CRC;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_crc_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_crc_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_crc_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_crc_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "crc",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_CRC;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_crc_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sm3_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sm3_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sm3_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sm3",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SM3;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sm3_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sm3_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sm3_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sm3_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sm3",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SM3;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sm3_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sm3_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sm3_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sm3_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sm3",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SM3;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sm3_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha512_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha512_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha512_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha512",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA512;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha512_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha512_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha512_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha512_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha512",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA512;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha512_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha512_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha512_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path =
+                sub_dir_path.join("test_calculate_checksum_sha512_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha512",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA512;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha512_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_md5_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_md5_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_md5_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "md5",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_MD5;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_md5_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_md5_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_md5_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_md5_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "md5",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_MD5;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_md5_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_md5_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_md5_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_md5_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "md5",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_MD5;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_md5_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha1_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha1_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha1_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha1",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA1;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha1_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha1_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha1_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha1_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha1",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA1;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha1_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha1_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha1_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha1_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha1",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA1;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha1_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha224_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha224_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha224_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha224",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA224;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha224_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha224_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha224_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha224_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha224",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA224;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha224_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha224_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha224_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path =
+                sub_dir_path.join("test_calculate_checksum_sha224_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha224",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA224;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha224_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha256_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha256_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha256_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA256;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha256_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha256_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha256_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha256_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA256;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha256_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha256_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha256_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path =
+                sub_dir_path.join("test_calculate_checksum_sha256_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha256",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA256;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha256_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha384_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha384_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha384_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha384",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA384;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha384_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha384_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha384_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_sha384_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha384",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA384;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha384_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_sha384_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_sha384_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path =
+                sub_dir_path.join("test_calculate_checksum_sha384_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "sha384",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_SHA384;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_sha384_hexadecimal error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_blake2b_base64() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_blake2b_base64")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_blake2b_base64.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "blake2b",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Base64;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_blake2b_base64 error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_blake2b_raw() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_blake2b_raw")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path = sub_dir_path.join("test_calculate_checksum_blake2b_raw.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "blake2b",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Raw;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_blake2b_raw error");
+                }
+            };
+        }
+
+        #[test]
+        fn test_calculate_checksum_blake2b_hexadecimal() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("test_calculate_checksum_blake2b_hexadecimal")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_path =
+                sub_dir_path.join("test_calculate_checksum_blake2b_hexadecimal.txt");
+            File::create(&test_file_path).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-a",
+                "blake2b",
+                test_file_path.to_str().unwrap(),
+            ];
+            let results = command.try_get_matches_from(args);
+            let algo_name: &str = CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
+            let length = 64;
+            let (name, algo, bits) = cksum_detect_algo(algo_name, Some(length));
+            let output_format = CksumOutputFormat::Hexadecimal;
+
+            let opts = CksumOptions {
+                algo_name: name,
+                digest: algo,
+                output_bits: bits,
+                length: Some(length),
+                untagged: false,
+                output_format,
+            };
+
+            match results
+                .expect("get opt_flags error")
+                .get_many::<String>(opt_flags::FILE)
+            {
+                Some(files) => {
+                    let s = cksum(opts, files.map(OsStr::new));
+                    assert!(s.is_ok());
+                }
+                None => {
+                    panic!("test_calculate_checksum_blake2b_hexadecimal error");
+                }
+            };
+        }
+    }
+}

@@ -1,0 +1,28 @@
+[package]
+name = "ct_csplit"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "csplit ~ (ctutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/ls"
+
+[lib]
+path = "src/csplit.rs"
+
+[dependencies]
+clap = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "fs", "format"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "csplit"
+path = "src/main.rs"

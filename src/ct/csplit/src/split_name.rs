@@ -291,4 +291,30 @@ mod tests {
         assert_eq!(split_name.get(42), "xxcst-42        -");
     }
 
+    #[test]
+    fn left_adjusted_octal() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%-10o-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-52        -");
+    }
+
+    #[test]
+    fn left_adjusted_lower_hex() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%-10x-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-2a        -");
+    }
+
+    #[test]
+    fn left_adjusted_upper_hex() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%-10X-")), None).unwrap();
+        assert_eq!(split_name.get(42), "xxcst-2A        -");
+    }
+
+    #[test]
+    fn too_many_percent() {
+        let split_name = SplitName::new(None, Some(String::from("%02d-%-3x")), None);
+        match split_name {
+            Err(CsplitError::SuffixFormatTooManyPercents) => (),
+            _ => panic!("should fail with SuffixFormatTooManyPercents"),
+        };
+    }
 }

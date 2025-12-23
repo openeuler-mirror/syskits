@@ -468,3 +468,84 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
     Ok(pathbuf1.starts_with(pathbuf2))
 }
 
+#[cfg(test)]
+mod tests {
+
+    use super::ends_with_slash_dot;
+    use super::path_has_prefix;
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_ends_with_slash_dot() {
+        assert!(ends_with_slash_dot("/."));
+        assert!(ends_with_slash_dot("./."));
+        assert!(ends_with_slash_dot("../."));
+        assert!(ends_with_slash_dot("a/."));
+        assert!(ends_with_slash_dot("/a/."));
+
+        assert!(!ends_with_slash_dot(""));
+        assert!(!ends_with_slash_dot("."));
+        assert!(!ends_with_slash_dot("./"));
+        assert!(!ends_with_slash_dot(".."));
+        assert!(!ends_with_slash_dot("/.."));
+        assert!(!ends_with_slash_dot("a/.."));
+        assert!(!ends_with_slash_dot("/a/.."));
+        assert!(!ends_with_slash_dot("/"));
+    }
+
+    #[test]
+    fn test_copy_directory() {}
+
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_path_has_prefix() {
+        // Test case 1: p2 is a prefix of p1
+        let p1 = PathBuf::from("/usr/bin");
+        let p2 = PathBuf::from("/usr");
+        assert!(path_has_prefix(&p1, &p2).is_ok() && path_has_prefix(&p1, &p2).unwrap());
+
+        // Test case 2: p2 is not a prefix of p1
+        let p1 = PathBuf::from("/usr");
+        let p2 = PathBuf::from("/usr/bin");
+        assert!(path_has_prefix(&p1, &p2).is_ok() && !path_has_prefix(&p1, &p2).unwrap());
+
+        // Test case 3: p2 is not a prefix of p1
+        let p1 = PathBuf::from("/usr/bin");
+        let p2 = PathBuf::from("/var/log");
+        assert!(path_has_prefix(&p1, &p2).is_ok() && !path_has_prefix(&p1, &p2).unwrap());
+        assert!(path_has_prefix(&p2, &p1).is_ok() && !path_has_prefix(&p2, &p1).unwrap());
+    }
+
+    // use std::fs;
+    // use std::path::Path;
+    //
+    // #[test]
+    // fn test_entry_new() {
+    //     // Create a temporary directory for testing
+    //     let temp_dir = fs::create_dir_all("/tmp/test_dir").unwrap();
+    //     let root = Path::new("/tmp/test_dir");
+    //     let context = Context {
+    //         current_dir: PathBuf::from("/tmp"),
+    //         root_parent: Some(PathBuf::from("/tmp/test_dir")),
+    //         target: &*PathBuf::from("/tmp/target"),
+    //         root: &root,
+    //     };
+    //
+    //     // Create a dummy DirEntry
+    //     let dir_entry = Path::new("/tmp/test_dir").to_str();
+    //     let direntry = fs::DirEntry::path(dir_entry);
+    //
+    //     // Create an Entry using the new function
+    //     let entry = Entry::new(&context, &direntry, false).unwrap();
+    //
+    //     // Assert the values of the created Entry
+    //     assert_eq!(entry.source_absolute, PathBuf::from("/tmp/test_dir/file.txt"));
+    //     assert_eq!(entry.source_relative, PathBuf::from("file.txt"));
+    //     assert_eq!(entry.local_to_target, PathBuf::from("/tmp/target/file.txt"));
+    //     assert!(!entry.target_is_file);
+    //
+    //     // Clean up the temporary directory
+    //     fs::remove_dir_all("/tmp/test_dir").unwrap();
+    // }
+}

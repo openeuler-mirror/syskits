@@ -384,4 +384,182 @@ mod tests {
         assert_eq!(custom_cmp_chars('.', '.', true), Ordering::Equal);
         assert_eq!(custom_cmp_chars(',', ',', true), Ordering::Equal);
     }
+
+    #[test]
+    fn test_cmp_chars_whitespace() {
+        assert_eq!(custom_cmp_chars(' ', '\t', false), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('\t', ' ', false), Ordering::Less);
+        assert_eq!(custom_cmp_chars(' ', ' ', false), Ordering::Equal);
+        assert_eq!(custom_cmp_chars('\t', '\t', false), Ordering::Equal);
+
+        assert_eq!(custom_cmp_chars(' ', '\t', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('\t', ' ', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars(' ', ' ', true), Ordering::Equal);
+        assert_eq!(custom_cmp_chars('\t', '\t', true), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_cmp_chars_symbols() {
+        assert_eq!(custom_cmp_chars('+', '-', false), Ordering::Less);
+        assert_eq!(custom_cmp_chars('-', '+', false), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('+', '+', false), Ordering::Equal);
+        assert_eq!(custom_cmp_chars('-', '-', false), Ordering::Equal);
+
+        assert_eq!(custom_cmp_chars('+', '-', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars('-', '+', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('+', '+', true), Ordering::Equal);
+        assert_eq!(custom_cmp_chars('-', '-', true), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_cmp_chars_unicode_characters() {
+        assert_eq!(
+            custom_cmp_chars('\u{1F600}', '\u{1F601}', false),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F601}', '\u{1F600}', false),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F600}', '\u{1F600}', false),
+            Ordering::Equal
+        );
+
+        assert_eq!(
+            custom_cmp_chars('\u{1F600}', '\u{1F601}', true),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F601}', '\u{1F600}', true),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F600}', '\u{1F600}', true),
+            Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn test_cmp_chars_edge_cases() {
+        assert_eq!(custom_cmp_chars('\u{0}', '\u{1}', false), Ordering::Less);
+        assert_eq!(custom_cmp_chars('\u{1}', '\u{0}', false), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('\u{0}', '\u{0}', false), Ordering::Equal);
+
+        assert_eq!(custom_cmp_chars('\u{0}', '\u{1}', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars('\u{1}', '\u{0}', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('\u{0}', '\u{0}', true), Ordering::Equal);
+
+        assert_eq!(
+            custom_cmp_chars('\u{FFFF}', '\u{10000}', false),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{10000}', '\u{FFFF}', false),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{FFFF}', '\u{FFFF}', false),
+            Ordering::Equal
+        );
+
+        assert_eq!(
+            custom_cmp_chars('\u{FFFF}', '\u{10000}', true),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{10000}', '\u{FFFF}', true),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{FFFF}', '\u{FFFF}', true),
+            Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn test_cmp_chars_unusual_unicode_characters() {
+        assert_eq!(
+            custom_cmp_chars('\u{1D49E}', '\u{1D49F}', false),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1D49F}', '\u{1D49E}', false),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1D49E}', '\u{1D49E}', false),
+            Ordering::Equal
+        );
+
+        assert_eq!(
+            custom_cmp_chars('\u{1D49E}', '\u{1D49F}', true),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1D49F}', '\u{1D49E}', true),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1D49E}', '\u{1D49E}', true),
+            Ordering::Equal
+        );
+
+        assert_eq!(
+            custom_cmp_chars('\u{1F1E6}', '\u{1F1E7}', false),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F1E7}', '\u{1F1E6}', false),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F1E6}', '\u{1F1E6}', false),
+            Ordering::Equal
+        );
+
+        assert_eq!(
+            custom_cmp_chars('\u{1F1E6}', '\u{1F1E7}', true),
+            Ordering::Less
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F1E7}', '\u{1F1E6}', true),
+            Ordering::Greater
+        );
+        assert_eq!(
+            custom_cmp_chars('\u{1F1E6}', '\u{1F1E6}', true),
+            Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn test_custom_str_cmp_no_custom_settings() {
+        let result = custom_cmp_str("abc", "def", false, false, false);
+        assert_eq!(result, "abc".cmp("def"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_ignore_non_printing() {
+        let result = custom_cmp_str("abc\x08\x00def", "abcdef", true, false, false);
+        assert_eq!(result, "abcdef".cmp("abcdef"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_ignore_non_dictionary() {
+        let result = custom_cmp_str("abc$%def", "abcdef", false, true, false);
+        assert_eq!(result, "abcdef".cmp("abcdef"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_ignore_case() {
+        let result = custom_cmp_str("AbCdEf", "abcdef", false, false, true);
+        assert_eq!(result, "abcdef".cmp("abcdef"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_ignore_non_printing_and_non_dictionary() {
+        let result = custom_cmp_str("abc\x08\x00$%def", "abcdef", true, true, false);
+        assert_eq!(result, "abcdef".cmp("abcdef"));
+    }
+
 }

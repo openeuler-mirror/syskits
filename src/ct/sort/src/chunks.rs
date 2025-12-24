@@ -2276,4 +2276,265 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_read_function_precomputed_needs_tokens_false_1_1_1() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed {
+                is_needs_tokens: false,
+                num_infos_per_line: 1,
+                floats_per_line: 1,
+                selections_per_line: 1,
+            },
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_selectors_default() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            selectors: vec![],
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_parse_lines_basic() {
+        let input = "line1\nline2\nline3";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            separator: Some('\n'),
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(lines.len(), 3);
+        assert_eq!(
+            lines[0],
+            SortLine {
+                line: "line1",
+                index: 0,
+            }
+        );
+        assert_eq!(
+            lines[1],
+            SortLine {
+                line: "line2",
+                index: 1,
+            }
+        );
+        assert_eq!(
+            lines[2],
+            SortLine {
+                line: "line3",
+                index: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_with_different_separator() {
+        let input = "part1|part2|part3";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            separator: Some('|'),
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'|', &settings);
+
+        assert_eq!(lines.len(), 3);
+        assert_eq!(
+            lines[0],
+            SortLine {
+                line: "part1",
+                index: 0,
+            }
+        );
+        assert_eq!(
+            lines[1],
+            SortLine {
+                line: "part2",
+                index: 1,
+            }
+        );
+        assert_eq!(
+            lines[2],
+            SortLine {
+                line: "part3",
+                index: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_empty_input() {
+        let input = "";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            separator: Some('\n'),
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_no_separator_present() {
+        let input = "No separators here";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs::default();
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(
+            lines.len(),
+            1,
+            "Should handle input without separators gracefully"
+        );
+        assert_eq!(
+            lines[0].line, "No separators here",
+            "Content should match the entire input"
+        );
+    }
+
+    #[test]
+    fn test_read_to_buffer_resize_needed() {
+        let data = b"Hello\nWorld\nThis is a longer test to force resizing of the buffer.";
+        let expected_data =
+            b"Hello\nWorld\nThis is a longer test to force resizing of the buffer.\n";
+        let mut file = MockRead {
+            data: Cursor::new(data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 10]; // Small buffer to trigger resizing
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, Some(100), 0, b'\n')
+                .unwrap();
+
+        assert!(buffer.len() > 10); // Buffer should have resized
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], expected_data);
+    }
+
+    #[test]
+    fn test_read_to_buffer_single_small_file() {
+        let data = b"Hello\nWorld\n";
+        let mut file = MockRead {
+            data: Cursor::new(data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 1024]; // Large buffer to avoid resizing
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(read_bytes, data.len());
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], data);
+    }
+
+    #[test]
+    fn test_read_to_buffer_multiple_files() {
+        let data1 = b"First file,\nSecond line.";
+        let data2 = b"\nThird file starts here,\nAnd another line.";
+        let file1 = MockRead {
+            data: Cursor::new(data1.clone().to_vec()),
+        };
+        let file2 = MockRead {
+            data: Cursor::new(data2.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = vec![Ok(file2)].into_iter();
+
+        let mut file = file1;
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(should_continue, false);
+        assert!(read_bytes > 0 && read_bytes <= buffer.len());
+    }
+
+    #[test]
+    fn test_empty_and_whitespace_lines() {
+        let input = "\n   \n\n";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs::default();
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(
+            lines.len(),
+            3,
+            "Should recognize empty and whitespace lines"
+        );
+        assert_eq!(lines[1].line, "   ", "Whitespace line should be preserved");
+    }
+
 }

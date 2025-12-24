@@ -1,0 +1,307 @@
+/*
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
+ *     syskits is licensed under Mulan PSL v2.
+ *    You can use this software according to the terms and conditions of the Mulan PSL V2
+ *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *    See the Mulan PSL v2 for more details.
+ *
+ */
+
+//! 使用辅助文件存储中间块，对大文件进行分类。
+//!
+//! 文件被读取到内存块中，然后进行单独排序，并写入临时文件。
+//! 写入临时文件。有两个线程： 一个分类器，一个读写器。
+//! 单个内存块的缓冲区会循环使用。有两个缓冲区。
+
+use std::cmp::Ordering;
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
+
+use std::io::Read;
+use std::sync::mpsc::{Receiver, SyncSender};
+use std::thread;
+
+use itertools::Itertools;
+
+use ctcore::ct_error::CTResult;
+
+use crate::chunks::ChunkRecycled;
+use crate::chunks::{self, Chunk};
+use crate::merge::MergeClosedTmpFile;
+use crate::merge::MergeWriteableCompressedTmpFile;
+use crate::merge::MergeWriteablePlainTmpFile;
+use crate::merge::MergeWriteableTmpFile;
+use crate::tmp_dir::TmpDirWrapper;
+use crate::SortOutput;
+use crate::{merge, sort_by, sort_compare_by, SortGlobalConfigs};
+
+use crate::{sort_print_sorted, SortLine};
+
+const EXT_SORT_START_BUFFER_SIZE: usize = 8_000;
+
+/// 使用辅助文件存储中间块（如果需要），对文件进行排序，并输出结果。
+pub fn ext_sort(
+    files: &mut impl Iterator<Item = CTResult<Box<dyn Read + Send>>>,
+    settings: &SortGlobalConfigs,
+    output: SortOutput,
+    tmp_dir: &mut TmpDirWrapper,
+) -> CTResult<()> {
+    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
+    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
+    thread::spawn({
+        let settings = settings.clone();
+        move || ext_sort_sorter(&recycled_receiver, &sorted_sender, &settings)
+    });
+
+    match settings.compress_prog {
+        Some(_) => ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
+            files,
+            settings,
+            &sorted_receiver,
+            recycled_sender,
+            output,
+            tmp_dir,
+        ),
+        None => ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
+            files,
+            settings,
+            &sorted_receiver,
+            recycled_sender,
+            output,
+            tmp_dir,
+        ),
+    }
+}
+
+fn ext_sort_reader_writer<
+    F: Iterator<Item = CTResult<Box<dyn Read + Send>>>,
+    Tmp: MergeWriteableTmpFile + 'static,
+>(
+    files: F,
+    sort_settings: &SortGlobalConfigs,
+    chunk_receiver: &Receiver<Chunk>,
+    chunk_sender: SyncSender<Chunk>,
+    sort_output: SortOutput,
+    tmp_dir: &mut TmpDirWrapper,
+) -> CTResult<()> {
+    let separator = sort_settings.line_ending.into();
+
+    // 启发式选择： 除以 10 似乎可以使我们的内存使用量大致
+    // 设置.buffer_size 左右。
+    let buffer_size = sort_settings.buffer_size / 10;
+    let read_result: ExtSortReadResult<Tmp> = ext_sort_read_write_loop(
+        files,
+        tmp_dir,
+        separator,
+        buffer_size,
+        sort_settings,
+        chunk_receiver,
+        chunk_sender,
+    )?;
+    match read_result {
+        ExtSortReadResult::WroteChunksToFile { tmp_files } => {
+            let merger = merge::merge_with_file_limit::<_, _, Tmp>(
+                tmp_files.into_iter().map(|c| c.reopen()),
+                sort_settings,
+                tmp_dir,
+            )?;
+            merger.write_all(sort_settings, sort_output)?;
+        }
+        ExtSortReadResult::SortedSingleChunk(chunk) => match sort_settings.is_unique {
+            true => {
+                sort_print_sorted(
+                    chunk.lines().iter().dedup_by(|a, b| {
+                        sort_compare_by(a, b, sort_settings, chunk.line_data(), chunk.line_data())
+                            == Ordering::Equal
+                    }),
+                    sort_settings,
+                    sort_output,
+                );
+            }
+            false => {
+                sort_print_sorted(chunk.lines().iter(), sort_settings, sort_output);
+            }
+        },
+        ExtSortReadResult::SortedTwoChunks([a, b]) => {
+            let merged_iter = a.lines().iter().map(|line| (line, &a)).merge_by(
+                b.lines().iter().map(|line| (line, &b)),
+                |(line_a, a), (line_b, b)| {
+                    sort_compare_by(line_a, line_b, sort_settings, a.line_data(), b.line_data())
+                        != Ordering::Greater
+                },
+            );
+            match sort_settings.is_unique {
+                true => {
+                    sort_print_sorted(
+                        merged_iter
+                            .dedup_by(|(line_a, a), (line_b, b)| {
+                                sort_compare_by(
+                                    line_a,
+                                    line_b,
+                                    sort_settings,
+                                    a.line_data(),
+                                    b.line_data(),
+                                ) == Ordering::Equal
+                            })
+                            .map(|(line, _)| line),
+                        sort_settings,
+                        sort_output,
+                    );
+                }
+                false => {
+                    sort_print_sorted(
+                        merged_iter.map(|(line, _)| line),
+                        sort_settings,
+                        sort_output,
+                    );
+                }
+            }
+        }
+        ExtSortReadResult::EmptyInput => {
+            // 不输出任何东西
+        }
+    }
+    Ok(())
+}
+
+/// 在sort线程上执行的函数。
+fn ext_sort_sorter(
+    chunk_receiver: &Receiver<Chunk>,
+    chunk_sender: &SyncSender<Chunk>,
+    sort_settings: &SortGlobalConfigs,
+) {
+    while let Ok(mut payload) = chunk_receiver.recv() {
+        payload.with_dependent_mut(|_, contents| {
+            sort_by(&mut contents.lines, sort_settings, &contents.line_data);
+        });
+        if chunk_sender.send(payload).is_err() {
+            // 接收者已经离开，可能是因为其他线程出错了。
+            // 我们静静地停止，因为实际错误是由其他线程打印出来的。
+            return;
+        }
+    }
+}
+
+/// 描述我们如何从输入中读取数据块。
+enum ExtSortReadResult<I: MergeWriteableTmpFile> {
+    /// 输入为空。没有读取任何内容。
+    EmptyInput,
+    /// 输入的内容被保存在内存中的一个 Chunk 中。
+    SortedSingleChunk(Chunk),
+    /// 输入内容分为两块，分别保存在内存中。
+    SortedTwoChunks([Chunk; 2]),
+    /// 输入内容被读取为多块，并写入辅助文件。
+    WroteChunksToFile { tmp_files: Vec<I::Closed> },
+}
+
+/// 在读写线程上执行的函数。
+fn ext_sort_read_write_loop<I: MergeWriteableTmpFile>(
+    mut files: impl Iterator<Item = CTResult<Box<dyn Read + Send>>>,
+    tmp_dir: &mut TmpDirWrapper,
+    separator: u8,
+    buffer_len: usize,
+    sort_settings: &SortGlobalConfigs,
+    chunk_receiver: &Receiver<Chunk>,
+    chunk_sender: SyncSender<Chunk>,
+) -> CTResult<ExtSortReadResult<I>> {
+    let mut file = files.next().unwrap()?;
+
+    let mut carry_over = vec![];
+    // kick things off with two reads
+    for _ in 0..2 {
+        let should_continue = chunks::chunk_read(
+            &chunk_sender,
+            ChunkRecycled::new(if EXT_SORT_START_BUFFER_SIZE < buffer_len {
+                EXT_SORT_START_BUFFER_SIZE
+            } else {
+                buffer_len
+            }),
+            Some(buffer_len),
+            &mut carry_over,
+            &mut file,
+            &mut files,
+            separator,
+            sort_settings,
+        )?;
+
+        if !should_continue {
+            drop(chunk_sender);
+            // 我们已经读取了整个输入信息。由于我们正在进行前两次读取、
+            // 这意味着我们可以将整个输入内容放入内存。绕过下面的写入
+            // 以更直接的方式处理这种情况。
+            let result = match chunk_receiver.recv() {
+                Ok(first_chunk) => match chunk_receiver.recv() {
+                    Ok(second_chunk) => {
+                        ExtSortReadResult::SortedTwoChunks([first_chunk, second_chunk])
+                    }
+                    _ => ExtSortReadResult::SortedSingleChunk(first_chunk),
+                },
+                _ => ExtSortReadResult::EmptyInput,
+            };
+
+            return Ok(result);
+        }
+    }
+
+    let mut sender_option = Some(chunk_sender);
+    let mut tmp_files = vec![];
+    loop {
+        let chunk = match chunk_receiver.recv() {
+            Ok(it) => it,
+            _ => {
+                return Ok(ExtSortReadResult::WroteChunksToFile { tmp_files });
+            }
+        };
+
+        let tmp_file = ext_sort_write::<I>(
+            &chunk,
+            tmp_dir.next_file()?,
+            sort_settings.compress_prog.as_deref(),
+            separator,
+        )?;
+        tmp_files.push(tmp_file);
+
+        let recycled_chunk = chunk.recycle();
+
+        if let Some(sender) = &sender_option {
+            let should_continue = chunks::chunk_read(
+                sender,
+                recycled_chunk,
+                None,
+                &mut carry_over,
+                &mut file,
+                &mut files,
+                separator,
+                sort_settings,
+            )?;
+            if !should_continue {
+                sender_option = None;
+            }
+        }
+    }
+}
+
+/// 将`chunk`中的行写入`file`，用`separator`分隔。
+/// `compress_prog` 用于选择性压缩文件内容。
+fn ext_sort_write<I: MergeWriteableTmpFile>(
+    chunk: &Chunk,
+    file: (File, PathBuf),
+    compress_prog: Option<&str>,
+    separator: u8,
+) -> CTResult<I::Closed> {
+    let mut tmp_file = I::create(file, compress_prog)?;
+    ext_sort_write_lines(chunk.lines(), tmp_file.as_write(), separator);
+    tmp_file.finished_writing()
+}
+
+fn ext_sort_write_lines<T: Write>(lines: &[SortLine], w: &mut T, separator: u8) {
+    for s in lines {
+        w.write_all(s.line.as_bytes()).unwrap();
+        w.write_all(&[separator]).unwrap();
+    }
+}
+

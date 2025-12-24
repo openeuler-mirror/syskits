@@ -652,4 +652,175 @@ mod tests {
 
         assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
     }
+
+    #[test]
+    fn test_check_salt_some_value() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            salt: Some([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 10, 11, 12, 13, 14, 15]),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_none() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: None,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some(','),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some_digital() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some('1'),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some_letter() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some('a'),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some_uppercase_letter() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some('A'),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some_colon() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some(':'),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some_horizontal() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some('-'),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_separator_some_space() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            separator: Some(' '),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_threads_string() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            threads: String::from("test"),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
 }

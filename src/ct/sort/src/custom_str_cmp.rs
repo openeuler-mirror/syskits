@@ -71,3 +71,317 @@ pub fn custom_cmp_str(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::cmp::Ordering;
+
+    use super::{custom_cmp_chars, custom_cmp_str, custom_filter_char};
+
+    #[test]
+    fn test_filter_char_no_ignore() {
+        assert!(custom_filter_char('a', false, false));
+        assert!(custom_filter_char('1', false, false));
+        assert!(custom_filter_char(' ', false, false));
+        assert!(custom_filter_char('\n', false, false));
+        assert!(custom_filter_char('\u{263A}', false, false)); // Unicode smiley face
+
+        assert!(custom_filter_char('\u{0}', false, false)); // ASCII NUL
+        assert!(custom_filter_char('\u{FFFF}', false, false)); // Non-ASCII character
+
+        assert!(custom_filter_char('!', false, false));
+        assert!(custom_filter_char('@', false, false));
+        assert!(custom_filter_char('#', false, false));
+        assert!(custom_filter_char('$', false, false));
+        assert!(custom_filter_char('%', false, false));
+        assert!(custom_filter_char('^', false, false));
+        assert!(custom_filter_char('&', false, false));
+        assert!(custom_filter_char('*', false, false));
+        assert!(custom_filter_char('(', false, false));
+        assert!(custom_filter_char(')', false, false));
+        assert!(custom_filter_char('-', false, false));
+        assert!(custom_filter_char('_', false, false));
+        assert!(custom_filter_char('=', false, false));
+        assert!(custom_filter_char('+', false, false));
+        assert!(custom_filter_char('{', false, false));
+        assert!(custom_filter_char('}', false, false));
+        assert!(custom_filter_char('|', false, false));
+        assert!(custom_filter_char(':', false, false));
+        assert!(custom_filter_char(';', false, false));
+        assert!(custom_filter_char('\'', false, false));
+        assert!(custom_filter_char('"', false, false));
+        assert!(custom_filter_char('<', false, false));
+        assert!(custom_filter_char('>', false, false));
+        assert!(custom_filter_char(',', false, false));
+        assert!(custom_filter_char('.', false, false));
+        assert!(custom_filter_char('/', false, false));
+        assert!(custom_filter_char('?', false, false));
+
+        assert!(custom_filter_char('\u{00A0}', false, false)); // Non-breaking space
+        assert!(custom_filter_char('\u{00A9}', false, false)); // Copyright symbol
+        assert!(custom_filter_char('\u{00AE}', false, false)); // Registered trademark symbol
+        assert!(custom_filter_char('\u{00B0}', false, false)); // Degree sign
+        assert!(custom_filter_char('\u{00B7}', false, false)); // Middle dot
+        assert!(custom_filter_char('\u{00BB}', false, false)); // Right-pointing double angle quotation mark
+        assert!(custom_filter_char('\u{00BF}', false, false)); // Inverted question mark
+        assert!(custom_filter_char('\u{2013}', false, false)); // En dash
+        assert!(custom_filter_char('\u{2014}', false, false)); // Em dash
+        assert!(custom_filter_char('\u{2018}', false, false)); // Left single quotation mark
+        assert!(custom_filter_char('\u{2019}', false, false)); // Right single quotation mark
+        assert!(custom_filter_char('\u{201C}', false, false)); // Left double quotation mark
+        assert!(custom_filter_char('\u{201D}', false, false)); // Right double quotation mark
+        assert!(custom_filter_char('\u{2026}', false, false)); // Horizontal ellipsis
+        assert!(custom_filter_char('\u{2122}', false, false)); // Trademark symbol
+        assert!(custom_filter_char('\u{2212}', false, false)); // Minus sign
+        assert!(custom_filter_char('\u{2605}', false, false)); // Black star
+    }
+
+    #[test]
+    fn test_filter_char_ignore_non_printing() {
+        assert!(custom_filter_char('a', true, false));
+        assert!(custom_filter_char('1', true, false));
+        assert!(custom_filter_char(' ', true, false));
+        assert!(!custom_filter_char('\n', true, false)); // ASCII control character
+        assert!(!custom_filter_char('\u{263A}', true, false)); // Unicode smiley face
+
+        assert!(!custom_filter_char('\u{0}', true, false)); // ASCII NUL
+        assert!(!custom_filter_char('\u{FFFF}', true, false)); // Non-ASCII character
+
+        assert!(custom_filter_char('!', true, false));
+        assert!(custom_filter_char('@', true, false));
+        assert!(custom_filter_char('#', true, false));
+        assert!(custom_filter_char('$', true, false));
+        assert!(custom_filter_char('%', true, false));
+        assert!(custom_filter_char('^', true, false));
+        assert!(custom_filter_char('&', true, false));
+        assert!(custom_filter_char('*', true, false));
+        assert!(custom_filter_char('(', true, false));
+        assert!(custom_filter_char(')', true, false));
+        assert!(custom_filter_char('-', true, false));
+        assert!(custom_filter_char('_', true, false));
+        assert!(custom_filter_char('=', true, false));
+        assert!(custom_filter_char('+', true, false));
+        assert!(custom_filter_char('{', true, false));
+        assert!(custom_filter_char('}', true, false));
+        assert!(custom_filter_char('|', true, false));
+        assert!(custom_filter_char(':', true, false));
+        assert!(custom_filter_char(';', true, false));
+        assert!(custom_filter_char('\'', true, false));
+        assert!(custom_filter_char('"', true, false));
+        assert!(custom_filter_char('<', true, false));
+        assert!(custom_filter_char('>', true, false));
+        assert!(custom_filter_char(',', true, false));
+        assert!(custom_filter_char('.', true, false));
+        assert!(custom_filter_char('/', true, false));
+        assert!(custom_filter_char('?', true, false));
+
+        assert!(!custom_filter_char('\u{00A0}', true, false)); // Non-breaking space
+        assert!(!custom_filter_char('\u{00A9}', true, false)); // Copyright symbol
+        assert!(!custom_filter_char('\u{00AE}', true, false)); // Registered trademark symbol
+        assert!(!custom_filter_char('\u{00B0}', true, false)); // Degree sign
+        assert!(!custom_filter_char('\u{00B7}', true, false)); // Middle dot
+        assert!(!custom_filter_char('\u{00BB}', true, false)); // Right-pointing double angle quotation mark
+        assert!(!custom_filter_char('\u{00BF}', true, false)); // Inverted question mark
+        assert!(!custom_filter_char('\u{2013}', true, false)); // En dash
+        assert!(!custom_filter_char('\u{2014}', true, false)); // Em dash
+        assert!(!custom_filter_char('\u{2018}', true, false)); // Left single quotation mark
+        assert!(!custom_filter_char('\u{2019}', true, false)); // Right single quotation mark
+        assert!(!custom_filter_char('\u{201C}', true, false)); // Left double quotation mark
+        assert!(!custom_filter_char('\u{201D}', true, false)); // Right double quotation mark
+        assert!(!custom_filter_char('\u{2026}', true, false)); // Horizontal ellipsis
+        assert!(!custom_filter_char('\u{2122}', true, false)); // Trademark symbol
+        assert!(!custom_filter_char('\u{2212}', true, false)); // Minus sign
+        assert!(!custom_filter_char('\u{2605}', true, false)); // Black star
+    }
+
+    #[test]
+    fn test_filter_char_ignore_non_dictionary() {
+        assert!(custom_filter_char('a', false, true));
+        assert!(custom_filter_char('1', false, true));
+        assert!(custom_filter_char(' ', false, true));
+        assert!(custom_filter_char('\n', false, true)); // ASCII control character
+        assert!(!custom_filter_char('\u{263A}', false, true)); // Non-alphanumeric, non-whitespace Unicode character
+
+        assert!(!custom_filter_char('\u{0}', false, true)); // ASCII NUL
+        assert!(!custom_filter_char('\u{FFFF}', false, true)); // Non-ASCII character
+
+        assert!(!custom_filter_char('!', false, true));
+        assert!(!custom_filter_char('@', false, true));
+        assert!(!custom_filter_char('#', false, true));
+        assert!(!custom_filter_char('$', false, true));
+        assert!(!custom_filter_char('%', false, true));
+        assert!(!custom_filter_char('^', false, true));
+        assert!(!custom_filter_char('&', false, true));
+        assert!(!custom_filter_char('*', false, true));
+        assert!(!custom_filter_char('(', false, true));
+        assert!(!custom_filter_char(')', false, true));
+        assert!(!custom_filter_char('-', false, true));
+        assert!(!custom_filter_char('_', false, true));
+        assert!(!custom_filter_char('=', false, true));
+        assert!(!custom_filter_char('+', false, true));
+        assert!(!custom_filter_char('{', false, true));
+        assert!(!custom_filter_char('}', false, true));
+        assert!(!custom_filter_char('|', false, true));
+        assert!(!custom_filter_char(':', false, true));
+        assert!(!custom_filter_char(';', false, true));
+        assert!(!custom_filter_char('\'', false, true));
+        assert!(!custom_filter_char('"', false, true));
+        assert!(!custom_filter_char('<', false, true));
+        assert!(!custom_filter_char('>', false, true));
+        assert!(!custom_filter_char(',', false, true));
+        assert!(!custom_filter_char('.', false, true));
+        assert!(!custom_filter_char('/', false, true));
+        assert!(!custom_filter_char('?', false, true));
+
+        assert!(!custom_filter_char('\u{00A0}', false, true)); // Non-breaking space
+        assert!(!custom_filter_char('\u{00A9}', false, true)); // Copyright symbol
+        assert!(!custom_filter_char('\u{00AE}', false, true)); // Registered trademark symbol
+        assert!(!custom_filter_char('\u{00B0}', false, true)); // Degree sign
+        assert!(!custom_filter_char('\u{00B7}', false, true)); // Middle dot
+        assert!(!custom_filter_char('\u{00BB}', false, true)); // Right-pointing double angle quotation mark
+        assert!(!custom_filter_char('\u{00BF}', false, true)); // Inverted question mark
+        assert!(!custom_filter_char('\u{2013}', false, true)); // En dash
+        assert!(!custom_filter_char('\u{2014}', false, true)); // Em dash
+        assert!(!custom_filter_char('\u{2018}', false, true)); // Left single quotation mark
+        assert!(!custom_filter_char('\u{2019}', false, true)); // Right single quotation mark
+        assert!(!custom_filter_char('\u{201C}', false, true)); // Left double quotation mark
+        assert!(!custom_filter_char('\u{201D}', false, true)); // Right double quotation mark
+        assert!(!custom_filter_char('\u{2026}', false, true)); // Horizontal ellipsis
+        assert!(!custom_filter_char('\u{2122}', false, true)); // Trademark symbol
+        assert!(!custom_filter_char('\u{2212}', false, true)); // Minus sign
+        assert!(!custom_filter_char('\u{2605}', false, true)); // Black star
+    }
+
+    #[test]
+    fn test_filter_char_ignore_both() {
+        assert!(custom_filter_char('a', true, true));
+        assert!(custom_filter_char('1', true, true));
+        assert!(custom_filter_char(' ', true, true));
+        assert!(!custom_filter_char('\n', true, true)); // ASCII control character
+        assert!(!custom_filter_char('\u{263A}', true, true)); // Non-alphanumeric, non-whitespace Unicode character
+
+        assert!(!custom_filter_char('\u{0}', true, true)); // ASCII NUL
+        assert!(!custom_filter_char('\u{FFFF}', true, true)); // Non-ASCII character
+
+        assert!(!custom_filter_char('!', true, true));
+        assert!(!custom_filter_char('@', true, true));
+        assert!(!custom_filter_char('#', true, true));
+        assert!(!custom_filter_char('$', true, true));
+        assert!(!custom_filter_char('%', true, true));
+        assert!(!custom_filter_char('^', true, true));
+        assert!(!custom_filter_char('&', true, true));
+        assert!(!custom_filter_char('*', true, true));
+        assert!(!custom_filter_char('(', true, true));
+        assert!(!custom_filter_char(')', true, true));
+        assert!(!custom_filter_char('-', true, true));
+        assert!(!custom_filter_char('_', true, true));
+        assert!(!custom_filter_char('=', true, true));
+        assert!(!custom_filter_char('+', true, true));
+        assert!(!custom_filter_char('{', true, true));
+        assert!(!custom_filter_char('}', true, true));
+        assert!(!custom_filter_char('|', true, true));
+        assert!(!custom_filter_char(':', true, true));
+        assert!(!custom_filter_char(';', true, true));
+        assert!(!custom_filter_char('\'', true, true));
+        assert!(!custom_filter_char('"', true, true));
+        assert!(!custom_filter_char('<', true, true));
+        assert!(!custom_filter_char('>', true, true));
+        assert!(!custom_filter_char(',', true, true));
+        assert!(!custom_filter_char('.', true, true));
+        assert!(!custom_filter_char('/', true, true));
+        assert!(!custom_filter_char('?', true, true));
+
+        assert!(!custom_filter_char('\u{00A0}', true, true)); // Non-breaking space
+        assert!(!custom_filter_char('\u{00A9}', true, true)); // Copyright symbol
+        assert!(!custom_filter_char('\u{00AE}', true, true)); // Registered trademark symbol
+        assert!(!custom_filter_char('\u{00B0}', true, true)); // Degree sign
+        assert!(!custom_filter_char('\u{00B7}', true, true)); // Middle dot
+        assert!(!custom_filter_char('\u{00BB}', true, true)); // Right-pointing double angle quotation mark
+        assert!(!custom_filter_char('\u{00BF}', true, true)); // Inverted question mark
+        assert!(!custom_filter_char('\u{2013}', true, true)); // En dash
+        assert!(!custom_filter_char('\u{2014}', true, true)); // Em dash
+        assert!(!custom_filter_char('\u{2018}', true, true)); // Left single quotation mark
+        assert!(!custom_filter_char('\u{2019}', true, true)); // Right single quotation mark
+        assert!(!custom_filter_char('\u{201C}', true, true)); // Left double quotation mark
+        assert!(!custom_filter_char('\u{201D}', true, true)); // Right double quotation mark
+        assert!(!custom_filter_char('\u{2026}', true, true)); // Horizontal ellipsis
+        assert!(!custom_filter_char('\u{2122}', true, true)); // Trademark symbol
+        assert!(!custom_filter_char('\u{2212}', true, true)); // Minus sign
+        assert!(!custom_filter_char('\u{2605}', true, true)); // Black star
+    }
+
+    #[test]
+    fn test_filter_char_ignore_both_with_special_cases() {
+        assert!(!custom_filter_char('\u{00AD}', true, true)); // Soft hyphen
+        assert!(!custom_filter_char('\u{200B}', true, true)); // Zero-width space
+        assert!(!custom_filter_char('\u{2028}', true, true)); // Line separator
+        assert!(!custom_filter_char('\u{2029}', true, true)); // Paragraph separator
+        assert!(!custom_filter_char('\u{FEFF}', true, true)); // Byte Order Mark (BOM)
+
+        assert!(!custom_filter_char('\u{000C}', true, true)); // Form feed (ASCII control character)
+        assert!(!custom_filter_char('\u{007F}', true, true)); // Delete (ASCII control character)
+    }
+
+    #[test]
+    fn test_cmp_chars_no_ignore_case() {
+        assert_eq!(custom_cmp_chars('a', 'b', false), Ordering::Less);
+        assert_eq!(custom_cmp_chars('b', 'a', false), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('a', 'a', false), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_cmp_chars_ignore_case() {
+        assert_eq!(custom_cmp_chars('a', 'B', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars('b', 'A', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('A', 'a', true), Ordering::Equal);
+
+        assert_eq!(custom_cmp_chars('a', 'c', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars('c', 'a', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('A', 'A', true), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_cmp_chars_special_chars() {
+        assert_eq!(
+            custom_cmp_chars('\u{00E9}', '\u{00C9}', true),
+            Ordering::Greater
+        ); // é (U+00E9) vs É (U+00C9)
+        assert_eq!(
+            custom_cmp_chars('\u{00FC}', '\u{00DC}', true),
+            Ordering::Greater
+        ); // ü (U+00FC) vs Ü (U+00DC)
+
+        assert_eq!(
+            custom_cmp_chars('\u{00E9}', '\u{00C9}', false),
+            Ordering::Greater
+        ); // é (U+00E9) vs É (U+00C9)
+        assert_eq!(
+            custom_cmp_chars('\u{00FC}', '\u{00DC}', false),
+            Ordering::Greater
+        );
+        // ü (U+00FC) vs Ü (U+00DC)
+    }
+
+    #[test]
+    fn test_cmp_chars_numbers() {
+        assert_eq!(custom_cmp_chars('1', '2', false), Ordering::Less);
+        assert_eq!(custom_cmp_chars('2', '1', false), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('1', '1', false), Ordering::Equal);
+
+        assert_eq!(custom_cmp_chars('1', '2', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars('2', '1', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars('1', '1', true), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_cmp_chars_punctuation() {
+        assert_eq!(custom_cmp_chars('.', ',', false), Ordering::Greater);
+        assert_eq!(custom_cmp_chars(',', '.', false), Ordering::Less);
+        assert_eq!(custom_cmp_chars('.', '.', false), Ordering::Equal);
+        assert_eq!(custom_cmp_chars(',', ',', false), Ordering::Equal);
+
+        assert_eq!(custom_cmp_chars('.', ',', true), Ordering::Greater);
+        assert_eq!(custom_cmp_chars(',', '.', true), Ordering::Less);
+        assert_eq!(custom_cmp_chars('.', '.', true), Ordering::Equal);
+        assert_eq!(custom_cmp_chars(',', ',', true), Ordering::Equal);
+    }
+}

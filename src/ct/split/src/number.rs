@@ -462,4 +462,147 @@ mod tests {
         n.number_increment().unwrap();
         assert_eq!(n.number_digits(), vec![0, 2]);
     }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_3() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![1, 0]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_4() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![1, 1]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_5() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![1, 2]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_6() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![2, 0]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_7() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![2, 1]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_8() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![2, 2]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_9() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert!(n.number_increment().is_err());
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_dynamic_width_number_display_alphabetic() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "aa");
+        assert_eq!(format!("{}", num(1)), "ab");
+        assert_eq!(format!("{}", num(2)), "ac");
+        assert_eq!(format!("{}", num(25)), "az");
+        assert_eq!(format!("{}", num(26)), "ba");
+        assert_eq!(format!("{}", num(27)), "bb");
+        assert_eq!(format!("{}", num(28)), "bc");
+        assert_eq!(format!("{}", num(26 + 25)), "bz");
+        assert_eq!(format!("{}", num(26 + 26)), "ca");
+        assert_eq!(format!("{}", num(26 * 25 - 1)), "yz");
+        assert_eq!(format!("{}", num(26 * 25)), "zaaa");
+        assert_eq!(format!("{}", num(26 * 25 + 1)), "zaab");
+    }
+
+    #[test]
+    fn test_dynamic_width_number_display_numeric_decimal() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(9)), "09");
+        assert_eq!(format!("{}", num(17)), "17");
+        assert_eq!(format!("{}", num(10 * 9 - 1)), "89");
+        assert_eq!(format!("{}", num(10 * 9)), "9000");
+        assert_eq!(format!("{}", num(10 * 9 + 1)), "9001");
+        assert_eq!(format!("{}", num(10 * 99 - 1)), "9899");
+        assert_eq!(format!("{}", num(10 * 99)), "990000");
+        assert_eq!(format!("{}", num(10 * 99 + 1)), "990001");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_numeric_octal() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(8, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "\0\0");
+        assert_eq!(format!("{}", num(7)), "\0\0");
+    }
+ 
 }

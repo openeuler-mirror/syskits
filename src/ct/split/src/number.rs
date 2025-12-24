@@ -604,5 +604,172 @@ mod tests {
         assert_eq!(format!("{}", num(0)), "\0\0");
         assert_eq!(format!("{}", num(7)), "\0\0");
     }
- 
+    #[test]
+    fn test_dynamic_width_number_display_numeric_binary() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(2, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "\0\0");
+        assert_eq!(format!("{}", num(1)), "\0\0");
+    }
+
+    #[test]
+    fn test_dynamic_width_number_display_numeric_hexadecimal_upper() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(15)), "0f");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_numeric_hexadecimal_lower() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(15)), "0f");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_numeric_hexadecimal_mixed() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(15)), "0f");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_numeric_hexadecimal_mixed_upper() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(15)), "0f");
+    }
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_dynamic_width_number_display_numeric_hexadecimal() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
+            for _ in 0..n {
+                number.number_increment().unwrap();
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(15)), "0f");
+        assert_eq!(format!("{}", num(16)), "10");
+        assert_eq!(format!("{}", num(17)), "11");
+        assert_eq!(format!("{}", num(18)), "12");
+
+        assert_eq!(format!("{}", num(16 * 15 - 1)), "ef");
+        assert_eq!(format!("{}", num(16 * 15)), "f000");
+        assert_eq!(format!("{}", num(16 * 15 + 1)), "f001");
+        assert_eq!(format!("{}", num(16 * 255 - 1)), "feff");
+        assert_eq!(format!("{}", num(16 * 255)), "ff0000");
+        assert_eq!(format!("{}", num(16 * 255 + 1)), "ff0001");
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_fixed_width_number_display_alphabetic() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::FixedWidth(NumberFixedWidthNumber::new(26, 2, 0).unwrap());
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "aa");
+        assert_eq!(format!("{}", num(1).unwrap()), "ab");
+        assert_eq!(format!("{}", num(2).unwrap()), "ac");
+        assert_eq!(format!("{}", num(25).unwrap()), "az");
+        assert_eq!(format!("{}", num(26).unwrap()), "ba");
+        assert_eq!(format!("{}", num(27).unwrap()), "bb");
+        assert_eq!(format!("{}", num(28).unwrap()), "bc");
+        assert_eq!(format!("{}", num(26 + 25).unwrap()), "bz");
+        assert_eq!(format!("{}", num(26 + 26).unwrap()), "ca");
+        assert_eq!(format!("{}", num(26 * 25 - 1).unwrap()), "yz");
+        assert_eq!(format!("{}", num(26 * 25).unwrap()), "za");
+        assert_eq!(format!("{}", num(26 * 26 - 1).unwrap()), "zz");
+        assert!(num(26 * 26).is_err());
+    }
+
+    #[test]
+    fn test_fixed_width_number_display_numeric_decimal() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::FixedWidth(NumberFixedWidthNumber::new(10, 2, 0).unwrap());
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "00");
+        assert_eq!(format!("{}", num(9).unwrap()), "09");
+        assert_eq!(format!("{}", num(17).unwrap()), "17");
+        assert_eq!(format!("{}", num(10 * 9 - 1).unwrap()), "89");
+        assert_eq!(format!("{}", num(10 * 9).unwrap()), "90");
+        assert_eq!(format!("{}", num(10 * 10 - 1).unwrap()), "99");
+        assert!(num(10 * 10).is_err());
+    }
+
+    #[test]
+    fn test_fixed_width_number_display_numeric_hexadecimal() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::FixedWidth(NumberFixedWidthNumber::new(16, 2, 0).unwrap());
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "00");
+        assert_eq!(format!("{}", num(15).unwrap()), "0f");
+        assert_eq!(format!("{}", num(17).unwrap()), "11");
+        assert_eq!(format!("{}", num(16 * 15 - 1).unwrap()), "ef");
+        assert_eq!(format!("{}", num(16 * 15).unwrap()), "f0");
+        assert_eq!(format!("{}", num(16 * 16 - 1).unwrap()), "ff");
+        assert!(num(16 * 16).is_err());
+    }
+
+    #[test]
+    fn test_fixed_width_number_start_suffix() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::FixedWidth(NumberFixedWidthNumber::new(16, 2, 0x14)?);
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "14");
+        assert_eq!(format!("{}", num(0xf).unwrap()), "23");
+    }
 }

@@ -3650,4 +3650,240 @@ mod tests {
             "Last line should be 'line3' if reversed"
         );
     }
+
+    #[test]
+    fn test_parse_lines_selectors_default() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            selectors: vec![],
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    // ---------------->
+
+    #[test]
+    fn test_interrupted_read() {
+        struct InterruptedRead {
+            data: Cursor<Vec<u8>>,
+            interrupt_count: usize,
+        }
+
+        impl Read for InterruptedRead {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.interrupt_count > 0 {
+                    self.interrupt_count -= 1;
+                    Err(std::io::Error::new(ErrorKind::Interrupted, "interrupted"))
+                } else {
+                    self.data.read(buf)
+                }
+            }
+        }
+
+        let data = b"Data that gets read after an interruption.";
+        let expected_data = b"Data that gets read after an interruption.\n";
+        let mut file = InterruptedRead {
+            data: Cursor::new(data.clone().to_vec()),
+            interrupt_count: 1,
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        // 多一个换行符
+        assert_eq!(read_bytes, expected_data.len());
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], expected_data);
+    }
+
+    #[test]
+    fn test_file_without_ending_newline() {
+        let data = b"Line without newline";
+        let mut file = MockRead {
+            data: Cursor::new(data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(read_bytes, data.len() + 1); // includes appended newline
+        assert_eq!(should_continue, false);
+        assert_eq!(buffer[data.len()], b'\n'); // Check that newline was appended correctly
+        assert_eq!(&buffer[..read_bytes - 1], data);
+    }
+
+    #[test]
+    fn test_multiple_buffer_expansions() {
+        let large_data = [
+            b"a".repeat(5000),
+            b"\n".to_vec(),
+            b"b".repeat(10000),
+            b"\n".to_vec(),
+            b"c".repeat(5000),
+        ]
+        .concat();
+        // let large_data = b"a".repeat(5000) + b"\n" + b"b".repeat(10000) + b"\n" + b"c".repeat(5000);
+        let mut file = MockRead {
+            data: Cursor::new(large_data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 4096]; // Initially smaller buffer
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) = chunk_read_to_buffer(
+            &mut file,
+            &mut next_files,
+            &mut buffer,
+            Some(20000), // Max buffer size
+            0,
+            b'\n',
+        )
+        .unwrap();
+
+        assert!(buffer.len() <= 20000);
+        assert!(buffer.len() < large_data.len());
+        assert_eq!(should_continue, true);
+        assert_eq!(read_bytes, 15002);
+    }
+
+    #[test]
+    fn test_continuous_reading_across_files() {
+        let data1 = b"First file ends here without newline";
+        let data2 = b"Second file starts immediately";
+        let file1 = MockRead {
+            data: Cursor::new(data1.clone().to_vec()),
+        };
+        let file2 = MockRead {
+            data: Cursor::new(data2.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = vec![Ok(file2)].into_iter();
+
+        let mut file = file1;
+        let (_, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert!(!should_continue);
+        assert!(buffer.contains(&b'\n'));
+    }
+
+    #[test]
+    fn test_file_ending_at_buffer_limit() {
+        let data = b"Exactly at the buffer limit";
+        let excepted_data = b"Exactly at the buffer limit\n";
+        let mut file = MockRead {
+            data: Cursor::new(data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; data.len()]; // Buffer exactly the size of data
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(read_bytes, excepted_data.len());
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], excepted_data);
+    }
+
+    #[test]
+    fn test_incomplete_line_handling() {
+        let data = b"Line without ending newline";
+        let mut file = MockRead {
+            data: Cursor::new(data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 1024]; // Large buffer
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes - 1], data); // Check buffer without the appended newline
+        assert_eq!(buffer[read_bytes - 1], b'\n'); // Ensure newline was appended
+    }
+
+    #[test]
+    fn test_error_handling() {
+        struct ErrorMockRead;
+
+        impl Read for ErrorMockRead {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::new(
+                    ErrorKind::Other,
+                    "Simulated read error",
+                ))
+            }
+        }
+
+        let mut file = ErrorMockRead;
+        let mut buffer = vec![0; 1024];
+        let mut next_files = std::iter::empty();
+
+        let result = chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n');
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_buffer_exact_match() {
+        let data = b"First line\nSecond line\n";
+        let mut file = MockRead {
+            data: Cursor::new(data.to_vec()),
+        };
+        let mut buffer = vec![0; data.len()];
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(read_bytes, data.len());
+        assert_eq!(should_continue, true);
+        assert_eq!(&buffer[..read_bytes], data);
+    }
+
+    #[test]
+    fn test_buffer_underflow_with_offset() {
+        let initial_data = b"End of previous line";
+        let continued_data = b" starts here\nNext line";
+        let mut file = MockRead {
+            data: Cursor::new(continued_data.to_vec()),
+        };
+        let mut buffer = vec![0; 50]; // Small buffer to force resizing
+        let mut next_files = std::iter::empty();
+
+        buffer[..initial_data.len()].copy_from_slice(initial_data);
+        let start_offset = initial_data.len();
+
+        let (read_bytes, should_continue) = chunk_read_to_buffer(
+            &mut file,
+            &mut next_files,
+            &mut buffer,
+            Some(100), // Specify max buffer size for the test
+            start_offset,
+            b'\n',
+        )
+        .unwrap();
+
+        assert!(buffer.len() <= 100);
+        assert_eq!(should_continue, false);
+        assert!(read_bytes > initial_data.len() + continued_data.len());
+    }
+
 }

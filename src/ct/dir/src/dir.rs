@@ -2594,5 +2594,51 @@ mod tests {
             assert!(matches.unwrap().contains_id(dir_flags::size::DIR_KIBIBYTES));
         }
 
+        #[test]
+        fn test_ct_app_si_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--si"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::size::DIR_SI));
+        }
+
+        #[test]
+        fn test_ct_app_block_size_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--block-size=1024"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::size::DIR_BLOCK_SIZE));
+        }
+
+        #[test]
+        fn test_ct_app_inode_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-i"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_INODE));
+        }
+
+        #[test]
+        fn test_ct_app_reverse_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_REVERSE));
+        }
+
+        #[test]
+        fn test_ct_app_recursive_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-R"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_RECURSIVE));
+        }
     }
 }

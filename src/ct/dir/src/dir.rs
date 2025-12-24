@@ -2400,5 +2400,96 @@ mod tests {
             assert!(matches.is_ok());
             assert!(matches.unwrap().contains_id(dir_flags::DIR_HIDE));
         }
+
+        #[test]
+        fn test_ct_app_ignore_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-I", "*.tmp"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_IGNORE));
+        }
+
+        #[test]
+        fn test_ct_app_ignore_backups_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-B"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_IGNORE_BACKUPS));
+        }
+
+        #[test]
+        fn test_ct_app_change_short_c() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-c"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::time::DIR_CHANGE));
+        }
+
+        #[test]
+        fn test_ct_app_access_short_u() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::time::DIR_ACCESS));
+        }
+
+        #[test]
+        fn test_ct_app_ignore_short_uppercase_i() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-I", "*.tmp"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_IGNORE));
+        }
+
+        #[test]
+        fn test_ct_app_sort_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--sort=size"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_SORT));
+        }
+
+        #[test]
+        fn test_ct_app_size_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-S"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::sort::DIR_SIZE));
+        }
+
+        #[test]
+        fn test_ct_app_time_sort_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-t"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::sort::DIR_TIME));
+        }
+
+        #[test]
+        fn test_ct_app_version_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-v"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::sort::DIR_VERSION));
+        }
+
+        #[test]
+        fn test_ct_app_extension_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-X"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::sort::DIR_EXTENSION));
+        }
+
     }
 }

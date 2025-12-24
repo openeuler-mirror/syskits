@@ -664,4 +664,87 @@ mod tests {
         assert!(it.next().is_none());
     }
 
+    #[test]
+    fn test_filename_iterator_numeric_start_out_of_range() {
+        let suffix = FilenameSuffix {
+            stype: FilenameSuffixType::Decimal,
+            length: 3,
+            start: 1000,
+            auto_widening: false,
+            additional: ".txt".to_string(),
+        };
+        let it = FilenameIterator::new("chunk_", &suffix);
+        assert!(it.is_err());
+    }
+
+    #[test]
+    fn test_filename_iterator_hexadecimal_reached_max_value() {
+        let suffix = FilenameSuffix {
+            stype: FilenameSuffixType::Hexadecimal,
+            length: 3,
+            start: 0xfff,
+            auto_widening: false,
+            additional: ".txt".to_string(),
+        };
+        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        assert_eq!(it.next().unwrap(), "chunk_fff.txt");
+        assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn test_filename_iterator_hexadecimal_start_out_of_range() {
+        let suffix = FilenameSuffix {
+            stype: FilenameSuffixType::Hexadecimal,
+            length: 3,
+            start: 0x1000,
+            auto_widening: false,
+            additional: ".txt".to_string(),
+        };
+        let it = FilenameIterator::new("chunk_", &suffix);
+        assert!(it.is_err());
+    }
+
+    #[test]
+    fn test_alphabetic_radix() {
+        assert_eq!(FilenameSuffixType::Alphabetic.radix(), 26);
+    }
+
+    #[test]
+    fn test_decimal_radix() {
+        assert_eq!(FilenameSuffixType::Decimal.radix(), 10);
+    }
+
+    #[test]
+    fn test_hexadecimal_radix() {
+        assert_eq!(FilenameSuffixType::Hexadecimal.radix(), 16);
+    }
+
+    #[test]
+    fn test_suffix_error_not_parsable_display() {
+        let error = FilenameSuffixError::NotParsable("123".to_string());
+        assert_eq!("invalid suffix length: '123'", format!("{}", error));
+    }
+
+    #[test]
+    fn test_suffix_error_too_small_display() {
+        let error = FilenameSuffixError::TooSmall(5);
+        assert_eq!(
+            "the suffix length needs to be at least 5",
+            format!("{}", error)
+        );
+    }
+
+    #[test]
+    fn test_suffix_error_contains_separator_display() {
+        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        assert_eq!(
+            "invalid suffix '/', contains directory separator",
+            format!("{}", error)
+        );
+    }
+    #[test]
+    fn test_suffix_error_contains_separator_debug() {
+        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        assert_eq!("ContainsSeparator(\"/\")", format!("{:?}", error));
+    }
 }

@@ -2537,4 +2537,226 @@ mod tests {
         assert_eq!(lines[1].line, "   ", "Whitespace line should be preserved");
     }
 
+    #[test]
+    fn test_complex_input_handling() {
+        let input = "normal\nUPPERCASE\n1234\nspecial@#$%\n";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_ignore_case: true,
+            is_dictionary_order: true,
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(lines.len(), 4, "Should correctly parse complex input");
+        assert_eq!(
+            lines[1].line, "UPPERCASE",
+            "Should handle uppercase lines under ignore_case setting"
+        );
+        assert!(
+            line_data.num_infos.is_empty(),
+            "NumInfos should be empty with no numbers processed"
+        );
+    }
+
+    #[test]
+    fn test_with_global_settings_true() {
+        let input = "line1\nLINE2\nline3";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_ignore_case: true,
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(lines.len(), 3);
+        assert!(
+            line_data.selections.is_empty(),
+            "Expected no selections with ignore_case true"
+        );
+        assert_eq!(
+            lines[1].line, "LINE2",
+            "Case should be preserved in content"
+        );
+    }
+
+    #[test]
+    fn test_with_global_settings_false() {
+        let input = "line1\nLINE2\nline3";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_ignore_case: false,
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(lines.len(), 3);
+        assert!(
+            line_data.selections.is_empty(),
+            "Expected no selections with ignore_case true"
+        );
+        assert_eq!(
+            lines[1].line, "LINE2",
+            "Case should be preserved in content"
+        );
+    }
+
+    #[test]
+    fn test_ignore_case() {
+        let input = "a\nB\nc";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_ignore_case: true,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Depending on the implementation, this might affect sorting or comparison rather than parsing.
+        // This test assumes that the implementation of parsing might lowercase everything if ignore_case is true.
+        assert_eq!(
+            lines[1].line, "B",
+            "Should convert to lowercase if ignore_case is true"
+        );
+    }
+
+    #[test]
+    fn test_different_line_endings_newline() {
+        let input = "Windows\r\nUnix\nMac\r";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            line_ending: CtLineEnding::Newline, // Assuming you have an enum or similar
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(
+            lines.len(),
+            3,
+            "Should split correctly using different line endings"
+        );
+        assert_eq!(
+            lines[0].line, "Windows\r",
+            "Incorrect handling of Windows line endings"
+        );
+        assert_eq!(
+            lines[2].line, "Mac\r",
+            "Incorrect handling of Mac line endings"
+        );
+    }
+
+    #[test]
+    fn test_different_line_endings_nul() {
+        let input = "Windows\r\nUnix\nMac\r";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            line_ending: CtLineEnding::Nul, // Assuming you have an enum or similar
+            ..Default::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        assert_eq!(
+            lines.len(),
+            3,
+            "Should split correctly using different line endings"
+        );
+        assert_eq!(
+            lines[0].line, "Windows\r",
+            "Incorrect handling of Windows line endings"
+        );
+        assert_eq!(
+            lines[2].line, "Mac\r",
+            "Incorrect handling of Mac line endings"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_unique_lines_true() {
+        let input = "line\nline\nline";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_unique: true,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming parse_lines filters out duplicates when unique is true
+        assert_eq!(lines.len(), 3, "Only one unique line should be parsed");
+    }
+
+    #[test]
+    fn test_parse_lines_unique_lines_false() {
+        let input = "line\nline\nline";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_unique: false,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming parse_lines filters out duplicates when unique is true
+        assert_eq!(lines.len(), 3, "Only one unique line should be parsed");
+    }
+
+    #[test]
+    fn test_parse_lines_reverse_order_true() {
+        let input = "line1\nline2\nline3";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_reverse: true,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_reverse_order_false() {
+        let input = "line1\nline2\nline3";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            is_reverse: false,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
 }

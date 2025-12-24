@@ -781,4 +781,374 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_read_function_reverse_order_true() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_reverse: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_reverse_order_false() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_reverse: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_check_sorted_true() {
+        let input = "line1\nline3\nline2"; // Intentionally unsorted
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_check: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_check_sorted_false() {
+        let input = "line1\nline3\nline2"; // Intentionally unsorted
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_check: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_check_silent_true() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_check_silent: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_check_silent_false() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_check_silent: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_ignore_leading_blanks_true() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_ignore_leading_blanks: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_ignore_leading_blanks_false() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_ignore_leading_blanks: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_dictionary_order_true() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_dictionary_order: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_dictionary_order_false() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_dictionary_order: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
 }

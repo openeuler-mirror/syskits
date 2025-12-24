@@ -293,3 +293,78 @@ impl Strategy {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use crate::strategy::StrategyNumberType;
+    use crate::strategy::StrategyNumberTypeError;
+    #[test]
+    fn test_number_type_from_case_1() {
+        let number_type = StrategyNumberType::from("123").unwrap();
+        assert_eq!(number_type, StrategyNumberType::Bytes(123));
+    }
+
+    #[test]
+    fn test_number_type_from_case_2() {
+        let number_type = StrategyNumberType::from("l/123").unwrap();
+        assert_eq!(number_type, StrategyNumberType::Lines(123));
+    }
+
+    #[test]
+    fn test_number_type_from_case_3() {
+        let number_type = StrategyNumberType::from("l/123/456").unwrap();
+        assert_eq!(number_type, StrategyNumberType::KthLines(123, 456));
+    }
+
+    #[test]
+    fn test_number_type_from_case_4() {
+        let number_type = StrategyNumberType::from("r/123").unwrap();
+        assert_eq!(number_type, StrategyNumberType::RoundRobin(123));
+    }
+
+    #[test]
+    fn test_number_type_from_case_5() {
+        let number_type = StrategyNumberType::from("r/123/456").unwrap();
+        assert_eq!(number_type, StrategyNumberType::KthRoundRobin(123, 456));
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_number_type_from_error_case_1() {
+        assert_eq!(
+            StrategyNumberType::from("xyz").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+    }
+    #[test]
+    fn test_number_type_from_error_case_() {
+        assert_eq!(
+            StrategyNumberType::from("l/xyz").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_from_error_case_2() {
+        assert_eq!(
+            StrategyNumberType::from("l/xyz").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_from_error_case_3() {
+        assert_eq!(
+            StrategyNumberType::from("l/123/xyz").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_from_error_case_4() {
+        assert_eq!(
+            StrategyNumberType::from("l/abc/456").unwrap_err(),
+            StrategyNumberTypeError::ChunkNumber("abc".to_string())
+        );
+    }
+}

@@ -772,4 +772,70 @@ mod tests {
         assert_eq!(format!("{}", num(0).unwrap()), "14");
         assert_eq!(format!("{}", num(0xf).unwrap()), "23");
     }
+    #[test]
+    fn test_dynamic_width_number_display_num_decimal() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10, 0));
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "00");
+        assert_eq!(format!("{}", num(9).unwrap()), "09");
+    }
+
+    #[test]
+    fn test_dynamic_width_number_start_suffix() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10, 8));
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "08");
+        assert_eq!(format!("{}", num(8).unwrap()), "16");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_num_hexadecimal() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "00");
+        assert_eq!(format!("{}", num(8).unwrap()), "08");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_n_alphabetic() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26, 0));
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "aa");
+        assert_eq!(format!("{}", num(8).unwrap()), "ai");
+    }
+    #[test]
+    fn test_dynamic_width_number_display_num_octal() {
+        fn num(n: usize) -> Result<Number, NumberOverflow> {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(8, 0));
+            for _ in 0..n {
+                number.number_increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "\0\0");
+        assert_eq!(format!("{}", num(8).unwrap()), "\0\0");
+    }
 }

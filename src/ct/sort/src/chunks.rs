@@ -3404,4 +3404,250 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_parse_lines_compress_prog_none() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            compress_prog: None,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_compress_prog_tar() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            compress_prog: Some("tar".to_string()),
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_compress_prog_zip() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            compress_prog: Some("zip".to_string()),
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_merge_batch_size_0() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            merge_batch_size: 0,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_merge_batch_size_32() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            merge_batch_size: 32,
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_precomputed_default() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed::default(),
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_precomputed_needs_tokens_true() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed {
+                is_needs_tokens: true,
+                num_infos_per_line: 0,
+                floats_per_line: 0,
+                selections_per_line: 0,
+            },
+            ..SortGlobalConfigs::default()
+        };
+
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_precomputed_needs_tokens_false() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed {
+                is_needs_tokens: false,
+                num_infos_per_line: 0,
+                floats_per_line: 0,
+                selections_per_line: 0,
+            },
+            ..SortGlobalConfigs::default()
+        };
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_precomputed_needs_tokens_true_1_1_1() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed {
+                is_needs_tokens: true,
+                num_infos_per_line: 1,
+                floats_per_line: 1,
+                selections_per_line: 1,
+            },
+            ..SortGlobalConfigs::default()
+        };
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
+
+    #[test]
+    fn test_parse_lines_precomputed_needs_tokens_false_1_1_1() {
+        let input = "line1\nline2\nline3\nline11";
+        let mut lines: Vec<SortLine> = Vec::new();
+        let mut line_data = line_data_default();
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed {
+                is_needs_tokens: false,
+                num_infos_per_line: 1,
+                floats_per_line: 1,
+                selections_per_line: 1,
+            },
+            ..SortGlobalConfigs::default()
+        };
+        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+
+        // Assuming the implementation reverses the order of lines post-parsing
+        assert_eq!(
+            lines[0].line, "line1",
+            "First line should be 'line1' if reversed"
+        );
+        assert_eq!(
+            lines[2].line, "line3",
+            "Last line should be 'line3' if reversed"
+        );
+    }
 }

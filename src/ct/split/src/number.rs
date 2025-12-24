@@ -364,3 +364,102 @@ impl Display for DynamicWidthNumber {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::number::DynamicWidthNumber;
+    use crate::number::Number;
+    use crate::number::NumberFixedWidthNumber;
+    use crate::number::NumberOverflow;
+
+    #[test]
+    fn test_initial_state() {
+        let n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        assert_eq!(n.number_digits(), vec![0, 0]);
+    }
+
+    #[test]
+    fn test_increment_once() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![0, 1]);
+    }
+
+    #[test]
+    fn test_increment_twice() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![0, 2]);
+    }
+
+    #[test]
+    fn test_increment_three_times() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![1, 0]);
+    }
+
+    #[test]
+    fn test_increment_four_times() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![1, 1]);
+    }
+
+    #[test]
+    fn test_increment_five_times() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![1, 2]);
+    }
+
+    #[test]
+    fn test_increment_six_times() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn test_increment_seven_times() {
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![0, 0, 1]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_1() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        assert_eq!(n.number_digits(), vec![0, 0]);
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![0, 1]);
+    }
+
+    #[test]
+    fn test_fixed_width_number_increment_case_2() {
+        let mut n = Number::FixedWidth(NumberFixedWidthNumber::new(3, 2, 0).unwrap());
+        n.number_increment().unwrap();
+        n.number_increment().unwrap();
+        assert_eq!(n.number_digits(), vec![0, 2]);
+    }
+}

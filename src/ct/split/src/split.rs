@@ -28,7 +28,6 @@ use std::fs::{metadata, File};
 use std::io;
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use std::u64;
 
 use ctcore::uio_error;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};

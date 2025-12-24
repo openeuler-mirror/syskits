@@ -747,4 +747,18 @@ mod tests {
         let error = FilenameSuffixError::ContainsSeparator("/".to_string());
         assert_eq!("ContainsSeparator(\"/\")", format!("{:?}", error));
     }
+    #[test]
+    fn test_suffix_error_contains_separator_display_with_path() {
+        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        assert_eq!(
+            "invalid suffix '/', contains directory separator",
+            format!("{}", error)
+        );
+    }
+
+    #[test]
+    fn test_suffix_error_contains_separator_debug_with_path() {
+        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        assert_eq!("ContainsSeparator(\"/\")", format!("{:?}", error));
+    }
 }

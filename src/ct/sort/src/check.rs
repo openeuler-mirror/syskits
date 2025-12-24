@@ -312,4 +312,175 @@ mod tests {
 
         assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
     }
+
+    #[test]
+    fn test_check_ignore_non_printing_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_ignore_non_printing: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_merge_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_merge: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_merge_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_merge: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_reverse_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_reverse: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), false);
+    }
+
+    #[test]
+    fn test_check_reverse_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_reverse: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_stable_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_stable: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_stable_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_stable: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_mode_sort_mode_default() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            mode: SortMode::SortDefault,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_mode_sort_mode_general_numeric() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            mode: SortMode::SortGeneralNumeric,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_mode_sort_mode_numeric() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            mode: SortMode::SortNumeric,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
 }

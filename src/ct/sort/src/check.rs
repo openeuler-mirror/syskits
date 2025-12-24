@@ -993,4 +993,156 @@ mod tests {
         assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
     }
 
+    #[test]
+    fn test_check_compress_prog_some_zip() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            compress_prog: Some("zip".to_string()),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_precomputed_default() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed::default(),
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_precomputed() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            precomputed: SortPrecomputed {
+                is_needs_tokens: true,
+                num_infos_per_line: 100,
+                floats_per_line: 100,
+                selections_per_line: 100,
+            },
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_precomputed_new_selector() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let mut settings = SortGlobalConfigs {
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+        settings.selectors.push(
+            SortFieldSelector::new(
+                SortKeyPosition {
+                    field: 1,
+                    char: 1,
+                    is_ignore_blanks: false,
+                },
+                None,
+                SortKeySettings {
+                    mode: crate::SortMode::SortVersion,
+                    is_ignore_blanks: false,
+                    is_ignore_case: false,
+                    is_dictionary_order: false,
+                    is_ignore_non_printing: false,
+                    is_reverse: false,
+                },
+            )
+            .unwrap(),
+        );
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_unique_failure() {
+        let contents = b"apple\napple\nbanana\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+        let settings = SortGlobalConfigs {
+            is_unique: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_err(), true);
+    }
+
+    #[test]
+    fn test_check_sorting_error() {
+        let contents = b"banana\napple\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+        let settings = SortGlobalConfigs {
+            is_unique: false,
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_err(), true);
+    }
+
+    #[test]
+    fn test_reader_basic_functionality() {
+        let data = b"hello\nworld\n"; // Example file content
+        let file = Box::new(Cursor::new(data));
+        let (recycled_sender, recycled_receiver): (
+            SyncSender<ChunkRecycled>,
+            Receiver<ChunkRecycled>,
+        ) = sync_channel(1);
+        let (loaded_sender, loaded_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+            sync_channel(1);
+
+        let settings = crate::SortGlobalConfigs::default();
+
+        // Send a recycled chunk to be used by the reader
+        recycled_sender.send(ChunkRecycled::new(1024)).unwrap();
+
+        // Spawn the reader function in a separate thread
+        let reader_thread = thread::spawn(move || {
+            check_reader(file, &recycled_receiver, &loaded_sender, &settings).unwrap()
+        });
+
+        // Check if reader sends back a proper chunk
+        let received_chunk = loaded_receiver.recv().unwrap();
+
+        assert_eq!(received_chunk.borrow_dependent().lines.len(), 2); // Expecting "hello" and "world"
+        assert_eq!(received_chunk.borrow_dependent().lines[0].line, "hello");
+        assert_eq!(received_chunk.borrow_dependent().lines[1].line, "world");
+
+        // Ensure the reader thread completes
+        reader_thread.join().unwrap();
+    }
 }

@@ -1379,9 +1379,7 @@ mod tests {
 
         let opts = temp_mv_opts();
         let err = mv_handle_two_paths(&source, &target, &opts).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("cannot move"));
+        assert!(err.to_string().contains("cannot move"));
     }
 
     #[test]

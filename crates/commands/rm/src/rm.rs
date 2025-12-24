@@ -728,8 +728,8 @@ fn custom_remove_dir_all(path: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use std::ffi::{OsStr, OsString};
+    use std::fs;
     use std::path::PathBuf;
 
     fn base_options() -> RMOptions {
@@ -789,9 +789,7 @@ mod tests {
 
     #[test]
     fn test_extract_files_and_validate_input() {
-        let matches = ct_app()
-            .try_get_matches_from(vec!["rm", "a", "b"])
-            .unwrap();
+        let matches = ct_app().try_get_matches_from(vec!["rm", "a", "b"]).unwrap();
         let files = extract_files(&matches);
         assert_eq!(files.len(), 2);
 
@@ -851,8 +849,12 @@ mod tests {
         assert!(should_prompt_user(&options, &files));
 
         options.recursive = false;
-        let files: Vec<&OsStr> =
-            vec![OsStr::new("a"), OsStr::new("b"), OsStr::new("c"), OsStr::new("d")];
+        let files: Vec<&OsStr> = vec![
+            OsStr::new("a"),
+            OsStr::new("b"),
+            OsStr::new("c"),
+            OsStr::new("d"),
+        ];
         assert!(should_prompt_user(&options, &files));
 
         options.interactive = InteractiveMode::Never;

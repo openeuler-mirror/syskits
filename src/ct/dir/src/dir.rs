@@ -2491,5 +2491,108 @@ mod tests {
             assert!(matches.unwrap().contains_id(dir_flags::sort::DIR_EXTENSION));
         }
 
+        #[test]
+        fn test_ct_app_none_sort_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-U"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::sort::DIR_NONE));
+        }
+
+        #[test]
+        fn test_ct_app_dereference_all_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-L"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::dereference::DIR_ALL));
+        }
+
+        #[test]
+        fn test_ct_app_dereference_dir_args_long() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--dereference-command-line-symlink-to-dir",
+            ];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::dereference::DIR_DIR_ARGS));
+        }
+
+        #[test]
+        fn test_ct_app_dereference_args_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::dereference::DIR_ARGS));
+        }
+
+        #[test]
+        fn test_ct_app_no_group_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-G"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_NO_GROUP));
+        }
+
+        #[test]
+        fn test_ct_app_all_files_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-a"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::files::DIR_ALL));
+        }
+
+        #[test]
+        fn test_ct_app_almost_all_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-A"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::files::DIR_ALMOST_ALL));
+        }
+
+        #[test]
+        fn test_ct_app_directory_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::DIR_DIRECTORY));
+        }
+
+        #[test]
+        fn test_ct_app_human_readable_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches
+                .unwrap()
+                .contains_id(dir_flags::size::DIR_HUMAN_READABLE));
+        }
+
+        #[test]
+        fn test_ct_app_kibibytes_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-k"];
+            let matches = command.try_get_matches_from(args);
+            assert!(matches.is_ok());
+            assert!(matches.unwrap().contains_id(dir_flags::size::DIR_KIBIBYTES));
+        }
+
     }
 }

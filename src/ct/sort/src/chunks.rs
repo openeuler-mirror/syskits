@@ -3886,4 +3886,153 @@ mod tests {
         assert!(read_bytes > initial_data.len() + continued_data.len());
     }
 
+    #[test]
+    fn test_non_standard_separator_large_data() {
+        // Create large data segments and store them as slices of &[u8]
+        let segment_x = b"X".repeat(1024);
+        let segment_y = b"Y".repeat(2048);
+        let segment_z = b"Z".repeat(1024);
+        let separator_value = b"";
+        // Convert Vec<Vec<u8>> to Vec<&[u8]> to be compatible with join
+        let data_segments = vec![&segment_x[..], &segment_y[..], &segment_z[..]];
+        let expected_data_segments = vec![
+            &segment_x[..],
+            &segment_y[..],
+            &segment_z[..],
+            separator_value,
+        ];
+        let separator = &[b'|'][..]; // Create a slice for the separator
+
+        // Use join on a slice of &[u8]
+        let data = data_segments.join(separator);
+        let expected_data = expected_data_segments.join(separator);
+        let mut file = MockRead {
+            data: Cursor::new(data.clone()),
+        };
+        let mut buffer = vec![0; 1500]; // Smaller than any single segment
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) = chunk_read_to_buffer(
+            &mut file,
+            &mut next_files,
+            &mut buffer,
+            Some(5000), // Enough to fit all data eventually
+            0,
+            b'|',
+        )
+        .unwrap();
+
+        assert_eq!(should_continue, false);
+        assert!(read_bytes >= data.len()); // Ensure all data is read
+        assert_eq!(&buffer[..read_bytes], expected_data.as_slice());
+    }
+
+    #[test]
+    fn test_eof_without_newline() {
+        let data = b"Complete line without newline";
+        let expected_data = b"Complete line without newline\n";
+        let mut file = MockRead {
+            data: Cursor::new(data.to_vec()),
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = std::iter::empty();
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
+
+        assert_eq!(read_bytes, expected_data.len());
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], expected_data); // Ensure data matches exactly
+    }
+
+    #[test]
+    fn test_start_offset_handling() {
+        let initial_data = b"partial line";
+        let continued_data = b" continues\nNew line";
+        let expected_continued_data = b" continues\nNew line\n";
+        let mut file = MockRead {
+            data: Cursor::new(continued_data.to_vec()),
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = std::iter::empty();
+
+        // Simulate that "partial line" was the carryover data.
+        buffer[..initial_data.len()].copy_from_slice(initial_data);
+        let start_offset = initial_data.len();
+
+        let (read_bytes, should_continue) = chunk_read_to_buffer(
+            &mut file,
+            &mut next_files,
+            &mut buffer,
+            None,
+            start_offset,
+            b'\n',
+        )
+        .unwrap();
+
+        // Create complete_data by manually appending data into a vector
+        let mut complete_data = Vec::from(initial_data);
+        complete_data.extend_from_slice(expected_continued_data);
+
+        assert_eq!(
+            read_bytes,
+            initial_data.len() + expected_continued_data.len()
+        );
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], complete_data.as_slice());
+    }
+
+    #[test]
+    fn test_different_separators() {
+        let data = b"Row1|Row2|Row3";
+        let excepted_data = b"Row1|Row2|Row3|";
+        let mut file = MockRead {
+            data: Cursor::new(data.to_vec()),
+        };
+        let mut buffer = vec![0; 1024];
+        let mut next_files = std::iter::empty();
+        let separator = b'|';
+
+        let (read_bytes, should_continue) =
+            chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, separator)
+                .unwrap();
+
+        // Verify that the function correctly identifies '|' as the separator.
+        assert_eq!(read_bytes, excepted_data.len());
+        assert_eq!(should_continue, false);
+        assert_eq!(&buffer[..read_bytes], excepted_data);
+        assert_eq!(buffer[excepted_data.len() - 1], separator); // Check that last read byte is separator
+    }
+
+    #[test]
+    fn test_max_buffer_size_handling() {
+        let data = [
+            b"a".repeat(5000),
+            b"\n".to_vec(),
+            b"b".repeat(10000),
+            b"\n".to_vec(),
+        ]
+        .concat();
+
+        let mut file = MockRead {
+            data: Cursor::new(data.clone().to_vec()),
+        };
+        let mut buffer = vec![0; 3000]; // Initially smaller buffer
+        let mut next_files = std::iter::empty();
+        let max_buffer_size = 17240; // Larger than any single line but smaller than all data
+
+        let (read_bytes, should_continue) = chunk_read_to_buffer(
+            &mut file,
+            &mut next_files,
+            &mut buffer,
+            Some(max_buffer_size),
+            0,
+            b'\n',
+        )
+        .unwrap();
+
+        assert_eq!(buffer.len(), max_buffer_size); // Buffer should have resized up to max_buffer_size
+        assert_eq!(read_bytes, 15002);
+        assert_eq!(should_continue, false); // Should continue as not all data fits
+    }
 }

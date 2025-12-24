@@ -343,3 +343,442 @@ fn chunk_read_to_buffer<T: Read>(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+    use std::sync::mpsc::{self};
+
+    use ctcore::ct_line_ending::CtLineEnding;
+
+    use crate::numeric_str_cmp::NumInfoParseSettings;
+    use crate::{SortMode, SortPrecomputed};
+
+    use super::*;
+
+    struct MockRead {
+        data: Cursor<Vec<u8>>,
+    }
+
+    impl Read for MockRead {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.data.read(buf)
+        }
+    }
+
+    fn line_data_default() -> ChunkLineData<'static> {
+        ChunkLineData {
+            selections: Vec::new(),
+            num_infos: Vec::new(),
+            parsed_floats: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_read_function_settings_default() {
+        let input = "line1\nline2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            // Initialize with default or test-specific settings
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_ignore_case_true() {
+        let input = "line1\nLINE2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_ignore_case: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_ignore_case_false() {
+        let input = "line1\nLINE2\nline3";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_ignore_case: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_different_line_endings_newline() {
+        let input = "Windows\r\nUnix\nMac\r";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            line_ending: CtLineEnding::Newline,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_chunk_recycle() {
+        let chunk = Chunk::new(vec![0; 10], |_buffer| {
+            let lines = vec![
+                SortLine {
+                    line: "Line 1",
+                    index: 0,
+                },
+                SortLine {
+                    line: "Line 2",
+                    index: 1,
+                },
+            ];
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123e5", &settings).0;
+            let b_info = NumInfo::parse("12300000", &settings).0;
+            let line_data = ChunkLineData {
+                selections: vec!["Selection 1", "Selection 2"],
+                num_infos: vec![a_info, b_info],
+                parsed_floats: vec![
+                    SortGeneralF64ParseResult::SortNaN,
+                    SortGeneralF64ParseResult::SortNaN,
+                ],
+            };
+            ChunkContents { lines, line_data }
+        });
+
+        // Step 2: Recycle the chunk
+        let recycled_chunk = chunk.recycle();
+
+        // Step 3: Verify the recycled_chunk contents are cleared and ready for reuse
+        assert!(
+            recycled_chunk.lines.is_empty(),
+            "Lines should be empty after recycling"
+        );
+        assert!(
+            recycled_chunk.selections.is_empty(),
+            "Selections should be empty after recycling"
+        );
+        assert!(
+            recycled_chunk.num_infos.is_empty(),
+            "NumInfos should be empty after recycling"
+        );
+        assert!(
+            recycled_chunk.parsed_floats.is_empty(),
+            "ParsedFloats should be empty after recycling"
+        );
+
+        // Step 4: Optionally, verify the buffer is also reset as expected
+        assert_eq!(
+            recycled_chunk.buffer.len(),
+            10,
+            "Buffer should be retained after recycling"
+        );
+        assert!(
+            recycled_chunk.buffer.iter().all(|&b| b == 0),
+            "Buffer should be cleared after recycling"
+        );
+    }
+
+    #[test]
+    fn test_chunk_recycle_complex_data() {
+        let chunk = Chunk::new(vec![0; 20], |_| {
+            let lines = vec![
+                SortLine {
+                    line: "Line with special characters: #@!",
+                    index: 0,
+                },
+                SortLine {
+                    line: "Line with unicode: привет",
+                    index: 1,
+                },
+            ];
+
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123e5", &settings).0;
+            let b_info = NumInfo::parse("12300000", &settings).0;
+            let line_data = ChunkLineData {
+                selections: vec!["Special Selection", "Unicode Selection"],
+                num_infos: vec![a_info, b_info],
+                parsed_floats: vec![
+                    SortGeneralF64ParseResult::SortInfinity,
+                    SortGeneralF64ParseResult::SortInfinity,
+                ],
+            };
+            ChunkContents { lines, line_data }
+        });
+
+        // Recycle the chunk
+        let recycled_chunk = chunk.recycle();
+
+        // Verify that all components are cleared
+        assert!(
+            recycled_chunk.lines.is_empty(),
+            "Lines should be empty after recycling"
+        );
+        assert!(
+            recycled_chunk.selections.is_empty(),
+            "Selections should be empty after recycling"
+        );
+        assert!(
+            recycled_chunk.num_infos.is_empty(),
+            "NumInfos should be empty after recycling"
+        );
+        assert!(
+            recycled_chunk.parsed_floats.is_empty(),
+            "ParsedFloats should be empty after recycling"
+        );
+    }
+
+    #[test]
+    fn test_partial_data_recycling() {
+        let chunk = Chunk::new(vec![0; 10], |_buffer| {
+            let lines = vec![SortLine {
+                line: "Partial data line",
+                index: 0,
+            }];
+            let settings = NumInfoParseSettings::default();
+            let num_info = NumInfo::parse("12300000", &settings).0;
+
+            let line_data = ChunkLineData {
+                selections: vec![],        // No selections
+                num_infos: vec![num_info], // Some num_infos
+                parsed_floats: vec![],     // No parsed floats
+            };
+            ChunkContents { lines, line_data }
+        });
+
+        // Recycle the chunk
+        let recycled_chunk = chunk.recycle();
+
+        // Checks
+        assert_eq!(
+            recycled_chunk.num_infos.len(),
+            0,
+            "NumInfos should be empty after recycling"
+        );
+        assert_eq!(
+            recycled_chunk.selections.len(),
+            0,
+            "Selections should be empty after recycling"
+        );
+        assert_eq!(
+            recycled_chunk.parsed_floats.len(),
+            0,
+            "ParsedFloats should be empty after recycling"
+        );
+    }
+
+    #[test]
+    fn test_read_function_different_line_endings_nul() {
+        let input = "Windows\r\nUnix\nMac\r";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            line_ending: CtLineEnding::Nul,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_unique_lines_true() {
+        let input = "line\nline\nline";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_unique: true,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_read_function_unique_lines_false() {
+        let input = "line\nline\nline";
+        let mut file = Cursor::new(input.as_bytes());
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        let recycled_chunk = ChunkRecycled::new(1024);
+        let mut carry_over = Vec::new();
+        let mut next_files = vec![].into_iter(); // Assuming no further files
+
+        let settings = SortGlobalConfigs {
+            is_unique: false,
+            ..Default::default()
+        };
+
+        let result = chunk_read(
+            &tx,
+            recycled_chunk,
+            Some(1024),
+            &mut carry_over,
+            &mut file,
+            &mut next_files,
+            b'\n',
+            &settings,
+        );
+
+        assert!(result.is_ok());
+
+        // Check what was sent to the channel
+        match rx.try_recv() {
+            Ok(chunk) => {
+                assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
+            }
+            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+        }
+    }
+
+}

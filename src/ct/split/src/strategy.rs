@@ -447,4 +447,40 @@ mod tests {
             StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
         );
     }
+
+    #[test]
+    fn test_number_type_num_chunks_case_1() {
+        let number_type = StrategyNumberType::from("123").unwrap();
+        assert_eq!(number_type.num_chunks(), 123);
+    }
+
+    #[test]
+    fn test_number_type_num_chunks_case_2() {
+        let number_type = StrategyNumberType::from("123/456").unwrap();
+        assert_eq!(number_type.num_chunks(), 456);
+    }
+
+    #[test]
+    fn test_number_type_num_chunks_case_3() {
+        let number_type = StrategyNumberType::from("l/123").unwrap();
+        assert_eq!(number_type.num_chunks(), 123);
+    }
+
+    #[test]
+    fn test_number_type_num_chunks_case_4() {
+        let number_type = StrategyNumberType::from("l/123/456").unwrap();
+        assert_eq!(number_type.num_chunks(), 456);
+    }
+
+    #[test]
+    fn test_number_type_num_chunks_case_5() {
+        let number_type = StrategyNumberType::from("r/123").unwrap();
+        assert_eq!(number_type.num_chunks(), 123);
+    }
+
+    #[test]
+    fn test_number_type_num_chunks_case_6() {
+        let number_type = StrategyNumberType::from("r/123/456").unwrap();
+        assert_eq!(number_type.num_chunks(), 456);
+    }
 }

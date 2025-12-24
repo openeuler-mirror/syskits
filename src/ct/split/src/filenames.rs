@@ -375,3 +375,147 @@ impl<'a> Iterator for FilenameIterator<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::filenames::FilenameSuffix;
+    use crate::filenames::FilenameSuffixType;
+    use crate::filenames::{FilenameIterator, FilenameSuffixError};
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_initial_three_iterations() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Alphabetic,
+                length: 2,
+                start: 0,
+                auto_widening: false,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            assert_eq!(it.next().unwrap(), "chunk_aa.txt");
+            assert_eq!(it.next().unwrap(), "chunk_ab.txt");
+            assert_eq!(it.next().unwrap(), "chunk_ac.txt");
+        }
+
+        #[test]
+        fn test_skip_to_last_iteration() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Alphabetic,
+                length: 2,
+                start: 0,
+                auto_widening: false,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            assert_eq!(it.nth(26 * 26 - 1).unwrap(), "chunk_zz.txt");
+        }
+
+        #[test]
+        fn test_end_of_iteration() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Alphabetic,
+                length: 2,
+                start: 0,
+                auto_widening: false,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            it.nth(26 * 26 - 1).unwrap();
+            assert_eq!(it.next(), None);
+        }
+        #[test]
+        fn test_filename_iterator_alphabetic_dynamic_width() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Alphabetic,
+                length: 2,
+                start: 0,
+                auto_widening: true,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            assert_eq!(it.next().unwrap(), "chunk_aa.txt");
+        }
+        #[test]
+        fn test_filename_iterator_numeric_dynamic_width() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Decimal,
+                length: 2,
+                start: 0,
+                auto_widening: true,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            assert_eq!(it.next().unwrap(), "chunk_00.txt");
+        }
+        #[test]
+        fn test_filename_iterator_numeric_fixed_width() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Decimal,
+                length: 2,
+                start: 0,
+                auto_widening: false,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            assert_eq!(it.next().unwrap(), "chunk_00.txt");
+        }
+        #[test]
+        fn test_filename_iterator_numeric_fixed_width_start() {
+            let suffix = FilenameSuffix {
+                stype: FilenameSuffixType::Decimal,
+                length: 2,
+                start: 10,
+                auto_widening: false,
+                additional: ".txt".to_string(),
+            };
+            let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+            assert_eq!(it.next().unwrap(), "chunk_10.txt");
+        }
+    }
+
+    #[test]
+    fn test_initial_three_iterations_numeric() {
+        let suffix = FilenameSuffix {
+            stype: FilenameSuffixType::Decimal,
+            length: 2,
+            start: 0,
+            auto_widening: false,
+            additional: ".txt".to_string(),
+        };
+        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        assert_eq!(it.next().unwrap(), "chunk_00.txt");
+        assert_eq!(it.next().unwrap(), "chunk_01.txt");
+        assert_eq!(it.next().unwrap(), "chunk_02.txt");
+    }
+
+    #[test]
+    fn test_skip_to_last_iteration_numeric() {
+        let suffix = FilenameSuffix {
+            stype: FilenameSuffixType::Decimal,
+            length: 2,
+            start: 0,
+            auto_widening: false,
+            additional: ".txt".to_string(),
+        };
+        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
+    }
+
+    #[test]
+    fn test_end_of_iteration_numeric() {
+        let suffix = FilenameSuffix {
+            stype: FilenameSuffixType::Decimal,
+            length: 2,
+            start: 0,
+            auto_widening: false,
+            additional: ".txt".to_string(),
+        };
+        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        it.nth(10 * 10 - 1).unwrap();
+        assert_eq!(it.next(), None);
+    }
+
+}

@@ -127,3 +127,189 @@ fn check_reader(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::{Cursor, Write};
+
+    use tempfile::tempdir;
+
+    use ctcore::ct_line_ending::CtLineEnding;
+
+    use crate::{
+        SortFieldSelector, SortKeyPosition, SortKeySettings, SortMode, SortPrecomputed,
+        SORT_DEFAULT_BUF_SIZE,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_check_success() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_unique: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_debug_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_debug: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_debug_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_debug: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_ignore_leading_blanks_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_ignore_leading_blanks: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_ignore_leading_blanks_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_ignore_leading_blanks: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_ignore_case_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_ignore_case: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_ignore_case_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_ignore_case: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_dictionary_order_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_dictionary_order: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_dictionary_order_false() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_dictionary_order: false,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+
+    #[test]
+    fn test_check_ignore_non_printing_true() {
+        let contents = b"apple\nbanana\ncarrot\n";
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("testfile.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(contents).unwrap();
+
+        let settings = SortGlobalConfigs {
+            is_ignore_non_printing: true,
+            // Set other necessary fields as default or as required
+            ..Default::default()
+        };
+
+        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+    }
+}

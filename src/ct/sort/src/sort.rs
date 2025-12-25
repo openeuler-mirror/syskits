@@ -2183,4 +2183,73 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod general_f64_parse_tests {
+        use super::*;
+
+        #[test]
+        fn test_general_f64_parse_valid_number() {
+            assert_eq!(
+                sort_general_f64_parse("123.45"),
+                SortGeneralF64ParseResult::SortNumber(123.45),
+                "Test case 1 failed for input: '123.45'"
+            );
+        }
+
+        #[test]
+        fn test_general_f64_parse_negative_number() {
+            assert_eq!(
+                sort_general_f64_parse("-123.45"),
+                SortGeneralF64ParseResult::SortNumber(-123.45),
+                "Test case 2 failed for input: '-123.45'"
+            );
+        }
+
+        #[test]
+        fn test_general_f64_parse_nan() {
+            assert_eq!(
+                sort_general_f64_parse("nan"),
+                SortGeneralF64ParseResult::SortNaN,
+                "Test case 3 failed for input: 'nan'"
+            );
+        }
+
+        #[test]
+        fn test_general_f64_parse_positive_infinity() {
+            assert_eq!(
+                sort_general_f64_parse("inf"),
+                SortGeneralF64ParseResult::SortInfinity,
+                "Test case 4 failed for input: 'inf'"
+            );
+        }
+
+        #[test]
+        fn test_general_f64_parse_negative_infinity() {
+            assert_eq!(
+                sort_general_f64_parse("-inf"),
+                SortGeneralF64ParseResult::SortNegInfinity,
+                "Test case 5 failed for input: '-inf'"
+            );
+        }
+
+        #[test]
+        fn test_general_f64_parse_invalid() {
+            assert_eq!(
+                sort_general_f64_parse("invalid"),
+                SortGeneralF64ParseResult::SortInvalid,
+                "Test case 6 failed for input: 'invalid'"
+            );
+        }
+
+        #[test]
+        fn test_general_f64_parse_invalid_multiple_dots() {
+            assert_eq!(
+                sort_general_f64_parse("123.45.67"),
+                SortGeneralF64ParseResult::SortInvalid,
+                "Test case 7 failed for input: '123.45.67'"
+            );
+        }
+    }
+
 }

@@ -560,6 +560,136 @@ mod tests {
             assert_eq!(range, 0..3);
         }
 
+        #[test]
+        fn test_number_with_negative_sign() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("-456", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 2,
+                    sign: NumSign::Negative,
+                }
+            );
+            assert_eq!(range, 1..4);
+        }
+
+        #[test]
+        fn test_number_with_decimal_point() {
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            let (num_info, range) = NumInfo::parse("789.01", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 2,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..6);
+        }
+
+        #[test]
+        fn test_number_with_leading_zeros() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("0000123", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 2,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 4..7);
+        }
+
+        #[test]
+        fn test_number_with_thousands_separator() {
+            let settings = NumInfoParseSettings {
+                thousands_separator: Some(','),
+                ..Default::default()
+            };
+            let (num_info, range) = NumInfo::parse("1,234", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 3,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..5);
+        }
+
+        #[test]
+        fn test_number_with_si_unit() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let (num_info, range) = NumInfo::parse("1.5K", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            ); // Adjust exponent logic if needed
+            assert_eq!(range, 0..4);
+        }
+
+        #[test]
+        fn test_invalid_input() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("abc", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..0);
+        }
+
+        #[test]
+        fn test_empty_input() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..0);
+        }
+
+        #[test]
+        fn test_get_unit_none() {
+            assert_eq!(num_cmp_get_unit(None), 0, "None should return 0");
+        }
+
+        #[test]
+        fn test_get_unit_k_lowercase() {
+            assert_eq!(
+                num_cmp_get_unit(Some('k')),
+                1,
+                "Lowercase k should return 1"
+            );
+        }
+
+        #[test]
+        fn test_get_unit_k_uppercase() {
+            assert_eq!(
+                num_cmp_get_unit(Some('K')),
+                1,
+                "Uppercase K should return 1"
+            );
+        }
+
 
     }
 }

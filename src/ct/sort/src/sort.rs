@@ -2131,5 +2131,56 @@ mod tests {
                 "Test case 18 failed"
             );
         }
+
+        #[test]
+        fn test_month_parse_october() {
+            assert_eq!(
+                sort_month_parse("OCT"),
+                SortMonth::October,
+                "Test case 19 failed"
+            );
+            assert_eq!(
+                sort_month_parse("oct"),
+                SortMonth::October,
+                "Test case 20 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_november() {
+            assert_eq!(
+                sort_month_parse("NOV"),
+                SortMonth::November,
+                "Test case 21 failed"
+            );
+            assert_eq!(
+                sort_month_parse("nov"),
+                SortMonth::November,
+                "Test case 22 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_december() {
+            assert_eq!(
+                sort_month_parse("DEC"),
+                SortMonth::December,
+                "Test case 23 failed"
+            );
+            assert_eq!(
+                sort_month_parse("dec"),
+                SortMonth::December,
+                "Test case 24 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_unknown() {
+            assert_eq!(
+                sort_month_parse("XYZ"),
+                SortMonth::Unknown,
+                "Test case 25 failed"
+            );
+        }
     }
 }

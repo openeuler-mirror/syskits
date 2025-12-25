@@ -4169,4 +4169,137 @@ mod tests {
             let _ = fs::remove_file(test_file_name);
         }
     }
+
+    #[cfg(test)]
+    mod display_sort_error_tests {
+        use std::fmt::Write;
+        use std::io;
+        use std::io::ErrorKind;
+
+        use super::*;
+
+        #[test]
+        fn test_display_ct_disorder_silent() {
+            let error = SortError::SortDisorder {
+                file: OsString::from("file.txt"),
+                line_number: 42,
+                line: "1,2,3".to_string(),
+                is_silent: true,
+            };
+
+            let mut output = String::new();
+            let result = write!(&mut output, "{}", error);
+            assert_eq!(result, Ok(()));
+            assert_eq!(output, "");
+        }
+
+        #[test]
+        fn test_display_ct_disorder_verbose() {
+            let error = SortError::SortDisorder {
+                file: OsString::from("file.txt"),
+                line_number: 42,
+                line: "1,2,3".to_string(),
+                is_silent: false,
+            };
+
+            let mut output = String::new();
+            let result = write!(&mut output, "{}", error);
+            assert_eq!(result, Ok(()));
+            assert_eq!(output, "file.txt:42: disorder: 1,2,3");
+        }
+
+        #[test]
+        fn display_ct_disorder() {
+            let err = SortError::SortDisorder {
+                file: "example.txt".into(),
+                line_number: 10,
+                line: "Invalid data line".to_string(),
+                is_silent: false,
+            };
+
+            assert_eq!(
+                format!("{}", err),
+                "example.txt:10: disorder: Invalid data line"
+            );
+        }
+
+        #[test]
+        fn display_ct_open_failed() {
+            let io_error = io::Error::new(ErrorKind::NotFound, "File not found");
+            let err = SortError::SortOpenFailed {
+                path: "/nonexistent/path.txt".to_string(),
+                error: io_error,
+            };
+
+            assert_eq!(
+                format!("{}", err),
+                "open failed: /nonexistent/path.txt: File not found"
+            );
+        }
+
+        #[test]
+        fn display_ct_read_failed() {
+            let io_error = io::Error::new(ErrorKind::PermissionDenied, "Permission denied");
+            let err = SortError::SortReadFailed {
+                path: PathBuf::from("/restricted/file.txt"),
+                error: io_error,
+            };
+
+            assert_eq!(
+                format!("{}", err),
+                "cannot read: /restricted/file.txt: Permission denied"
+            );
+        }
+
+        #[test]
+        fn display_ct_parse_key_error() {
+            let err = SortError::SortParseKeyError {
+                key: "invalid_key".to_string(),
+                msg: "Invalid character in key".to_string(),
+            };
+
+            assert_eq!(
+                format!("{}", err),
+                "failed to parse key 'invalid_key': Invalid character in key"
+            );
+        }
+
+        #[test]
+        fn display_ct_open_tmp_file_failed() {
+            let io_error = io::Error::new(ErrorKind::Other, "Unknown error");
+            let err = SortError::SortOpenTmpFileFailed { error: io_error };
+
+            assert_eq!(
+                format!("{}", err),
+                "failed to open temporary file: Unknown error"
+            );
+        }
+
+        #[test]
+        fn display_ct_compress_prog_execution_failed() {
+            let err = SortError::SortCompressProgExecutionFailed { code: 127 };
+
+            assert_eq!(
+                format!("{}", err),
+                "couldn't execute compress program: errno 127"
+            );
+        }
+
+        #[test]
+        fn display_ct_compress_prog_terminated_abnormally() {
+            let err = SortError::SortCompressProgTerminatedAbnormally {
+                prog: "gzip".to_string(),
+            };
+
+            assert_eq!(format!("{}", err), "'gzip' terminated abnormally");
+        }
+
+        #[test]
+        fn display_ct_tmp_dir_creation_failed() {
+            let err = SortError::SortTmpDirCreationFailed;
+
+            assert_eq!(format!("{}", err), "could not create temporary directory");
+        }
+    }
+
 }

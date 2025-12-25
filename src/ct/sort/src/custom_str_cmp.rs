@@ -562,4 +562,132 @@ mod tests {
         assert_eq!(result, "abcdef".cmp("abcdef"));
     }
 
+    #[test]
+    fn test_custom_str_cmp_ignore_case_and_non_printing() {
+        let result = custom_cmp_str("AbCdEf\x08\x00", "abcdef", true, false, true);
+        assert_eq!(result, "abcdef".cmp("abcdef"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_ignore_case_and_non_dictionary() {
+        let result = custom_cmp_str("AbCdEf$", "abcdef", false, true, true);
+        assert_eq!(result, "abcdef".cmp("abcdef"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_ignore_all() {
+        let result = custom_cmp_str("AbCdEf\x08\x00$%gHiJkL", "abcdefghijkl", true, true, true);
+        assert_eq!(result, "abcdefghijkl".cmp("abcdefghijkl"));
+    }
+
+    #[test]
+    fn test_custom_str_cmp_empty_strings() {
+        let result = custom_cmp_str("", "", false, false, false);
+        assert_eq!(result, Ordering::Equal);
+
+        let result = custom_cmp_str("", "abc", false, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str("abc", "", false, false, false);
+        assert_eq!(result, Ordering::Greater);
+    }
+
+    #[test]
+    fn test_custom_str_cmp_equal_strings() {
+        let result = custom_cmp_str("abcdef", "abcdef", false, false, false);
+        assert_eq!(result, Ordering::Equal);
+
+        let result = custom_cmp_str("aBcDeF", "abcdef", true, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str("abc$%def", "abcdef", false, true, false);
+        assert_eq!(result, Ordering::Equal);
+
+        let result = custom_cmp_str("AbCdEf\x08\x00$%def", "abcdef", true, true, false);
+        assert_eq!(result, Ordering::Less);
+    }
+
+    #[test]
+    fn test_custom_str_cmp_different_length() {
+        let result = custom_cmp_str("abc", "abcd", false, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str("abcde", "abcd", false, false, false);
+        assert_eq!(result, Ordering::Greater);
+    }
+
+    #[test]
+    fn test_custom_str_cmp_complex_cases() {
+        let result = custom_cmp_str(
+            "AbC123\x08\x00$%dEf",
+            "aBc456\x08\x00$%deF",
+            true,
+            true,
+            true,
+        );
+        assert_eq!(result, "abc123def".cmp("abc456def"));
+
+        let result = custom_cmp_str("ABCDEF", "abcdef", false, false, true);
+        assert_eq!(result, Ordering::Equal);
+
+        let result = custom_cmp_str("ABCDEF", "abcdef", false, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str(
+            "abc123\x08\x00$%def",
+            "abc123\x08\x00$%def",
+            true,
+            true,
+            false,
+        );
+        assert_eq!(result, Ordering::Equal);
+    }
+
+    #[test]
+    fn test_custom_str_cmp_single_character_strings() {
+        let result = custom_cmp_str("a", "b", false, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str("b", "a", false, false, false);
+        assert_eq!(result, Ordering::Greater);
+
+        let result = custom_cmp_str("A", "a", true, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str("!", "@", false, true, false);
+        assert_eq!(result, Ordering::Equal);
+
+        let result = custom_cmp_str("\x00", "\x01", false, false, true);
+        assert_eq!(result, Ordering::Less);
+    }
+
+    #[test]
+    fn test_custom_str_cmp_large_strings() {
+        let a = std::iter::repeat('a').take(1000).collect::<String>();
+        let b = std::iter::repeat('b').take(1000).collect::<String>();
+
+        let result = custom_cmp_str(&a, &b, false, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str(&b, &a, false, false, false);
+        assert_eq!(result, Ordering::Greater);
+
+        let result = custom_cmp_str(&a, &b, true, false, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str(&b, &a, true, false, false);
+        assert_eq!(result, Ordering::Greater);
+
+        let result = custom_cmp_str(&a, &b, false, true, false);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str(&b, &a, false, true, false);
+        assert_eq!(result, Ordering::Greater);
+
+        let result = custom_cmp_str(&a, &b, false, false, true);
+        assert_eq!(result, Ordering::Less);
+
+        let result = custom_cmp_str(&b, &a, false, false, true);
+        assert_eq!(result, Ordering::Greater);
+    }
 }

@@ -10184,5 +10184,116 @@ mod tests {
                 .contains_id(sort_flags::SORT_ZERO_TERMINATED));
         }
 
+        #[test]
+        fn test_ct_app_zero_terminated_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-z"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::SORT_ZERO_TERMINATED));
+        }
+
+        #[test]
+        fn test_ct_app_parallel_long_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--parallel"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_parallel_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--parallel", "10"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_PARALLEL));
+        }
+
+        #[test]
+        fn test_ct_app_buffer_size_long_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--buffer-size"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_buffer_size_short_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-S"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_buffer_size_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--buffer-size", "1000000000"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_BUF_SIZE));
+        }
+
+        #[test]
+        fn test_ct_app_buffer_size_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-S", "1000000000"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_BUF_SIZE));
+        }
+
+        #[test]
+        fn test_ct_app_temporary_directory_long_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--temporary-directory"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_temporary_directory_short_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-T"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_temporary_directory_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--temporary-directory", "tmp/"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_TMP_DIR));
+        }
    }
 }

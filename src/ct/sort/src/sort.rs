@@ -9962,5 +9962,114 @@ mod tests {
             assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
         }
 
+        #[test]
+        fn test_ct_app_field_separator_long_period() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "."];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_colon() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", ":"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_letter() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "a"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_letter2() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "sa"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_uppercase_letter() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "A"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_uppercase_letter2() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "AN"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_digital() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "6"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_digital2() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "66"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_space() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", " "];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_comma() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", ","];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
    }
 }

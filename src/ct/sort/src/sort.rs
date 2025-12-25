@@ -3084,4 +3084,96 @@ mod tests {
                 _ => panic!("Expected string selection"),
             }
         }
+
+
+    #[cfg(test)]
+    mod key_position_tests {
+        use super::*;
+
+        #[test]
+        fn test_new_with_valid_key() {
+            let key = "1.0";
+            let default_char_index = 0;
+            let ignore_blanks = false;
+
+            let result = SortKeyPosition::new(key, default_char_index, ignore_blanks);
+
+            assert!(result.is_ok());
+            let key_position = result.unwrap();
+            assert_eq!(key_position.field, 1);
+            assert_eq!(key_position.char, 0);
+            assert_eq!(key_position.is_ignore_blanks, false);
+        }
+
+        #[test]
+        fn test_new_with_invalid_key() {
+            let key = "invalid_key";
+            let default_char_index = 0;
+            let ignore_blanks = false;
+
+            let result = SortKeyPosition::new(key, default_char_index, ignore_blanks);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(
+                error,
+                "failed to parse field index 'invalid_key': invalid digit found in string"
+                    .to_string()
+            );
+        }
+
+        #[test]
+        fn test_new_with_field_index_zero() {
+            let key = "0.0";
+            let default_char_index = 0;
+            let ignore_blanks = false;
+
+            let result = SortKeyPosition::new(key, default_char_index, ignore_blanks);
+
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error, "field index can not be 0".to_string());
+        }
+
+        #[test]
+        fn test_new_with_parse_error() {
+            let key = "1invalid";
+            let default_char_index = 0;
+            let ignore_blanks = false;
+
+            let result = SortKeyPosition::new(key, default_char_index, ignore_blanks);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_new_with_default_char_index() {
+            let key = "1";
+            let default_char_index = 1;
+            let ignore_blanks = false;
+
+            let result = SortKeyPosition::new(key, default_char_index, ignore_blanks);
+
+            assert!(result.is_ok());
+            let key_position = result.unwrap();
+            assert_eq!(key_position.field, 1);
+            assert_eq!(key_position.char, 1);
+            assert_eq!(key_position.is_ignore_blanks, false);
+        }
+
+        #[test]
+        fn test_new_with_ignore_blanks_true() {
+            let key = "1.0";
+            let default_char_index = 0;
+            let ignore_blanks = true;
+
+            let result = SortKeyPosition::new(key, default_char_index, ignore_blanks);
+
+            assert!(result.is_ok());
+            let key_position = result.unwrap();
+            assert_eq!(key_position.field, 1);
+            assert_eq!(key_position.char, 0);
+            assert_eq!(key_position.is_ignore_blanks, true);
+        }
+    }
 }

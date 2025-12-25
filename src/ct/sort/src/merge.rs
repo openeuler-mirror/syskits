@@ -1415,5 +1415,255 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_merge_dictionary_order_true() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_dictionary_order: true,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_dictionary_order_false() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_dictionary_order: false,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_merge_true() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_merge: true,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_merge_false() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_merge: false,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_debug_true() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_debug: true,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_debug_false() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_debug: false,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_stable_true() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_stable: true,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_stable_false() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                is_stable: false,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_sort_mode_default() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                mode: SortMode::SortDefault,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_merge_sort_mode_version() {
+            let input = "line1\nLINE4\nline3";
+            let input2 = "line2\nLINE7\nline3";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/tmp/path"));
+            let settings = SortGlobalConfigs {
+                mode: SortMode::SortVersion,
+                ..Default::default()
+            };
+
+            let result = merge(&mut files, &settings, None, &mut tmp_dir);
+            assert!(result.is_ok());
+        }
+
     }
 }

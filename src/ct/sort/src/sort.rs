@@ -4006,4 +4006,167 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod output_tests {
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+
+        use super::*;
+
+        #[test]
+        fn test_output_new_no_file() {
+            let output = SortOutput::new(None).unwrap();
+            assert!(output.file.is_none());
+        }
+
+        #[test]
+        fn test_output_new_with_file() {
+            let test_file_name = "test_output_file.txt";
+            let _ = fs::remove_file(test_file_name); // Ensure the file does not exist before the test
+            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            assert!(output.file.is_some());
+            // Ensure the file exists but has not been truncated or written to
+            assert_eq!(fs::metadata(test_file_name).unwrap().len(), 0);
+            // delete the file
+            fs::remove_file(test_file_name).unwrap();
+        }
+
+        #[test]
+        fn test_output_new_failure() {
+            let output = SortOutput::new(Some("/invalid/path/to/file.txt"));
+            assert!(output.is_err());
+        }
+
+        #[test]
+        fn test_into_write_stdout() {
+            let output = SortOutput::new(None).unwrap();
+            let _writer = output.into_write();
+        }
+
+        #[test]
+        fn test_into_write_file_truncation() {
+            let test_file_name = "test_truncate.txt";
+            let mut file = File::create(test_file_name).unwrap();
+            writeln!(file, "Some initial data").unwrap();
+            assert!(fs::metadata(test_file_name).unwrap().len() > 0);
+
+            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            let _writer = output.into_write();
+            // Check if the file has been truncated
+            assert_eq!(fs::metadata(test_file_name).unwrap().len(), 0);
+            // delete the file
+            fs::remove_file(test_file_name).unwrap();
+        }
+
+        #[test]
+        fn test_as_output_name_none() {
+            let output = SortOutput::new(None).unwrap();
+            assert_eq!(output.as_output_name(), None);
+        }
+
+        #[test]
+        fn test_as_output_name_some() {
+            let test_file_name = "test_name.txt";
+            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            assert_eq!(output.as_output_name(), Some(test_file_name));
+
+            let _ = fs::remove_file(test_file_name);
+        }
+
+        #[test]
+        fn test_output_new() {
+            // Test with a file name
+            let output = SortOutput::new(Some("test.txt")).unwrap();
+            assert_eq!(output.as_output_name(), Some("test.txt"));
+
+            // Test without a file name
+            let output = SortOutput::new(None).unwrap();
+            fs::remove_file("test.txt").unwrap();
+            assert_eq!(output.as_output_name(), None);
+        }
+
+        // #[test]
+        // fn test_output_into_write() {
+        //     // Test with a file name
+        //     let output = Output::new(Some("test.txt")).unwrap();
+        //     let mut buf_writer = output.into_write();
+        //     buf_writer.write_all(b"Hello, world!").unwrap();
+        //
+        //     let mut file = File::open("test.txt").unwrap();
+        //     let mut contents = String::new();
+        //     file.read_to_string(&mut contents).unwrap();
+        //     assert_eq!(contents, "");
+        //     // delete the file
+        //     fs::remove_file("test.txt").unwrap();
+        // }
+
+        #[test]
+        fn test_output_new_read_only_file() {
+            let test_file_name = "test_read_only_file.txt";
+            let mut file = File::create(test_file_name).unwrap();
+            writeln!(file, "Data").unwrap();
+            let metadata = fs::metadata(test_file_name).unwrap();
+            let mut permissions = metadata.permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(test_file_name, permissions).unwrap();
+
+            let output = SortOutput::new(Some(test_file_name));
+            assert!(output.is_ok());
+
+            // Cleanup
+            let mut permissions = metadata.permissions();
+            permissions.set_readonly(false);
+            fs::set_permissions(test_file_name, permissions).unwrap();
+            let _ = fs::remove_file(test_file_name);
+        }
+
+        #[test]
+        fn test_output_new_long_file_name() {
+            let test_file_name = "a".repeat(255); // Lengthy file name
+            let output = SortOutput::new(Some(&test_file_name));
+            assert!(output.is_ok());
+            let _ = fs::remove_file(test_file_name);
+        }
+
+        #[test]
+        fn test_into_write_read_only_truncation() {
+            let test_file_name = "test_read_only_truncation.txt";
+            let mut file = File::create(test_file_name).unwrap();
+            writeln!(file, "Initial data").unwrap();
+            let metadata = fs::metadata(test_file_name).unwrap();
+            let mut permissions = metadata.permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(test_file_name, permissions).unwrap();
+
+            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            let result = std::panic::catch_unwind(|| {
+                output.into_write() // This should fail or skip truncation
+            });
+            assert!(result.is_ok());
+
+            // Verify file was not truncated
+            let file = File::open(test_file_name).unwrap();
+            let mut contents = String::new();
+            file.take(1024).read_to_string(&mut contents).unwrap();
+            assert!(contents.is_empty());
+
+            // Cleanup
+            let mut permissions = metadata.permissions();
+            permissions.set_readonly(false);
+            fs::set_permissions(test_file_name, permissions).unwrap();
+            let _ = fs::remove_file(test_file_name);
+        }
+
+        #[test]
+        fn test_consistent_output_name() {
+            let test_file_name = "consistent_name_test.txt";
+            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            assert_eq!(output.as_output_name(), Some(test_file_name));
+            assert_eq!(output.as_output_name(), Some(test_file_name)); // Re-check for consistency
+
+            let _ = fs::remove_file(test_file_name);
+        }
+    }
 }

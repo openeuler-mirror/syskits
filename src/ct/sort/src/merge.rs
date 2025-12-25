@@ -2961,6 +2961,294 @@ mod tests {
             assert!(merger.is_ok());
         }
 
+        #[test]
+        fn test_merge_global_setting_ignore_leading_blanks_true() {
+            let settings = SortGlobalConfigs {
+                is_ignore_leading_blanks: true,
+                ..Default::default()
+            };
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_ignore_leading_blanks_false() {
+            let settings = SortGlobalConfigs {
+                is_ignore_leading_blanks: false,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_dictionary_order_true() {
+            let settings = SortGlobalConfigs {
+                is_dictionary_order: true,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_dictionary_order_false() {
+            let settings = SortGlobalConfigs {
+                is_dictionary_order: false,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_merge_true() {
+            let settings = SortGlobalConfigs {
+                is_merge: true,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_merge_false() {
+            let settings = SortGlobalConfigs {
+                is_merge: false,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_debug_true() {
+            let settings = SortGlobalConfigs {
+                is_debug: true,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_debug_false() {
+            let settings = SortGlobalConfigs {
+                is_debug: false,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_stable_true() {
+            let settings = SortGlobalConfigs {
+                is_stable: true,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_stable_false() {
+            let settings = SortGlobalConfigs {
+                is_stable: false,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
     
     }
 }

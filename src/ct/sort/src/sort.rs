@@ -9364,6 +9364,124 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
         }
-   
+
+        #[test]
+        fn test_ct_app_check_default_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_long_silent() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "silent";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_short_silent() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "silent"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_long_quiet() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "quiet";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_short_quiet() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "quiet"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_long_diagnose_first() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "diagnose-first";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_short_diagnose_first() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "diagnose-first"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
+
+        #[test]
+        fn test_ct_app_check_silent_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--check-silent"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::check::SORT_CHECK_SILENT));
+        }
+
+        #[test]
+        fn test_ct_app_check_silent_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-C"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::check::SORT_CHECK_SILENT));
+        }
+
+        // check冲突output
+        #[test]
+        fn test_ct_app_check_default_long_output_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--check", "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
    }
 }

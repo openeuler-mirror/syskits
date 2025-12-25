@@ -3669,4 +3669,234 @@ mod tests {
             assert!(!output_str.contains("^")); // Check for debug markers
         }
     }
+
+    #[cfg(test)]
+    mod key_settings_tests {
+        use super::*;
+
+        #[test]
+        fn test_check_compatibility() {
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortNumeric, false, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortNumeric, false, true).is_err()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortNumeric, true, false).is_err()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortNumeric, true, true).is_err()
+            );
+
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortHumanNumeric, false, false)
+                    .is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortHumanNumeric, false, true)
+                    .is_err()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortHumanNumeric, true, false)
+                    .is_err()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortHumanNumeric, true, true)
+                    .is_err()
+            );
+
+            assert!(SortKeySettings::check_compatibility(
+                SortMode::SortGeneralNumeric,
+                false,
+                false
+            )
+            .is_ok());
+            assert!(SortKeySettings::check_compatibility(
+                SortMode::SortGeneralNumeric,
+                false,
+                true
+            )
+            .is_err());
+            assert!(SortKeySettings::check_compatibility(
+                SortMode::SortGeneralNumeric,
+                true,
+                false
+            )
+            .is_err());
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortGeneralNumeric, true, true)
+                    .is_err()
+            );
+
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortMonth, false, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortMonth, false, true).is_err()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortMonth, true, false).is_err()
+            );
+            assert!(SortKeySettings::check_compatibility(SortMode::SortMonth, true, true).is_err());
+
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortVersion, false, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortVersion, false, true).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortVersion, true, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortVersion, true, true).is_ok()
+            );
+
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortRandom, false, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortRandom, false, true).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortRandom, true, false).is_ok()
+            );
+            assert!(SortKeySettings::check_compatibility(SortMode::SortRandom, true, true).is_ok());
+
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortDefault, false, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortDefault, false, true).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortDefault, true, false).is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortDefault, true, true).is_ok()
+            );
+        }
+
+        #[test]
+        fn test_set_sort_mode() {
+            let mut settings = SortKeySettings::default();
+            assert!(settings.set_sort_mode(SortMode::SortNumeric).is_ok());
+            assert_eq!(settings.mode, SortMode::SortNumeric);
+
+            assert!(settings.set_sort_mode(SortMode::SortHumanNumeric).is_err());
+            assert_eq!(settings.mode, SortMode::SortNumeric); // unchanged
+
+            settings = SortKeySettings::default(); // reset
+            assert!(settings.set_sort_mode(SortMode::SortDefault).is_ok());
+        }
+
+        #[test]
+        fn test_set_dictionary_order() {
+            let mut settings = SortKeySettings::default();
+            settings.mode = SortMode::SortDefault;
+            assert!(settings.set_dictionary_order().is_ok());
+
+            settings.mode = SortMode::SortNumeric;
+            assert!(settings.set_dictionary_order().is_err());
+        }
+
+        #[test]
+        fn test_set_ignore_non_printing() {
+            let mut settings = SortKeySettings::default();
+            settings.mode = SortMode::SortDefault;
+            assert!(settings.set_ignore_non_printing().is_ok());
+
+            settings.mode = SortMode::SortNumeric;
+            assert!(settings.set_ignore_non_printing().is_err());
+        }
+
+        #[test]
+        fn test_compatibility_all_modes() {
+            let modes = vec![
+                SortMode::SortDefault,
+                SortMode::SortNumeric,
+                SortMode::SortHumanNumeric,
+                SortMode::SortGeneralNumeric,
+                SortMode::SortMonth,
+            ];
+            for mode in modes {
+                for &dict_order in &[false, true] {
+                    for &ignore_np in &[false, true] {
+                        let result = SortKeySettings::check_compatibility(
+                            mode.clone(),
+                            ignore_np,
+                            dict_order,
+                        );
+                        if matches!(
+                            mode,
+                            SortMode::SortNumeric
+                                | SortMode::SortHumanNumeric
+                                | SortMode::SortGeneralNumeric
+                                | SortMode::SortMonth
+                        ) && (dict_order || ignore_np)
+                        {
+                            assert!(
+                                result.is_err(),
+                                "Failed in mode {:?} with dict_order: {}, ignore_np: {}",
+                                mode,
+                                dict_order,
+                                ignore_np
+                            );
+                        } else {
+                            assert!(
+                                result.is_ok(),
+                                "Unexpected error in mode {:?} with dict_order: {}, ignore_np: {}",
+                                mode,
+                                dict_order,
+                                ignore_np
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn test_mode_transitions() {
+            let mut settings = SortKeySettings::default();
+            for initial_mode in &[SortMode::SortDefault, SortMode::SortNumeric] {
+                for target_mode in &[SortMode::SortGeneralNumeric, SortMode::SortMonth] {
+                    settings.mode = initial_mode.clone();
+                    let res = settings.set_sort_mode(target_mode.clone());
+                    if initial_mode == &SortMode::SortDefault || initial_mode == target_mode {
+                        assert!(res.is_ok());
+                        assert_eq!(settings.mode, *target_mode);
+                    } else {
+                        assert!(res.is_err());
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn test_chain_setting_changes() {
+            let mut settings = SortKeySettings::default();
+            assert!(settings.set_sort_mode(SortMode::SortDefault).is_ok());
+            assert!(settings.set_dictionary_order().is_ok());
+            assert!(settings.set_ignore_non_printing().is_ok());
+
+            settings.mode = SortMode::SortNumeric; // set to a mode incompatible with dictionary_order and ignore_non_printing
+            assert!(settings.set_dictionary_order().is_err());
+            assert!(settings.set_ignore_non_printing().is_err());
+        }
+
+        #[test]
+        fn test_settings_after_mode_changes() {
+            let mut settings = SortKeySettings::default();
+            assert!(settings.set_sort_mode(SortMode::SortNumeric).is_ok());
+            assert!(settings.set_ignore_non_printing().is_err()); // should be incompatible now
+
+            settings.mode = SortMode::SortDefault; // reset to a compatible mode
+            assert!(settings.set_ignore_non_printing().is_ok()); // should now be compatible
+
+            settings.mode = SortMode::SortNumeric;
+            assert!(settings.set_dictionary_order().is_err()); // should be incompatible
+        }
+    }
 }

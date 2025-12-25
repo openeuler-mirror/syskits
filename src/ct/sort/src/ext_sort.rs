@@ -3089,4 +3089,257 @@ mod tests {
         }
     
     }
+    mod write_tests {
+        use std::fs;
+        use std::fs::File;
+        use std::io::{BufWriter, Cursor};
+        use std::path::PathBuf;
+
+        use tempfile::{tempdir, NamedTempFile};
+
+        use crate::chunks::{ChunkContents, ChunkLineData};
+        use crate::merge::MergeInput;
+        use crate::numeric_str_cmp::{NumInfo, NumInfoParseSettings};
+        use crate::{SortError, SortGeneralF64ParseResult};
+
+        use super::*;
+
+        // Mock implementation of WriteableTmpFile for testing
+        struct MockWriteableTmpFile {
+            writer: BufWriter<File>,
+            path: PathBuf,
+        }
+
+        impl MergeWriteableTmpFile for MockWriteableTmpFile {
+            type Closed = MockClosedTmpFile;
+            type InnerWrite = BufWriter<File>;
+
+            fn create(file: (File, PathBuf), _compress_prog: Option<&str>) -> CTResult<Self> {
+                Ok(MockWriteableTmpFile {
+                    writer: BufWriter::new(file.0),
+                    path: file.1,
+                })
+            }
+
+            fn finished_writing(self) -> CTResult<Self::Closed> {
+                Ok(MockClosedTmpFile { path: self.path })
+            }
+
+            fn as_write(&mut self) -> &mut Self::InnerWrite {
+                &mut self.writer
+            }
+        }
+
+        struct MockClosedTmpFile {
+            path: PathBuf,
+        }
+
+        struct MockMergeInput {
+            data: Cursor<Vec<u8>>,
+        }
+
+        impl MergeInput for MockMergeInput {
+            type InnerRead = Cursor<Vec<u8>>;
+
+            fn finished_reading(self) -> CTResult<()> {
+                Ok(())
+            }
+
+            fn as_read(&mut self) -> &mut Self::InnerRead {
+                &mut self.data
+            }
+        }
+
+        impl MergeClosedTmpFile for MockClosedTmpFile {
+            type Reopened = MockMergeInput;
+
+            fn reopen(self) -> CTResult<Self::Reopened> {
+                // Reopen the file and prepare the MockMergeInput
+                let data = fs::read(&self.path)
+                    .map_err(|e| SortError::SortOpenTmpFileFailed { error: e })?;
+                Ok(MockMergeInput {
+                    data: Cursor::new(data),
+                })
+            }
+        }
+
+        // Helper function to create a mock chunk
+        fn create_mock_chunk() -> Chunk {
+            Chunk::new(vec![0; 10], |_buffer| {
+                let lines = vec![
+                    SortLine {
+                        line: "Line 1",
+                        index: 0,
+                    },
+                    SortLine {
+                        line: "Line 2",
+                        index: 1,
+                    },
+                ];
+                let settings = NumInfoParseSettings::default();
+                let a_info = NumInfo::parse("123e5", &settings).0;
+                let b_info = NumInfo::parse("12300000", &settings).0;
+                let line_data = ChunkLineData {
+                    selections: vec!["Selection 1", "Selection 2"],
+                    num_infos: vec![a_info, b_info],
+                    parsed_floats: vec![
+                        SortGeneralF64ParseResult::SortNaN,
+                        SortGeneralF64ParseResult::SortNaN,
+                    ],
+                };
+                ChunkContents { lines, line_data }
+            })
+        }
+
+        fn create_mock_chunk_with_known_data() -> Chunk {
+            Chunk::new(vec![0; 10], |_buffer| {
+                let lines = vec![
+                    SortLine {
+                        line: "Line 1",
+                        index: 0,
+                    },
+                    SortLine {
+                        line: "Line 2",
+                        index: 1,
+                    },
+                ];
+                let settings = NumInfoParseSettings::default();
+                let a_info = NumInfo::parse("123e5", &settings).0;
+                let b_info = NumInfo::parse("12300000", &settings).0;
+                let line_data = ChunkLineData {
+                    selections: vec!["Selection 1", "Selection 2"],
+                    num_infos: vec![a_info, b_info],
+                    parsed_floats: vec![
+                        SortGeneralF64ParseResult::SortNaN,
+                        SortGeneralF64ParseResult::SortNaN,
+                    ],
+                };
+                ChunkContents { lines, line_data }
+            })
+        }
+
+        fn create_empty_chunk() -> Chunk {
+            Chunk::new(vec![0; 10], |_buffer| {
+                let lines = Vec::new(); // No lines
+                let line_data = ChunkLineData {
+                    selections: Vec::new(),
+                    num_infos: Vec::new(),
+                    parsed_floats: Vec::new(),
+                };
+                ChunkContents { lines, line_data }
+            })
+        }
+
+        #[test]
+        fn test_write_function() {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("test_output.txt");
+            let file = File::create(&file_path).unwrap();
+
+            let chunk = create_mock_chunk();
+            let result = ext_sort_write::<MockWriteableTmpFile>(
+                &chunk,
+                (file, file_path.clone()),
+                None,
+                b'\n',
+            );
+
+            assert!(result.is_ok());
+
+            // Read back the file to check contents
+            let mut contents = String::new();
+            let mut file = File::open(file_path).unwrap();
+            file.read_to_string(&mut contents).unwrap();
+            assert_eq!(contents, "Line 1\nLine 2\n");
+        }
+
+        #[test]
+        fn test_write_typical() {
+            let temp_file = NamedTempFile::new().unwrap();
+            let file_path = temp_file.path().to_path_buf();
+            let file = temp_file.reopen().unwrap();
+
+            let chunk = create_mock_chunk(); // Assume this creates a valid Chunk with some lines
+            let separator = b'\n';
+
+            let result =
+                ext_sort_write::<MockWriteableTmpFile>(&chunk, (file, file_path), None, separator);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_write_with_compression() {
+            let temp_file = NamedTempFile::new().unwrap();
+            let file_path = temp_file.path().to_path_buf();
+            let file = temp_file.reopen().unwrap();
+
+            let chunk = create_mock_chunk(); // Same as above
+            let separator = b'\n';
+
+            // Assuming "gzip" is a placeholder for actual compression behavior
+            let result = ext_sort_write::<MergeWriteableCompressedTmpFile>(
+                &chunk,
+                (file, file_path),
+                Some("gzip"),
+                separator,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_write_error_handling() {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("non_writable_file");
+            let file = File::create(&file_path).unwrap();
+
+            let chunk = create_mock_chunk();
+
+            // Set file permissions to read-only to simulate a write error
+            let metadata = fs::metadata(&file_path).unwrap();
+            let mut permissions = metadata.permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(&file_path, permissions).unwrap();
+
+            let result =
+                ext_sort_write::<MockWriteableTmpFile>(&chunk, (file, file_path), None, b'\n');
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_write_empty_chunk() {
+            let temp_file = NamedTempFile::new().unwrap();
+            let file_path = temp_file.path().to_path_buf();
+            let file = temp_file.reopen().unwrap();
+
+            let chunk = create_empty_chunk(); // Assume this creates an empty Chunk
+            let separator = b'\n';
+
+            let result =
+                ext_sort_write::<MockWriteableTmpFile>(&chunk, (file, file_path), None, separator);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_data_integrity() {
+            let temp_file = NamedTempFile::new().unwrap();
+            let file_path = temp_file.path().to_path_buf();
+            let file = temp_file.reopen().unwrap();
+
+            let chunk = create_mock_chunk_with_known_data(); // Assume this creates a chunk with predictable data
+            let separator = b'\n';
+
+            let _ = ext_sort_write::<MockWriteableTmpFile>(
+                &chunk,
+                (file, file_path.clone()),
+                None,
+                separator,
+            );
+
+            let mut contents = String::new();
+            let mut file = File::open(file_path).unwrap();
+            file.read_to_string(&mut contents).unwrap();
+
+            assert_eq!(contents, "Line 1\nLine 2\n"); // Assuming "KnownData" was the expected output
+        }
+    }
 }

@@ -2408,4 +2408,269 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod file_merger_tests {}
+
+    #[cfg(test)]
+    mod tests {
+        use std::fs::File;
+        use std::io::Write;
+
+        use tempfile::tempdir;
+
+        use ctcore::ct_line_ending::CtLineEnding;
+
+        use crate::{SortMode, SortPrecomputed};
+
+        use super::*;
+
+        #[cfg(test)]
+        mod writeable_plain_tmp_file_tests {
+            use std::fs::{self, File};
+            use std::io::{Read, Write};
+
+            use tempfile::tempdir;
+
+            use super::*;
+
+            #[test]
+            fn test_write_and_close_plain_tmp_file() {
+                let temp_dir = tempdir().unwrap();
+                let file_path = temp_dir.path().join("tempfile");
+                let file = File::create(&file_path).unwrap();
+
+                let mut tmp_file =
+                    MergeWriteablePlainTmpFile::create((file, file_path.clone()), None).unwrap();
+                writeln!(tmp_file.as_write(), "Hello, world!").unwrap();
+
+                let closed_file = tmp_file.finished_writing().unwrap();
+                assert!(fs::metadata(&closed_file.path).is_ok());
+
+                let mut file = File::open(&closed_file.path).unwrap();
+                let mut contents = String::new();
+                file.read_to_string(&mut contents).unwrap();
+
+                assert_eq!(contents, "Hello, world!\n");
+            }
+        }
+
+        #[cfg(test)]
+        mod writeable_compressed_tmp_file_tests {
+            use std::fs::File;
+            use std::io::{Read, Write};
+            use std::process::{Command, Stdio};
+
+            use tempfile::tempdir;
+
+            use super::*;
+
+            #[test]
+            fn test_write_and_close_compressed_tmp_file() {
+                let temp_dir = tempdir().unwrap();
+                let file_path = temp_dir.path().join("tempfile.gz");
+                let file = File::create(&file_path).unwrap();
+
+                // Using "gzip" for compression in this test. Ensure gzip is installed.
+                let mut tmp_file = MergeWriteableCompressedTmpFile::create(
+                    (file, file_path.clone()),
+                    Some("gzip"),
+                )
+                .unwrap();
+                writeln!(tmp_file.as_write(), "Hello, world!").unwrap();
+
+                let closed_file = tmp_file.finished_writing().unwrap();
+                assert!(fs::metadata(&closed_file.path).is_ok());
+
+                // Decompress and check contents
+                let mut child = Command::new("gzip")
+                    .arg("-d")
+                    .arg("-c")
+                    .arg(&closed_file.path)
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+
+                let mut output = String::new();
+                child
+                    .stdout
+                    .take()
+                    .unwrap()
+                    .read_to_string(&mut output)
+                    .unwrap();
+                assert!(child.wait().unwrap().success());
+
+                assert_eq!(output, "Hello, world!\n");
+            }
+        }
+
+        #[test]
+        fn test_no_output_file_in_input_list() {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+
+            let mut files = vec![file_path.clone().into_os_string()];
+            let output = Some("/path/not/in/list");
+
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result =
+                merge_replace_output_file_in_input_files(&mut files, output, &mut tmp_dir_wrapper);
+            assert!(result.is_ok());
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0], file_path.into_os_string());
+        }
+
+        #[test]
+        fn test_multiple_files_with_one_output_match() {
+            let temp_dir = tempdir().unwrap();
+            let file1_path = temp_dir.path().join("file1");
+            let file2_path = temp_dir.path().join("file2");
+            let mut file1 = File::create(&file1_path).unwrap();
+            let mut file2 = File::create(&file2_path).unwrap();
+            writeln!(file1, "data 1").unwrap();
+            writeln!(file2, "data 2").unwrap();
+
+            let mut files = vec![
+                file1_path.clone().into_os_string(),
+                file2_path.clone().into_os_string(),
+            ];
+            let output = Some(file2_path.to_str().unwrap());
+
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result =
+                merge_replace_output_file_in_input_files(&mut files, output, &mut tmp_dir_wrapper);
+            assert!(result.is_err());
+            assert_eq!(files.len(), 2);
+            assert_eq!(files[0], file1_path.into_os_string());
+            assert_eq!(files[1], file2_path.into_os_string());
+        }
+
+        #[test]
+        fn test_merge_empty_input_list() {
+            let temp_dir = tempdir().unwrap();
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 10,
+                compress_prog: None,
+                ..Default::default()
+            };
+
+            let mut files = vec![];
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_invalid_file_paths() {
+            let temp_dir = tempdir().unwrap();
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 10,
+                compress_prog: None,
+                ..Default::default()
+            };
+
+            let file_paths = ["/invalid/path/to/file1", "/invalid/path/to/file2"];
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_err());
+        }
+
+        #[test]
+        fn test_merge_global_setting_default() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 10,
+                compress_prog: None,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_ignore_case_true() {
+            let settings = SortGlobalConfigs {
+                is_ignore_case: true,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+
+        #[test]
+        fn test_merge_global_setting_ignore_case_false() {
+            let settings = SortGlobalConfigs {
+                is_ignore_case: false,
+                ..Default::default()
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("file1");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let file_path2 = temp_dir.path().join("file2");
+            let mut file2 = File::create(&file_path2).unwrap();
+            writeln!(file2, "Hello, world!").unwrap();
+            let file_name2 = file_path2.to_str().unwrap();
+
+            let file_paths = [file_name, file_name2]; // Mock paths
+            let mut files = file_paths
+                .iter()
+                .map(|p| OsString::from(*p))
+                .collect::<Vec<_>>();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
+            assert!(merger.is_ok());
+        }
+    }
 }

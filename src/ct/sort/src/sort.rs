@@ -9483,5 +9483,124 @@ mod tests {
             assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
         }
 
+        #[test]
+        fn test_ct_app_check_default_short_output_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_long_silent_output_short() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "silent";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort, "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_short_silent_output_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "silent", "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_long_quiet_output_short() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "quiet";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort, "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_short_quiet_output_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "quiet", "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_long_diagnose_first_output_short() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "diagnose-first";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort, "-o", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_short_diagnose_first_output_short() {
+            let command = ct_app();
+
+            let input_args = vec![
+                ctcore::ct_util_name(),
+                "-c",
+                "diagnose-first",
+                "-o",
+                "test_file",
+            ];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_default_long_output_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--check", "--output", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_default_short_output_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-c", "--output", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_long_silent_output_long() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "silent";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort, "--output", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
    }
 }

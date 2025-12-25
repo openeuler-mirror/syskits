@@ -3991,4 +3991,27 @@ mod tests {
             assert!(merger.is_ok());
         }
     }
+
+    #[test]
+    fn test_finished_reading() {
+        let input = PlainMergeInput {
+            inner: Cursor::new(Vec::new()),
+        };
+
+        assert_eq!(input.finished_reading().unwrap(), ());
+    }
+
+    #[test]
+    fn test_as_read() {
+        let data = b"test data\n";
+        let mut input = PlainMergeInput {
+            inner: Cursor::new(data.to_vec()),
+        };
+
+        let read = input.as_read();
+        let mut buffer = [0; 10];
+        read.read(&mut buffer).unwrap();
+
+        assert_eq!(&buffer, data);
+    }
 }

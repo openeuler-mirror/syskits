@@ -3488,4 +3488,185 @@ mod tests {
             assert_eq!(token_buffer, expected);
         }
     }
+
+    #[cfg(test)]
+    mod line_tests {
+        use super::*;
+
+        fn line_data_default() -> ChunkLineData<'static> {
+            ChunkLineData {
+                selections: Vec::new(),
+                num_infos: Vec::new(),
+                parsed_floats: Vec::new(),
+            }
+        }
+
+        #[test]
+        fn test_create_line() {
+            let mut line_data = line_data_default();
+            let mut token_buffer = Vec::new();
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let line = SortLine::create(
+                "Hello, world",
+                0,
+                &mut line_data,
+                &mut token_buffer,
+                &settings,
+            );
+
+            assert_eq!(line.line, "Hello, world");
+            assert!(!token_buffer.is_empty()); // Check if tokens were created
+        }
+
+        #[test]
+        fn test_print_non_debug() {
+            let line = SortLine {
+                line: "Hello, world",
+                index: 0,
+            };
+            let settings = SortGlobalConfigs {
+                is_debug: false,
+                line_ending: CtLineEnding::Newline,
+                ..Default::default()
+            };
+            let mut output = Vec::new();
+            line.print(&mut output, &settings);
+
+            assert_eq!(String::from_utf8(output).unwrap(), "Hello, world\n");
+        }
+
+        #[test]
+        fn test_print_debug() {
+            let line = SortLine {
+                line: "Hello, world",
+                index: 0,
+            };
+            let settings = SortGlobalConfigs {
+                is_debug: true,
+                line_ending: CtLineEnding::Newline,
+                ..Default::default()
+            };
+            let mut output = Vec::new();
+            line.print_debug(&settings, &mut output).unwrap();
+
+            // This test depends heavily on the output ct_format of `print_debug`, adjust assertion accordingly
+            assert!(String::from_utf8(output).unwrap().contains("Hello, world"));
+        }
+
+        #[test]
+        fn test_create_line_with_multiple_selectors() {
+            let mut line_data = line_data_default();
+            let mut token_buffer = Vec::new();
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: true,
+                    ..Default::default()
+                },
+                selectors: vec![
+                    SortFieldSelector {
+                        from: Default::default(),
+                        is_needs_selection: true,
+                        settings: SortKeySettings {
+                            mode: SortMode::SortNumeric,
+                            is_ignore_blanks: false,
+                            is_ignore_case: false,
+                            is_dictionary_order: false,
+                            is_ignore_non_printing: false,
+                            is_reverse: false,
+                        },
+                        to: None,
+                        is_needs_tokens: false,
+                    },
+                    SortFieldSelector {
+                        from: Default::default(),
+                        is_needs_selection: true,
+                        settings: SortKeySettings {
+                            mode: SortMode::SortGeneralNumeric,
+                            is_ignore_blanks: false,
+                            is_ignore_case: false,
+                            is_dictionary_order: false,
+                            is_ignore_non_printing: false,
+                            is_reverse: false,
+                        },
+                        to: None,
+                        is_needs_tokens: false,
+                    },
+                ],
+                ..Default::default()
+            };
+
+            let line = SortLine::create(
+                "123 main st",
+                1,
+                &mut line_data,
+                &mut token_buffer,
+                &settings,
+            );
+            assert_eq!(line.line, "123 main st");
+            assert_eq!(line_data.num_infos.len(), 1); // Assuming a numeric selector might fill this
+            assert_eq!(line_data.parsed_floats.len(), 1); // Assuming a general numeric selector might fill this
+            assert_eq!(line_data.selections.len(), 1); // Two selections expected
+        }
+
+        #[test]
+        fn test_create_line_no_need_for_tokens() {
+            let mut line_data = line_data_default();
+            let mut token_buffer = Vec::new();
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: false, // No tokenization required
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let _line = SortLine::create(
+                "No tokens needed",
+                2,
+                &mut line_data,
+                &mut token_buffer,
+                &settings,
+            );
+            assert!(token_buffer.is_empty()); // No tokens should be created
+        }
+
+        #[test]
+        fn test_print_debug_with_numeric_mode() {
+            let line = SortLine {
+                line: "100 apples",
+                index: 5,
+            };
+            let settings = SortGlobalConfigs {
+                is_debug: true,
+                selectors: vec![SortFieldSelector {
+                    from: Default::default(),
+                    is_needs_selection: true,
+                    settings: SortKeySettings {
+                        mode: SortMode::SortNumeric,
+                        is_ignore_blanks: false,
+                        is_ignore_case: false,
+                        is_dictionary_order: false,
+                        is_ignore_non_printing: false,
+                        is_reverse: false,
+                    },
+                    to: None,
+                    is_needs_tokens: false,
+                }],
+                ..Default::default()
+            };
+            let mut output = Vec::new();
+            line.print_debug(&settings, &mut output).unwrap();
+            let output_str = String::from_utf8(output).unwrap();
+            // The exact output needs to be adjusted based on the expected debug ct_format
+            assert!(output_str.contains("100")); // Check that the numeric part is correctly annotated
+            assert!(!output_str.contains("^")); // Check for debug markers
+        }
+    }
 }

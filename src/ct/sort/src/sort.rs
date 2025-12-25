@@ -3015,8 +3015,8 @@ mod tests {
             assert_eq!(pos, "");
             assert_eq!(opts, "M1");
         }
-    }
-        #[test]
+
+                #[test]
         fn test_parse_key_with_conflicting_options() {
             let global_settings = SortGlobalConfigs::default();
             let result = SortFieldSelector::parse("1,2Md,1n", &global_settings); // Assuming 'd' and 'n' are conflicting in this context
@@ -3084,6 +3084,8 @@ mod tests {
                 _ => panic!("Expected string selection"),
             }
         }
+
+    }
 
 
     #[cfg(test)]
@@ -7667,6 +7669,275 @@ mod tests {
             let file_name = file_path.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "--sort=month", "-r", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_short_sort_long_random() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--sort=random", "-r", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_short_sort_long_version() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--sort=version", "-r", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_version_sort_long() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--version-sort", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_version_sort_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-V", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_long_sort_long_general_numeric() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sort=general-numeric",
+                "--reverse",
+                file_name,
+            ];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_long_sort_long_human_numeric() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sort=human-numeric",
+                "--reverse",
+                file_name,
+            ];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_long_sort_long_month() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sort=month",
+                "--reverse",
+                file_name,
+            ];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_long_sort_long_numeric() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sort=numeric",
+                "--reverse",
+                file_name,
+            ];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_long_sort_long_random() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sort=random",
+                "--reverse",
+                file_name,
+            ];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_no_exist_file_reverse_long_sort_long_version() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--sort=version",
+                "--reverse",
+                file_name,
+            ];
             let result = sort_main(args.iter().map(|s| OsString::from(s)));
             // let mut s = String::new();
             // 使用模式匹配提取字段值

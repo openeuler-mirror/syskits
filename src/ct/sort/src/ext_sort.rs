@@ -3342,4 +3342,79 @@ mod tests {
             assert_eq!(contents, "Line 1\nLine 2\n"); // Assuming "KnownData" was the expected output
         }
     }
+
+    mod read_write_loop_test {
+        use std::io::Cursor;
+        use std::sync::mpsc;
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        // #[test]
+        // fn test_single_small_file() {
+        //     let input_data = b"Line 1\nLine 2\n"; // Simple data that fits into the initial read buffer
+        //     let cursor = Cursor::new(input_data.clone());
+        //     let files = vec![Ok(Box::new(cursor) as Box<dyn Read + Send>)].into_iter();
+        //
+        //     let temp_dir = tempdir().unwrap();
+        //     let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+        //
+        //     let (sender, receiver) = mpsc::sync_channel(1);
+        //     let (response_sender, response_receiver) = mpsc::sync_channel(1);
+        //     let sender_clone = sender.clone();
+        //     let settings = GlobalSettings::default();
+        //
+        //     // Kick off the loop in a separate thread
+        //     let handle = std::thread::spawn(move || {
+        //         let result = read_write_loop::<WriteablePlainTmpFile>(
+        //             files,
+        //             &mut tmp_dir_wrapper,
+        //             b'\n',
+        //             input_data.len(),
+        //             &settings,
+        //             &receiver,
+        //             sender_clone,
+        //         );
+        //         response_sender.send(result).unwrap();
+        //     });
+        //
+        //     // Sending fake chunks to simulate processing
+        //     sender.send(Chunk::new(vec![], |_buf| ChunkContents {
+        //         lines: vec![],
+        //         line_data: LineData {
+        //             selections: vec![],
+        //             num_infos: vec![],
+        //             parsed_floats: vec![],
+        //         },
+        //     })).unwrap();
+        //
+        //     // Retrieve result and verify
+        //     let result = response_receiver.recv().unwrap();
+        //     // assert!(matches!(result, Ok(ReadResult::SortedSingleChunk(_))));
+        //
+        //     // handle.join().unwrap();
+        // }
+
+        #[test]
+        fn test_empty_input() {
+            let files = vec![Ok(Box::new(Cursor::new(vec![])) as Box<dyn Read + Send>)].into_iter();
+            let temp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let (sender, receiver) = mpsc::sync_channel(1);
+
+            let result = ext_sort_read_write_loop::<MergeWriteablePlainTmpFile>(
+                files,
+                &mut tmp_dir_wrapper,
+                b'\n',
+                1024,
+                &SortGlobalConfigs::default(),
+                &receiver,
+                sender,
+            );
+
+            assert!(matches!(result, Ok(ExtSortReadResult::EmptyInput)));
+        }
+    }
 }

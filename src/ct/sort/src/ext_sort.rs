@@ -2906,6 +2906,187 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_ext_sort_merge_batch_size_0() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 0,
+                ..SortGlobalConfigs::default()
+            };
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_merge_batch_size_32() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 32,
+                ..SortGlobalConfigs::default()
+            };
+
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_precomputed_default() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed::default(),
+                ..SortGlobalConfigs::default()
+            };
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_precomputed_needs_tokens_true() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: true,
+                    num_infos_per_line: 0,
+                    floats_per_line: 0,
+                    selections_per_line: 0,
+                },
+                ..SortGlobalConfigs::default()
+            };
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_precomputed_needs_tokens_false() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: false,
+                    num_infos_per_line: 0,
+                    floats_per_line: 0,
+                    selections_per_line: 0,
+                },
+                ..SortGlobalConfigs::default()
+            };
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_precomputed_needs_tokens_true_1_1_1() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: true,
+                    num_infos_per_line: 1,
+                    floats_per_line: 1,
+                    selections_per_line: 1,
+                },
+                ..SortGlobalConfigs::default()
+            };
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_precomputed_needs_tokens_false_10_10_10() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: false,
+                    num_infos_per_line: 10,
+                    floats_per_line: 10,
+                    selections_per_line: 10,
+                },
+                ..SortGlobalConfigs::default()
+            };
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ext_sort_selectors_default() {
+            let input = "line1\nline2\nline3\nline11";
+            let reader = Cursor::new(input);
+            let box_reader = Box::new(reader) as Box<dyn Read + Send>;
+            let mut files = vec![Ok(box_reader)].into_iter();
+
+            let settings = SortGlobalConfigs {
+                selectors: vec![],
+                ..SortGlobalConfigs::default()
+            };
+
+            let output = SortOutput { file: None };
+            let temp_dir = TempDir::new().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            let result = ext_sort(&mut files, &settings, output, &mut tmp_dir);
+
+            assert!(result.is_ok());
+        }
     
     }
 }

@@ -829,4 +829,109 @@ mod tests {
             assert!(output.len() > 0, "Output should be large but is empty");
         }
     }
+
+    #[cfg(test)]
+    mod merge_with_file_limit_test {
+        use super::*;
+
+        #[test]
+        fn test_basic_merge_without_limits() {
+            let files = vec![
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"Hello".to_vec()),
+                }),
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"World".to_vec()),
+                }),
+            ];
+
+            let tmp_dir = TempDir::new().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 10, // Set higher than the number of files
+                compress_prog: None,  // Other settings are set as needed
+                ..Default::default()
+            };
+
+            let result = merge_with_file_limit::<_, _, MockWriteableTmpFile>(
+                files.into_iter(),
+                &settings,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_batch_processing() {
+            let num_files = 25; // More than typical batch size to force batching
+            let batch_size = 10;
+            let mut files = vec![];
+            for _ in 0..num_files {
+                files.push(Ok(MockMergeInput {
+                    data: Cursor::new(b"Data".to_vec()),
+                }));
+            }
+
+            let tmp_dir = TempDir::new().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+            let settings = SortGlobalConfigs {
+                merge_batch_size: batch_size,
+                compress_prog: None,
+                ..Default::default()
+            };
+
+            let result = merge_with_file_limit::<_, _, MockWriteableTmpFile>(
+                files.into_iter(),
+                &settings,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_no_files_provided() {
+            let tmp_dir = TempDir::new().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 10,
+                compress_prog: None,
+                ..Default::default()
+            };
+
+            let files: Vec<CTResult<MockMergeInput>> = vec![];
+
+            let result = merge_with_file_limit::<_, _, MockWriteableTmpFile>(
+                files.into_iter(),
+                &settings,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(matches!(result, Ok(_))); // Expecting no error even if no files are provided
+        }
+
+        #[test]
+        fn test_single_file_provided() {
+            let tmp_dir = TempDir::new().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 10,
+                compress_prog: None,
+                ..Default::default()
+            };
+
+            let files = vec![Ok(MockMergeInput {
+                data: Cursor::new(b"Single file".to_vec()),
+            })];
+
+            let result = merge_with_file_limit::<_, _, MockWriteableTmpFile>(
+                files.into_iter(),
+                &settings,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok()); // Should handle merging of a single file gracefully
+        }
+    }
 }

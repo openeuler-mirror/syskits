@@ -9253,6 +9253,117 @@ mod tests {
                 .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
         }
 
+        #[test]
+        fn test_ct_app_general_numeric_sort_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-g"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_version_sort_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--version-sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_VERSION));
+        }
+
+        #[test]
+        fn test_ct_app_version_sort_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_VERSION));
+        }
+
+        #[test]
+        fn test_ct_app_random_sort_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--random-sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_random_sort_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-R"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_dictionary_order_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--dictionary-order"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_dictionary_order_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-d"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_merge_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--merge"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_merge_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-m"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_check_default_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--check"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::check::SORT_CHECK));
+        }
    
    }
 }

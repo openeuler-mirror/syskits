@@ -10384,4 +10384,142 @@ mod tests {
             assert!(result.unwrap().contains_id(sort_flags::SORT_DEBUG));
         }
     }
+
+    #[cfg(test)]
+    mod ct_base_tests {
+        use super::*;
+
+        fn tokenize_helper(line: &str, separator: Option<char>) -> Vec<Field> {
+            let mut buffer = vec![];
+            tokenize(line, separator, &mut buffer);
+            buffer
+        }
+
+        #[test]
+        fn test_get_hash() {
+            let a = "Ted".to_string();
+
+            assert_eq!(2_646_829_031_758_483_623, sort_get_hash(&a));
+        }
+
+        #[test]
+        fn test_random_shuffle() {
+            let a = "Ted";
+            let b = "Ted";
+            let c = sort_get_rand_string();
+
+            assert_eq!(Ordering::Equal, sort_random_shuffle(a, b, &c));
+        }
+
+        #[test]
+        fn test_month_compare() {
+            let a = "JaN";
+            let b = "OCt";
+
+            assert_eq!(Ordering::Less, sort_month_compare(a, b));
+        }
+
+        #[test]
+        fn test_version_compare() {
+            let a = "1.2.3-alpha2";
+            let b = "1.4.0";
+
+            assert_eq!(Ordering::Less, ct_version_cmp(a, b));
+        }
+
+        #[test]
+        fn test_random_compare() {
+            let a = "9";
+            let b = "9";
+            let c = sort_get_rand_string();
+
+            assert_eq!(Ordering::Equal, sort_random_shuffle(a, b, &c));
+        }
+
+        #[test]
+        fn test_tokenize_fields() {
+            let line = "foo bar b    x";
+            assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,],);
+        }
+
+        #[test]
+        fn test_tokenize_fields_leading_whitespace() {
+            let line = "    foo bar b    x";
+            assert_eq!(
+                tokenize_helper(line, None),
+                vec![0..7, 7..11, 11..13, 13..18]
+            );
+        }
+
+        #[test]
+        fn test_tokenize_fields_custom_separator() {
+            let line = "aaa foo bar b    x";
+            assert_eq!(
+                tokenize_helper(line, Some('a')),
+                vec![0..0, 1..1, 2..2, 3..9, 10..18]
+            );
+        }
+
+        #[test]
+        fn test_tokenize_fields_trailing_custom_separator() {
+            let line = "a";
+            assert_eq!(tokenize_helper(line, Some('a')), vec![0..0]);
+            let line = "aa";
+            assert_eq!(tokenize_helper(line, Some('a')), vec![0..0, 1..1]);
+            let line = "..a..a";
+            assert_eq!(tokenize_helper(line, Some('a')), vec![0..2, 3..5]);
+        }
+
+        #[test]
+        #[cfg(target_pointer_width = "64")]
+        fn test_line_size() {
+            // We should make sure to not regress the size of the Line struct because
+            // it is unconditional overhead for every line we sort.
+            assert_eq!(std::mem::size_of::<SortLine>(), 24);
+        }
+
+        #[test]
+        fn test_parse_byte_count() {
+            let valid_input = [
+                ("0", 0),
+                ("50K", 50 * 1024),
+                ("50k", 50 * 1024),
+                ("1M", 1024 * 1024),
+                ("100M", 100 * 1024 * 1024),
+                #[cfg(not(target_pointer_width = "32"))]
+                ("1000G", 1000 * 1024 * 1024 * 1024),
+                #[cfg(not(target_pointer_width = "32"))]
+                ("10T", 10 * 1024 * 1024 * 1024 * 1024),
+                ("1b", 1),
+                ("1024b", 1024),
+                ("1024Mb", 1024 * 1024 * 1024), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
+                ("1", 1024),                    // K is default
+                ("50", 50 * 1024),
+                ("K", 1024),
+                ("k", 1024),
+                ("m", 1024 * 1024),
+                #[cfg(not(target_pointer_width = "32"))]
+                ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ];
+            for (input, expected_output) in &valid_input {
+                assert_eq!(
+                    SortGlobalConfigs::parse_byte_count(input),
+                    Ok(*expected_output)
+                );
+            }
+
+            // SizeTooBig
+            let invalid_input = ["500E", "1Y"];
+            for input in &invalid_input {
+                #[cfg(not(target_pointer_width = "128"))]
+                assert!(SortGlobalConfigs::parse_byte_count(input).is_err());
+            }
+
+            // ParseFailure
+            let invalid_input = ["nonsense", "1B", "B", "b", "p", "e", "z", "y"];
+            for input in &invalid_input {
+                assert!(SortGlobalConfigs::parse_byte_count(input).is_err());
+            }
+        }
+    }
 }

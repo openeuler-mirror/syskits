@@ -2001,4 +2001,135 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod month_parse_tests {
+        use super::*;
+
+        #[test]
+        fn test_month_parse_january() {
+            assert_eq!(
+                sort_month_parse("JAN"),
+                SortMonth::January,
+                "Test case 1 failed"
+            );
+            assert_eq!(
+                sort_month_parse("jan"),
+                SortMonth::January,
+                "Test case 2 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_february() {
+            assert_eq!(
+                sort_month_parse("FEB"),
+                SortMonth::February,
+                "Test case 3 failed"
+            );
+            assert_eq!(
+                sort_month_parse("feb"),
+                SortMonth::February,
+                "Test case 4 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_march() {
+            assert_eq!(
+                sort_month_parse("MAR"),
+                SortMonth::March,
+                "Test case 5 failed"
+            );
+            assert_eq!(
+                sort_month_parse("mar"),
+                SortMonth::March,
+                "Test case 6 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_april() {
+            assert_eq!(
+                sort_month_parse("APR"),
+                SortMonth::April,
+                "Test case 7 failed"
+            );
+            assert_eq!(
+                sort_month_parse("apr"),
+                SortMonth::April,
+                "Test case 8 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_may() {
+            assert_eq!(
+                sort_month_parse("MAY"),
+                SortMonth::May,
+                "Test case 9 failed"
+            );
+            assert_eq!(
+                sort_month_parse("may"),
+                SortMonth::May,
+                "Test case 10 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_june() {
+            assert_eq!(
+                sort_month_parse("JUN"),
+                SortMonth::June,
+                "Test case 11 failed"
+            );
+            assert_eq!(
+                sort_month_parse("jun"),
+                SortMonth::June,
+                "Test case 12 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_july() {
+            assert_eq!(
+                sort_month_parse("JUL"),
+                SortMonth::July,
+                "Test case 13 failed"
+            );
+            assert_eq!(
+                sort_month_parse("jul"),
+                SortMonth::July,
+                "Test case 14 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_august() {
+            assert_eq!(
+                sort_month_parse("AUG"),
+                SortMonth::August,
+                "Test case 15 failed"
+            );
+            assert_eq!(
+                sort_month_parse("aug"),
+                SortMonth::August,
+                "Test case 16 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_parse_september() {
+            assert_eq!(
+                sort_month_parse("SEP"),
+                SortMonth::September,
+                "Test case 17 failed"
+            );
+            assert_eq!(
+                sort_month_parse("sep"),
+                SortMonth::September,
+                "Test case 18 failed"
+            );
+        }
+    }
 }

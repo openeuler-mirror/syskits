@@ -5790,5 +5790,296 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn test_ct_main_exist_file_unique_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-u", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_long() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--check", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_uppercase_c_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-C", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_long_diagnose_first() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--check=diagnose-first", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_long_silent() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--check=silent", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_long_quiet() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--check=quiet", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_short_silent() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c=silent", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_short_quiet() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c=quiet", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_check_short_diagnose_first() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c=diagnose-first", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
     }
 }

@@ -9602,5 +9602,143 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
         }
+
+        #[test]
+        fn test_ct_app_check_short_silent_output_long() {
+            let command = ct_app();
+
+            let input_args = vec![
+                ctcore::ct_util_name(),
+                "-c",
+                "silent",
+                "--output",
+                "test_file",
+            ];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_long_quiet_output_long() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "quiet";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort, "--output", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_short_quiet_output_long() {
+            let command = ct_app();
+
+            let input_args = vec![
+                ctcore::ct_util_name(),
+                "-c",
+                "quiet",
+                "--output",
+                "test_file",
+            ];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_long_diagnose_first_output_long() {
+            let command = ct_app();
+            let check_sort = "--check=".to_owned() + "diagnose-first";
+
+            let input_args = vec![ctcore::ct_util_name(), &check_sort, "--output", "test_file"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_check_short_diagnose_first_output_long() {
+            let command = ct_app();
+
+            let input_args = vec![
+                ctcore::ct_util_name(),
+                "-c",
+                "diagnose-first",
+                "--output",
+                "test_file",
+            ];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        // ------------------>
+        #[test]
+        fn test_ct_app_ignore_case_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--ignore-case"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_IGNORE_CASE));
+        }
+
+        #[test]
+        fn test_ct_app_ignore_case_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-f"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_IGNORE_CASE));
+        }
+
+        #[test]
+        fn test_ct_app_ignore_nonprinting_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--ignore-nonprinting"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::SORT_IGNORE_NONPRINTING));
+        }
+
+        #[test]
+        fn test_ct_app_ignore_nonprinting_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-i"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::SORT_IGNORE_NONPRINTING));
+        }
+
+        #[test]
+        fn test_ct_app_ignore_leading_blanks_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--ignore-leading-blanks"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS));
+        }
+
    }
 }

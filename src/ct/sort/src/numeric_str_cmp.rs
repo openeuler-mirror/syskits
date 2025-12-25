@@ -777,6 +777,146 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_human_numeric_negative_numbers_with_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("-500K", &settings).0;
+            let b_info = NumInfo::parse("-1M", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("-500K", &a_info), ("-1M", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_positive_vs_negative_with_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1M", &settings).0;
+            let b_info = NumInfo::parse("-1M", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1M", &a_info), ("-1M", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_different_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1T", &settings).0;
+            let b_info = NumInfo::parse("900G", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1T", &a_info), ("900G", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_same_number_different_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1K", &settings).0;
+            let b_info = NumInfo::parse("1000", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1K", &a_info), ("1000", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_large_numbers() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1Z", &settings).0;
+            let b_info = NumInfo::parse("1000E", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1Z", &a_info), ("1000E", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_close_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("999M", &settings).0;
+            let b_info = NumInfo::parse("1G", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("999M", &a_info), ("1G", &b_info)),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_very_small_numbers() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("10m", &settings).0; // assuming milli-unit handling for small values
+            let b_info = NumInfo::parse("1", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("10m", &a_info), ("1", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_mixed_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1k", &settings).0;
+            let b_info = NumInfo::parse("1000", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1k", &a_info), ("1000", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_large_and_small_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1G", &settings).0;
+            let b_info = NumInfo::parse("1000000k", &settings).0; // equivalent to 1G
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1G", &a_info), ("1000000k", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_negative_values_with_different_magnitudes() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("-100M", &settings).0;
+            let b_info = NumInfo::parse("-1G", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("-100M", &a_info), ("-1G", &b_info)),
+                Ordering::Greater
+            );
+        }
+
 
     }
 }

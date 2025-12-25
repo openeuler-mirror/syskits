@@ -262,3 +262,146 @@ pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumIn
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_is_invalid_char_digit() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings::default();
+            assert_eq!(
+                NumInfo::is_invalid_char('1', &mut had_decimal_pt, &settings),
+                false,
+                "Digits should be valid"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_decimal_point() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            assert_eq!(
+                NumInfo::is_invalid_char('.', &mut had_decimal_pt, &settings),
+                false,
+                "First decimal point should be valid"
+            );
+            assert!(
+                had_decimal_pt,
+                "Decimal point flag should be set after parsing a decimal point"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_repeated_decimal_point() {
+            let mut had_decimal_pt = true; // Simulate that we've already encountered a decimal point
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            assert_eq!(
+                NumInfo::is_invalid_char('.', &mut had_decimal_pt, &settings),
+                true,
+                "Repeated decimal point should be invalid"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_non_digit_non_decimal() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            assert_eq!(
+                NumInfo::is_invalid_char('a', &mut had_decimal_pt, &settings),
+                true,
+                "Non-digit, non-decimal characters should be invalid"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_thousands_separator() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings {
+                thousands_separator: Some(','),
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            // Thousands separator should not affect the validity of other characters
+            assert_eq!(
+                NumInfo::is_invalid_char(',', &mut had_decimal_pt, &settings),
+                true,
+                "Comma should not be considered invalid if it is set as a thousands separator"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_with_alternate_decimal_point() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some(','),
+                ..Default::default()
+            };
+            assert_eq!(
+                NumInfo::is_invalid_char(',', &mut had_decimal_pt, &settings),
+                false,
+                "Comma as a decimal point should be valid"
+            );
+            assert!(
+                had_decimal_pt,
+                "Decimal point flag should be set after parsing a comma as a decimal point"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_with_control_chars() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings::default();
+            assert_eq!(
+                NumInfo::is_invalid_char('\n', &mut had_decimal_pt, &settings),
+                true,
+                "Control characters should be invalid"
+            );
+            assert_eq!(
+                NumInfo::is_invalid_char('\t', &mut had_decimal_pt, &settings),
+                true,
+                "Control characters should be invalid"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_with_whitespace() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings::default();
+            assert_eq!(
+                NumInfo::is_invalid_char(' ', &mut had_decimal_pt, &settings),
+                true,
+                "Whitespace should be invalid"
+            );
+        }
+
+        #[test]
+        fn test_is_invalid_char_with_special_characters() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings::default();
+            assert_eq!(
+                NumInfo::is_invalid_char('$', &mut had_decimal_pt, &settings),
+                true,
+                "Special characters like '$' should be invalid"
+            );
+            assert_eq!(
+                NumInfo::is_invalid_char('&', &mut had_decimal_pt, &settings),
+                true,
+                "Special characters like '&' should be invalid"
+            );
+        }
+    }
+}

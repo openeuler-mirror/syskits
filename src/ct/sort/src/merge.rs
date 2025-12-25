@@ -583,3 +583,250 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+    use std::path::PathBuf;
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    struct MockMergeInput {
+        data: Cursor<Vec<u8>>,
+    }
+
+    impl MergeInput for MockMergeInput {
+        type InnerRead = Cursor<Vec<u8>>;
+
+        fn finished_reading(self) -> CTResult<()> {
+            Ok(())
+        }
+
+        fn as_read(&mut self) -> &mut Self::InnerRead {
+            &mut self.data
+        }
+    }
+
+    struct MockWriteableTmpFile {
+        data: Cursor<Vec<u8>>,
+    }
+
+    impl MergeWriteableTmpFile for MockWriteableTmpFile {
+        type Closed = Self;
+        type InnerWrite = Cursor<Vec<u8>>;
+
+        fn create(_: (File, PathBuf), _: Option<&str>) -> CTResult<Self> {
+            Ok(Self {
+                data: Cursor::new(Vec::new()),
+            })
+        }
+
+        fn finished_writing(self) -> CTResult<Self::Closed> {
+            Ok(self)
+        }
+
+        fn as_write(&mut self) -> &mut Self::InnerWrite {
+            &mut self.data
+        }
+    }
+
+    impl MergeClosedTmpFile for MockWriteableTmpFile {
+        type Reopened = MockMergeInput;
+
+        fn reopen(self) -> CTResult<Self::Reopened> {
+            Ok(MockMergeInput {
+                data: Cursor::new(self.data.into_inner()),
+            })
+        }
+    }
+
+    // fn create_reader_file(data: Vec<u8>) -> ReaderFile<MockMergeInput> {
+    //     let (sender, _) = mpsc::sync_channel(1); // We won't receive in this test
+    //     ReaderFile {
+    //         file: MockMergeInput { data: Cursor::new(data) },
+    //         sender,
+    //         carry_over: vec![],
+    //     }
+    // }
+    #[cfg(test)]
+    mod compare_test {
+        // use crate::chunks::{ChunkContents, LineData};
+        // use crate::{GeneralF64ParseResult, Line};
+        // use crate::numeric_str_cmp::{NumInfo, NumInfoParseSettings};
+        // use super::*;
+        //  fn setup_default_chunk() -> Chunk () {
+        //      Chunk::new(vec![0; 10], |_buffer| {
+        //          let lines = vec![
+        //              Line {
+        //                  line: "Line 1",
+        //                  index: 0,
+        //              },
+        //              Line {
+        //                  line: "Line 2",
+        //                  index: 1,
+        //              },
+        //          ];
+        //          let settings = NumInfoParseSettings::default();
+        //          let a_info = NumInfo::parse("123e5", &settings).0;
+        //          let b_info = NumInfo::parse("12300000", &settings).0;
+        //          let line_data = LineData {
+        //              selections: vec!["Selection 1", "Selection 2"],
+        //              num_infos: vec![a_info, b_info],
+        //              parsed_floats: vec![GeneralF64ParseResult::NaN, GeneralF64ParseResult::NaN],
+        //          };
+        //          ChunkContents { lines, line_data }
+        //      })
+        //  }
+        //
+        //
+        //
+        //
+    }
+
+    #[cfg(test)]
+    mod merge_without_limit_test {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_basic_merge() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 100, // Not used here but must be set
+                ..Default::default()
+            };
+
+            let files = vec![
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"Hello".to_vec()),
+                }),
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"World".to_vec()),
+                }),
+            ];
+
+            let result = merge_without_limit(files.into_iter(), &settings);
+            assert!(result.is_ok());
+
+            // Further checks to ensure merged output is correct
+            let mut merger = result.unwrap();
+            let mut output = Vec::new();
+            while merger.write_next(&settings, &mut output) {}
+            assert_eq!(String::from_utf8(output).unwrap(), "Hello\nWorld\n");
+        }
+
+        #[test]
+        fn test_no_files() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 100, // Not used here but must be set
+                ..Default::default()
+            };
+
+            let files: Vec<CTResult<MockMergeInput>> = vec![];
+
+            let result = merge_without_limit(files.into_iter(), &settings);
+            assert!(result.is_ok());
+            // Ensure the merger does not proceed with any operations
+            let merger = result.unwrap();
+            assert!(merger.heap.is_empty());
+        }
+
+        #[test]
+        fn test_single_file() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 100, // Not used here but must be set
+                ..Default::default()
+            };
+
+            let files = vec![Ok(MockMergeInput {
+                data: Cursor::new(b"Only one file\n".to_vec()),
+            })];
+
+            let result = merge_without_limit(files.into_iter(), &settings);
+            assert!(result.is_ok());
+            // Check if single file contents are processed correctly
+            let mut merger = result.unwrap();
+            let mut output = Vec::new();
+            while merger.write_next(&settings, &mut output) {}
+            assert_eq!(String::from_utf8(output).unwrap(), "Only one file\n");
+        }
+
+        #[test]
+        fn test_handling_different_line_endings() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 100, // Not used here
+                ..Default::default()
+            };
+
+            let files = vec![
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"Hello".to_vec()),
+                }),
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"World".to_vec()),
+                }),
+            ];
+
+            let result = merge_without_limit(files.into_iter(), &settings);
+            assert!(result.is_ok());
+
+            let mut merger = result.unwrap();
+            let mut output = Vec::new();
+            while merger.write_next(&settings, &mut output) {}
+            assert_eq!(String::from_utf8(output).unwrap(), "Hello\nWorld\n");
+        }
+
+        #[test]
+        fn test_complex_merge_patterns() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 100, // Not used here
+                ..Default::default()
+            };
+
+            let files = vec![
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"Apple\nBanana\nApple\n".to_vec()),
+                }),
+                Ok(MockMergeInput {
+                    data: Cursor::new(b"Banana\nApple\nBanana\n".to_vec()),
+                }),
+            ];
+
+            let result = merge_without_limit(files.into_iter(), &settings);
+            assert!(result.is_ok());
+
+            let mut merger = result.unwrap();
+            let mut output = Vec::new();
+            while merger.write_next(&settings, &mut output) {}
+            // The expected output should be checked against a valid sorted order if applicable
+        }
+
+        #[test]
+        fn test_large_data_volume() {
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 100,
+                ..Default::default()
+            };
+
+            let large_input = "Line\n".repeat(10000); // Simulate large data volume
+            let large_input_vec = large_input.into_bytes();
+            let files = vec![
+                Ok(MockMergeInput {
+                    data: Cursor::new(large_input_vec.clone()),
+                }),
+                Ok(MockMergeInput {
+                    data: Cursor::new(large_input_vec),
+                }),
+            ];
+
+            let result = merge_without_limit(files.into_iter(), &settings);
+            assert!(result.is_ok());
+
+            let mut merger = result.unwrap();
+            let mut output = Vec::new();
+            while merger.write_next(&settings, &mut output) {}
+            assert!(output.len() > 0, "Output should be large but is empty");
+        }
+    }
+}

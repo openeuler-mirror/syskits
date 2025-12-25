@@ -4302,4 +4302,228 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod ct_functions_tests {}
+
+    #[cfg(test)]
+    mod ct_main_tests {
+        use std::ffi::OsString;
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_ctmain_input_h() {
+            {
+                let args = ["-h", ""];
+                let result = ctmain(args.iter().map(|s| OsString::from(s)));
+                println!("{}", result);
+                assert_eq!(result, 2);
+            }
+        }
+
+        #[test]
+        fn test_ctmain_input_v() {
+            {
+                let args = ["--version", ""];
+                let result = ctmain(args.iter().map(|s| OsString::from(s)));
+                println!("{}", result);
+                assert_eq!(result, 2);
+            }
+        }
+
+        #[test]
+        fn test_ctmain_input_uppercase_v() {
+            {
+                let args = ["-V", ""];
+                let result = ctmain(args.iter().map(|s| OsString::from(s)));
+                println!("{}", result);
+                assert_eq!(result, 2);
+            }
+        }
+
+        #[test]
+        fn test_ct_main_help_return() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_version_return() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_default_exist_file() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_ignore_leading_blanks_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-b", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_ignore_leading_blanks_long() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--ignore-leading-blanks", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_dictionary_order_long() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--dictionary-order", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exist_file_dictionary_order_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-d", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+    }
 }

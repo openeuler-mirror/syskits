@@ -2252,4 +2252,427 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod get_leading_gen_tests {
+        use super::*;
+
+        #[test]
+        fn test_get_leading_gen() {
+            // Test case 1: Basic functionality with no special characters
+            assert_eq!(
+                sort_get_leading_gen("  -123.45"),
+                (2..9),
+                "Test case 1 failed for input: '  -123.45'"
+            );
+
+            // Test case 2: Basic functionality with a special character (e)
+            assert_eq!(
+                sort_get_leading_gen("  -123e-45"),
+                (2..10),
+                "Test case 2 failed for input: '  -123e-45'"
+            );
+
+            // Test case 3: Basic functionality with a special character (.)
+            assert_eq!(
+                sort_get_leading_gen("  -123."),
+                (2..7),
+                "Test case 3 failed for input: '  -123.'"
+            );
+
+            // Test case 4: Special case with inf
+            assert_eq!(
+                sort_get_leading_gen("  inf"),
+                (2..5),
+                "Test case 4 failed for input: '  inf'"
+            );
+
+            // Test case 5: Special case with -inf
+            assert_eq!(
+                sort_get_leading_gen("  -inf"),
+                (2..6),
+                "Test case 5 failed for input: '  -inf'"
+            );
+
+            // Test case 6: Special case with nan
+            assert_eq!(
+                sort_get_leading_gen("  nan"),
+                (2..5),
+                "Test case 6 failed for input: '  nan'"
+            );
+
+            // Test case 7: Edge case with whitespace only
+            assert_eq!(
+                sort_get_leading_gen("     "),
+                (5..5),
+                "Test case 7 failed for input: '     '"
+            );
+
+            // Test case 8: Basic functionality with multiple special characters
+            assert_eq!(
+                sort_get_leading_gen("  -123.45e-10"),
+                (2..13),
+                "Test case 8 failed for input: '  -123.45e-10'"
+            );
+
+            // Test case 9: Basic functionality with a mix of whitespace and special characters
+            assert_eq!(
+                sort_get_leading_gen("   -123.45\te-10"),
+                (3..10),
+                "Test case 9 failed for input: '   -123.45\\te-10'"
+            );
+
+            // Test case 10: Basic functionality with a plus sign
+            assert_eq!(
+                sort_get_leading_gen("  +123.45"),
+                (2..9),
+                "Test case 10 failed for input: '  +123.45'"
+            );
+
+            // Test case 11: Basic functionality with a mix of whitespace, special characters, and a plus sign
+            assert_eq!(
+                sort_get_leading_gen("   +123.45\te+10"),
+                (3..10),
+                "Test case 11 failed for input: '   +123.45\\te+10'"
+            );
+
+            // Test case 12: Edge case with only a plus or minus sign and no digits
+            assert_eq!(
+                sort_get_leading_gen("  -"),
+                (2..3),
+                "Test case 12 failed for input: '  -'"
+            );
+
+            // Test case 13: Edge case with only a decimal point and no digits
+            assert_eq!(
+                sort_get_leading_gen("  ."),
+                (2..3),
+                "Test case 13 failed for input: '  .'"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod compare_by_tests {
+        use std::cmp::Ordering;
+
+        use crate::chunks::ChunkLineData;
+        use crate::numeric_str_cmp::NumInfo;
+        use crate::{sort_compare_by, SortLine, SortMode};
+
+        use super::*;
+
+        #[test]
+        fn test_basic_string_comparison() {
+            let a = SortLine {
+                line: "apple",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "banana",
+                index: 1,
+            };
+            let global_settings = SortGlobalConfigs {
+                selectors: vec![],
+                mode: SortMode::SortDefault,
+                is_reverse: false,
+                ..Default::default()
+            };
+            let a_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Less);
+        }
+
+        #[test]
+        fn test_numeric_comparison() {
+            let a = SortLine {
+                line: "10",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "2",
+                index: 1,
+            };
+            let global_settings = SortGlobalConfigs {
+                selectors: vec![],
+                mode: SortMode::SortNumeric,
+                is_reverse: false,
+                ..Default::default()
+            };
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("10", &settings).0;
+            let b_info = NumInfo::parse("2", &settings).0;
+            let a_line_data = ChunkLineData {
+                selections: vec!["10"],
+                num_infos: vec![a_info],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec!["2"],
+                num_infos: vec![b_info],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Less); // Since 10 < 2 numerically
+        }
+
+        #[test]
+        fn test_general_numeric_comparison() {
+            let a = SortLine {
+                line: "3.14",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "2.718",
+                index: 1,
+            };
+            let global_settings = SortGlobalConfigs {
+                selectors: vec![],
+                mode: SortMode::SortGeneralNumeric,
+                is_reverse: false,
+                ..Default::default()
+            };
+            let a_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(3.14)],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(2.718)],
+            };
+
+            let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Greater);
+        }
+
+        #[test]
+        fn test_reversed_sorting() {
+            let a = SortLine {
+                line: "apple",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "banana",
+                index: 1,
+            };
+            let global_settings = SortGlobalConfigs {
+                selectors: vec![],
+                mode: SortMode::SortDefault,
+                is_reverse: true,
+                ..Default::default()
+            };
+            let a_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Greater); // Reversed result of basic string comparison
+        }
+
+        #[test]
+        fn test_combination_of_sort_modes() {
+            let a = SortLine {
+                line: "10 apples",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "2 bananas",
+                index: 1,
+            };
+            let g_settings = SortGlobalConfigs {
+                selectors: vec![
+                    SortFieldSelector {
+                        from: Default::default(),
+                        to: None,
+                        settings: SortKeySettings {
+                            mode: SortMode::SortNumeric,
+                            is_reverse: false,
+                            ..Default::default()
+                        },
+                        is_needs_tokens: false,
+                        is_needs_selection: true,
+                    },
+                    SortFieldSelector {
+                        from: Default::default(),
+                        to: None,
+                        settings: SortKeySettings {
+                            mode: SortMode::SortDefault,
+                            is_reverse: false,
+                            ..Default::default()
+                        },
+                        is_needs_tokens: false,
+                        is_needs_selection: true,
+                    },
+                ],
+                ..Default::default()
+            };
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("10", &settings).0;
+            let b_info = NumInfo::parse("2", &settings).0;
+
+            let a_line_data = ChunkLineData {
+                selections: vec!["10", "apples"],
+                num_infos: vec![a_info],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec!["2", "bananas"],
+                num_infos: vec![b_info],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &g_settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Greater); // "10" should sort after "2" due to numeric sorting
+        }
+
+        #[test]
+        fn test_ignore_case_sorting() {
+            let a = SortLine {
+                line: "apple",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "Banana",
+                index: 1,
+            };
+            let settings = SortGlobalConfigs {
+                selectors: vec![SortFieldSelector {
+                    from: Default::default(),
+                    to: None,
+                    settings: SortKeySettings {
+                        mode: SortMode::SortDefault,
+                        is_ignore_case: true,
+                        ..Default::default()
+                    },
+                    is_needs_tokens: false,
+                    is_needs_selection: false,
+                }],
+                ..Default::default()
+            };
+            let a_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Less); // "apple" should sort before "Banana" when ignoring case
+        }
+
+        #[test]
+        fn test_ignore_non_printing_characters() {
+            let a = SortLine {
+                line: "\x01\x02Apple",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "apple",
+                index: 1,
+            };
+            let settings = SortGlobalConfigs {
+                selectors: vec![SortFieldSelector {
+                    from: Default::default(),
+                    to: None,
+                    settings: SortKeySettings {
+                        mode: SortMode::SortDefault,
+                        is_ignore_non_printing: true,
+                        ..Default::default()
+                    },
+                    is_needs_tokens: false,
+                    is_needs_selection: false,
+                }],
+                ..Default::default()
+            };
+            let a_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Less); // Non-printing characters are ignored
+        }
+
+        #[test]
+        fn test_edge_cases_for_numeric_sorting() {
+            let a = SortLine {
+                line: "-10000000000",
+                index: 0,
+            };
+            let b = SortLine {
+                line: "9999999999",
+                index: 1,
+            };
+            let g_settings = SortGlobalConfigs {
+                selectors: vec![SortFieldSelector {
+                    from: Default::default(),
+                    to: None,
+                    settings: SortKeySettings {
+                        mode: SortMode::SortNumeric,
+                        is_reverse: false,
+                        ..Default::default()
+                    },
+                    is_needs_tokens: false,
+                    is_needs_selection: false,
+                }],
+                ..Default::default()
+            };
+
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("-10000000000", &settings).0;
+            let b_info = NumInfo::parse("9999999999", &settings).0;
+
+            let a_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![a_info],
+                parsed_floats: vec![],
+            };
+            let b_line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![b_info],
+                parsed_floats: vec![],
+            };
+
+            let result = sort_compare_by(&a, &b, &g_settings, &a_line_data, &b_line_data);
+            assert_eq!(result, Ordering::Less); // "-10000000000" should sort before "9999999999" numerically
+        }
+    }
 }

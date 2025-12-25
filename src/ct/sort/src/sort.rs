@@ -8950,5 +8950,191 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn test_ct_main_no_exist_file_stable_short() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-s", file_name];
+            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            // let mut s = String::new();
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // sort 接口: Usage: sort [OPTION]... [FILE]...
+        //   or:  sort [OPTION]... --files0-from=F
+        // Write sorted concatenation of all FILE(s) to standard output.
+        //
+        // With no FILE, or when FILE is -, read standard input.
+        //
+        // Mandatory arguments to long options are mandatory for short options too.
+        // Ordering options:
+        //
+        //   -b, --ignore-leading-blanks  ignore leading blanks
+        //   -d, --dictionary-order      consider only blanks and alphanumeric characters
+        //   -f, --ignore-case           fold lower case to upper case characters
+        //   -g, --general-numeric-sort  compare according to general numerical value
+        //   -i, --ignore-nonprinting    consider only printable characters
+        //   -M, --month-sort            compare (unknown) < 'JAN' < ... < 'DEC'
+        //   -h, --human-numeric-sort    compare human readable numbers (e.g., 2K 1G)
+        //   -n, --numeric-sort          compare according to string numerical value
+        //   -R, --random-sort           shuffle, but group identical keys.  See shuf(1)
+        //       --random-source=FILE    get random bytes from FILE
+        //   -r, --reverse               reverse the result of comparisons
+        //       --sort=WORD             sort according to WORD:
+        //                                 general-numeric -g, human-numeric -h, month -M,
+        //                                 numeric -n, random -R, version -V
+        //   -V, --version-sort          natural sort of (version) numbers within text
+        //
+        // Other options:
+        //
+        //       --batch-size=NMERGE   merge at most NMERGE inputs at once;
+        //                             for more use temp files
+        //   -c, --check, --check=diagnose-first  check for sorted input; do not sort
+        //   -C, --check=quiet, --check=silent  like -c, but do not report first bad line
+        //       --compress-program=PROG  compress temporaries with PROG;
+        //                               decompress them with PROG -d
+        //       --debug               annotate the part of the line used to sort,
+        //                               and warn about questionable usage to stderr
+        //       --files0-from=F       read input from the files specified by
+        //                             NUL-terminated names in file F;
+        //                             If F is - then read names from standard input
+        //   -k, --key=KEYDEF          sort via a key; KEYDEF gives location and type
+        //   -m, --merge               merge already sorted files; do not sort
+        //   -o, --output=FILE         write result to FILE instead of standard output
+        //   -s, --stable              stabilize sort by disabling last-resort comparison
+        //   -S, --buffer-size=SIZE    use SIZE for main memory buffer
+        //   -t, --field-separator=SEP  use SEP instead of non-blank to blank transition
+        //   -T, --temporary-directory=DIR  use DIR for temporaries, not $TMPDIR or /tmp;
+        //                               multiple options specify multiple directories
+        //       --parallel=N          change the number of sorts run concurrently to N
+        //   -u, --unique              with -c, check for strict ordering;
+        //                               without -c, output only the first of an equal run
+        //   -z, --zero-terminated     line delimiter is NUL, not newline
+        //       --help     display this help and exit
+        //       --version  output version information and exit
+        //
+        //  SIZE may be followed by the following multiplicative suffixes:
+        // % 1% of memory, b 1, K 1024 (default), and so on for M, G, T, P, E, Z, Y.
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(input_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_sort_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_sort_general_numeric() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort=general-numeric"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_sort_human_numeric() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort=human-numeric"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_sort_month() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort=month"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_MONTH));
+        }
     }
 }

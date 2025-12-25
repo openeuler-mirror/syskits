@@ -3417,4 +3417,173 @@ mod tests {
             assert!(matches!(result, Ok(ExtSortReadResult::EmptyInput)));
         }
     }
+
+    mod write_lines_tests {
+        use std::io::Cursor;
+
+        use crate::ext_sort::ext_sort_write_lines;
+        use crate::SortLine;
+
+        #[test]
+        fn test_write_lines() {
+            let lines = vec![
+                SortLine {
+                    line: "Hello",
+                    index: 0,
+                },
+                SortLine {
+                    line: "World",
+                    index: 0,
+                },
+                SortLine {
+                    line: "Rust",
+                    index: 0,
+                },
+            ];
+
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+
+            assert_eq!(result, "Hello\nWorld\nRust\n");
+        }
+
+        #[test]
+        fn test_write_lines_empty_lines() {
+            let lines: &[SortLine] = &[];
+
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+
+            assert_eq!(result, "");
+        }
+
+        #[test]
+        fn test_write_lines_single_line() {
+            let lines = [SortLine {
+                line: "Hello".into(),
+                index: 0,
+            }];
+
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+
+            assert_eq!(result, "Hello\n");
+        }
+
+        #[test]
+        fn test_write_lines_multiple_lines() {
+            let lines = vec![
+                SortLine {
+                    line: "Hello".into(),
+                    index: 0,
+                },
+                SortLine {
+                    line: "World".into(),
+                    index: 1,
+                },
+                SortLine {
+                    line: "Rust".into(),
+                    index: 2,
+                },
+            ];
+
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+
+            assert_eq!(result, "Hello\nWorld\nRust\n");
+        }
+
+        #[test]
+        fn test_write_lines_with_different_separator() {
+            let lines = vec![
+                SortLine {
+                    line: "Hello".into(),
+                    index: 0,
+                },
+                SortLine {
+                    line: "World".into(),
+                    index: 1,
+                },
+                SortLine {
+                    line: "Rust".into(),
+                    index: 2,
+                },
+            ];
+
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b';');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+
+            assert_eq!(result, "Hello;World;Rust;");
+        }
+
+        #[test]
+        fn test_write_lines_single_line_index2() {
+            let lines = vec![SortLine {
+                line: "Hello".into(),
+                index: 2,
+            }];
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(result, "Hello\n");
+        }
+
+        #[test]
+        fn test_write_lines_empty_lines_index2() {
+            let lines = vec![
+                SortLine {
+                    line: "".into(),
+                    index: 2,
+                },
+                SortLine {
+                    line: "".into(),
+                    index: 2,
+                },
+                SortLine {
+                    line: "".into(),
+                    index: 2,
+                },
+            ];
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(result, "\n\n\n");
+        }
+
+        #[test]
+        fn test_write_lines_separator_space() {
+            let lines = vec![
+                SortLine {
+                    line: "Hello".into(),
+                    index: 0,
+                },
+                SortLine {
+                    line: "World".into(),
+                    index: 0,
+                },
+                SortLine {
+                    line: "Rust".into(),
+                    index: 0,
+                },
+            ];
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b' ');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(result, "Hello World Rust ");
+        }
+
+        #[test]
+        fn test_write_lines_no_lines() {
+            let lines: Vec<SortLine> = Vec::new();
+            let mut writer = Cursor::new(Vec::new());
+            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            let result = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(result, "");
+        }
+    }
 }

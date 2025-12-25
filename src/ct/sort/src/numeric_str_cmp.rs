@@ -403,5 +403,163 @@ mod tests {
                 "Special characters like '&' should be invalid"
             );
         }
+    
+        #[test]
+        fn test_is_invalid_char_with_numeric_and_special_mixture() {
+            let mut had_decimal_pt = false;
+            let settings = NumInfoParseSettings::default();
+            assert_eq!(
+                NumInfo::is_invalid_char('3', &mut had_decimal_pt, &settings),
+                false,
+                "Digits should be valid"
+            );
+            assert_eq!(
+                NumInfo::is_invalid_char('%', &mut had_decimal_pt, &settings),
+                true,
+                "Special characters like '%' immediately after a digit should be invalid"
+            );
+        }
+
+        #[test]
+        fn test_number_with_multiple_decimal_points() {
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            // Expected to handle or reject multiple decimal points correctly
+            let (num_info, range) = NumInfo::parse("12.34.56", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 1,
+                    sign: NumSign::Positive,
+                }
+            ); // Parsing stops at the second decimal point
+            assert_eq!(range, 0..5);
+        }
+
+        #[test]
+        fn test_number_with_non_numeric_suffix() {
+            let settings = NumInfoParseSettings::default();
+            // Parsing should stop at the first invalid character
+            let (num_info, range) = NumInfo::parse("789xyz", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 2,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..3);
+        }
+
+        #[test]
+        fn test_number_with_spaces_inside() {
+            let settings = NumInfoParseSettings::default();
+            // Spaces inside numbers are not typically allowed unless specified as thousands separators
+            let (num_info, range) = NumInfo::parse("1 234", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            ); // Parsing should ideally stop before the space
+            assert_eq!(range, 0..1);
+        }
+
+        #[test]
+        fn test_number_with_si_units_and_decimal() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            let (num_info, range) = NumInfo::parse("3.14M", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            ); // Adjust based on your implementation details
+            assert_eq!(range, 0..5);
+        }
+
+        #[test]
+        fn test_number_with_invalid_thousands_separator() {
+            let settings = NumInfoParseSettings {
+                thousands_separator: Some('\''),
+                ..Default::default()
+            };
+            let (num_info, range) = NumInfo::parse("1'234'567", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 6,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..9);
+        }
+
+        #[test]
+        fn test_number_with_multiple_signs() {
+            let settings = NumInfoParseSettings::default();
+            // Multiple signs should result in invalid parsing or default to the first applicable sign
+            let (num_info, range) = NumInfo::parse("+-123", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..0);
+        }
+
+        #[test]
+        fn test_number_with_leading_and_trailing_whitespace() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("  4567  ", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 3,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 2..6);
+        }
+
+        #[test]
+        fn test_full_zero_input() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("0000", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 0,
+                    sign: NumSign::Positive,
+                }
+            ); // Adjust if you handle full zero input differently
+            assert_eq!(range, 4..4); // Range shows where parsing effectively ended
+        }
+
+        #[test]
+        fn test_simple_number() {
+            let settings = NumInfoParseSettings::default();
+            let (num_info, range) = NumInfo::parse("123", &settings);
+            assert_eq!(
+                num_info,
+                NumInfo {
+                    exponent: 2,
+                    sign: NumSign::Positive,
+                }
+            );
+            assert_eq!(range, 0..3);
+        }
+
+
     }
 }

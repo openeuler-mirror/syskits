@@ -1905,3 +1905,100 @@ fn sort_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> S
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod format_error_message_tests {
+        use super::*;
+
+        #[test]
+        fn test_format_error_message_invalid_suffix() {
+            let error = ParseSizeError::InvalidSuffix("b".to_string());
+            let s = "100B";
+            let option = "-S";
+            let expected = "invalid suffix in ---S argument '100B'";
+            assert_eq!(sort_format_error_message(&error, s, option), expected);
+        }
+
+        #[test]
+        fn test_format_error_message_parse_failure() {
+            let error = ParseSizeError::ParseFailure("".to_string());
+            let s = "abc";
+            let option = "--buffer-size";
+            let expected = "invalid ----buffer-size argument 'abc'";
+            assert_eq!(sort_format_error_message(&error, s, option), expected);
+        }
+
+        #[test]
+        fn test_format_error_message_size_too_big() {
+            let error = ParseSizeError::SizeTooBig("b".to_string());
+            let s = "1GB";
+            let option = "-S";
+            let expected = "---S argument '1GB' too large";
+            assert_eq!(sort_format_error_message(&error, s, option), expected);
+        }
+    }
+
+    #[cfg(test)]
+    mod month_compare_tests {
+        use super::*;
+
+        #[test]
+        fn test_month_compare_same_month() {
+            assert_eq!(
+                sort_month_compare("January", "January"),
+                Ordering::Equal,
+                "Test case 1 failed"
+            );
+            assert_eq!(
+                sort_month_compare("january", "January"),
+                Ordering::Equal,
+                "Test case 2 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_compare_different_months() {
+            assert_eq!(
+                sort_month_compare("January", "February"),
+                Ordering::Less,
+                "Test case 3 failed"
+            );
+            assert_eq!(
+                sort_month_compare("february", "January"),
+                Ordering::Greater,
+                "Test case 4 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_compare_with_unknown() {
+            assert_eq!(
+                sort_month_compare("January", "XYZ"),
+                Ordering::Greater,
+                "Test case 5 failed"
+            );
+            assert_eq!(
+                sort_month_compare("XYZ", "January"),
+                Ordering::Less,
+                "Test case 6 failed"
+            );
+        }
+
+        #[test]
+        fn test_month_compare_case_insensitive() {
+            assert_eq!(
+                sort_month_compare("January", "january"),
+                Ordering::Equal,
+                "Test case 7 failed"
+            );
+            assert_eq!(
+                sort_month_compare("january", "January"),
+                Ordering::Equal,
+                "Test case 8 failed"
+            );
+        }
+    }
+}

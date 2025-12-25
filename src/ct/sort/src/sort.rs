@@ -3345,4 +3345,147 @@ mod tests {
             assert_eq!(token_buffer, expected);
         }
     }
+
+    #[cfg(test)]
+    mod tokenize_tests {
+        use super::*;
+
+        #[test]
+        fn test_tokenize_with_separator() {
+            let line = "Hello,World,This,is,a,test";
+            let separator = Some(',');
+            let mut token_buffer = Vec::new();
+
+            tokenize(line, separator, &mut token_buffer);
+            let expected = vec![
+                Field::from(0..5),
+                Field::from(6..11),
+                Field::from(12..16),
+                Field::from(17..19),
+                Field::from(20..21),
+                Field::from(22..26),
+            ];
+
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_without_separator() {
+            let line = "NoSeparator";
+            let separator = None;
+            let mut token_buffer = Vec::new();
+
+            tokenize(line, separator, &mut token_buffer);
+            let expected = vec![Field::from(0..11)];
+
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_with_tab_separator() {
+            let line = "Tab\tseparated\tfields";
+            let separator = Some('\t');
+            let mut token_buffer = Vec::new();
+            tokenize(line, separator, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..3),   // "Tab"
+                Field::from(4..13),  // "separated"
+                Field::from(14..20), // "fields"
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_with_space_separator() {
+            let line = "Space separated fields";
+            let separator = Some(' ');
+            let mut token_buffer = Vec::new();
+            tokenize(line, separator, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..5),   // "Space"
+                Field::from(6..15),  // "separated"
+                Field::from(16..22), // "fields"
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_empty_string() {
+            let line = "";
+            let separator = Some(',');
+            let mut token_buffer = Vec::new();
+            tokenize(line, separator, &mut token_buffer);
+
+            let expected = Vec::<Field>::new(); // 空向量
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_only_separators() {
+            let line = ",, ,, ,";
+            let separator = Some(',');
+            let mut token_buffer = Vec::new();
+            tokenize(line, separator, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..0), // 空字符串
+                Field::from(1..1), // 空字符串
+                Field::from(2..3), // 空字符串
+                Field::from(4..4), // 空字符串
+                Field::from(5..6), // 空字符串
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_consecutive_separators() {
+            let line = "hello,,world";
+            let separator = Some(',');
+            let mut token_buffer = Vec::new();
+            tokenize(line, separator, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..5),  // "hello"
+                Field::from(6..6),  // ""
+                Field::from(7..12), // "world"
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_leading_trailing_separators() {
+            let line = ",hello,world,";
+            let separator = Some(',');
+            let mut token_buffer = Vec::new();
+            tokenize(line, separator, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..0),  // ""
+                Field::from(1..6),  // "hello"
+                Field::from(7..12), // "world"
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_special_characters() {
+            let line = "Unicode: 😊, 控制字符: \n, 非常长的字符串: ".to_owned()
+                + std::iter::repeat("x")
+                    .take(1000)
+                    .collect::<String>()
+                    .as_str();
+            let separator = Some(',');
+            let mut token_buffer = Vec::new();
+            tokenize(&line, separator, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..13),    // "Unicode: 😊"
+                Field::from(14..30),   // "控制字符: \n"
+                Field::from(31..1055), // 非常长的字符串
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+    }
 }

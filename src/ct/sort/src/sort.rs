@@ -3258,4 +3258,91 @@ mod tests {
             assert_eq!(token_buffer, expected);
         }
     }
+
+    mod tokenize_default_tests {
+        use super::*;
+
+        #[test]
+        fn test_tokenize_default_empty_string() {
+            let line = "";
+            let mut token_buffer = Vec::new();
+            tokenize_default(line, &mut token_buffer);
+
+            let expected = vec![Field::from(0..0)]; // 空向量
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_default_only_spaces() {
+            let line = "     ";
+            let mut token_buffer = Vec::new();
+            tokenize_default(line, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..5), // 空字符串
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_default_single_spaces() {
+            let line = "hello world";
+            let mut token_buffer = Vec::new();
+            tokenize_default(line, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..5),  // "hello"
+                Field::from(5..11), // "world"
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_default_consecutive_spaces() {
+            let line = "hello  world";
+            let mut token_buffer = Vec::new();
+            tokenize_default(line, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..5),  // "hello"
+                Field::from(5..12), // "world"
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_default_leading_trailing_spaces() {
+            let line = " hello world ";
+            let mut token_buffer = Vec::new();
+            tokenize_default(line, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..6),   // "hello"
+                Field::from(6..12),  // "world"
+                Field::from(12..13), // ""
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_default_special_characters() {
+            let line = "Unicode: 😊, 控制字符: \n, 非常长的字符串: ".to_owned()
+                + std::iter::repeat("x")
+                    .take(1000)
+                    .collect::<String>()
+                    .as_str();
+            let mut token_buffer = Vec::new();
+            tokenize_default(&line, &mut token_buffer);
+
+            let expected = vec![
+                Field::from(0..8), // "Unicode: 😊"
+                Field::from(8..14),
+                Field::from(14..28), // "控制字符: \n"
+                Field::from(28..31),
+                Field::from(31..54),
+                Field::from(54..1055), // 非常长的字符串
+            ];
+            assert_eq!(token_buffer, expected);
+        }
+    }
 }

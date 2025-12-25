@@ -9740,5 +9740,117 @@ mod tests {
                 .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS));
         }
 
+        #[test]
+        fn test_ct_app_ignore_leading_blanks_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-b"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS));
+        }
+
+        #[test]
+        fn test_ct_app_output_default_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--output"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_output_default_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-o"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_output_file_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--output", "testfile"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_OUTPUT));
+        }
+
+        #[test]
+        fn test_ct_app_output_file_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-o", "testfile"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_OUTPUT));
+        }
+
+        #[test]
+        fn test_ct_app_reverse_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--reverse"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_REVERSE));
+        }
+
+        #[test]
+        fn test_ct_app_reverse_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-r"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_REVERSE));
+        }
+
+        #[test]
+        fn test_ct_app_stable_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--stable"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_STABLE));
+        }
+
+        #[test]
+        fn test_ct_app_stable_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-s"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_STABLE));
+        }
+
+        #[test]
+        fn test_ct_app_unique_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--unique"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_UNIQUE));
+        }
+
    }
 }

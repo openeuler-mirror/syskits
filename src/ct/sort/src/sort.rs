@@ -10295,5 +10295,93 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::SORT_TMP_DIR));
         }
-   }
+
+        #[test]
+        fn test_ct_app_temporary_directory_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-T", "tmp/"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_TMP_DIR));
+        }
+
+        #[test]
+        fn test_ct_app_compress_program_tar_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--compress-program", "tar"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_COMPRESS_PROG));
+        }
+
+        #[test]
+        fn test_ct_app_compress_program_zip_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--compress-program", "zip"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_COMPRESS_PROG));
+        }
+
+        #[test]
+        fn test_ct_app_batch_size_long_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--batch-size"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_batch_size_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--batch-size", "2"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_BATCH_SIZE));
+        }
+
+        #[test]
+        fn test_ct_app_files0_from_long_default() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--files0-from"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_files0_from_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--files0-from", "testfile"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_FILES0_FROM));
+        }
+
+        #[test]
+        fn test_ct_app_debug_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--debug"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_DEBUG));
+        }
+    }
 }

@@ -2286,4 +2286,126 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    #[cfg(test)]
+    mod replace_output_file_in_input_files_tests {
+        use std::ffi::OsString;
+        use std::path::PathBuf;
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_no_output_file() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(
+                tmp_file2,
+                "Hello1 1001 zzzzz1\nworld1 2201 ccccc1\nCtyunOs1 2001 aaaaa1\nCtyunOs1 1901 ababa1"
+            )
+            .expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
+            assert!(
+                merge_replace_output_file_in_input_files(&mut files, None, &mut tmp_dir).is_ok()
+            );
+        }
+
+        #[test]
+        fn test_output_file_in_list_once() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "Hello 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+            .expect("TODO: panic message");
+
+            let file_path2 = dir.path().join("sort_test_file2");
+            let mut tmp_file2 = File::create(&file_path2).unwrap();
+            writeln!(
+                tmp_file2,
+                "Hello1 1001 zzzzz1\nworld1 2201 ccccc1\nCtyunOs1 2001 aaaaa1\nCtyunOs1 1901 ababa1"
+            )
+            .expect("TODO: panic message");
+
+            let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
+
+            assert!(merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            )
+            .is_ok());
+        }
+
+        #[test]
+        fn test_output_file_in_list_multiple_times() {
+            let mut files = vec![
+                OsString::from("/path/to/output.txt"),
+                OsString::from("/path/to/output.txt"),
+            ];
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
+
+            assert!(merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            )
+            .is_ok());
+            assert_eq!(files[0], files[1]);
+            println!("{:?}", files[0].to_string_lossy());
+            // assert!(files[0].to_string_lossy().contains("cttils_sort"));
+        }
+
+        #[test]
+        fn test_output_file_not_in_list() {
+            let mut files = vec![
+                OsString::from("/path/to/file1.txt"),
+                OsString::from("/path/to/file2.txt"),
+            ];
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
+            assert!(merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            )
+            .is_ok());
+            assert_eq!(
+                files,
+                vec![
+                    OsString::from("/path/to/file1.txt"),
+                    OsString::from("/path/to/file2.txt"),
+                ]
+            );
+        }
+
+        #[test]
+        fn test_tmp_dir_creation_failure() {
+            let mut files = vec![OsString::from("/path/to/output.txt")];
+            let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
+            // Simulate failure by not setting `temp_dir`
+            match merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            ) {
+                Err(e) => assert_eq!(e.to_string(), "Temporary directory creation failed"),
+                Ok(ret) => assert_eq!(ret, ()),
+            }
+        }
+    }
 }

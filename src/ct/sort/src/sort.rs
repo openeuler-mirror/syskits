@@ -9852,5 +9852,115 @@ mod tests {
             assert!(result.unwrap().contains_id(sort_flags::SORT_UNIQUE));
         }
 
+        #[test]
+        fn test_ct_app_unique_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-u"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_UNIQUE));
+        }
+
+        #[test]
+        fn test_ct_app_key_default_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--key"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_key_default_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-k"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_key_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--key", "1"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_KEY));
+        }
+
+        #[test]
+        fn test_ct_app_key_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-k", "1"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_KEY));
+        }
+
+        #[test]
+        fn test_ct_app_key_two_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--key", "1", "--key", "2"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_KEY));
+        }
+
+        #[test]
+        fn test_ct_app_key_two_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-k", "1", "-k", "2"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_KEY));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_space() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", " "];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_comma() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", ","];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_long_horizontal() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--field-separator", "-"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
    }
 }

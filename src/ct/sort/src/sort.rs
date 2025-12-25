@@ -3899,4 +3899,111 @@ mod tests {
             assert!(settings.set_dictionary_order().is_err()); // should be incompatible
         }
     }
+
+    #[cfg(test)]
+    mod global_settings_tests {
+        use itertools::izip;
+
+        use super::*;
+
+        #[test]
+        fn test_init_precomputed_no_selectors() {
+            let mut settings = SortGlobalConfigs {
+                selectors: vec![],
+                ..Default::default()
+            };
+            settings.init_precomputed();
+            assert_eq!(settings.precomputed.is_needs_tokens, false);
+            assert_eq!(settings.precomputed.selections_per_line, 0);
+            assert_eq!(settings.precomputed.num_infos_per_line, 0);
+            assert_eq!(settings.precomputed.floats_per_line, 0);
+        }
+
+        #[test]
+        fn test_init_precomputed_varied_selectors() {
+            let mut settings = SortGlobalConfigs {
+                selectors: vec![
+                    SortFieldSelector {
+                        from: Default::default(),
+                        is_needs_tokens: true,
+                        is_needs_selection: false,
+                        settings: SortKeySettings {
+                            mode: SortMode::SortNumeric,
+                            is_ignore_blanks: false,
+                            is_ignore_case: false,
+                            is_dictionary_order: false,
+                            is_ignore_non_printing: false,
+                            is_reverse: false,
+                        },
+                        to: None,
+                    },
+                    SortFieldSelector {
+                        from: Default::default(),
+                        is_needs_tokens: false,
+                        is_needs_selection: true,
+                        settings: SortKeySettings {
+                            mode: SortMode::SortGeneralNumeric,
+                            is_ignore_blanks: false,
+                            is_ignore_case: false,
+                            is_dictionary_order: false,
+                            is_ignore_non_printing: false,
+                            is_reverse: false,
+                        },
+                        to: None,
+                    },
+                ],
+                ..Default::default()
+            };
+            settings.init_precomputed();
+            assert_eq!(settings.precomputed.is_needs_tokens, true);
+            assert_eq!(settings.precomputed.selections_per_line, 1);
+            assert_eq!(settings.precomputed.num_infos_per_line, 1);
+            assert_eq!(settings.precomputed.floats_per_line, 1);
+        }
+
+        #[test]
+        fn test_parse_byte_count_with_spaces() {
+            assert_eq!(SortGlobalConfigs::parse_byte_count(" 1K ").unwrap(), 1024);
+            // assert_eq!(GlobalSettings::parse_byte_count("1 K").unwrap(), 1024);
+        }
+
+        #[test]
+        fn test_parse_byte_count_boundary_conditions() {
+            assert_eq!(
+                SortGlobalConfigs::parse_byte_count("1023K").unwrap(),
+                1023 * 1024
+            );
+            assert_eq!(
+                SortGlobalConfigs::parse_byte_count("1024K").unwrap(),
+                1024 * 1024
+            );
+            assert_eq!(
+                SortGlobalConfigs::parse_byte_count("1025K").unwrap(),
+                1025 * 1024
+            );
+        }
+
+        #[test]
+        fn test_parse_byte_count_case_sensitivity() {
+            let lower_case = vec!["1k", "1m", "1g", "1t"];
+            let upper_case = vec!["1K", "1M", "1G", "1T", "1P", "1E", "1Z", "1Y"];
+            let expected = vec![
+                1024,
+                1024 * 1024,
+                1024 * 1024 * 1024,
+                1024 * 1024 * 1024 * 1024,
+                1024_usize
+                    .wrapping_mul(1024)
+                    .wrapping_mul(1024)
+                    .wrapping_mul(1024)
+                    .wrapping_mul(1024),
+                // add additional powers for E, Z, Y if usize is sufficient in your environment
+            ];
+
+            for (l, u, e) in izip!(lower_case, upper_case, expected) {
+                assert_eq!(SortGlobalConfigs::parse_byte_count(l).unwrap(), e);
+                assert_eq!(SortGlobalConfigs::parse_byte_count(u).unwrap(), e);
+            }
+        }
+    }
 }

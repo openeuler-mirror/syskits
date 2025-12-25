@@ -3016,4 +3016,72 @@ mod tests {
             assert_eq!(opts, "M1");
         }
     }
+        #[test]
+        fn test_parse_key_with_conflicting_options() {
+            let global_settings = SortGlobalConfigs::default();
+            let result = SortFieldSelector::parse("1,2Md,1n", &global_settings); // Assuming 'd' and 'n' are conflicting in this context
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_with_invalid_options() {
+            let result = SortFieldSelector::parse_with_options(("1", "x"), None); // 'x' is not a valid option
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_new_with_general_numeric() {
+            let from = SortKeyPosition {
+                field: 2,
+                char: 1,
+                is_ignore_blanks: true,
+            };
+            let settings = SortKeySettings {
+                mode: SortMode::SortGeneralNumeric,
+                ..Default::default()
+            };
+            let selector = SortFieldSelector::new(from, None, settings).unwrap();
+            assert!(!selector.is_needs_selection); // Should not need selection for general numeric
+            assert!(selector.is_needs_tokens);
+        }
+
+        #[test]
+        fn test_new_with_full_line_selector() {
+            let from = SortKeyPosition {
+                field: 1,
+                char: 1,
+                is_ignore_blanks: false,
+            };
+            let settings = SortKeySettings::default();
+            let selector = SortFieldSelector::new(from, None, settings).unwrap();
+            assert!(!selector.is_needs_selection); // Should not need selection if entire line is selected
+            assert!(!selector.is_needs_tokens); // No tokens needed if whole line is considered
+        }
+
+        #[test]
+        fn test_get_selection_with_empty_tokens() {
+            let selector = SortFieldSelector {
+                from: SortKeyPosition {
+                    field: 1,
+                    char: 1,
+                    is_ignore_blanks: false,
+                },
+                to: None,
+                settings: SortKeySettings {
+                    mode: SortMode::SortDefault,
+                    ..Default::default()
+                },
+                is_needs_tokens: true,
+                is_needs_selection: true,
+            };
+            let line = "";
+            let tokens = vec![]; // No tokens due to empty line
+            let selection = selector.get_selection(line, &tokens);
+            match selection {
+                SortSelection::Str(s) => {
+                    assert!(s.is_empty(), "Expected empty selection for an empty line")
+                }
+                _ => panic!("Expected string selection"),
+            }
+        }
 }

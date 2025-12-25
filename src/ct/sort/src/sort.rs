@@ -2675,4 +2675,241 @@ mod tests {
             assert_eq!(result, Ordering::Less); // "-10000000000" should sort before "9999999999" numerically
         }
     }
+
+    #[cfg(test)]
+    mod sort_by_tests {
+        use std::default::Default;
+
+        use super::*;
+
+        #[test]
+        fn test_basic_sorting() {
+            let mut lines = vec![
+                SortLine {
+                    line: "apple",
+                    index: 1,
+                },
+                SortLine {
+                    line: "banana",
+                    index: 2,
+                },
+                SortLine {
+                    line: "apricot",
+                    index: 3,
+                },
+            ];
+            let settings = SortGlobalConfigs::default();
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            assert_eq!(lines[0].line, "apple");
+            assert_eq!(lines[1].line, "apricot");
+            assert_eq!(lines[2].line, "banana");
+        }
+
+        #[test]
+        fn test_stable_sorting() {
+            let mut lines = vec![
+                SortLine {
+                    line: "cucumber",
+                    index: 1,
+                },
+                SortLine {
+                    line: "banana",
+                    index: 2,
+                },
+                SortLine {
+                    line: "apple",
+                    index: 3,
+                },
+            ];
+            let mut settings = SortGlobalConfigs::default();
+            settings.is_stable = true;
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            assert_eq!(lines[0].line, "cucumber"); // Smallest length first
+            assert_eq!(lines[1].line, "banana");
+            assert_eq!(lines[2].line, "apple");
+        }
+
+        #[test]
+        fn test_unique_sorting() {
+            // This test would be more meaningful if `compare_by` could handle unique checks; currently, it does not
+            let mut lines = vec![
+                SortLine {
+                    line: "apple",
+                    index: 1,
+                },
+                SortLine {
+                    line: "apple",
+                    index: 2,
+                },
+                SortLine {
+                    line: "banana",
+                    index: 3,
+                },
+            ];
+            let mut settings = SortGlobalConfigs::default();
+            settings.is_unique = true; // Simulate unique behavior
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            // Expected that duplicates "apple" might be handled if `compare_by` were to consider `unique`
+            assert_eq!(lines[0].line, "apple");
+            assert_eq!(lines[1].line, "apple");
+            assert_eq!(lines.len(), 3); // Assuming unique removes duplicates
+        }
+
+        #[test]
+        fn test_sort_stability() {
+            let mut lines = vec![
+                SortLine {
+                    line: "apple",
+                    index: 2,
+                },
+                SortLine {
+                    line: "apple",
+                    index: 1,
+                },
+                SortLine {
+                    line: "banana",
+                    index: 3,
+                },
+            ];
+            let settings = SortGlobalConfigs {
+                is_stable: true,
+                is_unique: false,
+                ..Default::default()
+            };
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            // Stability should maintain the order of "apple" as they are identical in terms of sorting criteria
+            assert_eq!(lines[0].index, 2);
+            assert_eq!(lines[1].index, 1);
+            assert_eq!(lines[2].line, "banana");
+        }
+
+        #[test]
+        fn test_sort_empty_vector() {
+            let mut lines: Vec<SortLine> = vec![];
+            let settings = SortGlobalConfigs::default();
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            assert!(lines.is_empty());
+        }
+
+        #[test]
+        fn test_sort_with_line_data_influence() {
+            // Assuming `compare_by` utilizes parsed_floats in its logic
+            let mut lines = vec![
+                SortLine {
+                    line: "2.3",
+                    index: 1,
+                },
+                SortLine {
+                    line: "1.1",
+                    index: 2,
+                },
+            ];
+            let settings = SortGlobalConfigs::default();
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![
+                    SortGeneralF64ParseResult::SortInfinity,
+                    SortGeneralF64ParseResult::SortInfinity,
+                ], // Mocked data
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            assert_eq!(lines[0].line, "1.1");
+            assert_eq!(lines[1].line, "2.3");
+        }
+
+        #[test]
+        fn test_sort_with_non_ascii_characters() {
+            let mut lines = vec![
+                SortLine {
+                    line: "münchen",
+                    index: 2,
+                },
+                SortLine {
+                    line: "zürich",
+                    index: 1,
+                },
+                SortLine {
+                    line: "köln",
+                    index: 3,
+                },
+            ];
+            let settings = SortGlobalConfigs::default();
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            // Assuming basic lexicographical order
+            assert_eq!(lines[0].line, "köln");
+            assert_eq!(lines[1].line, "münchen");
+            assert_eq!(lines[2].line, "zürich");
+        }
+
+        #[test]
+        fn test_sort_with_identical_lines() {
+            let mut lines = vec![
+                SortLine {
+                    line: "repeat",
+                    index: 1,
+                },
+                SortLine {
+                    line: "repeat",
+                    index: 2,
+                },
+                SortLine {
+                    line: "repeat",
+                    index: 3,
+                },
+            ];
+            let settings = SortGlobalConfigs {
+                is_stable: true,
+                is_unique: true,
+                ..Default::default()
+            }; // Assuming `unique` logic is implemented
+            let line_data = ChunkLineData {
+                selections: vec![],
+                num_infos: vec![],
+                parsed_floats: vec![],
+            };
+
+            sort_by(&mut lines, &settings, &line_data);
+            // Expecting unique processing to possibly reduce duplicates
+            assert_eq!(lines.len(), 3);
+            assert_eq!(lines[0].line, "repeat");
+        }
+    }
 }

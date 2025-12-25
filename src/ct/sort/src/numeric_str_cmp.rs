@@ -1334,5 +1334,75 @@ mod tests {
             test_base_helper("-20.1", "a", Ordering::Less);
             test_base_helper("a", "0.15", Ordering::Less);
         }
+
+        #[test]
+        fn test_base_multiple_decimal_pts() {
+            test_base_helper("10.0.0", "50.0.0", Ordering::Less);
+            test_base_helper("0.1.", "0.2.0", Ordering::Less);
+            test_base_helper("1.1.", "0", Ordering::Greater);
+            test_base_helper("1.1.", "-0", Ordering::Greater);
+        }
+
+        #[test]
+        fn test_base_leading_decimal_pts() {
+            test_base_helper(".0", ".0", Ordering::Equal);
+            test_base_helper(".1", ".0", Ordering::Greater);
+            test_base_helper(".02", "0", Ordering::Greater);
+        }
+
+        #[test]
+        fn test_base_leading_zeroes() {
+            test_base_helper("000000.0", ".0", Ordering::Equal);
+            test_base_helper("0.1", "0000000000000.0", Ordering::Greater);
+            test_base_helper("-01", "-2", Ordering::Greater);
+        }
+
+        #[test]
+        fn minus_base_zero() {
+            // This matches GNU sort behavior.
+            test_base_helper("-0", "0", Ordering::Equal);
+            test_base_helper("-0x", "0", Ordering::Equal);
+        }
+
+        #[test]
+        fn double_base_minus() {
+            test_base_helper("--1", "0", Ordering::Equal);
+        }
+
+        #[test]
+        fn single_base_minus() {
+            let info = NumInfo::parse("-", &NumInfoParseSettings::default());
+            assert_eq!(
+                info,
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Positive,
+                    },
+                    0..0
+                )
+            );
+        }
+
+        #[test]
+        fn base_invalid_with_unit() {
+            let info = NumInfo::parse(
+                "-K",
+                &NumInfoParseSettings {
+                    accept_si_units: true,
+                    ..Default::default()
+                },
+            );
+            assert_eq!(
+                info,
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Positive,
+                    },
+                    0..0
+                )
+            );
+        }
     }
 }

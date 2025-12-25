@@ -2912,4 +2912,108 @@ mod tests {
             assert_eq!(lines[0].line, "repeat");
         }
     }
+
+    #[cfg(test)]
+    mod field_selector_tests {
+        use crate::SortFieldSelector;
+
+        use super::*;
+
+        #[test]
+        fn test_split_key_options_no_options() {
+            let key = "1";
+            let (pos, opts) = SortFieldSelector::split_key_options(key);
+            assert_eq!(pos, "1");
+            assert_eq!(opts, "");
+        }
+
+        #[test]
+        fn test_split_key_options_with_options() {
+            let key = "1Mbg";
+            let (pos, opts) = SortFieldSelector::split_key_options(key);
+            assert_eq!(pos, "1");
+            assert_eq!(opts, "Mbg");
+        }
+
+        #[test]
+        fn test_parse_simple_key() {
+            let global_settings = SortGlobalConfigs::default();
+            let result = SortFieldSelector::parse("1", &global_settings);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_parse_key_with_options() {
+            let global_settings = SortGlobalConfigs::default();
+            let result = SortFieldSelector::parse("1,2Mn", &global_settings);
+            assert!(result.is_err()); // Assuming 'n' and 'M' are conflicting options in this scenario
+        }
+
+        #[test]
+        fn test_parse_with_options_numeric_err() {
+            let from_to = Some(("2", "n"));
+            let result = SortFieldSelector::parse_with_options(("1", "M"), from_to);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_new_invalid_char_index() {
+            let from = SortKeyPosition {
+                field: 1,
+                char: 0,
+                is_ignore_blanks: false,
+            }; // Invalid because char index 0 is not allowed
+            let result = SortFieldSelector::new(from, None, SortKeySettings::default());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_get_selection_numeric() {
+            let selector = SortFieldSelector {
+                from: SortKeyPosition {
+                    field: 1,
+                    char: 1,
+                    is_ignore_blanks: false,
+                },
+                to: None,
+                settings: SortKeySettings {
+                    mode: SortMode::SortNumeric,
+                    ..Default::default()
+                },
+                is_needs_tokens: false,
+                is_needs_selection: true,
+            };
+            let line = "12345 abc";
+            let tokens = vec![(0..5)]; // Simplified token representation
+            let selection = selector.get_selection(line, &tokens);
+            match selection {
+                SortSelection::WithNumInfo(s, _) => assert_eq!(s, "12345"),
+                _ => panic!("Expected numeric selection"),
+            }
+        }
+
+        #[test]
+        fn test_split_key_options_with_mixed_characters() {
+            let key = "12Mb2g";
+            let (pos, opts) = SortFieldSelector::split_key_options(key);
+            assert_eq!(pos, "12");
+            assert_eq!(opts, "Mb2g");
+        }
+
+        #[test]
+        fn test_split_key_options_with_leading_zeros() {
+            let key = "001Mb";
+            let (pos, opts) = SortFieldSelector::split_key_options(key);
+            assert_eq!(pos, "001");
+            assert_eq!(opts, "Mb");
+        }
+
+        #[test]
+        fn test_split_key_options_with_no_numeric_start() {
+            let key = "M1";
+            let (pos, opts) = SortFieldSelector::split_key_options(key);
+            assert_eq!(pos, "");
+            assert_eq!(opts, "M1");
+        }
+    }
 }

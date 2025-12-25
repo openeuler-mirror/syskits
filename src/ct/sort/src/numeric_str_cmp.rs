@@ -690,6 +690,93 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_get_unit_m() {
+            assert_eq!(num_cmp_get_unit(Some('M')), 2, "M should return 2");
+        }
+
+        #[test]
+        fn test_get_unit_g() {
+            assert_eq!(num_cmp_get_unit(Some('G')), 3, "G should return 3");
+        }
+
+        #[test]
+        fn test_get_unit_t() {
+            assert_eq!(num_cmp_get_unit(Some('T')), 4, "T should return 4");
+        }
+
+        #[test]
+        fn test_get_unit_p() {
+            assert_eq!(num_cmp_get_unit(Some('P')), 5, "P should return 5");
+        }
+
+        #[test]
+        fn test_get_unit_e() {
+            assert_eq!(num_cmp_get_unit(Some('E')), 6, "E should return 6");
+        }
+
+        #[test]
+        fn test_get_unit_z() {
+            assert_eq!(num_cmp_get_unit(Some('Z')), 7, "Z should return 7");
+        }
+
+        #[test]
+        fn test_get_unit_y() {
+            assert_eq!(num_cmp_get_unit(Some('Y')), 8, "Y should return 8");
+        }
+
+        #[test]
+        fn test_get_unit_invalid() {
+            assert_eq!(
+                num_cmp_get_unit(Some('X')),
+                0,
+                "Invalid unit should return 0"
+            );
+            assert_eq!(
+                num_cmp_get_unit(Some('0')),
+                0,
+                "Invalid unit should return 0"
+            );
+            assert_eq!(
+                num_cmp_get_unit(Some(' ')),
+                0,
+                "Invalid unit should return 0"
+            );
+            assert_eq!(
+                num_cmp_get_unit(Some('-')),
+                0,
+                "Invalid unit should return 0"
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("2G", &settings).0;
+            let b_info = NumInfo::parse("1500M", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("2G", &a_info), ("1500M", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_equal_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1G", &settings).0;
+            let b_info = NumInfo::parse("1000M", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1G", &a_info), ("1000M", &b_info)),
+                Ordering::Greater
+            );
+        }
+
 
     }
 }

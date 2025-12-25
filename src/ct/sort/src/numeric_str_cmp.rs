@@ -1039,5 +1039,115 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_numeric_str_cmp_positive_vs_negative() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123", &settings).0;
+            let b_info = NumInfo::parse("-123", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("123", &a_info), ("-123", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_with_trailing_zeroes() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123000", &settings).0;
+            let b_info = NumInfo::parse("123", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("123000", &a_info), ("123", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_with_decimal_points() {
+            let settings = NumInfoParseSettings {
+                decimal_pt: Some('.'),
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("123.45", &settings).0;
+            let b_info = NumInfo::parse("123.450", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("123.45", &a_info), ("123.450", &b_info)),
+                Ordering::Equal
+            );
+        }
+
+        #[test]
+        fn test_with_si_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("2000M", &settings).0;
+            let b_info = NumInfo::parse("1G", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("2000M", &a_info), ("1G", &b_info)),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_negative_vs_positive() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("-100", &settings).0;
+            let b_info = NumInfo::parse("100", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("-100", &a_info), ("100", &b_info)),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_numbers_with_commas() {
+            let settings = NumInfoParseSettings {
+                thousands_separator: Some(','),
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1,000,000", &settings).0;
+            let b_info = NumInfo::parse("1000000", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("1,000,000", &a_info), ("1000000", &b_info)),
+                Ordering::Equal
+            );
+        }
+
+        #[test]
+        fn test_large_numbers() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("999999999999999999", &settings).0;
+            let b_info = NumInfo::parse("1000000000000000000", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(
+                    ("999999999999999999", &a_info),
+                    ("1000000000000000000", &b_info),
+                ),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_with_mixed_significant_figures() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("1234500", &settings).0;
+            let b_info = NumInfo::parse("12345", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("1234500", &a_info), ("12345", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_identical_numbers_with_different_exponents() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123e5", &settings).0;
+            let b_info = NumInfo::parse("12300000", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("123e5", &a_info), ("12300000", &b_info)),
+                Ordering::Less
+            );
+        }
     }
 }

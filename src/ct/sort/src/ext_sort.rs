@@ -1423,6 +1423,266 @@ mod tests {
             assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
         }
 
+        #[test]
+        fn test_read_function_compress_prog_zip() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+            let settings = SortGlobalConfigs {
+                compress_prog: Some("zip".to_string()),
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_merge_batch_size_0() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 0,
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_merge_batch_size_32() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                merge_batch_size: 32,
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_precomputed_default() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed::default(),
+                ..SortGlobalConfigs::default()
+            };
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_precomputed_needs_tokens_true() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: true,
+                    num_infos_per_line: 0,
+                    floats_per_line: 0,
+                    selections_per_line: 0,
+                },
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_precomputed_needs_tokens_false() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: false,
+                    num_infos_per_line: 0,
+                    floats_per_line: 0,
+                    selections_per_line: 0,
+                },
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_precomputed_needs_tokens_true_1_1_1() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: true,
+                    num_infos_per_line: 1,
+                    floats_per_line: 1,
+                    selections_per_line: 1,
+                },
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_precomputed_needs_tokens_false_1_1_1() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                precomputed: SortPrecomputed {
+                    is_needs_tokens: false,
+                    num_infos_per_line: 1,
+                    floats_per_line: 1,
+                    selections_per_line: 1,
+                },
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
+
+        #[test]
+        fn test_read_function_selectors_default() {
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+            let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
+                mpsc::sync_channel(1);
+
+            let settings = SortGlobalConfigs {
+                selectors: vec![],
+                ..SortGlobalConfigs::default()
+            };
+
+            let mock_chunk = create_mock_chunk();
+            sender.send(mock_chunk).unwrap(); // Send a mock chunk to be sorted
+
+            // Run the sorter in a separate thread to simulate asynchronous operation
+            let _sorter_thread = thread::spawn(move || {
+                ext_sort_sorter(&receiver, &sorted_sender, &settings);
+            });
+
+            // Retrieve the sorted chunk
+            let sorted_chunk = sorted_receiver.recv().unwrap();
+
+            let sorted_lines: Vec<&str> =
+                sorted_chunk.lines().iter().map(|line| line.line).collect();
+            assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
+        }
     }
         
 }

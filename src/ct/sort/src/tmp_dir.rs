@@ -107,3 +107,128 @@ fn tmp_dir_remove_tmp_dir(path: &Path) -> std::io::Result<()> {
     std::fs::remove_dir(path)
 }
 
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    mod tmp_dir_wrapper_tests {
+        use std::path::PathBuf;
+
+        use super::*;
+
+        #[test]
+        fn test_tmp_dir_wrapper_new() {
+            let path = PathBuf::from("/tmp");
+            let wrapper = TmpDirWrapper::new(path.clone());
+            assert_eq!(wrapper.parent_path, path);
+            assert_eq!(wrapper.size, 0);
+            assert!(wrapper.temp_dir.is_none());
+            // test that lock is initialized
+            assert!(wrapper.lock.lock().is_ok());
+        }
+
+        #[test]
+        fn test_tmp_dir_wrapper_next_file() {
+            let mut wrapper = TmpDirWrapper::new(PathBuf::from("/tmp"));
+            let _ = wrapper.init_tmp_dir();
+
+            let (_file1, path1) = wrapper.next_file().unwrap();
+            let (_file2, path2) = wrapper.next_file().unwrap();
+
+            assert_ne!(path1, path2);
+            assert!(!path1.starts_with("/tmp/cttils_sort"));
+            assert!(!path2.starts_with("/tmp/cttils_sort"));
+        }
+
+        #[test]
+        fn test_tmp_dir_wrapper_wait_if_signal() {
+            let wrapper = TmpDirWrapper::new(PathBuf::from("/tmp"));
+            wrapper.wait_if_signal();
+            // test that lock is acquired and released
+            assert!(wrapper.lock.lock().is_ok());
+        }
+    }
+
+    #[test]
+    fn test_remove_tmp_dir_base() {
+        let test_dir = tempdir().expect("Failed to create temporary directory");
+
+        let result = tmp_dir_remove_tmp_dir(test_dir.path());
+
+        assert!(result.is_ok(), "remove_tmp_dir failed: {:?}", result);
+        assert!(
+            !test_dir.path().exists(),
+            "Temporary directory still exists after removal"
+        );
+    }
+
+    #[test]
+    fn test_remove_tmp_dir_with_files() {
+        let test_dir = tempdir().expect("Failed to create temporary directory");
+
+        let file1 = test_dir.path().join("file1.txt");
+        let file2 = test_dir.path().join("file2.txt");
+        fs::File::create(&file1).expect("Failed to create file1");
+        fs::File::create(&file2).expect("Failed to create file2");
+
+        let result = tmp_dir_remove_tmp_dir(test_dir.path());
+
+        assert!(result.is_ok(), "remove_tmp_dir failed: {:?}", result);
+        assert!(
+            !test_dir.path().exists(),
+            "Temporary directory still exists after removal"
+        );
+        assert!(
+            !file1.exists(),
+            "File1 still exists after removal of temporary directory"
+        );
+        assert!(
+            !file2.exists(),
+            "File2 still exists after removal of temporary directory"
+        );
+    }
+
+    #[test]
+    fn test_remove_tmp_dir_with_subdirs() {
+        let test_dir = tempdir().expect("Failed to create temporary directory");
+
+        let subdir1 = test_dir.path().join("subdir1");
+        let subdir2 = test_dir.path().join("subdir2");
+        fs::create_dir(&subdir1).expect("Failed to create subdir1");
+        fs::create_dir(&subdir2).expect("Failed to create subdir2");
+
+        let file1 = subdir1.as_path().join("file1.txt");
+        fs::File::create(&file1).expect("Failed to create file1");
+        let _result1 = tmp_dir_remove_tmp_dir(subdir1.as_path());
+        let _result2 = tmp_dir_remove_tmp_dir(subdir2.as_path());
+
+        let result = tmp_dir_remove_tmp_dir(test_dir.path());
+
+        assert!(result.is_ok(), "remove_tmp_dir failed: {:?}", result);
+        assert!(
+            !test_dir.path().exists(),
+            "Temporary directory still exists after removal"
+        );
+        assert!(
+            !subdir1.exists(),
+            "Subdir1 still exists after removal of temporary directory"
+        );
+        assert!(
+            !subdir2.exists(),
+            "Subdir2 still exists after removal of temporary directory"
+        );
+    }
+
+    #[test]
+    fn test_remove_tmp_dir_with_nothing() {
+        // Call remove_tmp_dir with a non-existent directory path
+        let result = tmp_dir_remove_tmp_dir(Path::new("/non/existent/directory"));
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+    }
+}

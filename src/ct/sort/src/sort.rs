@@ -10071,5 +10071,118 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
         }
+
+        #[test]
+        fn test_ct_app_field_separator_short_horizontal() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "-"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_period() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "."];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_colon() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", ":"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_letter() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "a"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_letter2() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "sa"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_uppercase_letter() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "A"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_uppercase_letter2() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "AN"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_digital() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "6"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_field_separator_short_digital2() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-t", "66"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::SORT_SEPARATOR));
+        }
+
+        #[test]
+        fn test_ct_app_zero_terminated_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--zero-terminated"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::SORT_ZERO_TERMINATED));
+        }
+
    }
 }

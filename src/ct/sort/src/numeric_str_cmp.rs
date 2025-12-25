@@ -1150,4 +1150,189 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod base_tests {
+        use super::*;
+
+        #[test]
+        fn parses_base_exp() {
+            let n = "1";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Positive,
+                    },
+                    0..1
+                )
+            );
+            let n = "100";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 2,
+                        sign: NumSign::Positive,
+                    },
+                    0..3
+                )
+            );
+            let n = "1,000";
+            assert_eq!(
+                NumInfo::parse(
+                    n,
+                    &NumInfoParseSettings {
+                        thousands_separator: Some(','),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    NumInfo {
+                        exponent: 3,
+                        sign: NumSign::Positive,
+                    },
+                    0..5
+                )
+            );
+            let n = "1,000";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Positive,
+                    },
+                    0..1
+                )
+            );
+            let n = "1000.00";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 3,
+                        sign: NumSign::Positive,
+                    },
+                    0..7
+                )
+            );
+        }
+
+        #[test]
+        fn parses_base_negative_exp() {
+            let n = "0.00005";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: -5,
+                        sign: NumSign::Positive,
+                    },
+                    6..7
+                )
+            );
+            let n = "00000.00005";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: -5,
+                        sign: NumSign::Positive,
+                    },
+                    10..11
+                )
+            );
+        }
+
+        #[test]
+        fn parses_base_sign() {
+            let n = "5";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Positive,
+                    },
+                    0..1
+                )
+            );
+            let n = "-5";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Negative,
+                    },
+                    1..2
+                )
+            );
+            let n = "    -5";
+            assert_eq!(
+                NumInfo::parse(n, &NumInfoParseSettings::default()),
+                (
+                    NumInfo {
+                        exponent: 0,
+                        sign: NumSign::Negative,
+                    },
+                    5..6
+                )
+            );
+        }
+
+        fn test_base_helper(a: &str, b: &str, expected: Ordering) {
+            let (a_info, a_range) = NumInfo::parse(a, &NumInfoParseSettings::default());
+            let (b_info, b_range) = NumInfo::parse(b, &NumInfoParseSettings::default());
+            let ordering = numeric_str_cmp(
+                (&a[a_range.clone()], &a_info),
+                (&b[b_range.clone()], &b_info),
+            );
+            assert_eq!(ordering, expected);
+            let ordering = numeric_str_cmp((&b[b_range], &b_info), (&a[a_range], &a_info));
+            assert_eq!(ordering, expected.reverse());
+        }
+
+        #[test]
+        fn test_base_single_digit() {
+            test_base_helper("1", "2", Ordering::Less);
+            test_base_helper("0", "0", Ordering::Equal);
+        }
+
+        #[test]
+        fn test_base_minus() {
+            test_base_helper("-1", "-2", Ordering::Greater);
+            test_base_helper("-0", "-0", Ordering::Equal);
+        }
+
+        #[test]
+        fn test_base_different_len() {
+            test_base_helper("-20", "-100", Ordering::Greater);
+            test_base_helper("10.0", "2.000000", Ordering::Greater);
+        }
+
+        #[test]
+        fn test_base_decimal_digits() {
+            test_base_helper("20.1", "20.2", Ordering::Less);
+            test_base_helper("20.1", "20.15", Ordering::Less);
+            test_base_helper("-20.1", "+20.15", Ordering::Less);
+            test_base_helper("-20.1", "-20", Ordering::Less);
+        }
+
+        #[test]
+        fn test_base_trailing_zeroes() {
+            test_base_helper("20.00000", "20.1", Ordering::Less);
+            test_base_helper("20.00000", "20.0", Ordering::Equal);
+        }
+
+        #[test]
+        fn test_base_invalid_digits() {
+            test_base_helper("foo", "bar", Ordering::Equal);
+            test_base_helper("20.1", "a", Ordering::Greater);
+            test_base_helper("-20.1", "a", Ordering::Less);
+            test_base_helper("a", "0.15", Ordering::Less);
+        }
+    }
 }

@@ -9136,5 +9136,123 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::modes::SORT_MONTH));
         }
-    }
+   
+        #[test]
+        fn test_ct_app_sort_numeric() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort=numeric"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_sort_version() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort=version"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_VERSION));
+        }
+
+        #[test]
+        fn test_ct_app_sort_random() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--sort=random"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_RANDOM));
+        }
+
+        #[test]
+        fn test_ct_app_human_numeric_sort_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_human_numeric_sort_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--human-numeric-sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_month_sort_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-M"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_MONTH));
+        }
+
+        #[test]
+        fn test_ct_app_month_sort_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--month-sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_MONTH));
+        }
+
+        #[test]
+        fn test_ct_app_numeric_sort_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--numeric-sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_numeric_sort_short() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "-n"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().contains_id(sort_flags::modes::SORT_NUMERIC));
+        }
+
+        #[test]
+        fn test_ct_app_general_numeric_sort_long() {
+            let command = ct_app();
+
+            let input_args = vec![ctcore::ct_util_name(), "--general-numeric-sort"];
+            let result = command.try_get_matches_from(input_args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
+        }
+
+   
+   }
 }

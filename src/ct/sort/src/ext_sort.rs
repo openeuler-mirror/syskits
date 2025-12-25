@@ -1684,5 +1684,377 @@ mod tests {
             assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
         }
     }
-        
+
+    #[cfg(test)]
+    mod reader_writer_test {
+        use std::fs::File;
+        use std::io::{Cursor, Read};
+        use std::sync::mpsc::{self, Receiver, SyncSender};
+
+        use tempfile::tempdir;
+
+        use ctcore::ct_line_ending::CtLineEnding;
+
+        use crate::{SortMode, SortPrecomputed};
+
+        use super::*;
+
+        // Helper function to create a mock file reader
+        fn mock_file_reader(content: &'static str) -> Box<dyn Read + Send> {
+            Box::new(Cursor::new(content))
+        }
+
+        // Test for the reader_writer function
+        #[test]
+        fn test_reader_writer_for_writeable_plain_tmp_file() {
+            let settings = SortGlobalConfigs {
+                mode: SortMode::SortNumeric,
+                is_debug: false,
+                is_ignore_leading_blanks: true,
+                is_ignore_case: false,
+                is_dictionary_order: false,
+                is_ignore_non_printing: false,
+                is_merge: false,
+                is_reverse: false,
+                is_stable: false,
+                is_unique: false,
+                is_check: false,
+                is_check_silent: false,
+                salt: None,
+                selectors: Vec::new(),
+                separator: None,
+                threads: "4".to_string(),
+                line_ending: CtLineEnding::Newline,
+                buffer_size: 8192,
+                compress_prog: None,
+                merge_batch_size: 100,
+                precomputed: SortPrecomputed::default(),
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            // Prepare channels for chunks
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+
+            // Create mock input files
+            let files = vec![Ok(mock_file_reader("Hello\nWorld\n"))].into_iter();
+
+            // Prepare output
+            let output_path = temp_dir.path().join("output");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output".to_string(), output_file)),
+            };
+
+            // Call the reader_writer function
+            let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
+                files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Read the output file and verify the contents
+            let mut output_contents = String::new();
+            let mut file = File::open(output_path).unwrap();
+            file.read_to_string(&mut output_contents).unwrap();
+            assert_eq!(output_contents, "Hello\nWorld\n");
+        }
+
+        #[test]
+        fn test_reader_writer_for_writeable_compressed_tmp_file() {
+            let settings = SortGlobalConfigs {
+                mode: SortMode::SortNumeric,
+                is_debug: false,
+                is_ignore_leading_blanks: true,
+                is_ignore_case: false,
+                is_dictionary_order: false,
+                is_ignore_non_printing: false,
+                is_merge: false,
+                is_reverse: false,
+                is_stable: false,
+                is_unique: false,
+                is_check: false,
+                is_check_silent: false,
+                salt: None,
+                selectors: Vec::new(),
+                separator: None,
+                threads: "4".to_string(),
+                line_ending: CtLineEnding::Newline,
+                buffer_size: 8192,
+                compress_prog: None,
+                merge_batch_size: 100,
+                precomputed: SortPrecomputed::default(),
+            };
+
+            let temp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
+
+            // Prepare channels for chunks
+            let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
+
+            // Create mock input files
+            let files = vec![Ok(mock_file_reader("Hello\nWorld\n"))].into_iter();
+
+            // Prepare output
+            let output_path = temp_dir.path().join("output");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output".to_string(), output_file)),
+            };
+
+            // Call the reader_writer function
+            let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
+                files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Read the output file and verify the contents
+            let mut output_contents = String::new();
+            let mut file = File::open(output_path).unwrap();
+            file.read_to_string(&mut output_contents).unwrap();
+            assert_eq!(output_contents, "Hello\nWorld\n");
+        }
+
+        #[test]
+        fn test_basic_functionality_for_writeable_plain_tmp_file() {
+            let files = vec![
+                Ok(Box::new(Cursor::new(b"Apple\nBanana\n")) as Box<dyn Read + Send>),
+                Ok(Box::new(Cursor::new(b"Cherry\nDate\n")) as Box<dyn Read + Send>),
+            ]
+            .into_iter();
+
+            let settings = SortGlobalConfigs::default();
+            let (sender, receiver) = mpsc::sync_channel(10);
+            let tmp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+
+            let output_path = tmp_dir.path().join("output.txt");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output.txt".to_string(), output_file)),
+            };
+
+            let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
+                files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Read the output file and check the contents
+            let mut contents = String::new();
+            File::open(output_path)
+                .unwrap()
+                .read_to_string(&mut contents)
+                .unwrap();
+            assert_eq!(contents, "Apple\nBanana\nCherry\nDate\n");
+        }
+
+        #[test]
+        fn test_empty_input_files_for_writeable_plain_tmp_file() {
+            let files = vec![
+                Ok(Box::new(Cursor::new(b"")) as Box<dyn Read + Send>),
+                Ok(Box::new(Cursor::new(b"")) as Box<dyn Read + Send>),
+            ]
+            .into_iter();
+            let settings = SortGlobalConfigs::default();
+            let (sender, receiver) = mpsc::sync_channel(10);
+            let tmp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+
+            let output_path = tmp_dir.path().join("output.txt");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output.txt".to_string(), output_file)),
+            };
+
+            let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
+                files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Check that the output file is empty
+            let contents = std::fs::read_to_string(output_path).unwrap();
+            assert!(
+                contents.is_empty(),
+                "Output file should be empty but was: {}",
+                contents
+            );
+        }
+
+        #[test]
+        fn test_high_concurrency_and_load_for_writeable_plain_tmp_file() {
+            let large_number_of_files = (0..100)
+                .map(|_| Ok(Box::new(Cursor::new(b"Data\n")) as Box<dyn Read + Send>))
+                .collect::<Vec<_>>()
+                .into_iter();
+
+            let settings = SortGlobalConfigs::default();
+            let (sender, receiver) = mpsc::sync_channel(10);
+            let tmp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+
+            let output_path = tmp_dir.path().join("output.txt");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output.txt".to_string(), output_file)),
+            };
+
+            let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
+                large_number_of_files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Check that the output file is empty
+            let contents = std::fs::read_to_string(output_path).unwrap();
+            assert!(
+                !contents.is_empty(),
+                "Output file should be empty but was: {}",
+                contents
+            );
+        }
+
+        #[test]
+        fn test_basic_functionality_for_writeable_compressed_tmp_file() {
+            let files = vec![
+                Ok(Box::new(Cursor::new(b"Apple\nBanana\n")) as Box<dyn Read + Send>),
+                Ok(Box::new(Cursor::new(b"Cherry\nDate\n")) as Box<dyn Read + Send>),
+            ]
+            .into_iter();
+
+            let settings = SortGlobalConfigs::default();
+            let (sender, receiver) = mpsc::sync_channel(10);
+            let tmp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+
+            let output_path = tmp_dir.path().join("output.txt");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output.txt".to_string(), output_file)),
+            };
+
+            let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
+                files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Read the output file and check the contents
+            let mut contents = String::new();
+            File::open(output_path)
+                .unwrap()
+                .read_to_string(&mut contents)
+                .unwrap();
+            assert_eq!(contents, "Apple\nBanana\nCherry\nDate\n");
+        }
+
+        #[test]
+        fn test_empty_input_files_for_writeable_compressed_tmp_file() {
+            let files = vec![
+                Ok(Box::new(Cursor::new(b"")) as Box<dyn Read + Send>),
+                Ok(Box::new(Cursor::new(b"")) as Box<dyn Read + Send>),
+            ]
+            .into_iter();
+            let settings = SortGlobalConfigs::default();
+            let (sender, receiver) = mpsc::sync_channel(10);
+            let tmp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+
+            let output_path = tmp_dir.path().join("output.txt");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output.txt".to_string(), output_file)),
+            };
+
+            let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
+                files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Check that the output file is empty
+            let contents = std::fs::read_to_string(output_path).unwrap();
+            assert!(
+                contents.is_empty(),
+                "Output file should be empty but was: {}",
+                contents
+            );
+        }
+
+        #[test]
+        fn test_high_concurrency_and_load_for_writeable_compressed_tmp_file() {
+            let large_number_of_files = (0..100)
+                .map(|_| Ok(Box::new(Cursor::new(b"Data\n")) as Box<dyn Read + Send>))
+                .collect::<Vec<_>>()
+                .into_iter();
+
+            let settings = SortGlobalConfigs::default();
+            let (sender, receiver) = mpsc::sync_channel(10);
+            let tmp_dir = tempdir().unwrap();
+            let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
+
+            let output_path = tmp_dir.path().join("output.txt");
+            let output_file = File::create(&output_path).unwrap();
+            let output = SortOutput {
+                file: Some(("output.txt".to_string(), output_file)),
+            };
+
+            let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
+                large_number_of_files,
+                &settings,
+                &receiver,
+                sender,
+                output,
+                &mut tmp_dir_wrapper,
+            );
+
+            assert!(result.is_ok());
+
+            // Check that the output file is empty
+            let contents = std::fs::read_to_string(output_path).unwrap();
+            assert!(
+                !contents.is_empty(),
+                "Output file should be empty but was: {}",
+                contents
+            );
+        }
+    }
 }

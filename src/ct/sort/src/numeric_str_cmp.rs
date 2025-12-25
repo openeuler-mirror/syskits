@@ -917,6 +917,127 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_human_numeric_zero_values_with_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("0K", &settings).0;
+            let b_info = NumInfo::parse("0", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("0K", &a_info), ("0", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_inverted_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1K", &settings).0;
+            let b_info = NumInfo::parse("1000M", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1K", &a_info), ("1000M", &b_info)),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_large_numbers_comparing_magnitude() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("10P", &settings).0;
+            let b_info = NumInfo::parse("10T", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("10P", &a_info), ("10T", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_human_numeric_with_similar_numbers_different_units() {
+            let settings = NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            };
+            let a_info = NumInfo::parse("1T", &settings).0;
+            let b_info = NumInfo::parse("1000G", &settings).0;
+            assert_eq!(
+                num_cmp_human_numeric_str_cmp(("1T", &a_info), ("1000G", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_numeric_str_cmp_equal() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123", &settings).0;
+            let b_info = NumInfo::parse("123", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("123", &a_info), ("123", &b_info)),
+                Ordering::Equal
+            );
+        }
+
+        #[test]
+        fn test_numeric_str_cmp_greater() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("124", &settings).0;
+            let b_info = NumInfo::parse("123", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("124", &a_info), ("123", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_numeric_str_cmp_less() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("123", &settings).0;
+            let b_info = NumInfo::parse("124", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("123", &a_info), ("124", &b_info)),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_numeric_str_cmp_leading_zeroes() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("00123", &settings).0;
+            let b_info = NumInfo::parse("123", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("00123", &a_info), ("123", &b_info)),
+                Ordering::Less
+            );
+        }
+
+        #[test]
+        fn test_numeric_str_cmp_different_lengths() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("1234", &settings).0;
+            let b_info = NumInfo::parse("123", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("1234", &a_info), ("123", &b_info)),
+                Ordering::Greater
+            );
+        }
+
+        #[test]
+        fn test_numeric_str_cmp_negative_numbers() {
+            let settings = NumInfoParseSettings::default();
+            let a_info = NumInfo::parse("-123", &settings).0;
+            let b_info = NumInfo::parse("-122", &settings).0;
+            assert_eq!(
+                numeric_str_cmp(("-123", &a_info), ("-122", &b_info)),
+                Ordering::Less
+            );
+        }
 
     }
 }

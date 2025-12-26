@@ -8862,4 +8862,275 @@ mod tests_fn {
 
         assert_eq!(time.unwrap(), DuTime::Accessed);
     }
+
+    #[test]
+    fn test_get_time_atime() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=atime"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Accessed);
+    }
+
+    #[test]
+    fn test_get_time_use() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=use"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Accessed);
+    }
+
+    #[test]
+    fn test_get_time_birth() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=birth"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Created);
+    }
+
+    #[test]
+    fn test_get_time_creation() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=creation"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Created);
+    }
+
+    #[test]
+    fn test_get_time_style_full_iso() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time-style", "full-iso"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time, None);
+    }
+
+    #[test]
+    fn test_get_time_style_long_iso() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time-style", "long-iso"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time, None);
+    }
+
+    #[test]
+    fn test_get_time_style_iso() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time-style", "iso"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time, None);
+    }
+
+    #[test]
+    fn test_ct_get_size_format_human_readable() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "-h"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, DuSizeFormat::Human(1024));
+    }
+
+    #[test]
+    fn test_ct_get_size_format_human_readable_whole() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--human-readable"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, DuSizeFormat::Human(1024));
+    }
+
+    #[test]
+    fn test_ct_get_size_format_si() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--si"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, DuSizeFormat::Human(1000));
+    }
+
 }

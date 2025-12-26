@@ -854,4 +854,189 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod mkdir_tests {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+
+        use super::*;
+
+        #[test]
+        fn test_mkdir_create_single_directory() {
+            let test_dir = Path::new("test_mkdir_single_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            assert!(mkdir(test_dir, false, 0o755, false).is_ok());
+            assert!(test_dir.exists());
+            assert!(test_dir.is_dir());
+
+            let metadata = fs::metadata(test_dir).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o755);
+
+            fs::remove_dir_all(test_dir).unwrap();
+        }
+
+        #[test]
+        fn test_mkdir_create_nested_directories() {
+            let test_dir = Path::new("test_mkdir_nested_dir/subdir1/subdir2");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            assert!(mkdir(test_dir, true, 0o755, false).is_ok());
+            assert!(test_dir.exists());
+            assert!(test_dir.is_dir());
+
+            let metadata = fs::metadata(test_dir).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o755);
+
+            fs::remove_dir_all(test_dir.parent().unwrap().parent().unwrap()).unwrap();
+        }
+
+        #[test]
+        fn test_mkdir_directory_already_exists() {
+            let test_dir = Path::new("test_mkdir_existing_dir");
+            if !test_dir.exists() {
+                fs::create_dir(test_dir).unwrap();
+            }
+
+            assert!(mkdir(test_dir, false, 0o755, false).is_err());
+
+            fs::remove_dir_all(test_dir).unwrap();
+        }
+
+        #[test]
+        fn test_mkdir_with_trailing_dot() {
+            let test_dir = Path::new("test_mkdir_with_dot/.");
+            if test_dir.parent().unwrap().exists() {
+                fs::remove_dir_all(test_dir.parent().unwrap()).unwrap();
+            }
+
+            assert!(mkdir(test_dir, true, 0o755, false).is_ok());
+            assert!(!test_dir.parent().unwrap().exists());
+            assert!(!test_dir.parent().unwrap().is_dir());
+            let remove_dir = Path::new("test_mkdir_with_dot");
+            if remove_dir.exists() {
+                fs::remove_dir_all(remove_dir).unwrap();
+            }
+        }
+
+        #[test]
+        fn test_mkdir_verbose() {
+            let test_dir = Path::new("test_mkdir_verbose_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            let output = std::panic::catch_unwind(|| {
+                mkdir(test_dir, false, 0o755, true).unwrap();
+            });
+            assert!(output.is_ok());
+            assert!(test_dir.exists());
+            assert!(test_dir.is_dir());
+
+            fs::remove_dir_all(test_dir).unwrap();
+        }
+
+        #[test]
+        fn test_mkdir_create_multiple_directories() {
+            let dirs = vec![
+                Path::new("multi_dir1"),
+                Path::new("multi_dir2"),
+                Path::new("multi_dir3"),
+            ];
+
+            for dir in &dirs {
+                if dir.exists() {
+                    fs::remove_dir_all(dir).unwrap();
+                }
+            }
+
+            for dir in &dirs {
+                assert!(mkdir(dir, false, 0o755, false).is_ok());
+                assert!(dir.exists());
+                assert!(dir.is_dir());
+            }
+
+            for dir in &dirs {
+                fs::remove_dir_all(dir).unwrap();
+            }
+        }
+
+        #[test]
+        fn test_mkdir_with_existing_file() {
+            let test_file = Path::new("test_mkdir_existing_file");
+            if !test_file.exists() {
+                fs::File::create(test_file).unwrap();
+            }
+
+            assert!(mkdir(test_file, false, 0o755, false).is_err());
+
+            fs::remove_file(test_file).unwrap();
+        }
+
+        #[test]
+        fn test_mkdir_with_no_permissions() {
+            let test_dir = Path::new("test_mkdir_no_permission_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            // 临时设置当前目录的权限，确保没有写权限
+            let current_dir = std::env::current_dir().unwrap();
+            let original_permissions = fs::metadata(&current_dir).unwrap().permissions();
+            let mut no_write_permissions = original_permissions.clone();
+            no_write_permissions.set_mode(original_permissions.mode() & !0o222);
+            fs::set_permissions(&current_dir, no_write_permissions).unwrap();
+
+            let result = mkdir(&current_dir, false, 0o755, false);
+
+            // 恢复原始权限
+            fs::set_permissions(&current_dir, original_permissions).unwrap();
+
+            assert!(result.is_err());
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+        }
+
+        #[test]
+        fn test_mkdir_with_non_existent_parent() {
+            let test_dir = Path::new("test_mkdir_non_existent_parent/child_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            assert!(mkdir(test_dir, false, 0o755, false).is_err());
+
+            let parent_dir = test_dir.parent().unwrap();
+            assert!(mkdir(parent_dir, false, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false).is_ok());
+
+            fs::remove_dir_all(parent_dir).unwrap();
+        }
+
+        #[test]
+        fn test_mkdir_recursive_with_partial_existing_parents() {
+            let parent_dir = Path::new("test_mkdir_partial_existing_parents");
+            let child_dir = parent_dir.join("child_dir1/child_dir2");
+
+            if parent_dir.exists() {
+                fs::remove_dir_all(parent_dir).unwrap();
+            }
+            fs::create_dir(parent_dir).unwrap();
+            fs::create_dir(parent_dir.join("child_dir1")).unwrap();
+
+            assert!(mkdir(&child_dir, true, 0o755, false).is_ok());
+            assert!(child_dir.exists());
+
+            fs::remove_dir_all(parent_dir).unwrap();
+        }
+    }
 }

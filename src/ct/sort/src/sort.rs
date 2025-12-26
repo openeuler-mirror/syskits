@@ -4089,20 +4089,20 @@ mod tests {
             assert_eq!(output.as_output_name(), None);
         }
 
-        // #[test]
-        // fn test_output_into_write() {
-        //     // Test with a file name
-        //     let output = Output::new(Some("test.txt")).unwrap();
-        //     let mut buf_writer = output.into_write();
-        //     buf_writer.write_all(b"Hello, world!").unwrap();
-        //
-        //     let mut file = File::open("test.txt").unwrap();
-        //     let mut contents = String::new();
-        //     file.read_to_string(&mut contents).unwrap();
-        //     assert_eq!(contents, "");
-        //     // delete the file
-        //     fs::remove_file("test.txt").unwrap();
-        // }
+        #[test]
+        fn test_output_into_write() {
+            // Test with a file name
+            let output = SortOutput::new(Some("test_output_into_write.txt")).unwrap();
+            let mut buf_writer = output.into_write();
+            buf_writer.write_all(b"Hello, world!").unwrap();
+
+            let mut file = File::open("test_output_into_write.txt").unwrap();
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            assert_eq!(contents, "");
+            // delete the file
+            fs::remove_file("test_output_into_write.txt").unwrap();
+        }
 
         #[test]
         fn test_output_new_read_only_file() {

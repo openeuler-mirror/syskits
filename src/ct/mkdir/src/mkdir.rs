@@ -1145,4 +1145,143 @@ mod tests {
             fs::remove_dir_all(parent_dir).unwrap();
         }
     }
+
+    #[cfg(test)]
+    mod chmod_tests {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+
+        use super::*;
+
+        #[test]
+        fn test_chmod_set_permissions() {
+            let test_dir = Path::new("test_chmod_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            fs::create_dir(test_dir).unwrap();
+            assert!(mkdir_chmod(test_dir, 0o755).is_ok());
+
+            let metadata = fs::metadata(test_dir).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o755);
+
+            fs::remove_dir_all(test_dir).unwrap();
+        }
+
+        #[test]
+        fn test_chmod_set_different_permissions() {
+            let test_dir = Path::new("test_chmod_different_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            fs::create_dir(test_dir).unwrap();
+            assert!(mkdir_chmod(test_dir, 0o700).is_ok());
+
+            let metadata = fs::metadata(test_dir).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o700);
+
+            fs::remove_dir_all(test_dir).unwrap();
+        }
+
+        #[test]
+        fn test_chmod_on_non_existent_dir() {
+            let test_dir = Path::new("test_non_existent_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            assert!(mkdir_chmod(test_dir, 0o755).is_err());
+        }
+
+        #[test]
+        fn test_chmod_on_file() {
+            let test_file = Path::new("test_chmod_file");
+            if test_file.exists() {
+                fs::remove_file(test_file).unwrap();
+            }
+
+            fs::File::create(test_file).unwrap();
+            assert!(mkdir_chmod(test_file, 0o644).is_ok());
+
+            let metadata = fs::metadata(test_file).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o644);
+
+            fs::remove_file(test_file).unwrap();
+        }
+
+        #[test]
+        fn test_chmod_preserves_existing_permissions() {
+            let test_file = Path::new("test_chmod_preserve_permissions_file");
+            if test_file.exists() {
+                fs::remove_file(test_file).unwrap();
+            }
+
+            fs::File::create(test_file).unwrap();
+            let original_metadata = fs::metadata(test_file).unwrap();
+            let original_permissions = original_metadata.permissions();
+
+            assert!(mkdir_chmod(test_file, 0o644).is_ok());
+            let metadata = fs::metadata(test_file).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o644);
+
+            // Restore original permissions
+            fs::set_permissions(test_file, original_permissions.clone()).unwrap();
+            let restored_metadata = fs::metadata(test_file).unwrap();
+            let restored_permissions = restored_metadata.permissions();
+            assert_eq!(restored_permissions.mode(), original_permissions.mode());
+
+            fs::remove_file(test_file).unwrap();
+        }
+
+        #[test]
+        fn test_chmod_on_symbolic_link() {
+            let test_file = Path::new("test_chmod_symlink_target");
+            let test_symlink = Path::new("test_chmod_symlink");
+            if test_file.exists() {
+                fs::remove_file(test_file).unwrap();
+            }
+            if test_symlink.exists() {
+                fs::remove_file(test_symlink).unwrap();
+            }
+
+            fs::File::create(test_file).unwrap();
+            std::os::unix::fs::symlink(test_file, test_symlink).unwrap();
+            assert!(mkdir_chmod(test_file, 0o644).is_ok());
+
+            let metadata = fs::metadata(test_file).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o644);
+
+            fs::remove_file(test_symlink).unwrap();
+            fs::remove_file(test_file).unwrap();
+        }
+
+        #[test]
+        fn test_chmod_no_effect_on_directory() {
+            let test_dir = Path::new("test_chmod_no_effect_dir");
+            if test_dir.exists() {
+                fs::remove_dir_all(test_dir).unwrap();
+            }
+
+            fs::create_dir(test_dir).unwrap();
+            assert!(mkdir_chmod(test_dir, 0o755).is_ok());
+            let metadata = fs::metadata(test_dir).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o755);
+
+            assert!(mkdir_chmod(test_dir, 0o644).is_ok());
+            let metadata = fs::metadata(test_dir).unwrap();
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o644);
+
+            fs::remove_dir_all(test_dir).unwrap();
+        }
+    }
 }

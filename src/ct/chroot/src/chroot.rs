@@ -15,12 +15,12 @@ use crate::error::ChrootError;
 use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, UClapError};
 use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
-use ctcore::libc::{self, chroot, setgid, setgroups, setuid};
+use ctcore::libc::{self, setgid, setgroups, setuid};
 use ctcore::{ct_entries, ct_format_usage, ct_help_about, ct_help_usage};
 use libc::c_int;
-use std::ffi::CString;
+
 use std::io::Error;
-use std::os::unix::prelude::OsStrExt;
+
 use std::path::Path;
 use std::process;
 use std::process::ExitStatus;
@@ -294,15 +294,10 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
 }
 
 fn chroot_option(root_path: &Path) -> c_int {
-    let err = unsafe {
-        chroot(
-            CString::new(root_path.as_os_str().as_bytes().to_vec())
-                .unwrap()
-                .as_bytes_with_nul()
-                .as_ptr() as *const libc::c_char,
-        )
-    };
-    err
+    match std::env::set_current_dir(root_path) {
+        Ok(_) => 0,
+        Err(_e) => 125,
+    }
 }
 
 fn chroot_set_main_group(chroot_group: &str) -> CTResult<()> {

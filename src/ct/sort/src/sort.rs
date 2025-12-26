@@ -1770,8 +1770,8 @@ fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
     // TODO：一旦我们支持的 Rust 最低版本达到 1.53 或以上，我们就应该为这些情况添加测试。
     match a.parse::<f64>() {
         Ok(a) if a.is_nan() => SortGeneralF64ParseResult::SortNaN,
-        Ok(a) if a == std::f64::NEG_INFINITY => SortGeneralF64ParseResult::SortNegInfinity,
-        Ok(a) if a == std::f64::INFINITY => SortGeneralF64ParseResult::SortInfinity,
+        Ok(a) if a == f64::NEG_INFINITY => SortGeneralF64ParseResult::SortNegInfinity,
+        Ok(a) if a == f64::INFINITY => SortGeneralF64ParseResult::SortInfinity,
         Ok(a) => SortGeneralF64ParseResult::SortNumber(a),
         Err(_) => SortGeneralF64ParseResult::SortInvalid,
     }

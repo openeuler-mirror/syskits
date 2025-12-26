@@ -1,6 +1,6 @@
 # syskits workspace 信息
 [workspace.package] # 共享的package配置项
-version = "1.0.0" 
+version = "1.1.0" 
 authors = ["CTyunOS linux developers"]
 license = "Mulan PSL v2.0"
 homepage = "https://www.ctyun.cn/developer"

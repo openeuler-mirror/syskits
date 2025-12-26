@@ -741,6 +741,193 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn test_ct_main_column_11() {
+            let args = vec![ctcore::ct_util_name(), "-11", "file1", "file2"];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_column_22() {
+            let args = vec![ctcore::ct_util_name(), "-22", "file1", "file2"];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_column_33() {
+            let args = vec![ctcore::ct_util_name(), "-33", "file1", "file2"];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_column_123() {
+            let args = vec![ctcore::ct_util_name(), "-123", "file1", "file2"];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_zero_terminated() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--zero-terminated",
+                "file1",
+                "file2",
+            ];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_zero() {
+            let args = vec![ctcore::ct_util_name(), "-z", "file1", "file2"];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_total() {
+            let args = vec![ctcore::ct_util_name(), "--total", "file1", "file2"];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+        #[test]
+        fn test_ct_main_file_1() {
+            let test_file_path = "test_ct_main_file_1.txt"; // 测试文件路径
+
+            let flag = opt_flags::FILE_1.to_string();
+            let files = test_file_path.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &files];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_file_2() {
+            let test_file_path = "test_ct_main_file_2.txt"; // 测试文件路径
+                                                            // let expected_result = FILE_2;
+            let flag = FILE_2.to_string();
+            let files = test_file_path.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &files];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_delimiter() {
+            let test_file = "test_ct_main_delimiter.txt"; // 测试文件路径
+
+            let flag = DELIMITER.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_delimiter_default() {
+            let test_file = "test_ct_main_delimiter_default.txt"; // 测试文件路径
+
+            let flag = DELIMITER_DEFAULT.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 0);
+                }
+            }
+        }
     }
 
 }

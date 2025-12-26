@@ -3062,6 +3062,75 @@ mod tests {
             let result = ctmain(args.iter().map(|s| OsString::from(s)));
             assert_eq!(result, 0);
         }
+
+        #[test]
+        fn tests_ctmain_all_args_23() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_all_args_231")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_all_args_231.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_all_args_232")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_all_args_232.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-23",
+                "--output-delimiter=STR",
+                "--total",
+                "--zero",
+                filename1,
+                filename2,
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+        #[test]
+        fn tests_ctmain_all_args_123() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_all_args1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_all_args1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_all_args2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_all_args2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-123",
+                "--output-delimiter=STR",
+                "--total",
+                "--zero",
+                filename1,
+                filename2,
+            ];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
     }
 
 }

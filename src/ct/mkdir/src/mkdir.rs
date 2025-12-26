@@ -1525,5 +1525,87 @@ mod tests {
             let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_err());
         }
+
+        #[test]
+        fn test_ct_main_verbose_long() {
+            let args = vec![ctcore::ct_util_name(), "--verbose"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_verbose_short() {
+            let args = vec![ctcore::ct_util_name(), "-v"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_mode_u() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_ct_main_mode_long_u");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-m", "u+rwx,go-w", file_name];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_mode_long_u() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_ct_main_mode_long_u");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--mode", "u+rwx,go-w", file_name];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_mode_long_r() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_ct_main_mode_long_r");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--mode", "+rwx", file_name];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_mode_long_u_s_755() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_ct_main_mode_long_r");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--mode", "0755,u+s", file_name];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_mode_long_u0755() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_ct_main_mode_long_u0755");
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-m", "0755", file_name];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
     }
+
 }

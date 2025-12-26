@@ -8550,4 +8550,316 @@ mod tests_fn {
 
         assert_eq!(max_depth.unwrap(), 0);
     }
+
+    #[test]
+    fn test_ct_get_max_depth_1() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "1"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+
+        assert_eq!(max_depth.unwrap(), 1);
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_2() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "2"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+
+        assert_eq!(max_depth.unwrap(), 2);
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_3() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "3"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+
+        assert_eq!(max_depth.unwrap(), 3);
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_4() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "4"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+
+        assert_eq!(max_depth.unwrap(), 4);
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_5() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "5"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+
+        assert_eq!(max_depth.unwrap(), 5);
+    }
+
+    #[test]
+    fn test_ct_get_summarize_max_depth_5() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            dir,
+            "--summarize",
+            "--max-depth",
+            "5",
+        ]; //du: summarizing conflicts with --max-depth=1
+
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize);
+
+        let s = SummarizeDepthConflict("5".to_string()).to_string();
+
+        assert_eq!(max_depth.unwrap_err().to_string(), s);
+    }
+
+    #[test]
+    fn test_ct_fn_read_files_from() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let filename = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let expected: Vec<PathBuf> = vec!["aaaa.\nbbbb.\ncccc.\ndddd.\n".into()];
+
+        let args = vec![ctcore::ct_util_name(), dir, "--files0-from", filename];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        // 处理输入文件列表
+        let _ = if let Some(file_from) = matches.get_one::<String>(opt_flags::FILES0_FROM) {
+            let result = du_read_files_from(file_from).unwrap();
+            assert_eq!(result, expected);
+        };
+    }
+
+    #[test]
+    fn test_get_time_ctime() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=ctime"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Modified);
+    }
+
+    #[test]
+    fn test_get_time_status() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=status"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Modified);
+    }
+
+    #[test]
+    fn test_get_time_access() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--time=access"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let time = du_get_time(&matches);
+
+        assert_eq!(time.unwrap(), DuTime::Accessed);
+    }
 }

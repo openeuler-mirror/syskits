@@ -1450,4 +1450,80 @@ mod tests {
             assert!(result.is_err());
         }
     }
+    #[cfg(test)]
+    mod ct_main_tests {
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_ct_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_parents_long() {
+            let args = vec![ctcore::ct_util_name(), "--parents"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_parents_short() {
+            let args = vec![ctcore::ct_util_name(), "-p"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_mode_long() {
+            let args = vec![ctcore::ct_util_name(), "--mode"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_mode_short() {
+            let args = vec![ctcore::ct_util_name(), "-m"];
+            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+    }
 }

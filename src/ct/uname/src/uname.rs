@@ -852,5 +852,86 @@ mod tests {
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_long_option_kernel_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--kernel-version"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_machine() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--machine"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_os() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--operating-system"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_processor() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--processor"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_hardware_platform() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--hardware-platform"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_a() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-a"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_s() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_n() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-n"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_r() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-v"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
     }
 }

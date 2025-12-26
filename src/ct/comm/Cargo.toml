@@ -1,0 +1,26 @@
+[package]
+name = "ct_comm"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "comm ~ (ctutils) compare sorted inputs"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/comm"
+
+[lib]
+path = "src/comm.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "comm"
+path = "src/main.rs"

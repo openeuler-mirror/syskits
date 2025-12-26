@@ -81,6 +81,7 @@ feat_common_core = [
   "dir",
   "split",
   "sort",
+  "comm",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -226,6 +227,7 @@ csplit = { optional = true, package = "ct_csplit", path = "src/ct/csplit" }
 dir = { optional = true, package = "ct_dir", path = "src/ct/dir" }
 split = { optional = true, package = "ct_split", path = "src/ct/split" }
 sort = { optional = true, package = "ct_sort", path = "src/ct/sort" }
+comm = { optional = true, package = "ct_comm", path = "src/ct/comm" }
 
 [dev-dependencies]
 chrono = { workspace = true }

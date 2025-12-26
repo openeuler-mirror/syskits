@@ -929,5 +929,167 @@ mod tests {
             }
         }
     }
+    #[cfg(test)]
+    mod tests_ct_line_reader {
+        use crate::ct_app;
+        use crate::opt_flags::COLUMN_1;
+        use crate::opt_flags::COLUMN_2;
+        use crate::opt_flags::COLUMN_3;
+        use crate::opt_flags::DELIMITER;
+        use crate::opt_flags::DELIMITER_DEFAULT;
+        use crate::opt_flags::FILE_1;
+        use crate::opt_flags::FILE_2;
+        use crate::opt_flags::TOTAL;
+        use crate::opt_flags::ZERO_TERMINATED;
+        use ctcore::ct_line_ending::CtLineEnding;
 
+        #[test]
+        fn test_ct_line_ending_from_zero_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_zero_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = ZERO_TERMINATED.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+
+            // let filename1 = matches.get_one::<String>(FILE_1).unwrap();
+            // let filename2 = matches.get_one::<String>(FILE_2).unwrap();
+            // let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
+            // let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_delimiter_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_delimiter_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = DELIMITER.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_delimiter_default_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_delimiter_default_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = DELIMITER_DEFAULT.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_total_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_total_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = TOTAL.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_file1_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_file1_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = FILE_1.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_file2_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_file2_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = FILE_2.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_column_1_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_column_1_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = COLUMN_1.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_column_2_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_column_2_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = COLUMN_2.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+        }
+
+        #[test]
+        fn test_ct_line_ending_from_column_3_flag() {
+            let command = ct_app();
+            let test_file = "test_ct_line_ending_from_column_3_flag.txt"; // 测试文件路径
+            let expected_result = CtLineEnding::Newline;
+            let flag = COLUMN_3.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = command.try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(ZERO_TERMINATED));
+            assert_eq!(line_ending, expected_result);
+        }
+    }
 }

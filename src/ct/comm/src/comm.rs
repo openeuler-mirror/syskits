@@ -247,3 +247,169 @@ fn args_init() -> Vec<Arg> {
     args
 }
 
+#[cfg(test)]
+mod tests {
+    // 这里是 `comm` 命令的使用说明和示例：
+    //
+    // 1. **基本用法**：
+    // ```bash
+    // comm FILE1 FILE2
+    // ```
+    // 比较已排序的文件 FILE1 和 FILE2，并按行比较它们。
+    //
+    // 2. **选项**：
+    //
+    // - `-1`：不显示 FILE1 中独有的行。
+    // - `-2`：不显示 FILE2 中独有的行。
+    // - `-3`：不显示两个文件共有的行。
+    //
+    // - `--output-delimiter=STR`：使用 STR 分隔列。
+    // - `--total`：输出摘要信息。
+    // - `-z, --zero-terminated`：行分隔符为 NUL 而不是换行符。
+    // - `--help`：显示帮助信息并退出。
+    // - `--version`：显示版本信息并退出。
+    //
+    // 3. **示例**：
+    //
+    // - 只打印同时存在于 file1 和 file2 中的行：
+    // ```bash
+    // comm -12 file1 file2
+    // ```
+    //
+    // - 打印 file1 中不在 file2 中出现的行，以及 file2 中不在 file1 中出现的行：
+    // ```bash
+    // comm -3 file1 file2
+    // ```
+    //
+    // 这些是 `comm` 命令的基本用法和选项示例。
+
+    #[cfg(test)]
+    mod tests_ct_app {
+        use crate::ct_app;
+        use crate::opt_flags;
+        use crate::opt_flags::DELIMITER;
+        use crate::opt_flags::DELIMITER_DEFAULT;
+        use crate::opt_flags::FILE_1;
+        use crate::opt_flags::FILE_2;
+
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_column_1() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-1", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_1)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_column_2() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-2", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_2)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_column_3() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-3", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_3)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_column_12() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-12", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_1)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_column_13() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-13", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_3)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_column_23() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-23", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_3)
+                .unwrap());
+        }
+    }
+}

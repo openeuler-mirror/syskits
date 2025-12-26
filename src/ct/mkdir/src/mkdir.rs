@@ -1885,5 +1885,125 @@ mod tests {
                 .collect();
             assert!(dirs.is_empty());
         }
+        #[test]
+        fn test_ct_app_numeric_mode() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "0755", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"0755".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_symbolic_mode() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "u+rwx,go-w", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"u+rwx,go-w".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_combined_mode() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "0755,u+s", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"0755,u+s".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_empty_mode() {
+            let app = ct_app();
+            let result = app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "", "dir"]);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_invalid_mode() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "invalidmode", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"invalidmode".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_no_mode_specified() {
+            let app = ct_app();
+            let matches = app.try_get_matches_from(vec![ctcore::ct_util_name(), "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(matches.get_one::<String>(mkdir_flags::MODE), None);
+        }
+
+        #[test]
+        fn test_ct_app_symbolic_mode_no_users() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "+rwx", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"+rwx".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_symbolic_mode_only_permission() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "a+r", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"a+r".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_numeric_mode_with_leading_zero() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "0777", "dir"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"0777".to_string())
+            );
+        }
     }
 }

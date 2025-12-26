@@ -1092,4 +1092,169 @@ mod tests {
             assert_eq!(line_ending, expected_result);
         }
     }
+    #[cfg(test)]
+    mod tests_ct_opt_flags {
+        use crate::ct_app;
+
+        use crate::opt_flags::COLUMN_1;
+        use crate::opt_flags::COLUMN_2;
+        use crate::opt_flags::COLUMN_3;
+        use crate::opt_flags::DELIMITER;
+        use crate::opt_flags::DELIMITER_DEFAULT;
+        use crate::opt_flags::FILE_1;
+        use crate::opt_flags::FILE_2;
+        use crate::opt_flags::TOTAL;
+        use crate::opt_flags::ZERO_TERMINATED;
+
+        #[test]
+        fn tests_ct_opt_flags_column_1() {
+            let test_file = "tests_ct_opt_flags_column_1.txt"; // 测试文件路径
+            let expected_result = COLUMN_1;
+            let flag = COLUMN_1.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+
+        #[test]
+        fn tests_ct_opt_flags_column_2() {
+            let test_file = "tests_ct_opt_flags_column_2.txt"; // 测试文件路径
+            let expected_result = COLUMN_2;
+            let flag = COLUMN_2.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+
+        #[test]
+        fn tests_ct_opt_flags_column_3() {
+            let test_file = "tests_ct_opt_flags_column_3.txt"; // 测试文件路径
+            let expected_result = COLUMN_3;
+            let flag = COLUMN_3.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+
+        #[test]
+        fn tests_ct_opt_flags_delimiter() {
+            let test_file = "tests_ct_opt_flags_delimter.txt"; // 测试文件路径
+            let expected_result = DELIMITER;
+            let flag = DELIMITER.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+
+        #[test]
+        fn tests_ct_opt_flags_delimiter_default() {
+            let test_file = "tests_ct_opt_flags_delimiter_default.txt"; // 测试文件路径
+            let expected_result = DELIMITER_DEFAULT;
+            let flag = DELIMITER_DEFAULT.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+
+        #[test]
+        fn tests_ct_opt_flags_file_1() {
+            let test_file = "tests_ct_opt_flags_file_1.txt"; // 测试文件路径
+            let expected_result = FILE_1;
+            let flag = FILE_1.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+        #[test]
+        fn tests_ct_opt_flags_file_2() {
+            let test_file = "tests_ct_opt_flags_file_2.txt"; // 测试文件路径
+            let expected_result = FILE_2;
+            let flag = FILE_2.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+
+        #[test]
+        fn tests_ct_opt_flags_total() {
+            let test_file = "tests_ct_opt_flags_total.txt"; // 测试文件路径
+            let expected_result = TOTAL;
+            let flag = TOTAL.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+        #[test]
+        fn tests_ct_opt_flags_zero_terminated() {
+            let test_file = "tests_ct_opt_flags_zero_terminated.txt"; // 测试文件路径
+            let expected_result = ZERO_TERMINATED;
+            let flag = ZERO_TERMINATED.to_string();
+
+            let file1 = test_file.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+
+            let binding = matches.expect("REASON");
+            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+
+            assert_eq!(filename1, expected_result);
+        }
+    }
 }

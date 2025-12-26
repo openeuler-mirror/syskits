@@ -4205,5 +4205,365 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_ct_app_time_ctime() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=ctime"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Modified);
+        }
+
+        #[test]
+        fn test_ct_app_time_status() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=status"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Modified);
+        }
+
+        #[test]
+        fn test_ct_app_time_access() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=access"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Accessed);
+        }
+
+        #[test]
+        fn test_ct_app_time_atime() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=atime"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Accessed);
+        }
+
+        #[test]
+        fn test_ct_app_time_use() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=use"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Accessed);
+        }
+
+        #[test]
+        fn test_ct_app_time_birth() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=birth"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Created);
+        }
+
+        #[test]
+        fn test_ct_app_time_creation() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--time=creation"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Created);
+        }
+
+        #[test]
+        fn test_ct_app_exclude_from_time_ctime() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                "*.txt",
+                "--time=ctime",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Modified);
+        }
+
+        #[test]
+        fn test_ct_app_exclude_from_time_status() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                "*.txt",
+                "--time=status",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Modified);
+        }
+
+        #[test]
+        fn test_ct_app_exclude_from_time_access() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                "*.txt",
+                "--time=access",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+            let result = match matches.get_one::<String>(TIME).map(AsRef::as_ref) {
+                None | Some("ctime" | "status") => DuTime::Modified,
+                Some("access" | "atime" | "use") => DuTime::Accessed,
+                Some("birth" | "creation") => DuTime::Created,
+                _ => unreachable!("should be caught by clap"),
+            };
+
+            assert_eq!(result, DuTime::Accessed);
+        }
+
     }
 }

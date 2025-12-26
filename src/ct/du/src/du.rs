@@ -3907,5 +3907,303 @@ mod tests {
             assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1EB");
         }
 
+        #[test]
+        fn test_ct_app_t_1y() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1YB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1YB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1z() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1ZB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1ZB");
+        }
+
+        #[test]
+        fn test_ct_app_verbose() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-v"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(VERBOSE).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_verbose_whole() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--verbose"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(VERBOSE).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_exclude() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--exclude", "*.txt"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_verbose_exclude() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--verbose",
+                "--exclude",
+                "*.txt",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(VERBOSE).unwrap());
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_x_from() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-X", "*.txt"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_exclude_from() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--exclude-from", "*.txt"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_files0_from() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--files0-from", "*.txt"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(FILES0_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_exclude_from_files0_from() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                "*.txt",
+                "--files0-from",
+                "*.txt",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(EXCLUDE_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+
+            assert_eq!(
+                matches
+                    .get_many::<String>(FILES0_FROM)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+                vec!["*.txt"]
+            );
+        }
+
     }
 }

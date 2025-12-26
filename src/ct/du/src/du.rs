@@ -9133,4 +9133,138 @@ mod tests_fn {
         assert_eq!(size_format, DuSizeFormat::Human(1000));
     }
 
+    #[test]
+    fn test_ct_get_size_format_bytes() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--bytes"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, BlockSize(1));
+    }
+
+    #[test]
+    fn test_ct_get_size_format_block_size_1k() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--block-size=1k"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, BlockSize(1024));
+    }
+
+    #[test]
+    fn test_ct_get_size_format_block_size_1m() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--block-size=1m"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, BlockSize(1048576));
+    }
+
+    #[test]
+    fn test_ct_get_size_format_block_size_1k_c() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--block-size=1K"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, BlockSize(1024));
+    }
+
+    #[test]
+    fn test_ct_get_size_format_block_size_1m_c() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--block-size=1M"];
+        // 从命令行参数中解析匹配项
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert_eq!(size_format, BlockSize(1048576));
+    }
 }

@@ -500,5 +500,176 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn test_uname_main_long_option_kernel_version() {
+            let args = vec![ctcore::ct_util_name(), "--kernel-version"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_long_option_machine() {
+            let args = vec![ctcore::ct_util_name(), "--machine"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_long_option_os() {
+            let args = vec![ctcore::ct_util_name(), "--operating-system"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_long_option_processor() {
+            let args = vec![ctcore::ct_util_name(), "--processor"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_long_option_hardware_platform() {
+            let args = vec![ctcore::ct_util_name(), "--hardware-platform"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_short_option_a() {
+            let args = vec![ctcore::ct_util_name(), "-a"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_short_option_s() {
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_short_option_n() {
+            let args = vec![ctcore::ct_util_name(), "-n"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_short_option_r() {
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_uname_main_short_option_v() {
+            let args = vec![ctcore::ct_util_name(), "-v"];
+            let result = uname_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
     }
 }

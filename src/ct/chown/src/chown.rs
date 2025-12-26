@@ -659,4 +659,235 @@ mod test {
         let result = ctmain(args.iter().map(|s| OsString::from(s)));
         assert_eq!(result, 1);
     }
+
+   // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_verbose_ctmain() {
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "-v"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    // 对于布尔选项，例如 --verbose
+    #[test]
+    fn test_verbose_whole_ctmain() {
+        // 测试用例：有效输入 --verbose
+        let args = vec![ctcore::ct_util_name(), "--verbose"];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 1);
+    }
+
+    // #[test]
+    // fn test_chgrp_ctmain() {
+    //     // 创建文件并写入内容
+    //     fn chgrp_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+    //         let mut file = File::create(filename)?;
+    //         file.write_all(content.as_bytes())?;
+    //         file.sync_all()?;
+    //         Ok(())
+    //     }
+    //
+    //     // 删除指定文件
+    //     fn chgrp_delete_file(filename: &str) -> io::Result<()> {
+    //         fs::remove_file(filename)?;
+    //         Ok(())
+    //     }
+    //
+    //     let filename = "test_chcon_h_ctmain.txt";
+    //
+    //     let content = "test_chcon_h_ctmain";
+    //
+    //     // 创建文件并写入内容
+    //     match chgrp_create_file_with_content(filename, content) {
+    //         Ok(_) => println!("File '{}' created successfully.", filename),
+    //         Err(e) => eprintln!("Error creating file: {}", e),
+    //     }
+    //
+    //     let args = vec![
+    //         ctcore::util_name(),
+    //         "--reference=test_chcon_h_ctmain.txt",
+    //         filename,
+    //     ];
+    //
+    //     let result = ctmain(args.iter().map(|s| OsString::from(s)));
+    //
+    //     // 删除文件
+    //     match chgrp_delete_file(filename) {
+    //         Ok(_) => println!("File '{}' deleted successfully.", filename),
+    //         Err(e) => eprintln!("Error deleting file: {}", e),
+    //     }
+    //
+    //     assert_eq!(result, 0);
+    // }
+    //
+    // #[test]
+    // fn test_chgrp_r_t_ctmain() {
+    //     fn chgrp_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
+    //         let mut file = File::create(filename)?;
+    //         file.write_all(content.as_bytes())?;
+    //         file.sync_all()?;
+    //         Ok(())
+    //     }
+    //
+    //     // 删除指定文件
+    //     fn chgrp_delete_file(filename: &str) -> io::Result<()> {
+    //         fs::remove_file(filename)?;
+    //         Ok(())
+    //     }
+    //
+    //     let filename = "test_chcon_h_ctmain.txt";
+    //
+    //     let content = "test_chcon_h_ctmain";
+    //
+    //     // 创建文件并写入内容
+    //     match chgrp_create_file_with_content(filename, content) {
+    //         Ok(_) => println!("File '{}' created successfully.", filename),
+    //         Err(e) => eprintln!("Error creating file: {}", e),
+    //     }
+    //
+    //     let args = vec![ctcore::util_name(), "-R", "root", filename];
+    //
+    //     let result = ctmain(args.iter().map(|s| OsString::from(s)));
+    //
+    //     // 删除文件
+    //     match chgrp_delete_file(filename) {
+    //         Ok(_) => println!("File '{}' deleted successfully.", filename),
+    //         Err(e) => eprintln!("Error deleting file: {}", e),
+    //     }
+    //
+    //     assert_eq!(result, 1);
+    // }
+    #[test]
+    fn test_chgrp_r_ctmain() {
+        let dir_path = "test_chgrp_r_ctmain";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chgrp_r_ctmain_w.txt";
+
+        // 创建二级目录
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // 创建文件路径
+        let file_path = format!("{}/{}", subdir_path, file_name);
+
+        // 创建文件并写入内容
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![ctcore::ct_util_name(), "-R", "1000", dir_path];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+        // 删除目录及其内容
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
+
+    #[test]
+    fn test_chgrp_single_file_ctmain() {
+        let file_name = "test_chcon_single_file.txt";
+        let file_path = file_name.to_owned();
+
+        // Create a file and write content
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![ctcore::ct_util_name(), "1000", file_name];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+
+        // Remove the file
+        fs::remove_file(file_path).expect("Failed to delete file");
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_chgrp_recursive_ctmain() {
+        let dir_path = "test_chgrp__recursive_ctmain";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chgrp_no_recursive_ctmain.txt";
+
+        // Create a directory hierarchy
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // Create a file in the subdirectory and write content
+        let file_path = format!("{}/{}", subdir_path, file_name);
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![ctcore::ct_util_name(), "--recursive", "1000", dir_path];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_eq!(result, 0);
+        // Remove the directory hierarchy
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
+
+    #[test]
+    fn test_chgrp_invalid_user_id_ctmain() {
+        let dir_path = "test_chgrp_invalid_user_id_ctmain";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chcon_invalid_user_id.txt";
+
+        // 创建二级目录
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // 创建文件路径
+        let file_path = format!("{}/{}", subdir_path, file_name);
+
+        // 创建文件并写入内容
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
+                               // Remove the directory hierarchy
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
+    #[test]
+    fn test_chgrp_h_r_ctmain() {
+        let dir_path = "test_chgrp_h_r_ctmain";
+        let subdir_name = "subdirectory";
+        let file_name = "test_chcon_invalid_user_id.txt";
+
+        // 创建二级目录
+        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        fs::create_dir_all(&subdir_path).expect("Failed to create directory");
+
+        // 创建文件路径
+        let file_path = format!("{}/{}", subdir_path, file_name);
+
+        // 创建文件并写入内容
+        let mut file = File::create(&file_path).expect("Failed to create file");
+        file.write_all(b"Hello, Rust!")
+            .expect("Failed to write to file");
+        println!("File '{}' created successfully.", file_path);
+
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-h",
+            "-R",
+            "invalid_user_id",
+            dir_path,
+        ];
+
+        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
+                               // Remove the directory hierarchy
+        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+    }
 }

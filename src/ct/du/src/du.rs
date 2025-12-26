@@ -8304,3 +8304,93 @@ mod tests {
         }
     }
 }
+#[cfg(test)]
+mod tests_fn {
+    use super::*;
+    use std::ffi::OsString;
+
+    use crate::DuError::SummarizeDepthConflict;
+    use crate::DuSizeFormat::BlockSize;
+    use std::io::Write;
+    use tempfile::Builder;
+
+    use std::fs::File;
+
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_read_block_size() {
+        let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
+        for it in &test_data {
+            assert!(matches!(du_read_block_size(it.as_deref()), Ok(1024)));
+        }
+    }
+    #[test]
+    fn test_read_block_size_valid_input_1024_bytes() {
+        let input_str = "1024";
+        let expected_output = 1024;
+        let result = du_read_block_size(Some(input_str)).unwrap();
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_read_block_size_valid_input_512k() {
+        let input_str = "512K";
+        let expected_output = 524288;
+        let result = du_read_block_size(Some(input_str)).unwrap();
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_read_block_size_valid_input_1m() {
+        let input_str = "1M";
+        let expected_output = 1048576;
+        let result = du_read_block_size(Some(input_str)).unwrap();
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_read_block_size_valid_input_2g() {
+        let input_str = "2G";
+        let expected_output = 2147483648;
+        let result = du_read_block_size(Some(input_str)).unwrap();
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_read_block_size_valid_input_1t() {
+        let input_str = "1T";
+        let expected_output = 1099511627776;
+        let result = du_read_block_size(Some(input_str)).unwrap();
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_read_block_size_invalid_input_invalid_string() {
+        let input_str = "invalid";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_block_size_invalid_input_empty_string() {
+        let input_str = "";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_block_size_invalid_input_invalid_unit() {
+        let input_str = "1024X";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_block_size_invalid_input_mixed_units() {
+        let input_str = "kK";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+}

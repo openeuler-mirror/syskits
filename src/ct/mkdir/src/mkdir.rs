@@ -597,4 +597,261 @@ mod tests {
             assert!(args.is_empty());
         }
     }
+
+    #[cfg(test)]
+    mod exec_tests {
+        use std::ffi::OsString;
+        use std::fs;
+
+        use clap::ArgMatches;
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        fn get_test_matches(args: Vec<&str>) -> ArgMatches {
+            ct_app().try_get_matches_from(args).unwrap()
+        }
+
+        #[test]
+        fn test_exec_single_dir() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("testdir");
+
+            let matches =
+                get_test_matches(vec![ctcore::ct_util_name(), test_path.to_str().unwrap()]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_multiple_dirs() {
+            let temp_dir = tempdir().unwrap();
+            let test_path1 = temp_dir.path().join("dir1");
+            let test_path2 = temp_dir.path().join("dir2");
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                test_path1.to_str().unwrap(),
+                test_path2.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+            assert!(test_path1.exists());
+            assert!(test_path1.is_dir());
+            assert!(test_path2.exists());
+            assert!(test_path2.is_dir());
+        }
+
+        #[test]
+        fn test_exec_recursive() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("dir1/dir2/dir3");
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                "-p",
+                test_path.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, true, 0o755, false);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_verbose() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("testdir");
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                "-v",
+                test_path.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, true);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_mkdir_error() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "testdir"]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_exec_with_real_mkdir() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("testdir");
+
+            let matches =
+                get_test_matches(vec![ctcore::ct_util_name(), test_path.to_str().unwrap()]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_existing_dir() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("test_exec_existing_dir");
+            fs::create_dir(&test_path).unwrap();
+
+            let matches =
+                get_test_matches(vec![ctcore::ct_util_name(), test_path.to_str().unwrap()]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_nested_dirs() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("dir1/dir2/dir3");
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                "-p",
+                test_path.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, true, 0o755, false);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_empty_dirs() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name()]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_exec_invalid_path() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "\0invalid"]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, false);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_exec_recursive_existing_path() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("test_exec_recursive_existing_path");
+            fs::create_dir(&test_path).unwrap();
+
+            let nested_path = test_path.join("nested");
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                "-p",
+                nested_path.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, true, 0o755, false);
+            assert!(result.is_ok());
+            assert!(nested_path.exists());
+            assert!(nested_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_verbose_existing_dir() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("test_exec_verbose_existing_dir");
+            fs::create_dir(&test_path).unwrap();
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                "-v",
+                test_path.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o755, true);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+        }
+
+        #[test]
+        fn test_exec_with_different_modes() {
+            let temp_dir = tempdir().unwrap();
+            let test_path = temp_dir.path().join("test_exec_with_different_modes");
+
+            let matches = get_test_matches(vec![
+                ctcore::ct_util_name(),
+                "-m",
+                "0700",
+                test_path.to_str().unwrap(),
+            ]);
+            let dirs = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default();
+
+            let result = mkdir_exec(dirs, false, 0o700, false);
+            assert!(result.is_ok());
+            assert!(test_path.exists());
+            assert!(test_path.is_dir());
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let metadata = fs::metadata(&test_path).unwrap();
+                let permissions = metadata.permissions();
+                assert_eq!(permissions.mode() & 0o777, 0o700);
+            }
+        }
+    }
 }

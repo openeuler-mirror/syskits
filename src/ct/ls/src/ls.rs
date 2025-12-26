@@ -55,8 +55,6 @@ use ctcore::{ct_parse_glob, ct_show, ct_show_error, ct_show_warning};
 #[cfg(unix)]
 use ctcore::ct_entries;
 use ctcore::ct_fs::CtFileInformation;
-#[cfg(unix)]
-use ctcore::ct_fsxattr::has_acl;
 use ctcore::ct_quoting_style;
 use ctcore::ct_quoting_style::escape_name;
 use ctcore::ct_quoting_style::CtQuotingStyle;
@@ -1858,7 +1856,8 @@ impl PathData {
             OnceCell::new()
         };
 
-        let security_context = if config.is_context {
+        // 配置了显示安全上下文才给出安全上下文, Long模式需要显示安全上下文标记
+        let security_context = if config.is_context || config.format == LsFormat::Long {
             get_security_context(config, &p_buf, must_dereference)
         } else {
             String::new()
@@ -2579,6 +2578,43 @@ fn display_grid<W: Write>(
     Ok(())
 }
 
+fn ls_has_context(item: &PathData) -> bool {
+    item.security_context.len() > 1
+}
+
+#[allow(unused_variables)]
+fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
+    #[cfg(feature = "feat_acl")]
+    {
+        use exacl::getfacl;
+        match getfacl(file, None) {
+            Ok(acls) => {
+                acls.iter().any(|acl| {
+                    if !acl.name.is_empty() {
+                        // 通过acl名字，排除默认acl entry
+                        true
+                    } else {
+                        false
+                    }
+                })
+            }
+            Err(e) => {
+                println!("Failed to get ACLs: {}", e);
+                false
+            }
+        }
+    }
+    #[cfg(not(feature = "feat_acl"))]
+    {
+        // #[cfg(unix)]
+        // use ctcore::ct_fsxattr::has_acl;
+        // has_acl(file)
+
+        // 没有enable acl 检查就默认返回 false
+        false
+    }
+}
+
 /// 这将向 BufWriter 写入 `ls -l` 输出的单个字符串。
 ///
 /// 依次写入以下键值：
@@ -2622,28 +2658,29 @@ fn display_item_long<W: Write>(
         output_display += "  ";
     }
     if let Some(md) = item.get_metadata(output) {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-        // TODO: See how Mac should work here
-        let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name.as_os_str());
+        let is_acl_set = ls_has_acl(item.display_name.as_os_str());
+        // 修订 selinux 和 acl 情况：
+        // 1. 如果没有安全上下文 ACL_T_NONE: 不显示
+        // 2. 如果只有安全上下文，但没有 ACL（have_acl 为假） ACL_T_LSM_CONTEXT_ONLY: 显示‘.’
+        // 3. 如果有 ACL（have_acl 为真）ACL_T_YES，无论是否有安全上下文： 则显示‘+’
+
+        let mut out_acl = if ls_has_context(item) {
+            // GNU `ls` 使用". "字符来表示具有安全上下文的文件
+            "."
+        } else {
+            ""
+        };
+
+        if is_acl_set {
+            // 如果设置了 acl，我们将在文件权限末尾显示 "+"。
+            out_acl = "+"
+        };
+
         write!(
             output_display,
-            "{}{}{} {}",
+            "{}{} {}",
             display_permissions(md, true),
-            if item.security_context.len() > 1 {
-                // GNU `ls` 使用". "字符来表示具有安全上下文的文件、
-                // 但不使用其他替代访问方法。
-                "."
-            } else {
-                ""
-            },
-            if is_acl_set {
-                // 如果设置了 acl，我们将在文件权限末尾显示 "+"。
-                "+"
-            } else {
-                ""
-            },
+            out_acl,
             pad_left(&display_symlink_count(md), padding.link_count)
         )
         .unwrap();

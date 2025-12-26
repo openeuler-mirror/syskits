@@ -310,3 +310,79 @@ fn chown_parse_spec(spec_str: &str, sep: char) -> CTResult<(Option<u32>, Option<
     Ok((uid_value, gid_value))
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use clap::error::ErrorKind;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::fs::File;
+
+    use std::io::Write;
+
+    #[test]
+    fn test_parse_uid() {
+        assert!(matches!(chown_parse_uid("", "", ':'), Ok(None)));
+        assert!(matches!(chown_parse_uid("", ":", ':'), Ok(None)));
+        assert!(matches!(chown_parse_uid("", ".", '.'), Ok(None)));
+        assert!(matches!(chown_parse_uid("", ".", ':'), Ok(None)));
+        assert!(matches!(chown_parse_uid("", ":", '.'), Ok(None)));
+    }
+    #[test]
+    fn test_parse_gid() {
+        assert!(matches!(chown_parse_gid("", ""), Ok(None)));
+        assert!(matches!(chown_parse_gid("", ":"), Ok(None)));
+        assert!(matches!(chown_parse_gid("", "."), Ok(None)));
+    }
+    #[test]
+    fn test_parse_spec_with_dot() {
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_or_dot() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_or_dot_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_or_dot_or_colon_or_dot() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+
+        assert!(matches!(chown_parse_spec(":", ':'), Ok(_)))
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_or_dot_or_colon_or_dot_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_or_dot_or_colon_or_dot_or_colon_or_dot() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+}

@@ -252,3 +252,131 @@ fn mkdir_create_dir(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod get_mode_tests {
+        use ctcore::libc;
+
+        use super::*;
+
+        fn get_test_matches(args: Vec<&str>) -> ArgMatches {
+            ct_app().try_get_matches_from(args).unwrap()
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_default() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name()]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, !ct_mode::get_umask() & 0o0777);
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_numeric() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755"]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, 0o755);
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_symbolic() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rwx,go-w"]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, 0o755);
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_mixed() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755,u+s"]);
+            let mode = mkdir_get_mode(&matches, false);
+
+            assert!(mode.is_err());
+
+            assert_eq!(mode.unwrap_err(), "invalid digit found in string");
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_invalid() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "invalid"]);
+            let mode = mkdir_get_mode(&matches, false);
+            assert!(mode.is_err());
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_combined_symbolic() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rwx,g-w,o+r"]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, 0o757);
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_empty_mode_string() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", ""]);
+            let mode = mkdir_get_mode(&matches, false);
+            assert!(mode.is_err());
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_partial_mode_string() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755,"]);
+            let mode = mkdir_get_mode(&matches, false);
+
+            assert!(mode.is_err());
+            assert_eq!(mode.unwrap_err(), "invalid digit found in string");
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_complex_symbolic() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rw,go-rw"]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, 0o711);
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_get_mode_with_umask() {
+            // Set a specific umask for the test
+            unsafe {
+                libc::umask(0o027);
+            }
+            let matches = get_test_matches(vec![ctcore::ct_util_name()]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, 0o750);
+        }
+        #[cfg(windows)]
+        #[test]
+        fn test_get_mode_default_windows() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name()]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, MKDIR_DEFAULT_PERM);
+        }
+
+        #[cfg(windows)]
+        #[test]
+        fn test_get_mode_numeric_windows() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755"]);
+            let mode = mkdir_get_mode(&matches, false).unwrap();
+            assert_eq!(mode, MKDIR_DEFAULT_PERM);
+        }
+
+        #[cfg(windows)]
+        #[test]
+        fn test_get_mode_invalid_windows() {
+            let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "invalid"]);
+            let mode = mkdir_get_mode(&matches, false);
+            assert!(mode.is_ok()); // On Windows, invalid mode should return DEFAULT_PERM
+            assert_eq!(mode.unwrap(), MKDIR_DEFAULT_PERM);
+        }
+    }
+}

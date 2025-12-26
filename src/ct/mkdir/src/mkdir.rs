@@ -1725,5 +1725,165 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
         }
+
+        #[test]
+        fn test_ct_app_verbose_long() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--verbose"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_verbose_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-v"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let missing_args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_version() {
+            let app = ct_app();
+            assert_eq!(app.get_version(), Some(crate_version!()));
+        }
+
+        #[test]
+        fn test_ct_app_args() {
+            let app = ct_app();
+
+            let mode_arg = app
+                .get_arguments()
+                .find(|a| a.get_id() == mkdir_flags::MODE);
+            assert!(mode_arg.is_some());
+            let mode_arg = mode_arg.unwrap();
+            assert_eq!(mode_arg.get_short(), Some('m'));
+            assert_eq!(mode_arg.get_long(), Some(mkdir_flags::MODE));
+
+            let parents_arg = app
+                .get_arguments()
+                .find(|a| a.get_id() == mkdir_flags::PARENTS);
+            assert!(parents_arg.is_some());
+            let parents_arg = parents_arg.unwrap();
+            assert_eq!(parents_arg.get_short(), Some('p'));
+            assert_eq!(parents_arg.get_long(), Some(mkdir_flags::PARENTS));
+
+            let verbose_arg = app
+                .get_arguments()
+                .find(|a| a.get_id() == mkdir_flags::VERBOSE);
+            assert!(verbose_arg.is_some());
+            let verbose_arg = verbose_arg.unwrap();
+            assert_eq!(verbose_arg.get_short(), Some('v'));
+            assert_eq!(verbose_arg.get_long(), Some(mkdir_flags::VERBOSE));
+
+            let dirs_arg = app
+                .get_arguments()
+                .find(|a| a.get_id() == mkdir_flags::DIRS);
+            assert!(dirs_arg.is_some());
+            let dirs_arg = dirs_arg.unwrap();
+            assert_eq!(dirs_arg.get_help(), None);
+            assert_eq!(dirs_arg.get_value_hint(), clap::ValueHint::DirPath);
+        }
+
+        #[test]
+        fn test_ct_app_args_parsing() {
+            let app = ct_app();
+
+            let matches = app.try_get_matches_from(vec![
+                ctcore::ct_util_name(),
+                "-m",
+                "0755",
+                "-p",
+                "-v",
+                "dir1",
+                "dir2",
+            ]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"0755".to_string())
+            );
+            assert!(matches.get_flag(mkdir_flags::PARENTS));
+            assert!(matches.get_flag(mkdir_flags::VERBOSE));
+            let dirs: Vec<&OsString> = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap()
+                .collect();
+            assert_eq!(dirs, vec![&OsString::from("dir1"), &OsString::from("dir2")]);
+        }
+
+        #[test]
+        fn test_ct_app_mode_long_parsing() {
+            let app = ct_app();
+            let matches = app.try_get_matches_from(vec![
+                ctcore::ct_util_name(),
+                "--mode",
+                "u+rwx,go-w",
+                "dir",
+            ]);
+            assert!(matches.is_ok());
+
+            let matches = matches.unwrap();
+            assert_eq!(
+                matches.get_one::<String>(mkdir_flags::MODE),
+                Some(&"u+rwx,go-w".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_invalid_mode_parsing() {
+            let app = ct_app();
+            let result =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "-m", "invalidmode", "dir"]);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_dirs_parsing() {
+            let app = ct_app();
+            let matches =
+                app.try_get_matches_from(vec![ctcore::ct_util_name(), "dir1", "dir2", "dir3"]);
+            assert!(matches.is_ok());
+            let matches = matches.unwrap();
+
+            let dirs: Vec<&OsString> = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap()
+                .collect();
+            assert_eq!(
+                dirs,
+                vec![
+                    &OsString::from("dir1"),
+                    &OsString::from("dir2"),
+                    &OsString::from("dir3")
+                ]
+            );
+        }
+
+        #[test]
+        fn test_ct_app_no_dirs() {
+            let app = ct_app();
+            let result = app.try_get_matches_from(vec![ctcore::ct_util_name()]);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            let dirs: Vec<&OsString> = matches
+                .get_many::<OsString>(mkdir_flags::DIRS)
+                .unwrap_or_default()
+                .collect();
+            assert!(dirs.is_empty());
+        }
     }
 }

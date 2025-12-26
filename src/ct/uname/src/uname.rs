@@ -933,5 +933,36 @@ mod tests {
             assert!(executable.is_ok());
         }
 
+        #[test]
+        fn test_ct_app_short_option_m() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-m"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_o() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-o"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_p() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-p"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_i() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-i"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
     }
 }

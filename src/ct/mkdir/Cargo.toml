@@ -1,0 +1,26 @@
+[package]
+name = "ct_mkdir"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "mkdir ~ (ctutils) create DIRECTORY"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/mkdir"
+
+[lib]
+path = "src/mkdir.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["fs", "mode"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "mkdir"
+path = "src/main.rs"

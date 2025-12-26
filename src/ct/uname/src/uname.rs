@@ -739,4 +739,118 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // uname 接口测试: uname [OPTION]...
+        //   -a, --all                print all information, in the following order,
+        //                              except omit -p and -i if unknown:
+        //   -s, --kernel-name        print the kernel name
+        //   -n, --nodename           print the network node hostname
+        //   -r, --kernel-release     print the kernel release
+        //   -v, --kernel-version     print the kernel version
+        //   -m, --machine            print the machine hardware name
+        //   -p, --processor          print the processor type (non-portable)
+        //   -i, --hardware-platform  print the hardware platform (non-portable)
+        //   -o, --operating-system   print the operating system
+        //       --help     display this help and exit
+        //       --version  output version information and exit
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_all() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--all"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_kernel_name() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--kernel-name"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_nodename() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--nodename"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_kernel_release() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--kernel-release"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+    }
 }

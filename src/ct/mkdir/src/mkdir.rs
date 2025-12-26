@@ -1607,5 +1607,123 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
 
+        use super::*;
+
+        // mkdir 接口: mkdir [OPTION]... DIRECTORY...
+        //
+        // Arguments:
+        //   [dirs]...
+        //
+        // Options:
+        //   -m, --mode <mode>  set file mode (not implemented on windows)
+        //   -p, --parents      make parent directories as needed
+        //   -v, --verbose      print a message for each printed directory
+        //   -h, --help         Print help
+        //   -V, --version      Print version
+        //
+        //   Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_parents_long() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--parents"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parents_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-p"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_mode_long() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--mode"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_mode_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-m"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+    }
 }

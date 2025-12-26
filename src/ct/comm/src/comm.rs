@@ -1527,4 +1527,203 @@ mod tests {
             assert_eq!(f1.is_ok(), true);
         }
     }
+
+    #[cfg(test)]
+    mod tests_ctmain {
+        use crate::ctmain;
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        #[test]
+        fn tests_ctmain_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_h() {
+            let args = vec![ctcore::ct_util_name(), "--h"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_flag_column_1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_file2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-1", filename1, filename2];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_flag_column_2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_2_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_flag_column_2_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_2_file2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_flag_column_2_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-2", filename1, filename2];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_flag_column_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_3_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_flag_column_3_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_3_file2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_flag_column_3_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-3", filename1, filename2];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_flag_column_12() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_12_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_flag_column_12_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_12_file2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_flag_column_12_file1.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-12", filename1, filename2];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_flag_column_13() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_13_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_flag_column_13_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_13_file2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_flag_column_13_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-13", filename1, filename2];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+
+        #[test]
+        fn tests_ctmain_flag_column_23() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_23_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ctmain_flag_column_23_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let temp_dir = Builder::new()
+                .prefix("tests_ctmain_flag_column_23_file2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_2 = sub_dir_path.join("tests_ctmain_flag_column_23_file2.txt");
+            File::create(&test_file_2).unwrap();
+            let filename2 = test_file_2.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-23", filename1, filename2];
+            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result, 0);
+        }
+    }
 }

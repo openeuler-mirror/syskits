@@ -3666,5 +3666,246 @@ mod tests {
             let matches = result.unwrap();
             assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1TB");
         }
+
+        #[test]
+        fn test_ct_app_threshold_1p() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1PB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1PB");
+        }
+
+        #[test]
+        fn test_ct_app_threshold_1e() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1EB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1EB");
+        }
+
+        #[test]
+        fn test_ct_app_threshold_1y() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1YB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1YB");
+        }
+
+        #[test]
+        fn test_ct_app_threshold_1z() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1ZB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1ZB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1k() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1KB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1KB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1m() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1MB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1MB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1g() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1GB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1GB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1t() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1TB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1TB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1p() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1PB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1PB");
+        }
+
+        #[test]
+        fn test_ct_app_t_1e() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-t", "1EB"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(THRESHOLD).unwrap(), "1EB");
+        }
+
     }
 }

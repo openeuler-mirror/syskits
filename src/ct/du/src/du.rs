@@ -1323,3 +1323,244 @@ fn format_error_message(pase_error: &ParseSizeError, s: &str, opt: &str) -> Stri
     }
 }
 
+#[cfg(test)]
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+
+    mod test_ct_app {
+        use super::*;
+        use crate::opt_flags::EXCLUDE_FROM;
+        use crate::opt_flags::FILES0_FROM;
+        use crate::opt_flags::ONE_FILE_SYSTEM;
+
+        use crate::opt_flags::TIME;
+        use crate::opt_flags::TIME_STYLE;
+
+        use crate::opt_flags::ALL;
+        use crate::opt_flags::APPARENT_SIZE;
+        use crate::opt_flags::BLOCK_SIZE;
+        use crate::opt_flags::BLOCK_SIZE_1K;
+        use crate::opt_flags::BLOCK_SIZE_1M;
+        use crate::opt_flags::BYTES;
+        use crate::opt_flags::COUNT_LINKS;
+        use crate::opt_flags::DEREFERENCE;
+        use crate::opt_flags::DEREFERENCE_ARGS;
+        use crate::opt_flags::EXCLUDE;
+        use crate::opt_flags::HUMAN_READABLE;
+        use crate::opt_flags::INODES;
+        use crate::opt_flags::MAX_DEPTH;
+        use crate::opt_flags::NO_DEREFERENCE;
+        use crate::opt_flags::NULL;
+        use crate::opt_flags::SEPARATE_DIRS;
+        use crate::opt_flags::SI;
+        use crate::opt_flags::SUMMARIZE;
+        use crate::opt_flags::THRESHOLD;
+        use crate::opt_flags::TOTAL;
+        use crate::opt_flags::VERBOSE;
+
+        use clap::error::ErrorKind;
+        use std::io::Write;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_a() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "-a"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(ALL).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_all() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--all"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(ALL).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_apparent_size() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(APPARENT_SIZE).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_all_apparent_size() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--all", "--apparent-size"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_one::<bool>(APPARENT_SIZE).unwrap());
+            assert!(matches.get_one::<bool>(ALL).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_block_size_1k() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1K"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+
+            assert_eq!(matches.get_one::<String>(BLOCK_SIZE).unwrap(), "1K");
+        }
+
+        #[test]
+        fn test_ct_app_block_size_1m() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1M"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(BLOCK_SIZE).unwrap(), "1M");
+        }
+
+        #[test]
+        fn test_ct_app_block_size_1g() {
+            let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = sub_dir_path.to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1g"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert_eq!(matches.get_one::<String>(BLOCK_SIZE).unwrap(), "1g");
+        }
+    }
+}

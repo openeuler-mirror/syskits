@@ -20,10 +20,10 @@ use ctcore::ct_error::CtSimpleError;
 
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
-use ctcore::ct_help_section;
+use ctcore::ct_help_usage;
 
-static ARCH_ABOUT: &str = ct_help_about!("arch.md");
-static ARCH_SUMMARY: &str = ct_help_section!("after help", "arch.md");
+const ARCH_ABOUT: &str = ct_help_about!("arch.md");
+const ARCH_SUMMARY: &str = ct_help_usage!("arch.md");
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     arch_main(args).map(|_| ())
@@ -37,7 +37,7 @@ pub fn arch_main(args: impl ctcore::Args) -> CTResult<String> {
 
     let binding = platform_info.machine().to_string_lossy();
     let s = binding.trim();
-    println!("{}", platform_info.machine().to_string_lossy().trim());
+
     Ok(s.to_string())
 }
 
@@ -50,7 +50,7 @@ pub fn ct_app() -> Command {
     Command::new(util_name)
         .version(command_version)
         .about(application_info)
-        .after_help(usage_description)
+        .override_usage(usage_description)
         .infer_long_args(true)
 }
 #[cfg(test)]
@@ -64,7 +64,7 @@ mod tests {
         {
             let args = ["-h", ""];
             let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
+
             assert_eq!(result, 1);
         }
 
@@ -83,7 +83,7 @@ mod tests {
         {
             let args = ["--version", ""];
             let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
+
             assert_eq!(result, 1);
         }
         {
@@ -102,7 +102,7 @@ mod tests {
         {
             let args = ["-V", ""];
             let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
+
             assert_eq!(result, 1);
         }
         {
@@ -138,5 +138,13 @@ mod tests {
             }
         }
         assert_eq!(s, expected_arch);
+    }
+
+    #[test]
+    fn test_arch_ctmain_help() {
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let result = arch_main(args.iter().map(|s| OsString::from(s)));
+
+        assert!(result.is_err());
     }
 }

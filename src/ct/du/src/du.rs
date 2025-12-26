@@ -5999,5 +5999,245 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_main_bytes() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file).unwrap();
+            let _ = test_file.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--bytes"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_total() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file).unwrap();
+            let _ = test_file.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "-c"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_total_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file).unwrap();
+            let _ = test_file.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--total"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_block_size_flag_k() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "-k"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_block_size_flag_1m() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "-m"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_max_depth_zeros() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "0"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_max_depth_1() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "1"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_max_depth_2() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "2"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_max_depth_3() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "3"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_max_depth_4() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "4"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
     }
 }

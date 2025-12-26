@@ -1257,4 +1257,274 @@ mod tests {
             assert_eq!(filename1, expected_result);
         }
     }
+
+    #[cfg(test)]
+    mod tests_ct_open_file {
+        use crate::ct_app;
+        use crate::open_file;
+        use crate::opt_flags;
+        use ctcore::ct_error::FromIo;
+        use ctcore::ct_line_ending::CtLineEnding;
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        use crate::opt_flags::COLUMN_1;
+        use crate::opt_flags::COLUMN_2;
+        use crate::opt_flags::COLUMN_3;
+        use crate::opt_flags::DELIMITER;
+        use crate::opt_flags::DELIMITER_DEFAULT;
+        use crate::opt_flags::FILE_1;
+        use crate::opt_flags::FILE_2;
+        use crate::opt_flags::TOTAL;
+        use crate::opt_flags::ZERO_TERMINATED;
+
+        #[test]
+        fn tests_ct_open_file_zero_terminated() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_zero_terminated_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_zero_terminated_file1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = ZERO_TERMINATED.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending = CtLineEnding::from_zero_flag(
+                matches
+                    .expect("REASON")
+                    .get_flag(opt_flags::ZERO_TERMINATED),
+            );
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_total() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_total")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_total.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = TOTAL.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(opt_flags::TOTAL));
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_file_1() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_file_1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = FILE_1.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(opt_flags::TOTAL));
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_file_2() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_file_2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_file_2.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = FILE_2.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(opt_flags::TOTAL));
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_delimiter() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_delimiter")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_delimiter.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = DELIMITER.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(opt_flags::TOTAL));
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+        #[test]
+        fn tests_ct_open_file_delimiter_default() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_delimiter_default")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_delimiter_default.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = DELIMITER_DEFAULT.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.expect("REASON").get_flag(opt_flags::TOTAL));
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_column_1() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_column_1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_column_1.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = COLUMN_1.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending = CtLineEnding::from_zero_flag(
+                matches.expect("REASON").get_flag(opt_flags::COLUMN_1),
+            );
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_column_2() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_column_2")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_column_2.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = COLUMN_2.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending = CtLineEnding::from_zero_flag(
+                matches.expect("REASON").get_flag(opt_flags::COLUMN_2),
+            );
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+
+        #[test]
+        fn tests_ct_open_file_column_3() {
+            // 创建临时目录结构
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_open_file_column_3")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("tests_ct_open_file_column_3.txt");
+            File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let flag = COLUMN_3.to_string();
+
+            let file1 = filename1.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+
+            let matches = ct_app().try_get_matches_from(args);
+            let line_ending = CtLineEnding::from_zero_flag(
+                matches.expect("REASON").get_flag(opt_flags::COLUMN_3),
+            );
+
+            let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
+
+            assert_eq!(f1.is_ok(), true);
+        }
+    }
 }

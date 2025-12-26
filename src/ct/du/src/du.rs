@@ -7699,5 +7699,275 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_ct_main_time_ctime() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--time=ctime"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_time_status() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--time=status"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_time_access() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--time=access"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_time_atime() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--time=atime"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_time_use() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir, "--time=use"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_time_birth() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+            let metadata = sub_dir_path
+                .metadata()
+                .expect("Failed to get file metadata");
+
+            let args = vec![ctcore::ct_util_name(), dir, "--time=birth"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            if metadata.created().is_ok() {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.is_err());
+            }
+        }
+
+        #[test]
+        fn test_ct_main_time_creation() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+            let metadata = sub_dir_path
+                .metadata()
+                .expect("Failed to get file metadata");
+            let args = vec![ctcore::ct_util_name(), dir, "--time=creation"];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            if metadata.created().is_ok() {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.is_err());
+            }
+        }
+
+        #[test]
+        fn test_ct_main_exclude_from_time_ctime() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                filename,
+                "--time=ctime",
+            ];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_exclude_from_time_status() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                filename,
+                "--time=status",
+            ];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_exclude_from_time_access() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename = test_file_1.to_str().unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                dir,
+                "--exclude-from",
+                filename,
+                "--time=access",
+            ];
+            let result = du_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
     }
 }

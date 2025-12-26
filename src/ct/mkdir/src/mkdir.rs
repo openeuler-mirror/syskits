@@ -379,4 +379,222 @@ mod tests {
             assert_eq!(mode.unwrap(), MKDIR_DEFAULT_PERM);
         }
     }
+
+    #[cfg(test)]
+    mod strip_minus_from_mode_tests {
+        use super::*;
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_no_change() {
+            let mut args = vec![ctcore::ct_util_name().to_string(), "dir".to_string()];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, false);
+            assert_eq!(
+                args,
+                vec![ctcore::ct_util_name().to_string(), "dir".to_string()]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_with_minus() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-m".to_string(),
+                "-rw-r--r--".to_string(),
+                "dir".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, true);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string(),
+                    "dir".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_with_multiple_minus() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-m".to_string(),
+                "-rw-r--r--".to_string(),
+                "-m".to_string(),
+                "-rwxr-xr-x".to_string(),
+                "dir".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, true);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string(),
+                    "-m".to_string(),
+                    "-rwxr-xr-x".to_string(),
+                    "dir".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_no_mode() {
+            let mut args = vec![ctcore::ct_util_name().to_string(), "dir".to_string()];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, false);
+            assert_eq!(
+                args,
+                vec![ctcore::ct_util_name().to_string(), "dir".to_string()]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_mixed_args() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-v".to_string(),
+                "-m".to_string(),
+                "-rw-r--r--".to_string(),
+                "dir".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, true);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-v".to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string(),
+                    "dir".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_only_minus() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-".to_string(),
+                "dir".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, false);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-".to_string(),
+                    "dir".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_mode_at_end() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "dir".to_string(),
+                "-m".to_string(),
+                "-rw-r--r--".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, true);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "dir".to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_multiple_dirs() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-m".to_string(),
+                "-rw-r--r--".to_string(),
+                "dir1".to_string(),
+                "dir2".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, true);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string(),
+                    "dir1".to_string(),
+                    "dir2".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_no_minus_prefix() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-m".to_string(),
+                "rw-r--r--".to_string(),
+                "dir".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, false);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string(),
+                    "dir".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_no_dirs() {
+            let mut args = vec![
+                ctcore::ct_util_name().to_string(),
+                "-m".to_string(),
+                "-rw-r--r--".to_string(),
+            ];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, true);
+            assert_eq!(
+                args,
+                vec![
+                    ctcore::ct_util_name().to_string(),
+                    "-m".to_string(),
+                    "rw-r--r--".to_string()
+                ]
+            );
+        }
+
+        #[cfg(not(windows))]
+        #[test]
+        fn test_strip_minus_from_mode_empty_args() {
+            let mut args: Vec<String> = vec![];
+            let result = mkdir_strip_minus_from_mode(&mut args);
+            assert_eq!(result, false);
+            assert!(args.is_empty());
+        }
+    }
 }

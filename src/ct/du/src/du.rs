@@ -8393,4 +8393,161 @@ mod tests_fn {
         let result = du_read_block_size(Some(input_str));
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_read_block_size_invalid_input_negative_value() {
+        let input_str = "-1024";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_block_size_invalid_input_fractional_value() {
+        let input_str = "1024.5";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_block_size_invalid_input_multiple_units() {
+        let input_str = "1T1G";
+        let result = du_read_block_size(Some(input_str));
+        assert!(result.is_err());
+    }
+
+    fn create_temp_file_with_content(content: &str) -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+        temp_dir
+    }
+
+    fn create_temp_symlink(target: &Path, symlink_path: &Path) {
+        symlink(target, symlink_path).unwrap();
+    }
+
+    #[test]
+    fn test_stat_new_regular_file() {
+        let temp_dir = create_temp_file_with_content("Hello, world!");
+        let test_file_path = temp_dir.path().join("test_file.txt");
+        let exclude_pattern = Pattern::new("test_file.txt").unwrap();
+        let exclude_pattern: Vec<Pattern> = vec![exclude_pattern];
+        let options = DuTraversalOptions {
+            all: true,
+            separate_dirs: false,
+            one_file_system: true,
+            dereference: DuDeref::All,
+            count_links: false,
+            verbose: false,
+            excludes: exclude_pattern,
+        };
+
+        let stat_result = DuStat::new(&test_file_path, &options);
+
+        assert!(stat_result.is_ok());
+
+        let stat = stat_result.unwrap();
+        assert_eq!(stat.path, test_file_path);
+        assert!(!stat.is_dir);
+        assert_eq!(stat.size, "Hello, world!".len() as u64);
+    }
+
+    #[test]
+    fn test_stat_new_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let exclude_pattern = Pattern::new("test_file.txt").unwrap();
+        let exclude_pattern: Vec<Pattern> = vec![exclude_pattern];
+        let options = DuTraversalOptions {
+            all: true,
+            separate_dirs: false,
+            one_file_system: true,
+            dereference: DuDeref::All,
+            count_links: false,
+            verbose: false,
+            excludes: exclude_pattern,
+        };
+
+        let stat_result = DuStat::new(temp_dir.path(), &options);
+
+        assert!(stat_result.is_ok());
+
+        let stat = stat_result.unwrap();
+        assert_eq!(stat.path, temp_dir.path());
+        assert!(stat.is_dir);
+        assert_eq!(stat.size, 0);
+    }
+
+    #[test]
+    fn test_stat_new_following_symlink() {
+        let temp_dir = create_temp_file_with_content("Symlink target content");
+        let test_file_path = temp_dir.path().join("test_file.txt");
+        let symlink_temp_dir = TempDir::new().unwrap();
+        let symlink_path = symlink_temp_dir.path().join("symlink.txt");
+
+        create_temp_symlink(&test_file_path, &symlink_path);
+
+        let exclude_pattern = Pattern::new("test_file.txt").unwrap();
+        let exclude_pattern: Vec<Pattern> = vec![exclude_pattern];
+        let options = DuTraversalOptions {
+            all: true,
+            separate_dirs: false,
+            one_file_system: true,
+            dereference: DuDeref::All,
+            count_links: false,
+            verbose: false,
+            excludes: exclude_pattern,
+        };
+
+        let stat_result = DuStat::new(&symlink_path, &options);
+
+        assert!(stat_result.is_ok());
+
+        let stat = stat_result.unwrap();
+        assert_eq!(stat.path, symlink_path);
+        assert!(!stat.is_dir);
+        assert_eq!(stat.size, "Symlink target content".len() as u64);
+    }
+
+    #[test]
+    fn test_div_ceil() {
+        assert_eq!(du_div_ceil(10, 3), 4);
+        assert_eq!(du_div_ceil(15, 5), 3);
+        assert_eq!(du_div_ceil(8, 2), 4);
+        assert_eq!(du_div_ceil(21, 7), 3);
+        assert_eq!(du_div_ceil(0, 5), 0);
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_zeros() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file.txt");
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "0"];
+
+        // 从命令行参数中解析匹配项
+        let matches = ct_app()
+            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .unwrap();
+
+        // 解析是否需要汇总信息
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+
+        assert_eq!(max_depth.unwrap(), 0);
+    }
 }

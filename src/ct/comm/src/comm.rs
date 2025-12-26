@@ -411,5 +411,174 @@ mod tests {
                 .get_one::<bool>(opt_flags::COLUMN_3)
                 .unwrap());
         }
+
+        #[test]
+        fn test_ct_app_column_11() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-11", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_column_22() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-22", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_column_33() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-33", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+
+        #[test]
+        fn test_ct_app_column_123() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-123", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_1)
+                .unwrap());
+            // assert!(result.unwrap().get_one::<bool>(opt_flags::COLUMN_2).unwrap());
+            // assert!(result.unwrap().get_one::<bool>(opt_flags::COLUMN_3).unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_zero_terminated() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--zero-terminated",
+                "file1",
+                "file2",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ZERO_TERMINATED)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_zero() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-z", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ZERO_TERMINATED)
+                .unwrap());
+        }
+
+        #[test]
+        fn test_ct_app_total() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--total", "file1", "file2"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_one::<bool>(opt_flags::TOTAL).unwrap());
+        }
+        #[test]
+        fn test_ct_app_file_1() {
+            let command = ct_app();
+            let test_file_path = "test_ct_app_file_1.txt"; // 测试文件路径
+            let expected_result = FILE_1;
+            let flag = opt_flags::FILE_1.to_string();
+            let files = test_file_path.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &files];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<String>(opt_flags::FILE_1)
+                    .unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_file_2() {
+            let command = ct_app();
+            let test_file_path = "test_ct_app_file_2.txt"; // 测试文件路径
+                                                           // let expected_result = FILE_2;
+            let flag = FILE_2.to_string();
+            let files = test_file_path.to_string();
+            let args = vec![ctcore::ct_util_name(), &flag, &files];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<String>(opt_flags::FILE_2)
+                    .unwrap(),
+                test_file_path
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter() {
+            let command = ct_app();
+            let test_file = "test_ct_app_delimiter.txt"; // 测试文件路径
+
+            let expected_result = DELIMITER_DEFAULT;
+            let flag = DELIMITER.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<String>(opt_flags::DELIMITER)
+                    .unwrap(),
+                expected_result
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_default() {
+            let command = ct_app();
+            let test_file = "test_ct_app_delimiter_default.txt"; // 测试文件路径
+
+            let expected_result = DELIMITER_DEFAULT;
+            let flag = DELIMITER_DEFAULT.to_string();
+            let file1 = test_file.to_string();
+
+            let args = vec![ctcore::ct_util_name(), &flag, &file1];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<String>(opt_flags::DELIMITER)
+                    .unwrap(),
+                expected_result
+            );
+        }
     }
 }

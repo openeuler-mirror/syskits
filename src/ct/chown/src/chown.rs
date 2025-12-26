@@ -385,4 +385,88 @@ mod test {
         assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
         assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
     }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_or_dot_or_colon_or_dot_or_colon_or_dot_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_test_olon_or_dot() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_test_or_dot_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_ctest_or_dot() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colof_test_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_dot_or_colon_sft_colon_or_dot() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec_with_test_or_colon_or_dot_or_colon() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+    }
+    #[test]
+    fn test_parse_spec() {
+        assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
+        assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
+        assert!(format!("{}", chown_parse_spec("::", ':').err().unwrap())
+            .starts_with("invalid group: "));
+        assert!(format!("{}", chown_parse_spec("..", ':').err().unwrap())
+            .starts_with("invalid group: "));
+    }
+
+    /// Test for parsing IDs that don't correspond to a named user or group.
+    #[test]
+    fn test_parse_spec_nameless_ids() {
+        // This assumes that there is no named user with ID 12345.
+        assert!(matches!(
+            chown_parse_spec("12345", ':'),
+            Ok((Some(12345), None))
+        ));
+        // This assumes that there is no named group with ID 54321.
+        assert!(matches!(
+            chown_parse_spec(":54321", ':'),
+            Ok((None, Some(54321)))
+        ));
+        assert!(matches!(
+            chown_parse_spec("12345:54321", ':'),
+            Ok((Some(12345), Some(54321)))
+        ));
+    }
+
+    #[test]
+    fn test_ct_app_execution_help() {
+        let command = ct_app();
+
+        // 测试用例：有效输入 --help
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
 }

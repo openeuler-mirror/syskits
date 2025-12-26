@@ -219,3 +219,109 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod uname_output_tests {
+        use super::*;
+
+        fn generate_uname_flags(
+            is_all: bool,
+            is_kernel_name: bool,
+            is_node_name: bool,
+            is_kernel_release: bool,
+            is_kernel_version: bool,
+            is_machine: bool,
+            is_processor: bool,
+            is_hardware_platform: bool,
+            is_os: bool,
+        ) -> UnameFlags {
+            UnameFlags {
+                is_all,
+                is_kernel_name,
+                is_node_name,
+                is_kernel_release,
+                is_kernel_version,
+                is_machine,
+                is_processor,
+                is_hardware_platform,
+                is_os,
+            }
+        }
+
+        #[test]
+        fn test_uname_output_all_flags() {
+            let flags =
+                generate_uname_flags(true, false, false, false, false, false, false, false, false);
+            let uname_output = UNameOutput::new(&flags).unwrap();
+
+            assert_eq!(uname_output.kernel_name, Some("Linux".to_string()));
+            assert!(uname_output.node_name.is_some());
+            assert!(uname_output.kernel_release.is_some());
+            assert!(uname_output.kernel_version.is_some());
+            assert!(uname_output.machine.is_some());
+            assert!(uname_output.os.is_some());
+            assert!(uname_output.processor.is_none());
+            assert!(uname_output.hardware_platform.is_none());
+            assert!(!uname_output.display().is_empty());
+        }
+
+        #[test]
+        fn test_uname_output_individual_flags() {
+            let flags = generate_uname_flags(false, true, true, true, true, true, true, true, true);
+            let uname_output = UNameOutput::new(&flags).unwrap();
+
+            assert!(uname_output.kernel_name.is_some());
+            assert!(uname_output.node_name.is_some());
+            assert!(uname_output.kernel_release.is_some());
+            assert!(uname_output.kernel_version.is_some());
+            assert!(uname_output.machine.is_some());
+            assert!(uname_output.os.is_some());
+            assert!(uname_output.processor.is_some());
+            assert!(uname_output.hardware_platform.is_some());
+            assert!(!uname_output.display().is_empty());
+        }
+
+        #[test]
+        fn test_uname_output_no_flags() {
+            let flags = generate_uname_flags(
+                false, false, false, false, false, false, false, false, false,
+            );
+            let uname_output = UNameOutput::new(&flags).unwrap();
+
+            assert!(uname_output.kernel_name.is_some());
+            assert!(uname_output.node_name.is_none());
+            assert!(uname_output.kernel_release.is_none());
+            assert!(uname_output.kernel_version.is_none());
+            assert!(uname_output.machine.is_none());
+            assert!(uname_output.os.is_none());
+            assert!(uname_output.processor.is_none());
+            assert!(uname_output.hardware_platform.is_none());
+
+            let expected_output = "Linux ";
+            assert_eq!(
+                uname_output.display().trim_end(),
+                expected_output.trim_end()
+            );
+        }
+
+        #[test]
+        fn test_uname_output_some_flags() {
+            let flags =
+                generate_uname_flags(false, true, false, true, false, true, false, true, false);
+            let uname_output = UNameOutput::new(&flags).unwrap();
+
+            assert!(uname_output.kernel_name.is_some());
+            assert!(uname_output.node_name.is_none());
+            assert!(uname_output.kernel_release.is_some());
+            assert!(uname_output.kernel_version.is_none());
+            assert!(uname_output.machine.is_some());
+            assert!(uname_output.os.is_none());
+            assert!(uname_output.processor.is_none());
+            assert!(uname_output.hardware_platform.is_some());
+            assert!(!uname_output.display().is_empty());
+        }
+    }
+}

@@ -390,6 +390,54 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_ct_app_file_data_short() {
+            let command = ct_app();
+            let missing_args = vec![ctcore::ct_util_name(), "-d"];
+            let result = command.try_get_matches_from(missing_args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_system_long_with_file() {
+            let filename = "test_ct_app_file_system_long_with_file";
+            let command = ct_app();
+            let missing_args = vec![ctcore::ct_util_name(), "--file-system", filename];
+            let result = command.try_get_matches_from(missing_args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_system_short_with_file() {
+            let filename = "test_ct_app_file_system_short_with_file";
+            let command = ct_app();
+            let missing_args = vec![ctcore::ct_util_name(), "-f", filename];
+            let result = command.try_get_matches_from(missing_args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_data_long_with_file() {
+            let filename = "test_ct_app_file_data_long_with_file";
+            let command = ct_app();
+            let missing_args = vec![ctcore::ct_util_name(), "--data", filename];
+            let result = command.try_get_matches_from(missing_args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_data_short_with_file() {
+            let filename = "test_ct_app_file_data_short_with_file";
+            let command = ct_app();
+            let missing_args = vec![ctcore::ct_util_name(), "-d", filename];
+            let result = command.try_get_matches_from(missing_args);
+
+            assert!(result.is_ok());
+        }
 
     }
 }

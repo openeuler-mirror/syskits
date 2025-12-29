@@ -19,7 +19,7 @@ Source0:        %{name}-v%{version}.tar.gz
 
 ExclusiveArch:  x86_64 aarch64
 
-BuildRequires:  gcc clang openssl-libs
+BuildRequires:  gcc clang openssl-libs libselinux-devel libacl-devel
 
 %description
 CTyunOs sysKits is suit of programes to release coreutils.
@@ -44,7 +44,7 @@ mkdir -p %{buildroot}/%{syskit_app_bin}
 
 %post
 # Define the file list variable
-file_list="qq arch base32 base64 basename basenc cat chcon chgrp chmod chown chroot cksum comm cp csplit split \
+file_list="arch base32 base64 basename basenc cat chcon chgrp chmod chown chroot cksum comm cp csplit split \
 du yes whoami who wc vdir dir ls sort mkdir mkfifo mknod mktemp mv nice nohup nproc date df dircolors pwd \
 groups hostname numfmt readlink rmdir sleep sum sync touch true truncate expand expr false pr printenv printf \
 tsort tty uname unexpand uniq unlink uptime users cut fmt logname echo env dirname"

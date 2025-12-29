@@ -1121,5 +1121,60 @@ mod tests {
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
+
+        #[test]
+        fn test_expand_shortcuts_with_only_shortcuts() {
+            let args = vec!["-4,8,12".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--tabs=12".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_only_files() {
+            let args = vec!["file1".to_string(), "file2".to_string()];
+            let expected = vec!["file1".to_string(), "file2".to_string()];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_empty_tabs_shortcut() {
+            let args = vec!["-4,,8".to_string(), "file1".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "file1".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_tabs_and_other_flags() {
+            let args = vec![
+                "-4,8".to_string(),
+                "--no-utf8".to_string(),
+                "file1".to_string(),
+            ];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--no-utf8".to_string(),
+                "file1".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_only_flags() {
+            let args = vec!["--all".to_string(), "--no-utf8".to_string()];
+            let expected = vec!["--all".to_string(), "--no-utf8".to_string()];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
     }
 }

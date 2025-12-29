@@ -1190,4 +1190,79 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod find_last_contiguous_block_of_xs_tests {
+        use super::*;
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_basic() {
+            let s = "abcXXXdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((3, 6)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_multiple_blocks() {
+            let s = "abcXXXdefXXXghi";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((9, 12)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_single_x() {
+            let s = "abcXdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_mixed_case() {
+            let s = "abcXXxXdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_no_x() {
+            let s = "abcdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_trailing_xs() {
+            let s = "abcdefXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((6, 9)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_leading_xs() {
+            let s = "XXXabcdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((0, 3)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_continuous_xs() {
+            let s = "abcXXXXXXXXXdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((3, 12)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_no_continuous_block_of_three() {
+            let s = "abcXXdefXXghi";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_exactly_three_xs() {
+            let s = "abcXXXdefXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((9, 12)));
+        }
+    }
 }

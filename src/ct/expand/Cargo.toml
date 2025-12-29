@@ -1,0 +1,27 @@
+[package]
+name = "ct_expand"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "expand ~ (ctutils) convert input tabs to spaces"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/expand"
+
+[lib]
+path = "src/expand.rs"
+
+[dependencies]
+clap = { workspace = true }
+unicode-width = { workspace = true }
+ctcore = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "expand"
+path = "src/main.rs"

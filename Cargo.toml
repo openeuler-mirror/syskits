@@ -118,6 +118,7 @@ feat_common_core = [
   "sum",
   "expr",
   "true",
+  "groups",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -300,6 +301,7 @@ false = { optional = true, package = "ct_false", path = "src/ct/false" }
 sum = { optional = true, package = "ct_sum", path = "src/ct/sum" }
 expr = { optional = true, package = "ct_expr", path = "src/ct/expr" }
 true = { optional = true, package = "ct_true", path = "src/ct/true" }
+groups = { optional = true, package = "ct_groups", path = "src/ct/groups" }
 
 [dev-dependencies]
 chrono = { workspace = true }

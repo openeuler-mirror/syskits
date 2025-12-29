@@ -270,4 +270,104 @@ mod tests {
             writer.flush()
         }
     }
+        #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::fs::File;
+        use std::os::unix::fs::symlink;
+        use tempfile::tempdir;
+        #[test]
+        fn test_readlink_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_canonicalize_long() {
+            let filename = "test_readlink_main_canonicalize_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--canonicalize", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_canonicalize_short() {
+            let filename = "test_readlink_main_canonicalize_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-f", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_canonicalize_existing_long() {
+            let filename = "test_readlink_main_canonicalize_existing_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--canonicalize-existing", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+ 
+    }
 }

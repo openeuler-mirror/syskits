@@ -1415,6 +1415,104 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_b_simple() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-b", "simple"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_s() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-S", ".bak"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_suffix() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--suffix=.bak"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_none() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--update=none"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_all() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--update=all"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_update_older() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--update=older"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_none() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-u", "none"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_all() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-u", "all"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u_older() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-u", "older"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_t_directory() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-t", "target-directory"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<OsString>(OPT_TARGET_DIRECTORY)
+                    .unwrap(),
+                OPT_TARGET_DIRECTORY
+            );
+        }
+
     }
 
 }

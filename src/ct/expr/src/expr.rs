@@ -146,3 +146,227 @@ pub fn expr_main(args: impl ctcore::Args) -> CTResult<String> {
     Ok(result)
 }
 
+#[cfg(test)]
+mod tests {
+    mod tests_expr_main {
+        use crate::expr_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_expr_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_expr_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_expr_main_add() {
+            let args = vec![ctcore::ct_util_name(), "1", "+", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "3");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_sub() {
+            let args = vec![ctcore::ct_util_name(), "1", "-", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "-1");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_mul() {
+            let args = vec![ctcore::ct_util_name(), "1", "*", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "2");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_div() {
+            let args = vec![ctcore::ct_util_name(), "7", "/", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "3");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_mod() {
+            let args = vec![ctcore::ct_util_name(), "7", "%", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "1");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+        #[test]
+        fn test_expr_main_index_num() {
+            let args = vec![ctcore::ct_util_name(), "index", "12345", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "2");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_index_str_not_found() {
+            let args = vec![ctcore::ct_util_name(), "index", "world", "x"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(_) => {
+                    assert!(false);
+                }
+                Err(_) => {
+                    assert!(true);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_index_str() {
+            let args = vec![ctcore::ct_util_name(), "index", "world", "o"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "2");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_substr() {
+            let args = vec![ctcore::ct_util_name(), "substr", "abcdef", "2", "3"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "bcd");
+                }
+                Err(_) => {
+                    assert!(false);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_or() {
+            let args = vec![ctcore::ct_util_name(), "0", "|", "3"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "3");
+        }
+
+        #[test]
+        fn test_expr_main_and() {
+            let args = vec![ctcore::ct_util_name(), "1", "&", "2"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "1");
+        }
+
+        #[test]
+        fn test_expr_main_less_than() {
+            let args = vec![ctcore::ct_util_name(), "2", "<", "3"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "1"); // 通常表达式结果为真会表示为1
+        }
+
+        #[test]
+        fn test_expr_main_substring() {
+            let args = vec![ctcore::ct_util_name(), "substr", "abcdef", "2", "3"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "bcd");
+        }
+
+        #[test]
+        fn test_expr_main_index() {
+            let args = vec![ctcore::ct_util_name(), "index", "world", "o"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "2"); // 'o' 在 "world" 中的位置从1开始计数
+        }
+
+        #[test]
+        fn test_expr_main_match() {
+            let args = vec![ctcore::ct_util_name(), "match", "hello", "ell"];
+            // 假设匹配成功返回匹配的字符串或其长度，具体行为需根据实际实现调整
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Ok(result) => {
+                    assert_eq!(result, "0");
+                }
+                Err(_) => {
+                    assert!(true);
+                }
+            }
+        }
+
+        #[test]
+        fn test_expr_main_escape_operator() {
+            let args = vec![ctcore::ct_util_name(), "+", "match"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "match"); // '+' 强制将 "match" 当作字符串处理
+        }
+
+        #[test]
+        fn test_expr_main_group() {
+            let args = vec![ctcore::ct_util_name(), "(", "3", "+", "2", ")", "*", "4"];
+            let result = expr_main(args.iter().map(|s| OsString::from(s)));
+            assert_eq!(result.unwrap(), "20");
+        }
+    }
+
+}

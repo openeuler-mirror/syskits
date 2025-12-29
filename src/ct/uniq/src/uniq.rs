@@ -2453,4 +2453,140 @@ mod tests {
             assert_eq!(content, "Hello, Temp File!");
         }
     }
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_ct_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_support_missing_argument() {
+            let filename = "test_ct_main_support_missing_argument";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_all_repeated() {
+            let filename = "test_ct_main_long_option_all_repeated";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--all-repeated=prepend", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            println!("{:?}", result);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_group() {
+            let filename = "test_ct_main_long_option_group";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--group=separate", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_check_chars() {
+            let filename = "test_ct_main_long_option_check_chars";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--check-chars=3", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_count() {
+            let filename = "test_ct_main_long_option_count";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--count", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+}
 }

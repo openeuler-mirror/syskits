@@ -1,0 +1,23 @@
+[package]
+name = "ct_true"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "true ~ (ctutils) do nothing and succeed"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/true"
+
+[lib]
+path = "src/true.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "true"
+path = "src/main.rs"

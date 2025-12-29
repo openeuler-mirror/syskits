@@ -1513,6 +1513,97 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_ct_app_target_directory() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "a",
+                "b",
+                "--target-directory",
+                "target-directory",
+            ];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<OsString>(OPT_TARGET_DIRECTORY)
+                    .unwrap(),
+                OPT_TARGET_DIRECTORY
+            );
+        }
+
+        #[test]
+        fn test_ct_app_n_t_directory() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-T", "target-directory"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<bool>(OPT_NO_TARGET_DIRECTORY),
+                Some(&true)
+            );
+        }
+
+        #[test]
+        fn test_ct_app_n_target_directory() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "a",
+                "b",
+                "--no-target-directory",
+                "target-directory",
+            ];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<bool>(OPT_NO_TARGET_DIRECTORY),
+                Some(&true)
+            );
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-v"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_VERBOSE), Some(&true));
+        }
+        #[test]
+        fn test_ct_app_verbose() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--verbose"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_VERBOSE), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_g() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-g"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_PROGRESS), Some(&true));
+        }
+        #[test]
+        fn test_ct_app_progress() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--progress"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_PROGRESS), Some(&true));
+        }
     }
 
 }

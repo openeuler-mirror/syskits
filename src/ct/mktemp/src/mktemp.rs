@@ -2308,4 +2308,145 @@ mod tests {
             assert_eq!(result.unwrap_err().to_string(), "failed to create file via template '/absolute/template.XXXXXX': No such file or directory");
         }
     }
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use tempfile::tempdir;
+        #[test]
+        fn test_ct_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_main_directory_long() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "--directory", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_directory_short() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "-d", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_dry_run_long() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "--dry-run", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_dry_run_short() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "-u", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_quiet_long() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "--quiet", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_quiet_short() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "-q", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_suffix_long() {
+            let dir = tempdir().unwrap();
+            let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "--suffix", "qqq", &template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_tmpdir_short() {
+            let dir = tempdir().unwrap();
+            let tmpdir = dir.path().to_str().unwrap();
+            let template = "tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), "-p", tmpdir, template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_tmpdir_long() {
+            let dir = tempdir().unwrap();
+            let tmpdir = String::from("--tmpdir=") + dir.path().to_str().unwrap();
+            let template = "tmp.XXXXXX";
+
+            let args = vec![ctcore::ct_util_name(), &tmpdir, template];
+            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+    }
 }

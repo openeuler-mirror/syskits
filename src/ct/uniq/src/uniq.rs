@@ -2588,5 +2588,238 @@ mod tests {
             assert!(result.is_ok());
         }
 
-}
+        #[test]
+        fn test_ct_main_long_option_ignore_case() {
+            let filename = "test_ct_main_long_option_ignore_case";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--ignore-case", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_repeated() {
+            let filename = "test_ct_main_long_option_repeated";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--repeated", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_skip_chars() {
+            let filename = "test_ct_main_long_option_skip_chars";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--skip-chars", "8", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_skip_fields() {
+            let filename = "test_ct_main_long_option_skip_fields";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--skip-fields", "5", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_unique() {
+            let filename = "test_ct_main_long_option_unique";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--unique", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_uppercase_d() {
+            let filename = "test_ct_main_short_option_uppercase_d";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-D=prepend", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_w() {
+            let filename = "test_ct_main_short_option_w";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-w", "6", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_c() {
+            let filename = "test_ct_main_short_option_c";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_i() {
+            let filename = "test_ct_main_short_option_i";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-i", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_d() {
+            let filename = "test_ct_main_short_option_d";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-d", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_s() {
+            let filename = "test_ct_main_short_option_s";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-s", "11", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_f() {
+            let filename = "test_ct_main_short_option_f";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-f", "8", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_short_option_u() {
+            let filename = "test_ct_main_short_option_u";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(
+                tmp_file,
+                "world\nworld\nworld\nworld\nworld 1000 zzzzz\nworld 2200 ccccc\nCtyunOs 2000 aaaaa\nCtyunOs 1900 ababa"
+            )
+                .unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-u", file_name];
+            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+    }
 }

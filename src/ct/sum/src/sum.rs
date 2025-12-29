@@ -543,4 +543,110 @@ mod tests {
             assert_eq!(content, "Hello, symlink!\n");
         }
     }
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::io::Write;
+        use tempfile::tempdir;
+        #[test]
+        fn test_sum_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sum_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sum_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sum_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sum_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sum_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sum_main_default() {
+            let filename = "test_sum_main_default";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sum_main_bsd_sum_algorithm_short() {
+            let filename = "test_sum_main_bsd_sum_algorithm_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-r", file_name];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sum_main_system_v_sum_algorithm_short() {
+            let filename = "test_sum_main_system_v_sum_algorithm_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-s", file_name];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sum_main_bsd_sum_algorithm_long() {
+            let filename = "test_sum_main_bsd_sum_algorithm_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--sysv", file_name];
+            let result = sum_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+    }
 }

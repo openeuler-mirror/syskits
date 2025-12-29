@@ -1632,5 +1632,52 @@ mod tests {
             ));
         }
 
-}
+        #[test]
+        fn test_adjacent_command_options() {
+            let str_slice = "-12 -s3";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_space_after_hyphen_before_number() {
+            let str_slice = "- 123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_hyphen_as_part_of_a_larger_argument() {
+            let str_slice = "--option-123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_numeric_overflow_scenarios() {
+            let str_slice = "-999999999999999999999999999999";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+    }
 }

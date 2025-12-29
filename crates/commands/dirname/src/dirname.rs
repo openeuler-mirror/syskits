@@ -71,27 +71,42 @@ fn dirname_process(line_ending: CtLineEnding, dirnames: &Vec<String>) -> Option<
         return Some(Err(CTsageError::new(1, "missing operand")));
     } else {
         for item in dirnames {
-            let path = Path::new(item);
-            match path.parent() {
-                Some(dir) => {
-                    if dir.components().next().is_none() {
-                        print!(".");
-                    } else {
-                        ct_print_verbatim(dir).unwrap();
-                    }
-                }
-                None => {
-                    if path.is_absolute() || item == "/" {
-                        print!("/");
-                    } else {
-                        print!(".");
-                    }
-                }
-            }
+            let dirname = compute_dirname(item);
+            ct_print_verbatim(&dirname).unwrap();
             print!("{line_ending}");
         }
     }
     None
+}
+
+pub fn compute_dirname(path: &str) -> String {
+    if path.is_empty() {
+        return ".".to_string();
+    }
+    // 1. 去掉末尾所有 '/'
+    let mut s = path.trim_end_matches('/');
+    // 如果去掉后变为空（说明全是 /），设为 "/"
+    if s.is_empty() {
+        return "/".to_string();
+    }
+    // 2. 找最后一个 '/'
+    if let Some(pos) = s.rfind('/') {
+        // 截断到该 '/'
+        s = &s[..pos];
+
+        // 3. 再去掉末尾 '/'
+        s = s.trim_end_matches('/');
+
+        // 4. 处理截断结果为空的情况
+        if s.is_empty() {
+            return "/".to_string();
+        } else {
+            return s.to_string();
+        }
+    } else {
+        // 没有 '/' → 返回 "."
+        return ".".to_string();
+    }
 }
 
 pub fn ct_app() -> Command {

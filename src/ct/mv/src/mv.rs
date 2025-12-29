@@ -1123,6 +1123,179 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_mv_main_file_to_dir_suffix() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--suffix=.bak"];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_file_to_dir_update_none() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--update=none"];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_file_to_dir_update_all() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--update=all"];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_file_to_dir_update_older() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--update=older"];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_file_to_dir_no_target_directory() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![
+                ctcore::ct_util_name(),
+                src_file,
+                dst_dir,
+                "--no-target-directory",
+            ];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_file_to_dir_verbose() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--verbose"];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_file_to_dir_progress() {
+            let temp_dir = Builder::new().prefix("test_mv_main_f").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            let dst_dir_path = temp_dir.path().join("dst_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let src_file = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let dst_dir = dst_dir_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--progress"];
+            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
     }
 
 }

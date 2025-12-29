@@ -498,7 +498,206 @@ mod tests {
             assert!(result.is_err());
         }
 
+        #[test]
+        fn test_readlink_main_verbose_short() {
+            let filename = "test_readlink_main_verbose_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
 
- 
+            let args = vec![ctcore::ct_util_name(), "-v", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_zero_long() {
+            let filename = "test_readlink_main_zero_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--zero", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_zero_short() {
+            let filename = "test_readlink_main_zero_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-z", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        // -->         let symlink_path = tmp_dir.path().join("symlink_dir");
+        //             symlink(&dir_path, &symlink_path).unwrap();
+
+        #[test]
+        fn test_readlink_main_no_newline_long_with_symlink() {
+            let filename = "test_readlink_main_no_newline_long_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--no-newline", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_no_newline_short_with_symlink() {
+            let filename = "test_readlink_main_no_newline_short_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-n", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_quiet_long_with_symlink() {
+            let filename = "test_readlink_main_quiet_long_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--quiet", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_quiet_short_with_symlink() {
+            let filename = "test_readlink_main_quiet_short_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-q", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_silent_short_with_symlink() {
+            let filename = "test_readlink_main_silent_short_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-s", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_silent_long_with_symlink() {
+            let filename = "test_readlink_main_silent_long_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--silent", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_verbose_long_with_symlink() {
+            let filename = "test_readlink_main_verbose_long_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--verbose", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_verbose_short_with_symlink() {
+            let filename = "test_readlink_main_verbose_short_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-v", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_zero_long_with_symlink() {
+            let filename = "test_readlink_main_zero_long_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--zero", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_zero_short_with_symlink() {
+            let filename = "test_readlink_main_zero_short_with_symlink";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+
+            let symlink_path = dir.path().join("symlink_file");
+            symlink(&file_path, &symlink_path).unwrap();
+            let file_name = symlink_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-z", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }     
     }
 }

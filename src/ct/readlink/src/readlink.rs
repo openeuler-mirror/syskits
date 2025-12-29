@@ -355,6 +355,7 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        
         #[test]
         fn test_readlink_main_canonicalize_existing_long() {
             let filename = "test_readlink_main_canonicalize_existing_long";
@@ -367,6 +368,136 @@ mod tests {
             let result = readlink_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_readlink_main_canonicalize_existing_short() {
+            let filename = "test_readlink_main_canonicalize_existing_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-e", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_canonicalize_missing_long() {
+            let filename = "test_readlink_main_canonicalize_existing_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--canonicalize-missing", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_readlink_main_canonicalize_missing_short() {
+            let filename = "test_readlink_main_canonicalize_missing_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-m", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_readlink_main_no_newline_long() {
+            let filename = "test_readlink_main_no_newline_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--no-newline", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_no_newline_short() {
+            let filename = "test_readlink_main_no_newline_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-n", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_quiet_long() {
+            let filename = "test_readlink_main_quiet_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--quiet", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_quiet_short() {
+            let filename = "test_readlink_main_quiet_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-q", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_silent_short() {
+            let filename = "test_readlink_main_quiet_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-s", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_silent_long() {
+            let filename = "test_readlink_main_silent_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--silent", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_readlink_main_verbose_long() {
+            let filename = "test_readlink_main_verbose_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--verbose", file_name];
+            let result = readlink_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
 
  
     }

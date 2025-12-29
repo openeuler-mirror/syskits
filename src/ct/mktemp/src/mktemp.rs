@@ -1161,5 +1161,33 @@ mod tests {
             assert_eq!(params.suffix, "");
         }
 
+        #[test]
+        fn test_params_from_with_special_chars_in_template() {
+            let options = create_options(false, false, false, None, None, false, "test!@#XXXXXX");
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test!@#");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_with_no_xs_and_suffix() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some(".log".to_string()),
+                false,
+                "test",
+            );
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "with --suffix, template 'test' must end in X"
+            );
+        }
     }
 }

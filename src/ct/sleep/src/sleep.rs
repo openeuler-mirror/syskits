@@ -236,4 +236,80 @@ mod tests {
             assert!(result.is_err());
         }
     }
+    #[cfg(test)]
+    mod sleep_parse_numbers_tests {
+        use super::*;
+        #[test]
+        fn test_sleep_parse_numbers_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches);
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains("missing operand"));
+        }
+
+        #[test]
+        fn test_sleep_parse_numbers_sleep_5() {
+            let args = vec![ctcore::ct_util_name(), "5"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["5"]);
+        }
+
+        #[test]
+        fn test_sleep_parse_numbers_sleep_0() {
+            let args = vec![ctcore::ct_util_name(), "0"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["0"]);
+        }
+
+        #[test]
+        fn test_sleep_parse_numbers_sleep_suffix_seconds_2() {
+            let args = vec![ctcore::ct_util_name(), "2s"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["2s"]);
+        }
+
+        #[test]
+        fn test_sleep_parse_numbers_sleep_suffix_minutes_2() {
+            let args = vec![ctcore::ct_util_name(), "2m"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["2m"]);
+        }
+
+        #[test]
+        fn test_sleep_parse_numbers_sleep_suffix_hours_2() {
+            let args = vec![ctcore::ct_util_name(), "2h"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["2h"]);
+        }
+        #[test]
+        fn test_sleep_parse_numbers_sleep_suffix_days_2() {
+            let args = vec![ctcore::ct_util_name(), "2d"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["2d"]);
+        }
+
+        #[test]
+        fn test_sleep_parse_numbers_sleep_suffix_err_2() {
+            let args = vec![ctcore::ct_util_name(), "2q"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(result, ["2q"]);
+        }
+    }
+
 }

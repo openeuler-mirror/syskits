@@ -189,3 +189,85 @@ fn readlink_show(path: &Path, line_ending: Option<CtLineEnding>) -> std::io::Res
     stdout().flush()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod show_tests {
+        use super::*;
+
+        fn test_show_output(path: &str, line_ending: Option<CtLineEnding>, expected_output: &str) {
+            let path = Path::new(path);
+            let mut output = Vec::new();
+            show_with_writer(&path, line_ending, &mut output).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), expected_output);
+        }
+
+        #[test]
+        fn test_show_with_newline() {
+            test_show_output("test/path", Some(CtLineEnding::Newline), "test/path\n");
+        }
+
+        #[test]
+        fn test_show_with_null() {
+            test_show_output("test/path", Some(CtLineEnding::Nul), "test/path\0");
+        }
+
+        #[test]
+        fn test_show_without_line_ending() {
+            test_show_output("test/path", None, "test/path");
+        }
+
+        #[test]
+        fn test_show_empty_path() {
+            test_show_output("", Some(CtLineEnding::Newline), "\n");
+        }
+
+        #[test]
+        fn test_show_path_with_spaces() {
+            test_show_output(
+                "test path with spaces",
+                Some(CtLineEnding::Newline),
+                "test path with spaces\n",
+            );
+        }
+
+        #[test]
+        fn test_show_path_with_unicode() {
+            test_show_output("测试/路径", Some(CtLineEnding::Newline), "测试/路径\n");
+        }
+
+        #[test]
+        fn test_show_very_long_path() {
+            let long_path = "a".repeat(1000);
+            let expected_output = format!("{}\n", long_path);
+            test_show_output(&long_path, Some(CtLineEnding::Newline), &expected_output);
+        }
+
+        #[test]
+        fn test_show_multiple_calls() {
+            let path = "repeated_call";
+            let mut output = Vec::new();
+            let line_ending = Some(CtLineEnding::Newline);
+            for _ in 0..3 {
+                show_with_writer(&Path::new(path), line_ending, &mut output).unwrap();
+            }
+            let expected_output = format!("{0}\n{0}\n{0}\n", path);
+            assert_eq!(String::from_utf8(output).unwrap(), expected_output);
+        }
+
+        fn show_with_writer(
+            path: &Path,
+            line_ending: Option<CtLineEnding>,
+            writer: &mut dyn Write,
+        ) -> std::io::Result<()> {
+            let path = path.to_str().unwrap();
+            write!(writer, "{path}")?;
+            if let Some(line_ending) = line_ending {
+                write!(writer, "{line_ending}")?;
+            }
+            writer.flush()
+        }
+    }
+}

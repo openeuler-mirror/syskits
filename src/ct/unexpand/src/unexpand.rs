@@ -746,4 +746,53 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod next_char_info_tests {
+        use super::*;
+
+        #[test]
+        fn test_next_char_info_with_utf8() {
+            let buf = "Hello, 世界!".as_bytes();
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(true, buf, 7);
+            assert_eq!(ctype, UnexpandCharType::Other);
+            assert_eq!(cwidth, 1); // "世"的字符宽度
+            assert_eq!(nbytes, 1); // "世"的UTF-8字节数
+        }
+
+        #[test]
+        fn test_next_char_info_with_ascii_space() {
+            let buf = "Hello world".as_bytes();
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(false, buf, 5);
+            assert_eq!(ctype, UnexpandCharType::Space);
+            assert_eq!(cwidth, 1);
+            assert_eq!(nbytes, 1);
+        }
+
+        #[test]
+        fn test_next_char_info_with_ascii_tab() {
+            let buf = "Hello\tworld".as_bytes();
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(false, buf, 5);
+            assert_eq!(ctype, UnexpandCharType::Tab);
+            assert_eq!(cwidth, 1);
+            assert_eq!(nbytes, 1);
+        }
+
+        #[test]
+        fn test_next_char_info_with_backspace() {
+            let buf = "Hello\nworld".as_bytes();
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(false, buf, 5);
+            assert_eq!(ctype, UnexpandCharType::Other);
+            assert_eq!(cwidth, 1);
+            assert_eq!(nbytes, 1);
+        }
+
+        #[test]
+        fn test_next_char_info_with_invalid_utf8() {
+            let buf = [0xff, 0xfe, 0xfd];
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(true, &buf, 0);
+            assert_eq!(ctype, UnexpandCharType::Other);
+            assert_eq!(cwidth, 1);
+            assert_eq!(nbytes, 1);
+        }
+    }
 }

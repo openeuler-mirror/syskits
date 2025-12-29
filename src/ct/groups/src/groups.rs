@@ -191,3 +191,38 @@ fn groups_main(args: impl ctcore::Args) -> CTResult<Vec<GroupInfo>> {
     Ok(g)
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_groups_main {
+        use crate::groups_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_groups_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = groups_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_groups_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = groups_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_groups_main() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = groups_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+}

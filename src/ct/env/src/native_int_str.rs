@@ -166,7 +166,7 @@ impl<'a> EnvConvert<Vec<String>, Vec<Cow<'a, NativeIntStr>>> for NCvt {
 // 返回值是一个 `Cow`，它要么是 `OsStr` 的借来的内容，要么是其拥有内容的副本，
 // 具体取决于操作系统的类型和输入的内容。
 #[cfg(target_os = "windows")]
-fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
+pub(crate) fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
     Cow::Owned(input.encode_wide().collect())
 }
 
@@ -181,7 +181,7 @@ pub(crate) fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntSt
 //
 // 返回一个 `Cow`，它代表了操作系统的字符串，可能是借来的也可能拥有其内容。
 #[cfg(target_os = "windows")]
-fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, OsStr> {
+pub(crate) fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, OsStr> {
     Cow::Owned(OsString::from_wide(&input))
 }
 
@@ -218,7 +218,7 @@ pub fn from_native_int_representation_owned(input: NativeIntString) -> OsString 
 // 如果字符可以被转换为本地整型表示，则返回该表示的 `Option`，
 // 否则返回 `None`，这取决于操作系统。
 #[cfg(target_os = "windows")]
-fn get_single_native_int_value(c: &char) -> Option<NativeCharInt> {
+pub fn get_single_native_int_value(c: &char) -> Option<NativeCharInt> {
     let mut buf = [0u16, 0];
     let s = c.encode_utf16(&mut buf);
     if s.len() == 1 {

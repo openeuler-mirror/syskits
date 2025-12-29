@@ -246,7 +246,7 @@ fn nproc_all() -> usize {
     target_os = "freebsd",
     target_os = "netbsd"
 )))]
-fn num_cpus_all() -> usize {
+fn nproc_all() -> usize {
     available_parallelism()
 }
 

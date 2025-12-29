@@ -12,6 +12,8 @@
 // * 特性门控外部crate（重新作为公共内部模块共享）
 #[cfg(feature = "libc")]
 pub extern crate libc;
+#[cfg(all(feature = "windows-sys", target_os = "windows"))]
+pub extern crate windows_sys;
 
 //## 内部模块
 // 模块结构说明：

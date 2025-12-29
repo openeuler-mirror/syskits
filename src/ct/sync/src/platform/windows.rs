@@ -11,11 +11,10 @@
 
 use ctcore::ct_crash;
 use ctcore::ct_display::Quotable;
+use ctcore::ct_error::CtSimpleError;
+#[allow(unused_imports)]
 use ctcore::ct_error::{CTError, CTResult};
 use ctcore::ct_wide::{CtFromWide, CtToWide};
-use nix::errno::Errno;
-use nix::fcntl::{open, OFlag};
-use nix::sys::stat::Mode;
 use std::fs::OpenOptions;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;

@@ -1031,5 +1031,135 @@ mod tests {
             assert_eq!(params.rand_num_chars, 6);
             assert_eq!(params.suffix, "");
         }
+
+        #[test]
+        fn test_params_from_with_env_var_tmpdir() {
+            std::env::set_var("TMPDIR", "/custom/env_tmpdir");
+            let options = create_options(false, false, false, None, None, true, "test.XXXXXX");
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+            std::env::remove_var("TMPDIR");
+        }
+
+        #[test]
+        fn test_params_from_no_random_chars() {
+            let options = create_options(false, false, false, None, None, false, "test.");
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "too few X's in template 'test.'"
+            );
+        }
+
+        #[test]
+        fn test_params_from_with_multiple_templates() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                None,
+                false,
+                "template1.XXXXXX template2.XXXXXX",
+            );
+            let result = MkTempParams::from(options).unwrap();
+            assert_eq!(result.directory, PathBuf::from(""));
+            assert_eq!(result.prefix, "template1.XXXXXX template2.");
+            assert_eq!(result.rand_num_chars, 6);
+            assert_eq!(result.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_with_spaces_in_template() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                None,
+                false,
+                "test with spaces.XXXXXX",
+            );
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test with spaces.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_with_trailing_slash_in_template() {
+            let options = create_options(false, false, false, None, None, false, "test/XXXXXX");
+            let result = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(result.directory, PathBuf::from("test/"));
+            assert_eq!(result.prefix, "");
+            assert_eq!(result.rand_num_chars, 6);
+            assert_eq!(result.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_with_trailing_xs_in_prefix() {
+            let options = create_options(false, false, false, None, None, false, "testXXX.XXXXXX");
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "testXXX.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_with_leading_xs_in_suffix() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some("XXX.log".to_string()),
+                false,
+                "test.XXXXXX",
+            );
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "XXX.log");
+        }
+
+        #[test]
+        fn test_params_from_with_empty_template() {
+            let options = create_options(false, false, false, None, None, false, "");
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "too few X's in template ''"
+            );
+        }
+
+        #[test]
+        fn test_params_from_with_no_template() {
+            let options = create_options(false, false, false, None, None, false, "");
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "too few X's in template ''"
+            );
+        }
+
+        #[test]
+        fn test_params_from_with_only_xs() {
+            let options = create_options(false, false, false, None, None, false, "XXXXXX");
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+
     }
 }

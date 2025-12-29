@@ -713,4 +713,106 @@ mod tests {
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
     }
+
+    #[cfg(test)]
+    mod mk_temp_error_tests {
+        use super::*;
+
+        #[test]
+        fn test_mktemp_error_fmt_persist_error() {
+            let path = PathBuf::from("/invalid/path");
+            let error = MkTempError::PersistError(path.clone());
+            let expected_message = format!("could not persist file '{}'", path.display());
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_must_end_in_x() {
+            let template = "template_without_x".to_string();
+            let error = MkTempError::MustEndInX(template.clone());
+            let expected_message = format!("with --suffix, template '{}' must end in X", template);
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_too_few_xs() {
+            let template = "too_few_X".to_string();
+            let error = MkTempError::TooFewXs(template.clone());
+            let expected_message = format!("too few X's in template '{}'", template);
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_prefix_contains_dir_separator() {
+            let template = "invalid/template".to_string();
+            let error = MkTempError::PrefixContainsDirSeparator(template.clone());
+            let expected_message = format!(
+                "invalid template, '{}', contains directory separator",
+                template
+            );
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_suffix_contains_dir_separator() {
+            let suffix = "invalid/suffix".to_string();
+            let error = MkTempError::SuffixContainsDirSeparator(suffix.clone());
+            let expected_message =
+                format!("invalid suffix '{}', contains directory separator", suffix);
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_invalid_template() {
+            let template = "/absolute/template".to_string();
+            let error = MkTempError::InvalidTemplate(template.clone());
+            let expected_message = format!(
+                "invalid template, '{}'; with --tmpdir, it may not be absolute",
+                template
+            );
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_too_many_templates() {
+            let error = MkTempError::TooManyTemplates;
+            let expected_message = "too many templates".to_string();
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_not_found() {
+            let template_type = "file".to_string();
+            let template = "non_existent_template".to_string();
+            let error = MkTempError::NotFound(template_type.clone(), template.clone());
+            let expected_message = format!(
+                "failed to create {} via template '{}': No such file or directory",
+                template_type, template
+            );
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_usage_too_many_templates() {
+            let error = MkTempError::TooManyTemplates;
+            assert!(error.usage());
+        }
+
+        #[test]
+        fn test_mktemp_error_usage_other_errors() {
+            let errors = vec![
+                MkTempError::PersistError(PathBuf::from("/invalid/path")),
+                MkTempError::MustEndInX("template_without_x".to_string()),
+                MkTempError::TooFewXs("too_few_X".to_string()),
+                MkTempError::PrefixContainsDirSeparator("invalid/template".to_string()),
+                MkTempError::SuffixContainsDirSeparator("invalid/suffix".to_string()),
+                MkTempError::InvalidTemplate("/absolute/template".to_string()),
+                MkTempError::NotFound("file".to_string(), "non_existent_template".to_string()),
+            ];
+
+            for error in errors {
+                assert!(!error.usage());
+            }
+        }
+    }
 }

@@ -1152,4 +1152,123 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod handle_obsolete_tests {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_single_obsolete_argument() {
+            let args = vec![OsString::from("-1")];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(processed_args.len(), 0); // Assuming it removes obsolete args
+            assert_eq!(skip_fields_old, Some(1));
+            assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_multiple_consecutive_obsolete_arguments() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("-2"),
+                OsString::from("-3"),
+            ];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(processed_args.len(), 0); // Assuming it removes all obsolete args
+            assert_eq!(skip_fields_old, Some(321)); // Assuming it aggregates numbers
+            assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_mixed_obsolete_and_current_arguments() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("file.txt"),
+                OsString::from("+2"),
+            ];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("file.txt"), OsString::from("+2")]
+            );
+            assert_eq!(skip_fields_old, Some(1));
+            assert_eq!(skip_chars_old, None);
+        }
+
+        #[test]
+        fn test_handling_invalid_obsolete_arguments() {
+            let args = vec![
+                OsString::from("-a"),
+                OsString::from("file.txt"),
+                OsString::from("+b"),
+            ];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![
+                    OsString::from("-a"),
+                    OsString::from("file.txt"),
+                    OsString::from("+b")
+                ]
+            ); // "-a" and "+b" should be ignored
+            assert!(skip_fields_old.is_none());
+            assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_no_obsolete_arguments() {
+            let args = vec![OsString::from("--option"), OsString::from("value")];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("--option"), OsString::from("value")]
+            );
+            assert!(skip_fields_old.is_none());
+            assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_complex_arguments_with_embedded_numbers() {
+            let args = vec![OsString::from("path-123-file")];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(processed_args, vec![OsString::from("path-123-file")]); // Should be treated as a single argument
+            assert!(skip_fields_old.is_none());
+            assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_edge_cases_with_extreme_numbers() {
+            let args = vec![OsString::from("-999999999999999999999999999999")];
+            let (processed_args, skip_fields_old, skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(processed_args.len(), 0);
+            assert_eq!(skip_fields_old, None); // Assuming it clamps to usize::MAX
+            assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_repeating_numbers_in_arguments() {
+            let args = vec![OsString::from("-111")];
+            let (processed_args, skip_fields_old, _skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(processed_args.len(), 0); // Assuming "-111" is recognized and removed
+            assert_eq!(skip_fields_old, Some(111));
+        }
+
+}
+
 }

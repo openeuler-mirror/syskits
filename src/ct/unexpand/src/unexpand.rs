@@ -865,4 +865,93 @@ mod tests {
             assert_eq!(output.into_inner(), b"\t\t");
         }
     }
+
+    #[cfg(test)]
+    mod next_tabstop_tests {
+        use super::*;
+
+        #[test]
+        fn test_single_tabstop_before_column() {
+            let tabstops = vec![8];
+            let col = 3;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(5));
+        }
+
+        #[test]
+        fn test_single_tabstop_at_column() {
+            let tabstops = vec![8];
+            let col = 8;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(8));
+        }
+
+        #[test]
+        fn test_single_tabstop_after_column() {
+            let tabstops = vec![8];
+            let col = 9;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(7));
+        }
+
+        #[test]
+        fn test_multiple_tabstops_before_column() {
+            let tabstops = vec![4, 8, 12];
+            let col = 3;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(1));
+        }
+
+        #[test]
+        fn test_multiple_tabstops_between_columns() {
+            let tabstops = vec![4, 8, 12];
+            let col = 5;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(3));
+        }
+
+        #[test]
+        fn test_multiple_tabstops_at_column() {
+            let tabstops = vec![4, 8, 12];
+            let col = 8;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(4));
+        }
+
+        #[test]
+        fn test_multiple_tabstops_after_last() {
+            let tabstops = vec![4, 8, 12];
+            let col = 13;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), None);
+        }
+
+        #[test]
+        fn test_empty_tabstops() {
+            let tabstops = vec![];
+            let col = 5;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), None);
+        }
+
+        #[test]
+        fn test_column_equal_to_tabstop() {
+            let tabstops = vec![4, 8, 12];
+            let col = 4;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(4));
+        }
+
+        #[test]
+        fn test_column_greater_than_all_tabstops() {
+            let tabstops = vec![4, 8, 12];
+            let col = 15;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), None);
+        }
+
+        #[test]
+        fn test_column_zero() {
+            let tabstops = vec![4, 8, 12];
+            let col = 0;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), Some(4));
+        }
+
+        #[test]
+        fn test_large_column_value() {
+            let tabstops = vec![4, 8, 12];
+            let col = 100;
+            assert_eq!(unexpand_next_tabstop(&tabstops, col), None);
+        }
+    }
 }

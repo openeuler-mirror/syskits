@@ -2076,5 +2076,79 @@ mod tests {
             assert_eq!(result, Some(OsString::from("--option+123")));
         }
 
-}
+        #[test]
+        fn test_empty_string() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("")));
+        }
+
+        #[test]
+        fn test_real_command_mixed() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("-s+10 -f5", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("-s+10 -f5")));
+        }
+
+        #[test]
+        fn test_consecutive_numbers() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-123-456", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("123".to_string())); // Assuming it stops at the first valid number sequence
+            assert_eq!(result, Some(OsString::from("--456")));
+        }
+
+        #[test]
+        fn test_numbers_mixed_with_letters() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-12ab34", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("12".to_string())); // Assuming it extracts until non-numeric characters
+            assert_eq!(result, Some(OsString::from("-ab34")));
+        }
+
+        #[test]
+        fn test_embedded_numbers() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("arg-123ment", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("123".to_string())); // Numbers embedded in text should not be extracted
+            assert_eq!(result, Some(OsString::from("arg-ment")));
+        }
+
+        #[test]
+        fn test_only_dashes() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("----", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, None);
+            assert_eq!(result, Some(OsString::from("----")));
+        }
+
+        #[test]
+        fn test_comprehensive_mixed_input() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields(
+                "-12-valid-flag-34-other-text",
+                &mut skip_fields_old,
+            );
+            assert_eq!(skip_fields_old, None); // Assuming it correctly extracts the first number sequence
+            assert_eq!(result, Some(OsString::from("--valid-flag-34-other-text")));
+        }
+
+        #[test]
+        fn test_adjacent_command_options() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-12-s3", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("12".to_string())); // Extracts number and correctly parses the rest as flags
+            assert_eq!(result, Some(OsString::from("--s3")));
+        }
+
+        #[test]
+        fn test_trailing_characters_after_numbers() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-123xyz", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("123".to_string())); // Assuming extraction stops at the first non-numeric character
+            assert_eq!(result, Some(OsString::from("-xyz")));
+        }
+    }
 }

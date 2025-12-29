@@ -988,4 +988,138 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    #[cfg(test)]
+    mod expand_shortcuts_tests {
+        use super::*;
+
+        #[test]
+        fn test_expand_shortcuts_no_shortcuts() {
+            let args = vec![
+                "--all".to_string(),
+                "file1".to_string(),
+                "file2".to_string(),
+            ];
+            let expected = vec![
+                "--all".to_string(),
+                "file1".to_string(),
+                "file2".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_tabs_shortcut() {
+            let args = vec!["-4,8,12".to_string(), "file1".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--tabs=12".to_string(),
+                "file1".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_multiple_shortcuts() {
+            let args = vec![
+                "-4,8".to_string(),
+                "-12,16".to_string(),
+                "file1".to_string(),
+            ];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--tabs=12".to_string(),
+                "--tabs=16".to_string(),
+                "file1".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_all_flag() {
+            let args = vec!["-4,8".to_string(), "--all".to_string(), "file1".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--all".to_string(),
+                "file1".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_a_flag() {
+            let args = vec!["-4,8".to_string(), "-a".to_string(), "file1".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "-a".to_string(),
+                "file1".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_empty_input() {
+            let args: Vec<String> = vec![];
+            let expected: Vec<String> = vec![];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_mixed_args() {
+            let args = vec![
+                "--all".to_string(),
+                "-4,8".to_string(),
+                "--some-flag".to_string(),
+                "file1".to_string(),
+                "-12".to_string(),
+            ];
+            let expected = vec![
+                "--all".to_string(),
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--some-flag".to_string(),
+                "file1".to_string(),
+                "--tabs=12".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_invalid_shortcuts() {
+            let args = vec!["-4,a".to_string(), "file1".to_string()];
+            let expected = vec!["-4,a".to_string(), "file1".to_string()];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_leading_dash() {
+            let args = vec!["file1".to_string(), "-4".to_string()];
+            let expected = vec![
+                "file1".to_string(),
+                "--tabs=4".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_with_repeated_tabs_shortcut() {
+            let args = vec!["-4,8,8,12".to_string(), "file1".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=8".to_string(),
+                "--tabs=8".to_string(),
+                "--tabs=12".to_string(),
+                "file1".to_string(),
+                "--first-only".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+    }
 }

@@ -814,5 +814,56 @@ mod tests {
                 assert!(!error.usage());
             }
         }
+
+        #[test]
+        fn test_mktemp_error_fmt_not_found_directory() {
+            let template_type = "directory".to_string();
+            let template = "non_existent_template".to_string();
+            let error = MkTempError::NotFound(template_type.clone(), template.clone());
+            let expected_message = format!(
+                "failed to create {} via template '{}': No such file or directory",
+                template_type, template
+            );
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_invalid_template_with_suffix() {
+            let template = "template/with/suffix.XXXXXX".to_string();
+            let error = MkTempError::InvalidTemplate(template.clone());
+            let expected_message = format!(
+                "invalid template, '{}'; with --tmpdir, it may not be absolute",
+                template
+            );
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_must_end_in_x_with_suffix() {
+            let template = "template_without_x".to_string();
+            let error = MkTempError::MustEndInX(template.clone());
+            let expected_message = format!("with --suffix, template '{}' must end in X", template);
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_suffix_contains_dir_separator_with_template() {
+            let suffix = "invalid/suffix".to_string();
+            let error = MkTempError::SuffixContainsDirSeparator(suffix.clone());
+            let expected_message =
+                format!("invalid suffix '{}', contains directory separator", suffix);
+            assert_eq!(format!("{}", error), expected_message);
+        }
+
+        #[test]
+        fn test_mktemp_error_fmt_prefix_contains_dir_separator_with_template() {
+            let template = "invalid/template".to_string();
+            let error = MkTempError::PrefixContainsDirSeparator(template.clone());
+            let expected_message = format!(
+                "invalid template, '{}', contains directory separator",
+                template
+            );
+            assert_eq!(format!("{}", error), expected_message);
+        }
     }
 }

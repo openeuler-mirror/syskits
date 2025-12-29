@@ -1699,4 +1699,116 @@ mod tests {
             }
         }
     }
+
+   #[cfg(test)]
+    mod make_temp_file_tests {
+        use std::fs;
+        use std::path::PathBuf;
+
+        use super::*;
+
+        #[test]
+        fn test_make_temp_file() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testfile";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result =
+                mktemp_file(&tmpdir, prefix, rand, suffix).expect("Failed to create temp file");
+            assert!(result.exists());
+            assert!(result.is_file());
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+            fs::remove_file(result).expect("Failed to clean up temp file");
+        }
+
+        #[test]
+        fn test_make_temp_file_with_long_prefix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "a".repeat(255);
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_file(&tmpdir, &prefix, rand, suffix);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("File name too long"));
+        }
+
+        #[test]
+        fn test_make_temp_file_with_long_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testfile";
+            let suffix = &"b".repeat(255);
+            let rand = 6;
+            let result = mktemp_file(&tmpdir, prefix, rand, suffix);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("File name too long"));
+        }
+
+        #[test]
+        fn test_make_temp_file_with_special_chars() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "special!@#$%^&*()";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_file(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to create temp file with special characters");
+            assert!(result.exists());
+            assert!(result.is_file());
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+            fs::remove_file(result).expect("Failed to clean up temp file");
+        }
+
+        #[test]
+        fn test_make_temp_file_with_empty_prefix_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "";
+            let rand = 6;
+            let suffix = "";
+            let result = mktemp_file(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to create temp file with empty prefix and suffix");
+            assert!(result.exists());
+            assert!(result.is_file());
+            assert!(result.starts_with(&tmpdir));
+            fs::remove_file(result).expect("Failed to clean up temp file");
+        }
+
+        #[test]
+        fn test_make_temp_file_in_non_existent_dir() {
+            let tmpdir = PathBuf::from("non_existent_dir");
+            let prefix = "testfile";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_file(&tmpdir, prefix, rand, suffix);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("failed to create file via template"));
+        }
+
+        #[test]
+        fn test_make_temp_file_with_relative_tmpdir() {
+            let tmpdir = PathBuf::from("relative_tmpdir");
+            fs::create_dir_all(&tmpdir).expect("Failed to create relative tmpdir");
+            let prefix = "relative_tmpdir";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_file(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to create temp file in relative tmpdir");
+            assert!(result.exists());
+            assert!(result.is_file());
+            assert!(result.to_str().unwrap().contains("relative_tmpdir"));
+            fs::remove_file(&result).expect("Failed to clean up temp file");
+            fs::remove_dir_all(tmpdir).expect("Failed to clean up relative tmpdir");
+        }
+    }
 }

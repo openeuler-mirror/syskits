@@ -106,4 +106,126 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    #[cfg(unix)]
+    mod get_uptime_by_proc_tests {
+        use std::fs;
+        use std::io::Write;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_get_uptime_by_proc_with_proc_uptime() {
+            let dir = tempdir().unwrap();
+            let proc_uptime_path = dir.path().join("uptime");
+            let mut file = fs::File::create(&proc_uptime_path).unwrap();
+            writeln!(file, "12345.67 67890.12").unwrap();
+
+            let result = get_uptime_by_proc(None, proc_uptime_path);
+            assert_eq!(result, 12345);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_without_proc_uptime_with_boot_time() {
+            let boot_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+                - 12345;
+            let result = get_uptime_by_proc(Some(boot_time), "/nonexistent/path");
+            assert!(result >= 12345);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_without_proc_uptime_without_boot_time() {
+            let result = get_uptime_by_proc(None, "/nonexistent/path");
+            assert_eq!(result, -1);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_with_proc_uptime2() {
+            let dir = tempdir().unwrap();
+            let proc_uptime_path = dir.path().join("uptime");
+            let mut file = fs::File::create(&proc_uptime_path).unwrap();
+            writeln!(file, "12345.67 67890.12").unwrap();
+
+            let result = get_uptime_by_proc(None, proc_uptime_path);
+            assert_eq!(result, 12345);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_without_proc_uptime_with_boot_time2() {
+            let boot_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+                - 12345;
+            let result = get_uptime_by_proc(Some(boot_time), "/nonexistent/path");
+            assert!(result >= 12345);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_without_proc_uptime_without_boot_time2() {
+            let result = get_uptime_by_proc(None, "/nonexistent/path");
+            assert_eq!(result, -1);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_with_empty_proc_uptime2() {
+            let dir = tempdir().unwrap();
+            let proc_uptime_path = dir.path().join("uptime");
+            let mut file = fs::File::create(&proc_uptime_path).unwrap();
+            writeln!(file, "").unwrap();
+
+            let result = get_uptime_by_proc(None, proc_uptime_path);
+            assert_eq!(result, -1);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_with_invalid_proc_uptime2() {
+            let dir = tempdir().unwrap();
+            let proc_uptime_path = dir.path().join("uptime");
+            let mut file = fs::File::create(&proc_uptime_path).unwrap();
+            writeln!(file, "invalid_data").unwrap();
+
+            let result = get_uptime_by_proc(None, proc_uptime_path);
+            assert_eq!(result, -1);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_with_proc_uptime_with_decimal() {
+            let dir = tempdir().unwrap();
+            let proc_uptime_path = dir.path().join("uptime");
+            let mut file = fs::File::create(&proc_uptime_path).unwrap();
+            writeln!(file, "12345.67").unwrap();
+
+            let result = get_uptime_by_proc(None, proc_uptime_path);
+            assert_eq!(result, 12345);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_with_boot_time_32bit() {
+            let boot_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as u32
+                - 12345;
+            let result = get_uptime_by_proc(Some(boot_time as time_t), "/nonexistent/path");
+            assert!(result >= 12345);
+        }
+
+        #[test]
+        fn test_get_uptime_by_proc_with_boot_time_64bit() {
+            let boot_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+                - 12345;
+            let result = get_uptime_by_proc(Some(boot_time), "/nonexistent/path");
+            assert!(result >= 12345);
+        }
+    }
 }

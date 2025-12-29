@@ -280,4 +280,116 @@ mod tests {
         }
     }
 
-}
+    #[cfg(test)]
+    mod sysv_sum_tests {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_sysv_sum() {
+            // 测试空输入
+            let data = b"";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 0);
+            assert_eq!(checksum, 0);
+
+            // 测试单个字节
+            let data = b"a";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 'a' as u16);
+
+            // 测试短字符串
+            let data = b"abc";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 'a' as u16 + 'b' as u16 + 'c' as u16);
+
+            // 测试短字符串（不同字符）
+            let data = b"xyz";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 'x' as u16 + 'y' as u16 + 'z' as u16);
+
+            // 测试长字符串（跨越多个块）
+            let data = vec![b'a'; 5000];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 10);
+            assert_eq!(checksum, 26255);
+
+            // 测试包含所有字节值的输入
+            let data: Vec<u8> = (0..=255).collect();
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 32640);
+
+            // 测试混合数据
+            let data = b"1234567890";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(
+                checksum,
+                '1' as u16
+                    + '2' as u16
+                    + '3' as u16
+                    + '4' as u16
+                    + '5' as u16
+                    + '6' as u16
+                    + '7' as u16
+                    + '8' as u16
+                    + '9' as u16
+                    + '0' as u16
+            );
+
+            // 测试较大数据
+            let data = vec![b'Z'; 10000];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 20);
+            assert_eq!(checksum, 48045);
+
+            // 测试数据跨越多块（精确到块边界）
+            let data = vec![b'b'; 1024];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 2);
+            assert_eq!(checksum, 34817);
+
+            // 测试数据跨越多块（块大小的倍数）
+            let data = vec![b'c'; 2048];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 4);
+            assert_eq!(checksum, 6147);
+
+            // 测试大数据集（更多块）
+            let data = vec![b'd'; 100000];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 196);
+            assert_eq!(checksum, 38680);
+
+            // 测试重复字符数据
+            let data = b"aaaaaa";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 6 * 'a' as u16);
+
+            // 测试极端数据
+            let data = vec![255u8; 5000];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_sysv(reader);
+            assert_eq!(blocks, 10);
+            assert_eq!(checksum, 29835);
+        }
+    }
+
+ }

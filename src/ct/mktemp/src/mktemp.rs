@@ -2100,4 +2100,212 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod mktemp_tests {
+        use std::fs;
+
+        use super::*;
+
+        fn create_options(
+            directory: bool,
+            dry_run: bool,
+            quiet: bool,
+            tmpdir: Option<PathBuf>,
+            suffix: Option<String>,
+            treat_as_template: bool,
+            template: &str,
+        ) -> MkTempFlags {
+            MkTempFlags {
+                is_directory: directory,
+                is_dry_run: dry_run,
+                is_quiet: quiet,
+                tmpdir: tmpdir,
+                suffix,
+                is_treat_as_template: treat_as_template,
+                template: template.to_string(),
+            }
+        }
+
+        #[test]
+        fn test_mktemp_file_creation() {
+            let options = create_options(false, false, false, None, None, false, "test.XXXXXX");
+            let result = mktemp(&options).expect("Failed to create temp file");
+            assert!(result.exists());
+            assert!(result.is_file());
+            fs::remove_file(result).expect("Failed to clean up temp file");
+        }
+
+        #[test]
+        fn test_mktemp_directory_creation() {
+            let options = create_options(true, false, false, None, None, false, "testdir.XXXXXX");
+            let result = mktemp(&options).expect("Failed to create temp directory");
+            assert!(result.exists());
+            assert!(result.is_dir());
+            fs::remove_dir_all(result).expect("Failed to clean up temp directory");
+        }
+
+        #[test]
+        fn test_mktemp_with_suffix() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some(".txt".to_string()),
+                false,
+                "test.XXXXXX",
+            );
+            let result = mktemp(&options).expect("Failed to create temp file with suffix");
+            assert!(result.exists());
+            assert!(result.is_file());
+            assert!(result.to_str().unwrap().ends_with(".txt"));
+            fs::remove_file(result).expect("Failed to clean up temp file");
+        }
+
+        #[test]
+        fn test_mktemp_with_tmpdir() {
+            let tmpdir = std::env::temp_dir().join("custom_tmpdir");
+            fs::create_dir_all(&tmpdir).expect("Failed to create custom tmpdir");
+            let options = create_options(
+                false,
+                false,
+                false,
+                Some(tmpdir.clone()),
+                None,
+                false,
+                "test.XXXXXX",
+            );
+            let result = mktemp(&options).expect("Failed to create temp file in custom tmpdir");
+            assert!(result.exists());
+            assert!(result.is_file());
+            assert!(result.starts_with(&tmpdir));
+            fs::remove_file(&result).expect("Failed to clean up temp file");
+            fs::remove_dir_all(tmpdir).expect("Failed to clean up custom tmpdir");
+        }
+
+        #[test]
+        fn test_mktemp_dry_run() {
+            let options = create_options(false, true, false, None, None, false, "test.XXXXXX");
+            let result = mktemp(&options).expect("Failed to dry run temp file creation");
+            assert!(!result.exists());
+        }
+
+        #[test]
+        fn test_mktemp_invalid_template() {
+            let options =
+                create_options(false, false, false, None, None, false, "invalid_template");
+            let result = mktemp(&options);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_mktemp_too_few_xs() {
+            let options = create_options(false, false, false, None, None, false, "too_few_X");
+            let result = mktemp(&options);
+
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "too few X's in template 'too_few_X'"
+            );
+        }
+
+        #[test]
+        fn test_mktemp_must_end_in_x() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some(".log".to_string()),
+                false,
+                "template_without_x",
+            );
+            let result = mktemp(&options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "with --suffix, template 'template_without_x' must end in X"
+            );
+        }
+
+        #[test]
+        fn test_mktemp_invalid_template_with_slash() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                None,
+                false,
+                "invalid/template.XXXXXX",
+            );
+            let result = mktemp(&options);
+            let expected_error = "failed to create file via template 'invalid/template.XXXXXX': No such file or directory";
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().to_string(), expected_error);
+        }
+
+        #[test]
+        fn test_mktemp_suffix_contains_dir_separator() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some("/invalid_suffix".to_string()),
+                false,
+                "template.XXXXXX",
+            );
+            let result = mktemp(&options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "invalid suffix '/invalid_suffix', contains directory separator"
+            );
+        }
+
+        #[test]
+        fn test_mktemp_with_no_template() {
+            let options = create_options(false, false, false, None, None, false, "");
+            let result = mktemp(&options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "too few X's in template ''"
+            );
+        }
+
+        #[test]
+        fn test_mktemp_with_multiple_templates() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                None,
+                false,
+                "template1.XXXXXX template2.XXXXXX",
+            );
+            let result = mktemp(&options);
+            assert!(result.is_ok());
+            fs::remove_file(result.unwrap()).expect("Failed to clean up temp file");
+        }
+
+        #[test]
+        fn test_mktemp_with_absolute_template() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                None,
+                false,
+                "/absolute/template.XXXXXX",
+            );
+            let result = mktemp(&options);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().to_string(), "failed to create file via template '/absolute/template.XXXXXX': No such file or directory");
+        }
+    }
 }

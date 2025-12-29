@@ -1,0 +1,571 @@
+/*
+ * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt::Display;
+#[cfg(unix)]
+use std::fs;
+use std::io::ErrorKind;
+use std::iter;
+#[cfg(unix)]
+use std::os::unix::prelude::PermissionsExt;
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use rand::Rng;
+use tempfile::Builder;
+
+use ctcore::ct_display::{ct_println_verbatim, Quotable};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
+const MKTEMP_ABOUT: &str = ct_help_about!("mktemp.md");
+const MKTEMP_USAGE: &str = ct_help_usage!("mktemp.md");
+
+const MKTEMP_DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
+mod mktemp_flags {
+    pub const MKTEMP_DIRECTORY: &str = "directory";
+    pub const MKTEMP_DRY_RUN: &str = "dry-run";
+    pub const MKTEMP_QUIET: &str = "quiet";
+    pub const MKTEMP_SUFFIX: &str = "suffix";
+    pub const MKTEMP_TMPDIR: &str = "tmpdir";
+    pub const MKTEMP_P: &str = "p";
+    pub const MKTEMP_T: &str = "t";
+}
+const MKTEMP_ARG_TEMPLATE: &str = "template";
+
+#[cfg(not(windows))]
+const TMPDIR_ENV_VAR: &str = "TMPDIR";
+#[cfg(windows)]
+const TMPDIR_ENV_VAR: &str = "TMP";
+
+#[derive(Debug)]
+enum MkTempError {
+    PersistError(PathBuf),
+    MustEndInX(String),
+    TooFewXs(String),
+
+    /// 模板前缀包含路径分隔符（例如 `"a/bXXX"`）。
+    PrefixContainsDirSeparator(String),
+
+    /// 模板后缀包含路径分隔符（例如 `"XXXa/b"`）。
+    SuffixContainsDirSeparator(String),
+    InvalidTemplate(String),
+    TooManyTemplates,
+
+    /// 指定的临时目录未找到。
+    NotFound(String, String),
+}
+
+impl CTError for MkTempError {
+    fn usage(&self) -> bool {
+        matches!(self, Self::TooManyTemplates)
+    }
+}
+
+impl Error for MkTempError {}
+
+impl Display for MkTempError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MkTempError::PersistError(p) => write!(f, "could not persist file {}", p.quote()),
+            MkTempError::MustEndInX(s) => {
+                write!(f, "with --suffix, template {} must end in X", s.quote())
+            }
+            MkTempError::TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
+            MkTempError::PrefixContainsDirSeparator(s) => {
+                write!(
+                    f,
+                    "invalid template, {}, contains directory separator",
+                    s.quote()
+                )
+            }
+            MkTempError::SuffixContainsDirSeparator(s) => {
+                write!(
+                    f,
+                    "invalid suffix {}, contains directory separator",
+                    s.quote()
+                )
+            }
+            MkTempError::InvalidTemplate(s) => write!(
+                f,
+                "invalid template, {}; with --tmpdir, it may not be absolute",
+                s.quote()
+            ),
+            MkTempError::TooManyTemplates => {
+                write!(f, "too many templates")
+            }
+            MkTempError::NotFound(template, s) => write!(
+                f,
+                "failed to create {} via template {}: No such file or directory",
+                template,
+                s.quote()
+            ),
+        }
+    }
+}
+
+/// 从命令行解析的选项。
+/// 这提供了应用程序逻辑和参数解析库 `clap` 之间的间接层，使每个都可以独立变化。
+#[derive(Clone)]
+pub struct MkTempFlags {
+    /// 是否创建临时目录而不是文件。
+    pub is_directory: bool,
+
+    /// 是否只打印将创建的文件的名称。
+    pub is_dry_run: bool,
+
+    /// 是否抑制文件创建错误消息。
+    pub is_quiet: bool,
+
+    /// 创建临时文件的目录。
+    /// 如果为 `None`，文件将创建在当前目录中。
+    pub tmpdir: Option<PathBuf>,
+
+    /// 要附加到临时文件的后缀（如果有）。
+    pub suffix: Option<String>,
+
+    /// 是否将模板参数视为单个文件路径组件。
+    pub is_treat_as_template: bool,
+
+    /// 用于临时文件名称的模板。
+    pub template: String,
+}
+
+impl MkTempFlags {
+    fn from(matches: &ArgMatches) -> Self {
+        let tmp_dir = matches
+            .get_one::<PathBuf>(mktemp_flags::MKTEMP_TMPDIR)
+            .or_else(|| matches.get_one::<PathBuf>(mktemp_flags::MKTEMP_P))
+            .cloned();
+        let (tmpdir, template) = match matches.get_one::<String>(MKTEMP_ARG_TEMPLATE) {
+            // 如果没有提供模板参数，则隐含 `--tmpdir`。
+            None => {
+                let tmpdir = Some(tmp_dir.unwrap_or_else(env::temp_dir));
+                let template = MKTEMP_DEFAULT_TEMPLATE;
+                (tmpdir, template.to_string())
+            }
+            Some(template) => {
+                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok()
+                    && matches.get_flag(mktemp_flags::MKTEMP_T)
+                {
+                    env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
+                } else if tmp_dir.is_some() {
+                    tmp_dir
+                } else if matches.get_flag(mktemp_flags::MKTEMP_T)
+                    || matches.contains_id(mktemp_flags::MKTEMP_TMPDIR)
+                {
+                    // 如果提供了 --tmpdir 而没有参数，或者提供了 -t
+                    // 导出到 TMPDIR
+                    Some(env::temp_dir())
+                } else {
+                    None
+                };
+                (tmpdir, template.to_string())
+            }
+        };
+        Self {
+            is_directory: matches.get_flag(mktemp_flags::MKTEMP_DIRECTORY),
+            is_dry_run: matches.get_flag(mktemp_flags::MKTEMP_DRY_RUN),
+            is_quiet: matches.get_flag(mktemp_flags::MKTEMP_QUIET),
+            tmpdir,
+            suffix: matches
+                .get_one::<String>(mktemp_flags::MKTEMP_SUFFIX)
+                .map(String::from),
+            is_treat_as_template: matches.get_flag(mktemp_flags::MKTEMP_T),
+            template,
+        }
+    }
+}
+
+/// 控制临时文件路径和名称的参数。
+/// 临时文件将创建在
+///
+/// ```text
+/// {directory}/{prefix}{XXX}{suffix}
+/// ```
+///
+/// 其中 `{XXX}` 是长度为 `num_rand_chars` 的随机字符序列。
+#[derive(Debug)]
+struct MkTempParams {
+    /// 包含临时文件的目录。
+    directory: PathBuf,
+
+    /// 临时文件的（非随机）前缀。
+    prefix: String,
+
+    /// 临时文件名称中的随机字符数。
+    rand_num_chars: usize,
+
+    /// 临时文件的（非随机）后缀。
+    suffix: String,
+}
+
+/// 查找最后一个连续的 X 块的起始和结束索引。
+/// 如果找不到至少三个 X 的连续块，此函数返回 `None`。
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// assert_eq!(mktemp_find_last_contiguous_block_of_xs("XXX_XXX"), Some((4, 7)));
+/// assert_eq!(mktemp_find_last_contiguous_block_of_xs("aXbXcX"), None);
+/// ```
+fn mktemp_find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
+    let j = s.rfind("XXX")? + 3;
+    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
+    Some((i, j))
+}
+
+impl MkTempParams {
+    fn from(flags: MkTempFlags) -> Result<Self, MkTempError> {
+        // 如果提供了后缀选项，模板参数必须以 'X' 结尾。
+        if flags.suffix.is_some() && !flags.template.ends_with('X') {
+            return Err(MkTempError::MustEndInX(flags.template));
+        }
+
+        // 获取模板中随机部分的起始和结束索引。
+        // 例如，如果模板是 "abcXXXXyz"，那么 `i` 是 3，`j` 是 7。
+        let (i, j) = if let Some(indices) = mktemp_find_last_contiguous_block_of_xs(&flags.template)
+        {
+            indices
+        } else {
+            let s = match flags.suffix {
+                None => flags.template,
+                Some(s) => format!("{}{}", flags.template, s),
+            };
+            return Err(MkTempError::TooFewXs(s));
+        };
+
+        // 组合作为选项给出的目录和模板的前缀。
+        // 例如，如果 `tmpdir` 是 "a/b" 且模板是 "c/dXXX"，
+        // 那么 `prefix` 是 "a/b/c/d"。
+        let tmpdir = flags.tmpdir;
+        let prefix_from_option = tmpdir.clone().unwrap_or_default();
+        let prefix_from_template = &flags.template[..i];
+        let prefix = Path::new(&prefix_from_option)
+            .join(prefix_from_template)
+            .display()
+            .to_string();
+        if flags.is_treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
+            return Err(MkTempError::PrefixContainsDirSeparator(flags.template));
+        }
+        if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
+            return Err(MkTempError::InvalidTemplate(flags.template));
+        }
+
+        // 将父目录与前缀路径部分分开。
+        // 例如，如果 `prefix` 是 "a/b/c/d"，那么 `directory` 是
+        // "a/b/c" 是 `prefix` 被重新分配给 "d"。
+        let (dir, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
+            (prefix, String::new())
+        } else {
+            let path = Path::new(&prefix);
+            let dir = if let Some(d) = path.parent() {
+                d.display().to_string()
+            } else {
+                String::new()
+            };
+
+            let prefix = if let Some(f) = path.file_name() {
+                f.to_str().unwrap().to_string()
+            } else {
+                String::new()
+            };
+
+            (dir, prefix)
+        };
+
+        // 将模板中的后缀与选项给出的后缀组合起来。
+        // 例如，如果命令行参数的后缀是 ".txt" 且
+        // 模板是 "XXXabc"，那么 `suffix` 是 "abc.txt"。
+        let suffix_from_flag = flags.suffix.unwrap_or_default();
+        let suffix_from_template = &flags.template[j..];
+        let suffix = format!("{}{}", suffix_from_template, suffix_from_flag);
+        if suffix.contains(MAIN_SEPARATOR) {
+            return Err(MkTempError::SuffixContainsDirSeparator(suffix));
+        }
+
+        // 模板中的随机字符数。
+        // 例如，如果模板是 "abcXXXXyz"，那么随机字符数是四个。
+        let rand_num_chars = j - i;
+
+        Ok(Self {
+            directory: dir.into(),
+            prefix,
+            rand_num_chars,
+            suffix,
+        })
+    }
+}
+
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    mktemp_main(args)
+}
+
+pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    let args_vec: Vec<_> = args.collect();
+    let matches = match ct_app().try_get_matches_from(&args_vec) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind() == ErrorKind::TooManyValues
+                && e.context().any(|(k, val)| {
+                    k == ContextKind::InvalidArg
+                        && val == &ContextValue::String("[template]".into())
+                })
+            {
+                return Err(CTsageError::new(1, "too many templates"));
+            }
+            return Err(e.into());
+        }
+    };
+
+    // 将命令行选项解析为适用于应用程序逻辑的 ct_format。
+    let flags = MkTempFlags::from(&matches);
+
+    if env::var("POSIXLY_CORRECT").is_ok() {
+        // 如果设置了 POSIXLY_CORRECT，模板必须是最后一个参数。
+        if matches.contains_id(MKTEMP_ARG_TEMPLATE) {
+            // 提供了模板参数，检查是否是最后一个。
+            if args_vec.last().unwrap() != OsStr::new(&flags.template) {
+                return Err(Box::new(MkTempError::TooManyTemplates));
+            }
+        }
+    }
+
+    let is_dry_run = flags.is_dry_run;
+    let is_suppress_file_err = flags.is_quiet;
+    let is_make_dir = flags.is_directory;
+
+    // 从命令行选项解析文件路径参数。
+    let MkTempParams {
+        directory: tmpdir,
+        prefix,
+        rand_num_chars: rand,
+        suffix,
+    } = MkTempParams::from(flags)?;
+
+    // 创建临时文件或目录，或模拟创建它。
+    let exec_res = match is_dry_run {
+        true => mktemp_dry_exec(&tmpdir, &prefix, rand, &suffix),
+        false => mktemp_exec(&tmpdir, &prefix, rand, &suffix, is_make_dir),
+    };
+
+    let res = match is_suppress_file_err {
+        true => {
+            // 将所有 UErrors 映射到 ExitCodes 防止错误被打印
+            exec_res.map_err(|e| e.code().into())
+        }
+        false => exec_res,
+    };
+
+    ct_println_verbatim(res?).map_err_context(|| "failed to print directory name".to_owned())
+}
+
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = MKTEMP_ABOUT;
+    let usage_description = ct_format_usage(MKTEMP_USAGE);
+    let args = vec![
+        Arg::new(mktemp_flags::MKTEMP_DIRECTORY)
+            .short('d')
+            .long(mktemp_flags::MKTEMP_DIRECTORY)
+            .help("Make a directory instead of a file")
+            .action(ArgAction::SetTrue),
+        Arg::new(mktemp_flags::MKTEMP_DRY_RUN)
+            .short('u')
+            .long(mktemp_flags::MKTEMP_DRY_RUN)
+            .help("do not create anything; merely print a name (unsafe)")
+            .action(ArgAction::SetTrue),
+        Arg::new(mktemp_flags::MKTEMP_QUIET)
+            .short('q')
+            .long("quiet")
+            .help("Fail silently if an error occurs.")
+            .action(ArgAction::SetTrue),
+        Arg::new(mktemp_flags::MKTEMP_SUFFIX)
+            .long(mktemp_flags::MKTEMP_SUFFIX)
+            .help(
+                "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
+                      This option is implied if TEMPLATE does not end with X.",
+            )
+            .value_name("SUFFIX"),
+        Arg::new(mktemp_flags::MKTEMP_P)
+            .short('p')
+            .help("short form of --tmpdir")
+            .value_name("DIR")
+            .num_args(1)
+            .value_parser(ValueParser::path_buf())
+            .value_hint(clap::ValueHint::DirPath),
+        Arg::new(mktemp_flags::MKTEMP_TMPDIR)
+            .long(mktemp_flags::MKTEMP_TMPDIR)
+            .help(
+                "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
+                      $TMPDIR ($TMP on windows) if set, else /tmp. With this option, \
+                      TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE \
+                      may contain slashes, but mktemp creates only the final component",
+            )
+            .value_name("DIR")
+            // 仅通过设置 --tmpdir 允许使用默认参数。否则，
+            // 使用提供的输入生成 tmpdir
+            .num_args(0..=1)
+            // 需要等号以避免没有提供 tmpdir 时的歧义
+            .require_equals(true)
+            .overrides_with(mktemp_flags::MKTEMP_P)
+            .value_parser(ValueParser::path_buf())
+            .value_hint(clap::ValueHint::DirPath),
+        Arg::new(mktemp_flags::MKTEMP_T)
+            .short('t')
+            .help(
+                "Generate a template (using the supplied prefix and TMPDIR \
+                 (TMP on windows) if set) to create a filename template [deprecated]",
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(MKTEMP_ARG_TEMPLATE).num_args(..=1),
+    ];
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .infer_long_args(true)
+        .args(args)
+}
+
+fn mktemp_dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {
+    let len = prefix.len() + suffix.len() + rand;
+    let mut buffer = Vec::with_capacity(len);
+    buffer.extend(prefix.as_bytes());
+    buffer.extend(iter::repeat(b'X').take(rand));
+    buffer.extend(suffix.as_bytes());
+
+    // 随机化。
+    let bytes = &mut buffer[prefix.len()..prefix.len() + rand];
+    rand::thread_rng().fill(bytes);
+    for b in bytes {
+        *b = match *b % 62 {
+            v @ 0..=9 => v + b'0',
+            v @ 10..=35 => v - 10 + b'a',
+            v @ 36..=61 => v - 36 + b'A',
+            _ => unreachable!(),
+        }
+    }
+    // 我们保证 utf8。
+    let buf = String::from_utf8(buffer).unwrap();
+    let tmp_dir = Path::new(tmpdir).join(buf);
+    Ok(tmp_dir)
+}
+
+/// 使用给定的参数创建临时目录。
+///
+/// 此函数创建一个作为 `dir` 子目录的临时目录。目录的名称是
+/// `prefix`、一串 `rand` 随机字符和 `suffix` 的连接。目录的权限设置为 `u+rwx`
+///
+/// # 错误
+///
+/// 如果临时目录无法写入磁盘或给定的目录 `dir` 不存在。
+fn mktemp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {
+    let mut builder = Builder::new();
+    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+    match builder.tempdir_in(dir) {
+        Ok(d) => {
+            // `into_path` 消耗 TempDir 而不删除它
+            let p = d.into_path();
+            #[cfg(not(windows))]
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o700))?;
+            Ok(p)
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let file_name = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let p = Path::new(dir).join(file_name);
+            let s = p.display().to_string();
+            Err(MkTempError::NotFound("directory".to_string(), s).into())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// 使用给定的参数创建临时文件。
+///
+/// 此函数在目录 `dir` 中创建一个临时文件。文件的名称是
+/// `prefix`、一串 `rand` 随机字符和 `suffix` 的连接。文件的权限设置为 `u+rw`。
+///
+/// # 错误
+///
+/// 如果文件无法写入磁盘或目录不存在。
+fn mktemp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {
+    let mut builder = Builder::new();
+    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+    match builder.tempfile_in(dir) {
+        // `keep` 确保文件不被删除
+        Ok(named_temp_file) => match named_temp_file.keep() {
+            Ok((_, p)) => Ok(p),
+            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
+        },
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let file_name = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let p = Path::new(dir).join(file_name);
+            let s = p.display().to_string();
+            Err(MkTempError::NotFound("file".to_string(), s).into())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn mktemp_exec(
+    dir: &Path,
+    prefix: &str,
+    rand: usize,
+    suffix: &str,
+    make_dir: bool,
+) -> CTResult<PathBuf> {
+    let path = if make_dir {
+        mktemp_dir(dir, prefix, rand, suffix)?
+    } else {
+        mktemp_file(dir, prefix, rand, suffix)?
+    };
+
+    // 获取到创建的临时文件或目录路径的最后一个组件。
+    let filename = path.file_name();
+    let filename = filename.unwrap().to_str().unwrap();
+
+    // 将目录与路径连接以获取要打印的路径。我们
+    // 不能使用 `Builder` 返回的路径，因为它给出了
+    // 绝对路径，我们需要返回一个与命令行上给定模板匹配的文件名
+    // 它可能是相对路径。
+    let path_buf = Path::new(dir).join(filename);
+
+    Ok(path_buf)
+}
+
+/// 创建临时文件或目录
+///
+/// 行为由 `flags` 参数确定，请参阅 [`MkTempFlags`] 了解详细信息。
+pub fn mktemp(flags: &MkTempFlags) -> CTResult<PathBuf> {
+    // 从命令行选项解析文件路径参数。
+    let MkTempParams {
+        directory: tmpdir,
+        prefix,
+        rand_num_chars: rand,
+        suffix,
+    } = MkTempParams::from(flags.clone())?;
+
+    // 创建临时文件或目录，或模拟创建它。
+    if flags.is_dry_run {
+        mktemp_dry_exec(&tmpdir, &prefix, rand, &suffix)
+    } else {
+        mktemp_exec(&tmpdir, &prefix, rand, &suffix, flags.is_directory)
+    }
+}
+

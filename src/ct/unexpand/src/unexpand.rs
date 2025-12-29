@@ -1177,4 +1177,30 @@ mod tests {
             assert_eq!(expand_shortcuts(&args), expected);
         }
     }
+
+   #[cfg(test)]
+    mod is_digit_or_comma_tests {
+        use super::*;
+
+        #[test]
+        fn test_is_digit_or_comma() {
+            assert_eq!(is_digit_or_comma('0'), true);
+            assert_eq!(is_digit_or_comma('1'), true);
+            assert_eq!(is_digit_or_comma('2'), true);
+            assert_eq!(is_digit_or_comma('3'), true);
+            assert_eq!(is_digit_or_comma('4'), true);
+            assert_eq!(is_digit_or_comma('5'), true);
+            assert_eq!(is_digit_or_comma('6'), true);
+            assert_eq!(is_digit_or_comma('7'), true);
+            assert_eq!(is_digit_or_comma('8'), true);
+            assert_eq!(is_digit_or_comma('9'), true);
+            assert_eq!(is_digit_or_comma(','), true);
+            assert_eq!(is_digit_or_comma('a'), false);
+            assert_eq!(is_digit_or_comma('A'), false);
+            assert_eq!(is_digit_or_comma('!'), false);
+            assert_eq!(is_digit_or_comma('('), false);
+            assert_eq!(is_digit_or_comma(')'), false);
+        }
+    }
+
 }

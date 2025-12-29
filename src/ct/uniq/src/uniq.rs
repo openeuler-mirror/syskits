@@ -2322,4 +2322,69 @@ mod tests {
             assert!(matches.is_err());
             assert_eq!(matches.unwrap_err().kind(), ErrorKind::ArgumentConflict);
         }
-    }}
+    }
+    #[cfg(test)]
+    mod open_input_file_tests {
+        use super::*;
+        use std::fs::File;
+        use std::io::{self, Read, Write};
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_uniq_open_input_file_stdin() {
+            // Create a temporary file to simulate stdin
+            let mut temp_file = NamedTempFile::new().unwrap();
+            let test_data = b"Hello, Stdin!";
+            temp_file.write_all(test_data).unwrap();
+
+            // Reopen the temporary file for reading
+            let mut temp_file = temp_file.reopen().unwrap();
+            let mut buffer = Vec::new();
+            temp_file.read_to_end(&mut buffer).unwrap();
+            assert_eq!(buffer, test_data);
+        }
+
+        #[test]
+        fn test_uniq_open_input_file_temp_file() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            let test_data = b"Hello, Temp File!";
+            temp_file.write_all(test_data).unwrap();
+            let file_name: Option<&OsStr> = Some(temp_file.path().as_os_str());
+
+            let reader = uniq_open_input_file(file_name).unwrap();
+            let mut reader: Box<dyn BufRead> = reader;
+
+            let mut buffer = Vec::new();
+            reader.read_to_end(&mut buffer).unwrap();
+            assert_eq!(buffer, test_data);
+        }
+
+        #[test]
+        fn test_uniq_open_input_file_with_hyphen() {
+            // Create a temporary file to simulate stdin
+            let mut temp_file = NamedTempFile::new().unwrap();
+            let test_data = b"Hello, Stdin!";
+            temp_file.write_all(test_data).unwrap();
+
+            // Reopen the temporary file for reading
+            let _file_name: Option<&OsStr> = Some(OsStr::new("-"));
+            let stdin_backup = io::stdin();
+            let _stdin_handle = stdin_backup.lock();
+            let stdin_file = File::open(temp_file.path()).unwrap();
+            let mut reader = BufReader::new(stdin_file);
+
+            // Test reading from redirected stdin
+            let mut buffer = Vec::new();
+            reader.read_to_end(&mut buffer).unwrap();
+            assert_eq!(buffer, test_data);
+        }
+
+        #[test]
+        fn test_uniq_open_input_file_invalid_path() {
+            let invalid_path = OsStr::new("/invalid/path/to/input.txt");
+            let file_name: Option<&OsStr> = Some(invalid_path);
+            let result = uniq_open_input_file(file_name);
+            assert!(result.is_err());
+        }
+    }
+}

@@ -2571,5 +2571,65 @@ mod tests {
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_quiet_long() {
+            let template = "tmp.XXXXXX";
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--quiet", template];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_quiet_short() {
+            let template = "tmp.XXXXXX";
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "-q", template];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long() {
+            let template = "tmp.XXXXXX";
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--suffix", "qqq", template];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_tmpdir_short() {
+            let template = "tmp.XXXXXX";
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "-p", "test", template];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_tmpdir_long() {
+            let template = "tmp.XXXXXX";
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--tmpdir=test", template];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_template_short() {
+            let template = "tmp.XXXXXX";
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "-t", template];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_ok());
+        }
     }
 }

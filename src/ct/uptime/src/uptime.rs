@@ -207,4 +207,16 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod uptime_print_time_tests {
+        use super::*;
+
+        #[test]
+        fn test_uptime_print_time() {
+            let formatted_time = uptime_print_time();
+
+            assert!(formatted_time.contains(":"));
+        }
+    }
+
 }

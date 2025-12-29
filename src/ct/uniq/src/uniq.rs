@@ -1993,4 +1993,88 @@ mod tests {
             assert_eq!(result, Some(OsString::from("--option-")));
         }
     }
+    #[cfg(test)]
+    mod handle_extract_obs_skip_chars_tests {
+        use super::*;
+
+        #[test]
+        fn test_extract_numeric_value() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("+10", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, Some("10".to_string()));
+            assert_eq!(result, None); // Assuming the function returns None after extraction
+        }
+
+        #[test]
+        fn test_no_numeric_value() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("+", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert!(result.is_some()); // Should return the original input if no digits follow '+'
+        }
+
+        #[test]
+        fn test_non_numeric_following_plus() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("+abc", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("+abc")));
+        }
+
+        #[test]
+        fn test_multiple_digits() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("+123", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, Some("123".to_string()));
+            assert_eq!(result, None); // Assuming the function returns None after extraction
+        }
+
+        #[test]
+        fn test_mixed_characters() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("+123abc", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None); // Should not extract since it's mixed
+            assert_eq!(result, Some(OsString::from("+123abc")));
+        }
+        #[test]
+        fn test_multiple_pluses() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("++123", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None); // Assuming it treats the second '+' as start of numbers
+            assert_eq!(result, Some(OsString::from("++123")));
+        }
+
+        #[test]
+        fn test_spaces_after_plus() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("+ 123", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("+ 123")));
+        }
+
+        #[test]
+        fn test_plus_at_end() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("argument+", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("argument+")));
+        }
+
+        #[test]
+        fn test_pluses_in_middle_of_arguments() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("arg+123ment", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("arg+123ment")));
+        }
+
+        #[test]
+        fn test_plus_as_part_of_larger_argument() {
+            let mut skip_chars_old = None;
+            let result = uniq_handle_extract_obs_skip_chars("--option+123", &mut skip_chars_old);
+            assert_eq!(skip_chars_old, None);
+            assert_eq!(result, Some(OsString::from("--option+123")));
+        }
+
+}
 }

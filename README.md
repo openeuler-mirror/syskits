@@ -1,6 +1,10 @@
 # syskits CTyunOS基础组件库
 ## 1. 目标
 
+### 为ctshell 提供自研基本系统组件的lib和bin。
+* lib 提供给ctshell 内嵌命令使用，结合ctshell提供的数据流操作逻辑，提供给用户良好体验。(属于rust 库源码引用)
+* bin 提供给ctshell 作为优先调用命令。(属于rust 应用引用)
+
 ### 替换基础组件coreutils
 * 功能层面达到替换基础组件coreutils能力
 * 接口层面兼容coreutils

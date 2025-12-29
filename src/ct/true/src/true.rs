@@ -92,3 +92,30 @@ pub fn ct_app() -> Command {
         )
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_true_main {
+        use crate::true_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_true_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = true_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_true_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = true_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+}

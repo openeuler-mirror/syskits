@@ -721,3 +721,147 @@ fn uniq_open_output_file(out_file_name: Option<&OsStr>) -> CTResult<Box<dyn Writ
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod uniq_tests {
+        use super::*;
+        use std::io::Cursor;
+        fn default_uniq() -> Uniq {
+            Uniq {
+                is_repeats_only: false,
+                is_uniques_only: false,
+                is_all_repeated: false,
+                delimiters: UniqDelimiters::None,
+                is_show_counts: false, // This time we want to show counts
+                skip_fields: None,
+                slice_start: None,
+                slice_stop: None,
+                is_ignore_case: false,
+                is_zero_terminated: false,
+            }
+        }
+        #[test]
+        fn test_print_uniq_show_counts() {
+            let input_data = b"apple\nbanana\napple\nbanana\nbanana\n";
+            let input = Cursor::new(input_data);
+            let mut output = Cursor::new(Vec::new());
+            let uniq = Uniq {
+                is_repeats_only: false,
+                is_uniques_only: false,
+                is_all_repeated: false,
+                delimiters: UniqDelimiters::None,
+                is_show_counts: true, // This time we want to show counts
+                skip_fields: None,
+                slice_start: None,
+                slice_stop: None,
+                is_ignore_case: false,
+                is_zero_terminated: false,
+            };
+
+            uniq.print_uniq(input, &mut output).unwrap();
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            // Expect counts for each line, including duplicates counted correctly
+            assert_eq!(
+                output_str,
+                "      1 apple\n      1 banana\n      1 apple\n      2 banana\n"
+            );
+        }
+
+        #[test]
+        fn test_should_print_delimiter_no_output_yet() {
+            let mut uniq = default_uniq();
+            uniq.delimiters = UniqDelimiters::Prepend;
+
+            assert!(uniq.should_print_delimiter(1, false));
+        }
+
+        #[test]
+        fn test_should_print_delimiter_after_first_group() {
+            let mut uniq = default_uniq();
+            uniq.delimiters = UniqDelimiters::Both;
+
+            assert!(!uniq.should_print_delimiter(2, true));
+        }
+
+        #[test]
+        fn test_skip_fields_multiple() {
+            let mut uniq = default_uniq();
+            uniq.skip_fields = Some(2);
+
+            let result = uniq.skip_fields(b"field1 field2 field3 field4");
+            assert_eq!(std::str::from_utf8(&result).unwrap(), " field3 field4");
+        }
+
+        #[test]
+        fn test_get_line_terminator() {
+            let mut uniq = default_uniq();
+
+            uniq.is_zero_terminated = true;
+            assert_eq!(uniq.get_line_terminator(), 0); // Expect zero terminator
+
+            uniq.is_zero_terminated = false;
+            assert_eq!(uniq.get_line_terminator(), b'\n'); // Expect newline terminator
+        }
+
+        #[test]
+        fn test_print_uniq_line_terminators() {
+            let input_data = b"apple\0banana\0apple\0";
+            let input = Cursor::new(input_data);
+            let mut output = Cursor::new(Vec::new());
+            let mut uniq = default_uniq();
+            uniq.is_zero_terminated = true;
+
+            uniq.print_uniq(input, &mut output).unwrap();
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert_eq!(output_str, "apple\0banana\0apple\0"); // Checking if zero terminators are handled
+        }
+
+        #[test]
+        fn test_cmp_keys_case_insensitivity() {
+            let mut uniq = default_uniq();
+            uniq.is_ignore_case = true;
+
+            let line1 = b"Case";
+            let line2 = b"case";
+            assert!(!uniq.cmp_keys(line1, line2)); // Expect true as case is ignored
+        }
+
+        #[test]
+        fn test_cmp_keys_with_field_skipping() {
+            let mut uniq = default_uniq();
+            uniq.skip_fields = Some(1);
+
+            let line1 = b"ignore this line";
+            let line2 = b"ignore that line";
+            assert!(uniq.cmp_keys(line1, line2)); // Expect true as the first field is skipped
+        }
+
+        #[test]
+        fn test_print_line_with_and_without_counts() {
+            let mut output = Cursor::new(Vec::new());
+            let mut uniq = default_uniq();
+            uniq.is_show_counts = true;
+            uniq.print_line(&mut output, b"test", 3, false).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "      3 test\n"
+            );
+
+            output = Cursor::new(Vec::new());
+            uniq.is_show_counts = false;
+            uniq.print_line(&mut output, b"test", 1, false).unwrap();
+            assert_eq!(String::from_utf8(output.into_inner()).unwrap(), "test\n");
+        }
+        #[test]
+        fn test_delimiters_handling() {
+            let mut uniq = default_uniq();
+            uniq.delimiters = UniqDelimiters::Append;
+
+            assert!(uniq.should_print_delimiter(1, true)); // Expect true when delimiter is Append and line has been printed
+        }
+    }
+
+}

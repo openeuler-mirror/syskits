@@ -483,3 +483,117 @@ fn unexpand_exe<W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::is_digit_or_comma;
+
+    use super::*;
+
+    #[cfg(test)]
+    mod unexpand_tests {
+        use std::fs::write;
+
+        use tempfile::{tempdir, NamedTempFile};
+
+        use super::*;
+
+        #[test]
+        fn test_unexpand_exe_with_single_file() {
+            let file = NamedTempFile::new().unwrap();
+            write(file.path(), b"    Hello\tWorld\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![file.path().to_str().unwrap().to_string()],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "\t\tHello\tWorld\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_with_multiple_files() {
+            let dir = tempdir().unwrap();
+            let file1_path = dir.path().join("file1.txt");
+            let file2_path = dir.path().join("file2.txt");
+
+            write(&file1_path, b"    Hello\n").unwrap();
+            write(&file2_path, b"\tWorld\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![
+                    file1_path.to_str().unwrap().to_string(),
+                    file2_path.to_str().unwrap().to_string(),
+                ],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "\t\tHello\n\t\tWorld\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_with_utf8_characters() {
+            let file = NamedTempFile::new().unwrap();
+            write(file.path(), "    Hello 世界\n".as_bytes()).unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![file.path().to_str().unwrap().to_string()],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: true,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "\t\tHello 世界\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_with_backspaces() {
+            let file = NamedTempFile::new().unwrap();
+            write(file.path(), b"Hello\n\nWorld\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![file.path().to_str().unwrap().to_string()],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "Hello\n\nWorld\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_with_no_files() {
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "");
+        }
+    }
+}

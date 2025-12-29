@@ -823,6 +823,106 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_ct_app_canonicalize_existing_short() {
+            let file_name = "test_ct_app_canonicalize_existing_short";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-e", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_canonicalize_missing_long() {
+            let file_name = "test_ct_app_canonicalize_existing_long";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--canonicalize-missing", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_canonicalize_missing_short() {
+            let file_name = "test_ct_app_canonicalize_missing_short";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-m", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_newline_long() {
+            let file_name = "test_ct_app_no_newline_long";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--no-newline", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_newline_short() {
+            let file_name = "test_ct_app_no_newline_short";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-n", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_quiet_long() {
+            let file_name = "test_ct_app_quiet_long";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--quiet", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_quiet_short() {
+            let file_name = "test_ct_app_quiet_short";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-q", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_silent_short() {
+            let file_name = "test_ct_app_quiet_short";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-s", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_silent_long() {
+            let file_name = "test_ct_app_silent_long";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--silent", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_verbose_long() {
+            let file_name = "test_ct_app_verbose_long";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--verbose", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
 
     }
 }

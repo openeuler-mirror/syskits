@@ -2151,4 +2151,65 @@ mod tests {
             assert_eq!(result, Some(OsString::from("-xyz")));
         }
     }
+
+    #[cfg(test)]
+    mod map_clap_errors_tests {
+        use super::*;
+        use clap::error::ErrorKind as ClapErrorKind;
+        use clap::Error as ClapError; // Assuming you use ContextKind elsewhere
+
+        fn generate_clap_error(
+            error_kind: ClapErrorKind,
+            arg_name: Option<&str>,
+            value: Option<&str>,
+        ) -> ClapError {
+            let name = if let Some(n) = arg_name { n } else { "" };
+
+            let val = if let Some(v) = value { v } else { "" };
+
+            ClapError::raw(
+                error_kind,
+                format!("dummy error for testing: {} {}", name, val),
+            )
+        }
+
+        #[test]
+        fn test_uniq_map_clap_errors_argument_conflict() {
+            let clap_err = generate_clap_error(ClapErrorKind::ArgumentConflict, None, None);
+            let error = uniq_map_clap_errors(&clap_err).to_string();
+            let expected = "--group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.";
+            assert_eq!(error, expected);
+        }
+
+        #[test]
+        fn test_uniq_map_clap_errors_invalid_value_group() {
+            let clap_err = generate_clap_error(
+                ClapErrorKind::InvalidValue,
+                Some("group"),
+                Some("badoption"),
+            );
+            let error = uniq_map_clap_errors(&clap_err).to_string();
+            let expected = "error: dummy error for testing: group badoption";
+            assert_eq!(error, expected);
+        }
+
+        #[test]
+        fn test_uniq_map_clap_errors_invalid_value_all_repeated() {
+            let clap_err = generate_clap_error(
+                ClapErrorKind::InvalidValue,
+                Some("all-repeated"),
+                Some("badoption"),
+            );
+            let error = uniq_map_clap_errors(&clap_err).to_string();
+            let expected = "error: dummy error for testing: all-repeated badoption";
+            assert_eq!(error, expected);
+        }
+
+        #[test]
+        fn test_uniq_map_clap_errors_default_case() {
+            let clap_err = generate_clap_error(ClapErrorKind::MissingRequiredArgument, None, None);
+            let error = uniq_map_clap_errors(&clap_err).to_string();
+            assert!(error.contains("dummy error for testing:"));
+        }
+    }
 }

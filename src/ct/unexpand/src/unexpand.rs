@@ -596,4 +596,154 @@ mod tests {
             assert_eq!(result, "");
         }
     }
+
+    #[cfg(test)]
+    mod unexpand_line_tests {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_unexpand_line_with_spaces_and_tabs() {
+            let mut buf = b"    \tHello".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[4]).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "\t\t\t\tHello".to_string()
+            );
+        }
+
+        #[test]
+        fn test_unexpand_line_with_mixed_characters() {
+            let mut buf = b"Hello\tWorld".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                is_a_flag: true,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "Hello\t\tWorld".to_string()
+            );
+        }
+
+        #[test]
+        fn test_unexpand_line_with_utf8_characters() {
+            let mut buf = "Hello 世界".as_bytes().to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "Hello  世界".to_string()
+            );
+        }
+
+        #[test]
+        fn test_unexpand_line_with_backspace() {
+            let mut buf = b"Hello\n\nWorld".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                is_a_flag: true,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
+            // println!("{:?}", output);
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "Hello\n\nWorld".to_string()
+            );
+        }
+
+        #[test]
+        fn test_unexpand_line_with_lastcol_limit() {
+            let mut buf = b"Hello\tWorld".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                is_a_flag: true,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 5, &[8]).unwrap();
+            assert_eq!(output.into_inner(), b"Hello\tWorld");
+        }
+
+        #[test]
+        fn test_unexpand_line_with_no_tabstops() {
+            let mut buf = b"Hello World".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![],
+                is_a_flag: true,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[]).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "Hello  World".to_string()
+            );
+        }
+
+        #[test]
+        fn test_unexpand_line_with_initial_whitespace() {
+            let mut buf = b"   Hello".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![4],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[4]).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "      Hello".to_string()
+            );
+        }
+
+        #[test]
+        fn test_unexpand_line_with_multiple_tabstops() {
+            let mut buf = b"       Hello".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![4, 8],
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, 0, &[4, 8]).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "\t\t      Hello".to_string()
+            );
+        }
+    }
+
 }

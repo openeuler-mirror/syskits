@@ -1203,4 +1203,102 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod unexpand_flags_tests {
+        use super::*;
+
+        #[test]
+        fn test_unexpand_flags_new_default() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.tabstops, vec![UNEXPAND_DEFAULT_TABSTOP]);
+            assert_eq!(flags.files, vec!["-".to_string()]);
+            assert_eq!(flags.is_a_flag, false);
+            assert_eq!(flags.is_u_flag, true);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_tabs() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8,12"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8, 12]);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_all_flag() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--all"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.is_a_flag, true);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_first_only_flag() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--first-only"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.is_a_flag, false);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_no_utf8_flag() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--no-utf8"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.is_u_flag, false);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_files() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "file1", "file2"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_invalid_tabstops() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,x,12"]);
+            let result = UnexpandFlags::new(&matches);
+            assert!(result.is_err());
+            assert_eq!(
+                result.err(),
+                Some(UnexpandParseError::InvalidCharacter("x".to_string()))
+            );
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_zero_tabstops() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,0,12"]);
+            let result = UnexpandFlags::new(&matches);
+            assert!(result.is_err());
+            assert_eq!(result.err(), Some(UnexpandParseError::TabSizeCannotBeZero));
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_non_ascending_tabstops() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,12,8"]);
+            let result = UnexpandFlags::new(&matches);
+            assert!(result.is_err());
+            assert_eq!(
+                result.err(),
+                Some(UnexpandParseError::TabSizesMustBeAscending)
+            );
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_too_large_tabstops() {
+            let app = ct_app();
+            let matches =
+                app.get_matches_from(vec!["unexpand", "--tabs", "4,999999999999999999999,12"]);
+            let result = UnexpandFlags::new(&matches);
+            assert!(result.is_err());
+            assert_eq!(result.err(), Some(UnexpandParseError::TabSizeTooLarge));
+        }
+    }
 }

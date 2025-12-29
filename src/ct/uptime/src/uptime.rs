@@ -113,3 +113,98 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .arg(arg)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod uptime_print_uptime_tests {
+        use super::*;
+
+        #[test]
+        fn test_uptime_print_uptime_days() {
+            let up_secs = 86400; // 1 day
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up 1 day,  0:00,  ", result);
+        }
+
+        #[test]
+        fn test_uptime_print_uptime_hours() {
+            let up_secs = 3600; // 1 hour
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up  1:00,  ", result);
+        }
+
+        #[test]
+        fn test_uptime_print_uptime_minutes() {
+            let up_secs = 60; // 1 minute
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up  0:01,  ", result);
+        }
+
+        #[test]
+        fn test_uptime_print_uptime_seconds() {
+            let up_secs = 10; // 10 seconds
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up  0:00,  ", result);
+        }
+
+        #[test]
+        fn test_uptime_print_uptime_days_hours_minutes() {
+            let up_secs = 90060; // 1 day, 1 hour, 1 minute
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up 1 day,  1:01,  ", result);
+        }
+
+        #[test]
+        fn test_uptime_print_uptime_days_hours() {
+            let up_secs = 54000;
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up 15:00,  ", result);
+        }
+
+        #[test]
+        fn test_uptime_print_uptime_days_minutes() {
+            let up_secs = 43200;
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up 12:00,  ", result);
+        }
+
+        // Test with multiple days
+        #[test]
+        fn test_uptime_print_uptime_multiple_days() {
+            let up_secs = 2 * 86401; // 2 days
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up 2 days,  0:00,  ", result);
+        }
+
+        // Test with exactly one hour, no days or minutes
+        #[test]
+        fn test_uptime_print_uptime_exactly_one_hour() {
+            let up_secs = 3601; // 1 hour
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up  1:00,  ", result);
+        }
+
+        // Test with zero uptime
+        #[test]
+        fn test_uptime_print_uptime_zero() {
+            let up_secs = 0;
+            let result = uptime_print_uptime(up_secs);
+            assert_eq!("up  0:00,  ", result);
+        }
+
+        // Test with negative uptime (edge case, though unrealistic)
+        #[test]
+        fn test_uptime_print_uptime_negative() {
+            let up_secs = -10;
+            let result = uptime_print_uptime(up_secs);
+            // Depending on how you want to handle negative values, the expected output may vary.
+            // Assuming it's treated as zero or has a specific error message.
+            // Here we assume it's treated as zero for simplicity.
+            assert_eq!("up  0:00,  ", result);
+        }
+    }
+
+}

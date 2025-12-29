@@ -122,6 +122,7 @@ feat_common_core = [
   "sleep",
   "expand",
   "sync",
+  "uptime",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -308,6 +309,7 @@ groups = { optional = true, package = "ct_groups", path = "src/ct/groups" }
 sleep = { optional = true, package = "ct_sleep", path = "src/ct/sleep" }
 expand = { optional = true, package = "ct_expand", path = "src/ct/expand" }
 sync = { optional = true, package = "ct_sync", path = "src/ct/sync" }
+uptime = { optional = true, package = "ct_uptime", path = "src/ct/uptime" }
 
 [dev-dependencies]
 chrono = { workspace = true }

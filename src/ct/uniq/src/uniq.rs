@@ -2212,4 +2212,114 @@ mod tests {
             assert!(error.contains("dummy error for testing:"));
         }
     }
-}
+
+    #[cfg(test)]
+    mod get_delimiter_tests {
+        use super::*;
+
+        #[test]
+        fn test_uniq_get_delimiter_none() {
+            let args = vec![ctcore::ct_util_name()];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::None);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_append_parse_error() {
+            let args = vec![ctcore::ct_util_name(), "--all-repeated=append"];
+            let matches = ct_app().try_get_matches_from(args);
+
+            assert!(matches.is_err());
+            assert_eq!(matches.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_prepend() {
+            let args = vec![ctcore::ct_util_name(), "--all-repeated=prepend"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Prepend);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_separate() {
+            let args = vec![ctcore::ct_util_name(), "--all-repeated=separate"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Separate);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_both() {
+            let args = vec![ctcore::ct_util_name(), "--group=both"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Both);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_default_group() {
+            let args = vec![ctcore::ct_util_name(), "--group"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Separate);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_invalid_value() {
+            // This test case will check for invalid values and should ensure the command fails as expected
+            let args = vec!["uniq", "--group=invalid"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_all_repeated_none() {
+            let args = vec!["uniq", "--all-repeated=none"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::None);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_all_repeated_default() {
+            let args = vec!["uniq", "--all-repeated"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::None);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_group_separate() {
+            let args = vec!["uniq", "--group=separate"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Separate);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_group_prepend() {
+            let args = vec!["uniq", "--group=prepend"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Prepend);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_group_append() {
+            let args = vec!["uniq", "--group=append"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let delimiter = uniq_get_delimiter(&matches);
+            assert_eq!(delimiter, UniqDelimiters::Append);
+        }
+
+        #[test]
+        fn test_uniq_get_delimiter_all_repeated_and_group() {
+            let args = vec!["uniq", "--all-repeated=separate", "--group=prepend"];
+            let matches = ct_app().try_get_matches_from(args);
+
+            assert!(matches.is_err());
+            assert_eq!(matches.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+        }
+    }}

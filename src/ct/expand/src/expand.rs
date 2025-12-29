@@ -915,4 +915,210 @@ mod tests {
         }
     }
 
+    mod tests_expand_functions {
+
+        use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
+        use crate::{
+            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
+            ExpandParseError, RemainingMode, DEFAULT_TABSTOP,
+        };
+
+        use crate::is_digit_or_comma;
+
+        #[test]
+        fn test_next_tabstop_remaining_mode_none() {
+            assert_eq!(expand_next_tabstop(&[1, 5], 0, &RemainingMode::None), 1);
+            assert_eq!(expand_next_tabstop(&[1, 5], 3, &RemainingMode::None), 2);
+            assert_eq!(expand_next_tabstop(&[1, 5], 6, &RemainingMode::None), 1);
+        }
+
+        #[test]
+        fn test_next_tabstop_remaining_mode_plus() {
+            assert_eq!(expand_next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
+            assert_eq!(expand_next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 3);
+            assert_eq!(expand_next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 5);
+        }
+
+        #[test]
+        fn test_next_tabstop_remaining_mode_slash() {
+            assert_eq!(expand_next_tabstop(&[1, 5], 0, &RemainingMode::Slash), 1);
+            assert_eq!(expand_next_tabstop(&[1, 5], 3, &RemainingMode::Slash), 2);
+            assert_eq!(expand_next_tabstop(&[1, 5], 6, &RemainingMode::Slash), 4);
+        }
+
+        #[test]
+        fn test_is_digit_or_comma() {
+            assert!(is_digit_or_comma('1'));
+            assert!(is_digit_or_comma(','));
+            assert!(!is_digit_or_comma('a'));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_empty_string() {
+            let result = expand_tabstops_parse("");
+            assert_eq!(result, Ok((RemainingMode::None, vec![DEFAULT_TABSTOP])));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_default_tabstop() {
+            let result = expand_tabstops_parse("    ,   ,     ");
+            assert_eq!(result, Ok((RemainingMode::None, vec![DEFAULT_TABSTOP])));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_valid_input() {
+            let result = expand_tabstops_parse("4,8,12+16,20/");
+            assert_eq!(
+                result,
+                Err(SpecifierNotAtStartOfNumber(
+                    "+".to_string(),
+                    "+16".to_string()
+                ))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_invalid_tabsize_zero() {
+            let result = expand_tabstops_parse("0");
+            assert_eq!(result, Err(ExpandParseError::TabSizeCannotBeZero));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_invalid_tabsizes_not_ascending() {
+            let result = expand_tabstops_parse("8,4");
+            assert_eq!(result, Err(ExpandParseError::TabSizesMustBeAscending));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_invalid_specifier_already_used() {
+            let result = expand_tabstops_parse("4+8/12");
+            assert_eq!(
+                result,
+                Err(SpecifierNotAtStartOfNumber(
+                    "+".to_string(),
+                    "+8/12".to_string()
+                ))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_invalid_tabsize_too_large() {
+            let result = expand_tabstops_parse("9999999999999999999");
+            assert_eq!(
+                result.unwrap(),
+                (RemainingMode::None, vec![9999999999999999999])
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_invalid_specifier_not_at_start_of_number() {
+            let result = expand_tabstops_parse("4+8a");
+            assert_eq!(
+                result,
+                Err(ExpandParseError::SpecifierNotAtStartOfNumber(
+                    "+".to_string(),
+                    "+8a".to_string()
+                ))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_invalid_character() {
+            let result = expand_tabstops_parse("a");
+            assert_eq!(
+                result,
+                Err(ExpandParseError::InvalidCharacter("a".to_string()))
+            );
+        }
+
+        use std::ffi::OsString;
+        use std::fs::File;
+        use std::io::{Read, Write};
+
+        #[test]
+        fn test_expand_shortcuts() {
+            let args = vec![
+                OsString::from("-1,2,3"),
+                OsString::from("file1.txt"),
+                OsString::from("-4,5,6"),
+                OsString::from("file2.txt"),
+            ];
+            let expected = vec![
+                OsString::from("--tabs=1"),
+                OsString::from("--tabs=2"),
+                OsString::from("--tabs=3"),
+                OsString::from("file1.txt"),
+                OsString::from("--tabs=4"),
+                OsString::from("--tabs=5"),
+                OsString::from("--tabs=6"),
+                OsString::from("file2.txt"),
+            ];
+
+            let result = expand_shortcuts(args);
+
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_empty_args() {
+            let args = Vec::new();
+            let expected: Vec<OsString> = Vec::new();
+
+            let result = expand_shortcuts(args);
+
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_no_shortcuts() {
+            let args = vec![
+                OsString::from("file1.txt"),
+                OsString::from("file2.txt"),
+                OsString::from("file3.txt"),
+            ];
+            let expected = vec![
+                OsString::from("file1.txt"),
+                OsString::from("file2.txt"),
+                OsString::from("file3.txt"),
+            ];
+
+            let result = expand_shortcuts(args);
+
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_non_digit_or_comma() {
+            let args = vec![OsString::from("-abc,def")];
+            let expected = vec![OsString::from("-abc,def")];
+
+            let result = expand_shortcuts(args);
+
+            assert_eq!(result, expected);
+        }
+
+        // #[test]
+        // fn test_expand_open_with_standard_input() {
+        //     let input = "test input";
+        //     let mut reader = expand_open("-").unwrap();
+        //     let mut output = String::new();
+        //     reader.read_to_string(&mut output).unwrap();
+        //     assert_eq!(output, input);
+        // }
+
+        #[test]
+        fn test_expand_open_with_file_path() {
+            let file_path = "test_file.txt"; // Replace with the actual file path
+            let mut file = File::create(file_path).unwrap();
+            let content = "test content";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let mut reader = expand_open(file_path).unwrap();
+            let mut output = String::new();
+            reader.read_to_string(&mut output).unwrap();
+            assert_eq!(output, content);
+
+            std::fs::remove_file(file_path).unwrap();
+        }
+    }
 }

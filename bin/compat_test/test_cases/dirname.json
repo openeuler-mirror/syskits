@@ -131,6 +131,30 @@
             },
             "cleanup_commands": [
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "dirname",
+            "description": "处理路径最后为 . 的情况",
+            "setup_commands": [
+            ],
+            "args": ["/usr/bin/."],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "/usr/bin\n",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+            ]
         }
     ]
   }

@@ -1297,5 +1297,124 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+    #[cfg(test)]
+    mod tests_mv_app {
+        use crate::ct_app;
+        use std::ffi::OsString;
+
+        use crate::opt_flags::{
+            OPT_FORCE, OPT_INTERACTIVE, OPT_NO_CLOBBER, OPT_NO_TARGET_DIRECTORY, OPT_PROGRESS,
+            OPT_STRIP_TRAILING_SLASHES, OPT_TARGET_DIRECTORY, OPT_VERBOSE,
+        };
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_f() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-f"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_FORCE), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_force() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--force"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_FORCE), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_i() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-i"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<bool>(OPT_INTERACTIVE),
+                Some(&true)
+            );
+        }
+
+        #[test]
+        fn test_ct_app_interactive() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--interactive"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<bool>(OPT_INTERACTIVE),
+                Some(&true)
+            );
+        }
+
+        #[test]
+        fn test_ct_app_n() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "-n"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_NO_CLOBBER), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_no_clobber() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--no-clobber"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_one::<bool>(OPT_NO_CLOBBER), Some(&true));
+        }
+
+        #[test]
+        fn test_ct_app_strip_trailing_slashes() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--strip-trailing-slashes"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<bool>(OPT_STRIP_TRAILING_SLASHES),
+                Some(&true)
+            );
+        }
+
+        #[test]
+        fn test_ct_app_backup_simple() {
+            let args = vec![ctcore::ct_util_name(), "a", "b", "--backup=simple"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+    }
 
 }

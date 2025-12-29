@@ -795,4 +795,74 @@ mod tests {
             assert_eq!(nbytes, 1);
         }
     }
+
+    #[cfg(test)]
+    mod write_tabs_tests {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_unexpand_write_tabs_single_tabstop() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 0, 8, false, true, false);
+            assert_eq!(output.into_inner(), b"\t\t\t\t");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_multiple_tabstops() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4, 8], 0, 12, false, true, false);
+            assert_eq!(output.into_inner(), b"\t\t\t\t        ");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_no_tabstops() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[], 0, 8, false, true, false);
+            assert_eq!(output.into_inner(), b"                ");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_with_prevtab() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 0, 8, true, true, false);
+            assert_eq!(output.into_inner(), b"\t\t\t\t");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_with_amode() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 0, 8, false, false, true);
+            assert_eq!(output.into_inner(), b"\t\t\t\t");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_no_init_no_amode() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 0, 8, false, false, false);
+            assert_eq!(output.into_inner(), b"                ");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_col_less_than_scol() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 8, 4, false, true, false);
+            assert_eq!(output.into_inner(), b"");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_col_equals_scol() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 4, 4, false, true, false);
+            assert_eq!(output.into_inner(), b"");
+        }
+
+        #[test]
+        fn test_unexpand_write_tabs_col_greater_than_scol() {
+            let mut output = Cursor::new(Vec::new());
+            unexpand_write_tabs(&mut output, &[4], 2, 4, false, true, false);
+            assert_eq!(output.into_inner(), b"\t\t");
+        }
+    }
 }

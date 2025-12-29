@@ -1475,5 +1475,231 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_cut_main_f_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "-f", "3-8"];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_fields_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "--fields", "3-8"];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_f_complement_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "-f",
+                "1",
+                "-d",
+                "o",
+                "--complement",
+            ];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_fields_complement_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "--fields",
+                "1",
+                "-d",
+                "o",
+                "--complement",
+            ];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_fields_only_delimited_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "--fields",
+                "1",
+                "--only-delimited",
+            ];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_fields_output_delimiter_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "--fields",
+                "2",
+                "--output-delimiter='R'",
+            ];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_fields_z_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), filename1, "-z", "-c", "1"];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_cut_main_fields_zero_terminated_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "abc     def     ghi.\n\
+                   012     456     789.\n\
+                   ";
+
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "--zero-terminated",
+                "-f",
+                "1",
+            ];
+            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
     }
 }

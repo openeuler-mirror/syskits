@@ -866,4 +866,170 @@ mod tests {
             assert_eq!(format!("{}", error), expected_message);
         }
     }
+
+    #[cfg(test)]
+    mod params_from_tests {
+        use super::*;
+
+        fn create_options(
+            directory: bool,
+            dry_run: bool,
+            quiet: bool,
+            tmpdir: Option<PathBuf>,
+            suffix: Option<String>,
+            treat_as_template: bool,
+            template: &str,
+        ) -> MkTempFlags {
+            MkTempFlags {
+                is_directory: directory,
+                is_dry_run: dry_run,
+                is_quiet: quiet,
+                tmpdir: tmpdir,
+                suffix,
+                is_treat_as_template: treat_as_template,
+                template: template.to_string(),
+            }
+        }
+
+        #[test]
+        fn test_params_from_basic() {
+            let options = create_options(false, false, false, None, None, false, "test.XXXXXX");
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_with_suffix() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some(".log".to_string()),
+                false,
+                "test.XXXXXX",
+            );
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, ".log");
+        }
+
+        #[test]
+        fn test_params_from_with_tmpdir() {
+            let tmpdir = std::env::temp_dir().join("custom_tmpdir");
+            let options = create_options(
+                false,
+                false,
+                false,
+                Some(tmpdir.clone()),
+                None,
+                false,
+                "test.XXXXXX",
+            );
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, tmpdir);
+            assert_eq!(params.prefix, "test.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+
+        #[test]
+        fn test_params_from_invalid_template_with_suffix() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some(".log".to_string()),
+                false,
+                "test_without_x",
+            );
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "with --suffix, template 'test_without_x' must end in X"
+            );
+        }
+
+        #[test]
+        fn test_params_from_too_few_xs() {
+            let options = create_options(false, false, false, None, None, false, "too_few_X");
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "too few X's in template 'too_few_X'"
+            );
+        }
+
+        #[test]
+        fn test_params_from_prefix_contains_dir_separator() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                None,
+                true,
+                "invalid/template.XXXXXX",
+            );
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "invalid template, 'invalid/template.XXXXXX', contains directory separator"
+            );
+        }
+
+        #[test]
+        fn test_params_from_invalid_template_absolute_path() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                Some(std::env::temp_dir()),
+                None,
+                false,
+                "/absolute/template.XXXXXX",
+            );
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().to_string(), "invalid template, '/absolute/template.XXXXXX'; with --tmpdir, it may not be absolute");
+        }
+
+        #[test]
+        fn test_params_from_suffix_contains_dir_separator() {
+            let options = create_options(
+                false,
+                false,
+                false,
+                None,
+                Some("/invalid_suffix".to_string()),
+                false,
+                "template.XXXXXX",
+            );
+            let result = MkTempParams::from(options);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "invalid suffix '/invalid_suffix', contains directory separator"
+            );
+        }
+
+        #[test]
+        fn test_params_from_no_tmpdir_with_t_flag() {
+            let options = create_options(false, false, false, None, None, true, "test.XXXXXX");
+            let params = MkTempParams::from(options).expect("Failed to create Params");
+            assert_eq!(params.directory, PathBuf::from(""));
+            assert_eq!(params.prefix, "test.");
+            assert_eq!(params.rand_num_chars, 6);
+            assert_eq!(params.suffix, "");
+        }
+    }
 }

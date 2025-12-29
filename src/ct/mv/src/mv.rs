@@ -1605,5 +1605,68 @@ mod tests {
             assert_eq!(result.unwrap().get_one::<bool>(OPT_PROGRESS), Some(&true));
         }
     }
+    #[cfg(test)]
+    mod tests_mv_fun {
+        use crate::{mv_parse_paths, MvOpts, MvOverwriteMode};
+        use ctcore::ct_backup_control::CtBackupMode;
+        use ctcore::ct_update_control::CtUpdateMode;
 
+        use std::ffi::OsString;
+
+        use std::path::PathBuf;
+
+        fn create_test_opts(overwrite: MvOverwriteMode, strip_slashes: bool) -> MvOpts {
+            MvOpts {
+                overwrite,
+                backup: CtBackupMode::NoBackup,
+                suffix: "".to_string(),
+                update: CtUpdateMode::ReplaceNone,
+                target_dir: None,
+                no_target_dir: false,
+                verbose: false,
+                strip_slashes,
+                progress_bar: false,
+            }
+        }
+
+        #[test]
+        fn test_mv_parse_paths_with_strip_slashes() {
+            let files = vec![
+                OsString::from("/path/to/file1.txt"),
+                OsString::from("/path/to/file2.txt"),
+                OsString::from("/path/to/directory/"),
+            ];
+            let mv_options = create_test_opts(MvOverwriteMode::Interactive, true);
+
+            let result = mv_parse_paths(&files, &mv_options);
+            assert_eq!(
+                result,
+                vec![
+                    PathBuf::from("/path/to/file1.txt"),
+                    PathBuf::from("/path/to/file2.txt"),
+                    PathBuf::from("/path/to/directory"),
+                ]
+            );
+        }
+
+        #[test]
+        fn test_mv_parse_paths_without_strip_slashes() {
+            let files = vec![
+                OsString::from("/path/to/file1.txt"),
+                OsString::from("/path/to/file2.txt"),
+                OsString::from("/path/to/directory/"),
+            ];
+            let mv_options = create_test_opts(MvOverwriteMode::Interactive, false);
+
+            let result = mv_parse_paths(&files, &mv_options);
+            assert_eq!(
+                result,
+                vec![
+                    PathBuf::from("/path/to/file1.txt"),
+                    PathBuf::from("/path/to/file2.txt"),
+                    PathBuf::from("/path/to/directory/"),
+                ]
+            );
+        }
+    }
 }

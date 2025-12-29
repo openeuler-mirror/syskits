@@ -225,4 +225,38 @@ mod tests {
         }
     }
 
+    mod tests_ct_app {
+        use crate::ct_app;
+
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_groups() {
+            let args = vec![ctcore::ct_util_name()];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+    }
 }

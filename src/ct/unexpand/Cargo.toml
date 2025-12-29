@@ -1,0 +1,26 @@
+[package]
+name = "ct_unexpand"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "unexpand ~ (ctutils) convert input spaces to tabs"
+
+homepage.workspace = true
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/unexpand"
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/unexpand.rs"
+
+[dependencies]
+clap = { workspace = true }
+unicode-width = { workspace = true }
+ctcore = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+[[bin]]
+name = "unexpand"
+path = "src/main.rs"

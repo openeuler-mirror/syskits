@@ -217,9 +217,10 @@ macro_rules! ct_crash(
 #[macro_export]
 macro_rules! ct_crash_if_err {
     ($exit_code:expr, $exp:expr) => {
-        match $exp {
-            Ok(v) => v,
-            Err(f) => $crate::ct_crash!($exit_code, "{}", f),
+        if let Err(f) = $exp {
+            $crate::ct_crash!($exit_code, "{}", f);
+        } else {
+            $exp.expect("Expected Ok, found Err")
         }
     };
 }

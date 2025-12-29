@@ -569,3 +569,148 @@ pub fn mktemp(flags: &MkTempFlags) -> CTResult<PathBuf> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod options_from_tests {
+        use clap::ArgMatches;
+
+        use super::*;
+
+        fn get_matches_from(args: &[&str]) -> ArgMatches {
+            ct_app().get_matches_from(args)
+        }
+
+        #[test]
+        fn test_options_from_basic() {
+            let matches = get_matches_from(&[ctcore::ct_util_name(), "test.XXXXXX"]);
+            let options = MkTempFlags::from(&matches);
+            assert_eq!(options.is_directory, false);
+            assert_eq!(options.is_dry_run, false);
+            assert_eq!(options.is_quiet, false);
+            assert_eq!(options.tmpdir, None);
+            assert_eq!(options.suffix, None);
+            assert_eq!(options.is_treat_as_template, false);
+            assert_eq!(options.template, "test.XXXXXX".to_string());
+        }
+
+        #[test]
+        fn test_options_from_with_flags() {
+            let matches =
+                get_matches_from(&[ctcore::ct_util_name(), "-d", "-u", "-q", "test.XXXXXX"]);
+            let options = MkTempFlags::from(&matches);
+            assert_eq!(options.is_directory, true);
+            assert_eq!(options.is_dry_run, true);
+            assert_eq!(options.is_quiet, true);
+            assert_eq!(options.tmpdir, None);
+            assert_eq!(options.suffix, None);
+            assert_eq!(options.is_treat_as_template, false);
+            assert_eq!(options.template, "test.XXXXXX".to_string());
+        }
+
+        #[test]
+        fn test_options_from_with_suffix() {
+            let matches =
+                get_matches_from(&[ctcore::ct_util_name(), "--suffix", ".log", "test.XXXXXX"]);
+            let options = MkTempFlags::from(&matches);
+            assert_eq!(options.is_directory, false);
+            assert_eq!(options.is_dry_run, false);
+            assert_eq!(options.is_quiet, false);
+            assert_eq!(options.tmpdir, None);
+            assert_eq!(options.suffix, Some(".log".to_string()));
+            assert_eq!(options.is_treat_as_template, false);
+            assert_eq!(options.template, "test.XXXXXX".to_string());
+        }
+
+        #[test]
+        fn test_options_from_with_p() {
+            let matches = get_matches_from(&[
+                ctcore::ct_util_name(),
+                "-p",
+                "/custom/tmpdir",
+                "test.XXXXXX",
+            ]);
+            let options = MkTempFlags::from(&matches);
+            assert_eq!(options.is_directory, false);
+            assert_eq!(options.is_dry_run, false);
+            assert_eq!(options.is_quiet, false);
+            assert_eq!(options.tmpdir, Some(PathBuf::from("/custom/tmpdir")));
+            assert_eq!(options.suffix, None);
+            assert_eq!(options.is_treat_as_template, false);
+            assert_eq!(options.template, "test.XXXXXX".to_string());
+        }
+
+        #[test]
+        fn test_options_by_env() {
+            // test_options_from_with_t
+            {
+                let matches = get_matches_from(&[ctcore::ct_util_name(), "-t", "test.XXXXXX"]);
+                let options = MkTempFlags::from(&matches);
+                assert_eq!(options.is_directory, false);
+                assert_eq!(options.is_dry_run, false);
+                assert_eq!(options.is_quiet, false);
+                assert_eq!(options.tmpdir, Some(env::temp_dir()));
+                assert_eq!(options.suffix, None);
+                assert_eq!(options.is_treat_as_template, true);
+                assert_eq!(options.template, "test.XXXXXX".to_string());
+            }
+
+            // test_options_from_no_template
+            {
+                let matches = get_matches_from(&[ctcore::ct_util_name()]);
+                let options = MkTempFlags::from(&matches);
+                assert_eq!(options.is_directory, false);
+                assert_eq!(options.is_dry_run, false);
+                assert_eq!(options.is_quiet, false);
+                assert_eq!(options.tmpdir, Some(env::temp_dir()));
+                assert_eq!(options.suffix, None);
+                assert_eq!(options.is_treat_as_template, false);
+                assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
+            }
+        
+            // test_options_from_with_environment_tmpdir
+            {
+                std::env::set_var("TMPDIR", "/custom/env_tmpdir");
+                let matches = get_matches_from(&[ctcore::ct_util_name(), "-t"]);
+                let options = MkTempFlags::from(&matches);
+                assert_eq!(options.is_directory, false);
+                assert_eq!(options.is_dry_run, false);
+                assert_eq!(options.is_quiet, false);
+                assert_eq!(options.tmpdir, Some(PathBuf::from("/custom/env_tmpdir")));
+                assert_eq!(options.suffix, None);
+                assert_eq!(options.is_treat_as_template, true);
+                assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
+                std::env::remove_var("TMPDIR");
+            }
+        }
+
+        #[test]
+        fn test_options_from_with_empty_suffix() {
+            let matches = get_matches_from(&[ctcore::ct_util_name(), "--suffix=", "test.XXXXXX"]);
+            let options = MkTempFlags::from(&matches);
+            assert_eq!(options.is_directory, false);
+            assert_eq!(options.is_dry_run, false);
+            assert_eq!(options.is_quiet, false);
+            assert_eq!(options.tmpdir, None);
+            assert_eq!(options.suffix, Some("".to_string()));
+            assert_eq!(options.is_treat_as_template, false);
+            assert_eq!(options.template, "test.XXXXXX".to_string());
+        }
+
+        #[test]
+        fn test_options_from_with_template_and_flags() {
+            let matches =
+                get_matches_from(&[ctcore::ct_util_name(), "-d", "-u", "-q", "test.XXXXXX"]);
+            let options = MkTempFlags::from(&matches);
+            assert_eq!(options.is_directory, true);
+            assert_eq!(options.is_dry_run, true);
+            assert_eq!(options.is_quiet, true);
+            assert_eq!(options.tmpdir, None);
+            assert_eq!(options.suffix, None);
+            assert_eq!(options.is_treat_as_template, false);
+            assert_eq!(options.template, "test.XXXXXX".to_string());
+        }
+    }
+}

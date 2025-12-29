@@ -1334,5 +1334,69 @@ mod tests {
             let result = mktemp_find_last_contiguous_block_of_xs(s);
             assert_eq!(result, Some((12, 15)));
         }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_intermittent_xs() {
+            let s = "abcXXdefXXghiXXjkl";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_single_contiguous_block_of_three() {
+            let s = "abcXXdefXXXghi";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((8, 11)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_leading_non_x_chars() {
+            let s = "XXabcXXXdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((5, 8)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_only_three_xs() {
+            let s = "XXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((0, 3)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_only_two_xs() {
+            let s = "XX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_special_characters_between_xs() {
+            let s = "X@X#X$X%X^X";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs() {
+            assert_eq!(mktemp_find_last_contiguous_block_of_xs("XXX"), Some((0, 3)));
+            assert_eq!(
+                mktemp_find_last_contiguous_block_of_xs("XXX_XXX"),
+                Some((4, 7))
+            );
+            assert_eq!(
+                mktemp_find_last_contiguous_block_of_xs("XXX_XXX_XXX"),
+                Some((8, 11))
+            );
+            assert_eq!(
+                mktemp_find_last_contiguous_block_of_xs("aaXXXbb"),
+                Some((2, 5))
+            );
+            assert_eq!(mktemp_find_last_contiguous_block_of_xs(""), None);
+            assert_eq!(mktemp_find_last_contiguous_block_of_xs("X"), None);
+            assert_eq!(mktemp_find_last_contiguous_block_of_xs("XX"), None);
+            assert_eq!(mktemp_find_last_contiguous_block_of_xs("aXbXcX"), None);
+            assert_eq!(mktemp_find_last_contiguous_block_of_xs("aXXbXXcXX"), None);
+        }
     }
 }

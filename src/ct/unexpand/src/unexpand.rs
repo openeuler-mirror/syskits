@@ -954,4 +954,38 @@ mod tests {
             assert_eq!(unexpand_next_tabstop(&tabstops, col), None);
         }
     }
+
+    #[cfg(test)]
+    mod unexpand_open_tests {
+        use std::fs::File;
+        use std::io::{Read, Write};
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_unexpand_open_with_file() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("testfile.txt");
+            let mut file = File::create(&file_path).unwrap();
+            writeln!(file, "Test content").unwrap();
+
+            let result = unexpand_open(file_path.to_str().unwrap());
+            assert!(result.is_ok());
+
+            let mut reader = result.unwrap();
+            let mut content = String::new();
+            reader.read_to_string(&mut content).unwrap();
+            assert_eq!(content, "Test content\n");
+        }
+
+        #[test]
+        fn test_unexpand_open_with_stdin() {
+            // This test is a bit tricky because it involves stdin,
+            // so we won't actually test reading from stdin here
+            let result = unexpand_open("-");
+            assert!(result.is_ok());
+        }
+    }
 }

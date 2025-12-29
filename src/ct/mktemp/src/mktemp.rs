@@ -1527,4 +1527,176 @@ mod tests {
             assert!(result.starts_with(&tmpdir));
         }
     }
+
+    #[cfg(test)]
+    mod make_temp_dir_tests {
+        use std::fs;
+        use std::path::PathBuf;
+
+        use super::*;
+
+        #[test]
+        fn test_make_temp_dir() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testdir";
+            let rand = 6;
+            let suffix = ".d";
+            let result =
+                mktemp_dir(&tmpdir, prefix, rand, suffix).expect("Failed to create temp directory");
+            assert!(result.exists());
+            assert!(result.is_dir());
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+            fs::remove_dir_all(result).expect("Failed to clean up temp directory");
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_long_prefix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "a".repeat(255);
+            let rand = 6;
+            let suffix = ".d";
+            let result = mktemp_dir(&tmpdir, &prefix, rand, suffix);
+
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("aaaaaaaaaaaaaaaaa"));
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_long_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testdir";
+            let suffix = &"b".repeat(255);
+            let rand = 6;
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains("bbbbbbbb"));
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_special_chars() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "specialdir!@#$%^&*()";
+            let rand = 6;
+            let suffix = ".d";
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to create temp directory with special characters");
+            assert!(result.exists());
+            assert!(result.is_dir());
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+            fs::remove_dir_all(result).expect("Failed to clean up temp directory");
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_empty_prefix_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "";
+            let rand = 6;
+            let suffix = "";
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to create temp directory with empty prefix and suffix");
+            assert!(result.exists());
+            assert!(result.is_dir());
+            assert!(result.starts_with(&tmpdir));
+            fs::remove_dir_all(result).expect("Failed to clean up temp directory");
+        }
+
+        #[test]
+        fn test_make_temp_dir_in_non_existent_dir() {
+            let tmpdir = PathBuf::from("non_existent_dir");
+            let prefix = "testdir";
+            let rand = 6;
+            let suffix = ".d";
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("No such file or directory"));
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_relative_tmpdir() {
+            let tmpdir = PathBuf::from("relative_tmpdir");
+            fs::create_dir_all(&tmpdir).expect("Failed to create relative tmpdir");
+            let prefix = "testdir";
+            let rand = 6;
+            let suffix = ".d";
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to create temp directory in relative tmpdir");
+            assert!(result.exists());
+            assert!(result.is_dir());
+            assert!(result.to_str().unwrap().contains("relative_tmpdir"));
+            fs::remove_dir_all(result).expect("Failed to clean up temp directory");
+            fs::remove_dir_all(tmpdir).expect("Failed to clean up relative tmpdir");
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_too_few_rand_chars() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testdir";
+            let rand = 0;
+            let suffix = ".d";
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
+            assert!(result.is_err());
+            // fs::remove_dir_all(result.unwrap()).expect("Failed to clean up temp directory");
+            // fs::remove_dir_all(tmpdir).expect("Failed to clean up relative tmpdir");
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_absolute_path() {
+            let tmpdir = PathBuf::from("/absolute/path");
+            let prefix = "testdir";
+            let rand = 6;
+            let suffix = ".d";
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("failed to create directory via template"));
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_invalid_characters_in_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testdir";
+            let suffix = "/invalid_suffix";
+            let rand = 6;
+            let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("failed to create directory via template"));
+        }
+
+        #[test]
+        fn test_make_temp_dir_with_random_lengths() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testdir";
+            let suffix = ".d";
+            let rand_lengths = [1, 5, 10, 20];
+            for &rand in rand_lengths.iter() {
+                let result = mktemp_dir(&tmpdir, prefix, rand, suffix).expect(&format!(
+                    "Failed to create temp directory with {} random characters",
+                    rand
+                ));
+                assert!(result.exists());
+                assert!(result.is_dir());
+                assert_eq!(
+                    result.to_str().unwrap().len(),
+                    tmpdir.to_str().unwrap().len() + prefix.len() + suffix.len() + rand + 1
+                );
+                fs::remove_dir_all(result).expect("Failed to clean up temp directory");
+            }
+        }
+    }
 }

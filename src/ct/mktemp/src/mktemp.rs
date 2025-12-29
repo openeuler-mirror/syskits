@@ -1399,4 +1399,132 @@ mod tests {
             assert_eq!(mktemp_find_last_contiguous_block_of_xs("aXXbXXcXX"), None);
         }
     }
+
+    #[cfg(test)]
+    mod dry_exec_tests {
+        use std::path::PathBuf;
+
+        use super::*;
+
+        #[test]
+        fn test_dry_exec_basic() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testfile";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path");
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+        }
+
+        #[test]
+        fn test_dry_exec_with_special_chars() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "special!@#$%^&*()";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path with special characters");
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+        }
+
+        #[test]
+        fn test_dry_exec_with_long_prefix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "a".repeat(255);
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_dry_exec(&tmpdir, &prefix, rand, suffix)
+                .expect("Failed to generate temp file path with long prefix");
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(&prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+        }
+
+        #[test]
+        fn test_dry_exec_with_long_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testfile";
+            let suffix = &"b".repeat(255);
+            let rand = 6;
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path with long suffix");
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+        }
+
+        #[test]
+        fn test_dry_exec_with_empty_prefix_suffix() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "";
+            let rand = 6;
+            let suffix = "";
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path with empty prefix and suffix");
+            assert!(result.starts_with(&tmpdir));
+        }
+
+        #[test]
+        fn test_dry_exec_with_zero_rand_chars() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testfile";
+            let rand = 0;
+            let suffix = ".tmp";
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path with zero random characters");
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+        }
+
+        #[test]
+        fn test_dry_exec_with_relative_tmpdir() {
+            let tmpdir = PathBuf::from("relative_tmpdir");
+            let prefix = "testfile";
+            let rand = 6;
+            let suffix = ".tmp";
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path in relative tmpdir");
+            assert!(result.starts_with(&tmpdir));
+            assert!(result.to_str().unwrap().contains(prefix));
+            assert!(result.to_str().unwrap().ends_with(suffix));
+        }
+
+        #[test]
+        fn test_dry_exec_with_various_rand_lengths() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "testfile";
+            let suffix = ".tmp";
+            let rand_lengths = [1, 5, 10, 20];
+            for &rand in rand_lengths.iter() {
+                let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix).expect(&format!(
+                    "Failed to generate temp file path with {} random characters",
+                    rand
+                ));
+                assert!(result.starts_with(&tmpdir));
+                assert!(result.to_str().unwrap().contains(prefix));
+                assert!(result.to_str().unwrap().ends_with(suffix));
+                assert_eq!(
+                    result.to_str().unwrap().len(),
+                    tmpdir.to_str().unwrap().len() + prefix.len() + suffix.len() + rand + 1
+                );
+            }
+        }
+
+        #[test]
+        fn test_dry_exec_with_zero_length_all() {
+            let tmpdir = std::env::temp_dir();
+            let prefix = "";
+            let rand = 0;
+            let suffix = "";
+            let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix)
+                .expect("Failed to generate temp file path with zero length all");
+            assert!(result.starts_with(&tmpdir));
+        }
+    }
 }

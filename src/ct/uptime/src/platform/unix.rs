@@ -89,3 +89,21 @@ fn get_uptime_by_proc<P: AsRef<Path>>(boot_time: Option<time_t>, path: P) -> i64
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod print_loadavg_tests {
+        #[cfg(unix)]
+        use super::print_loadavg;
+
+        #[test]
+        #[cfg(unix)]
+        fn test_print_loadavg() {
+            let result = print_loadavg();
+            assert!(result.contains(":"));
+        }
+    }
+
+}

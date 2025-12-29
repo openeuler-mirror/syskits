@@ -864,4 +864,292 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod opt_parsed_tests {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_combination_of_valid_and_obsolete_arguments() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("--valid-option"),
+                OsString::from("+2"),
+                OsString::from("filename"),
+            ];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![
+                    OsString::from("--valid-option"),
+                    OsString::from("+2"),
+                    OsString::from("filename")
+                ]
+            );
+        }
+
+        #[test]
+        fn test_edge_cases_with_zero_and_negative_numbers() {
+            let args = vec![
+                OsString::from("-0"),
+                OsString::from("-123"),
+                OsString::from("-999"),
+            ];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(processed_args.len(), 0); // Assuming all are filtered out as obsolete numeric args
+        }
+
+        #[test]
+        fn test_complex_command_line_strings() {
+            let args = vec![
+                OsString::from("--option=value"),
+                OsString::from("-n10"),
+                OsString::from("path/to/file"),
+                OsString::from("-100"),
+            ];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![
+                    OsString::from("--option=value"),
+                    OsString::from("-n"),
+                    OsString::from("path/to/file")
+                ]
+            );
+        }
+
+        #[test]
+        fn test_concatenated_options() {
+            let args = vec![OsString::from("-abc"), OsString::from("path/file")];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("-abc"), OsString::from("path/file")]
+            );
+        }
+
+        #[test]
+        fn test_options_with_equal_signs() {
+            let args = vec![OsString::from("--size=100"), OsString::from("output.txt")];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("--size=100"), OsString::from("output.txt")]
+            );
+        }
+
+        #[test]
+        fn test_arguments_with_escaped_characters() {
+            let args = vec![OsString::from(
+                "path/with\\ space/and\\ special\\&characters",
+            )];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from(
+                    "path/with\\ space/and\\ special\\&characters"
+                )]
+            );
+        }
+
+        #[test]
+        fn test_full_command_line_simulation() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("--valid-option"),
+                OsString::from("path/to/file"),
+                OsString::from("+2"),
+                OsString::from("anotherpath"),
+            ];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![
+                    OsString::from("--valid-option"),
+                    OsString::from("path/to/file"),
+                    OsString::from("+2"),
+                    OsString::from("anotherpath")
+                ]
+            );
+        }
+
+        #[test]
+        fn test_arguments_mimicking_options() {
+            let args = vec![OsString::from("-1234"), OsString::from("logfile.log")];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(processed_args, vec![OsString::from("logfile.log")]);
+        }
+
+        #[test]
+        fn test_invalid_command_syntax() {
+            let args = vec![
+                OsString::from("--="),
+                OsString::from("-#"),
+                OsString::from("+?"),
+            ];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![
+                    OsString::from("--="),
+                    OsString::from("-#"),
+                    OsString::from("+?")
+                ]
+            );
+        }
+    }
+
 }

@@ -1264,5 +1264,75 @@ mod tests {
             let result = mktemp_find_last_contiguous_block_of_xs(s);
             assert_eq!(result, Some((9, 12)));
         }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_empty_string() {
+            let s = "";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_x_only() {
+            let s = "XXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((0, 4)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_spaces() {
+            let s = "abc XXX def XXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((12, 15)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_newlines() {
+            let s = "abc\nXXX\ndef\nXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((12, 15)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_tabs() {
+            let s = "abc\tXXX\tdef\tXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((12, 15)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_special_chars() {
+            let s = "abc!@#XXX$%^XXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((12, 15)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_all_x() {
+            let s = "XXXXXXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((0, 8)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_digits() {
+            let s = "abc123XXXdef";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((6, 9)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_special_x() {
+            let s = "abc*XXX*def";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((4, 7)));
+        }
+
+        #[test]
+        fn test_find_last_contiguous_block_of_xs_with_leading_and_trailing_xs() {
+            let s = "XXXabcXXXdefXXX";
+            let result = mktemp_find_last_contiguous_block_of_xs(s);
+            assert_eq!(result, Some((12, 15)));
+        }
     }
 }

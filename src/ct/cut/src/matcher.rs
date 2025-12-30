@@ -153,4 +153,82 @@ mod tests_matcher {
         let matcher = ExactMatcher::new("<>".as_bytes());
         assert_eq!(matcher.next_match("abc<>xyz".as_bytes()), Some((3, 5)));
     }
+
+    #[test]
+    fn test_exact_matcher_end_of_string_match_multi_bytes() {
+        let matcher = ExactMatcher::new("<>".as_bytes());
+        assert_eq!(matcher.next_match("abcxyz<>".as_bytes()), Some((6, 8)));
+    }
+
+    #[test]
+    fn test_exact_matcher_no_match_in_string_multi_bytes() {
+        let matcher = ExactMatcher::new("<>".as_bytes());
+        assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+    }
+
+    #[test]
+    fn test_whitespace_matcher_empty_input() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("".as_bytes()), None);
+    }
+
+    #[test]
+    fn test_whitespace_matcher_single_space_match() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match(" ".as_bytes()), Some((0, 1)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_start_tab() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("\tabcxyz".as_bytes()), Some((0, 1)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_within_space() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("abc\txyz".as_bytes()), Some((3, 4)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_end_space() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("abcxyz ".as_bytes()), Some((6, 7)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_no_space() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+    }
+
+    #[test]
+    fn test_whitespace_matcher_multi_spaces_full_match() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match(" \t ".as_bytes()), Some((0, 3)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_start_double_tab() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("\t\tabcxyz".as_bytes()), Some((0, 2)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_within_spaces() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("abc \txyz".as_bytes()), Some((3, 5)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_end_double_space() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("abcxyz  ".as_bytes()), Some((6, 8)));
+    }
+
+    #[test]
+    fn test_whitespace_matcher_multi_spaces_no_space() {
+        let matcher = WhitespaceMatcher {};
+        assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+    }
 }

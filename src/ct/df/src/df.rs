@@ -5479,5 +5479,275 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_df_main_df_lowercase_b_m() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "-Bm"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_uppercase_block_size_m() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=M"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_lowercase_block_size_m() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=m"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_df_main_df_uppercase_b_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "-BG"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_lowercase_b_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "-Bg"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_uppercase_block_size_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=G"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_lowercase_block_size_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=g"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_uppercase_b_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "-BT"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_lowercase_b_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "-Bt"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_main_df_uppercase_block_size_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=T"];
+            let result = df_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
     }
 }

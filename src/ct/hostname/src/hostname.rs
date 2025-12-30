@@ -303,5 +303,35 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().get_flag(OPT_FQDN));
         }
+
+        #[test]
+        fn test_ct_app_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--short"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_SHORT));
+        }
+
+        #[test]
+        fn test_ct_app_s() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_SHORT));
+        }
+
+        #[test]
+        fn test_ct_app_hostname() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert_eq!(None, result.unwrap().get_one::<String>(OPT_HOST));
+        }
     }
 }

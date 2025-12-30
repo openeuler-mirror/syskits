@@ -13556,4 +13556,456 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use crate::ct_app;
+
+        // numfmt 接口: numfmt [OPTION]... [NUMBER]...
+        //
+        // Options:
+        //   -d, --delimiter <X>      use X instead of whitespace for field delimiter
+        //       --field <FIELDS>     replace the numbers in these input fields; see FIELDS below [default: 1]
+        //       --format <FORMAT>    use printf style floating-point FORMAT; see FORMAT below for details
+        //       --from <UNIT>        auto-scale input numbers to UNITs; see UNIT below [default: none]
+        //       --from-unit <N>      specify the input unit size [default: 1]
+        //       --to <UNIT>          auto-scale output numbers to UNITs; see UNIT below [default: none]
+        //       --to-unit <N>        the output unit size [default: 1]
+        //       --padding <N>        pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N; the default is to automatically pad if a whitespace is found
+        //       --header [<N>]       print (without converting) the first N header lines; N defaults to 1 if not specified
+        //       --round <METHOD>     use METHOD for rounding when scaling [default: from-zero] [possible values: up, down, from-zero, towards-zero, nearest]
+        //       --suffix <SUFFIX>    print SUFFIX after each formatted number, and accept inputs optionally ending with SUFFIX
+        //       --invalid <INVALID>  set the failure mode for invalid input [default: abort] [possible values: abort, fail, warn, ignore]
+        //   -h, --help               Print help
+        //   -V, --version            Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            // 测试用例3：验证当提供未知参数时是否正确报错
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            // 测试用例4：验证当缺少必需的参数时是否正确报错
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "|", "1", "2", "3"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_colon() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", ":"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_comma() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", ","];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_semicolon() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", ";"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_vertical() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "|"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_tab() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "\t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_space() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", " "];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_group_separator() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "\u{001d}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_record_separator() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "\u{001e}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_unit_separator() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "\u{001f}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_digital() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "6"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"6".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_letter() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_letter_aa() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "aa"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"aa".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_uppercase_letter() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter", "A"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"A".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_long_no_value() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "--delimiter"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "|", "1", "2", "3"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_no_value() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_colon() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", ":"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_comma() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", ","];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_semicolon() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", ";"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_vertical() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "|"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_tab() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "\t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_space() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", " "];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_group_separator() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "\u{001d}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_record_separator() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "\u{001e}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_unit_separator() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "\u{001f}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_digital() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "6"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"6".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_letter() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_short_letter_aa() {
+            let command = ct_app();
+
+            let cmd_args = vec![ctcore::ct_util_name(), "-d", "aa"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("delimiter"),
+                Some(&"aa".to_string())
+            );
+        }
+    }
 }

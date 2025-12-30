@@ -8630,4 +8630,49 @@ mod tests {
             assert!(!mount_info_lt(&m1, &m2));
         }
     }
+
+    mod is_best {
+
+        use crate::is_best;
+        use ctcore::ct_fsext::CtMountInfo;
+
+        /// Instantiate a [`CtMountInfo`] with the given fields.
+        fn mount_info(dev_id: &str, mount_dir: &str) -> CtMountInfo {
+            CtMountInfo {
+                dev_id: String::from(dev_id),
+                dev_name: String::new(),
+                fs_type: String::new(),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote: false,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn test_empty() {
+            let m = mount_info("0", "/mnt/bar");
+            assert!(is_best(&[], &m));
+        }
+
+        #[test]
+        fn test_different_dev_id() {
+            let m1 = mount_info("0", "/mnt/bar");
+            let m2 = mount_info("1", "/mnt/bar");
+            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(&[m2], &m1));
+        }
+
+        #[test]
+        fn test_same_dev_id() {
+            // There are several conditions under which a `MountInfo` is
+            // considered "better" than the others, we're just checking
+            // one condition in this test.
+            let m1 = mount_info("0", "/mnt/bar");
+            let m2 = mount_info("0", "/mnt/bar/baz");
+            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(is_best(&[m2], &m1));
+        }
+    }
 }

@@ -1,0 +1,33 @@
+[package]
+name = "ct_hostname"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "hostname ~ (ctutils) display or set the host name of the current host"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/hostname"
+
+[lib]
+path = "src/hostname.rs"
+
+[dependencies]
+clap = { workspace = true }
+hostname = { workspace = true, features = ["set"] }
+ctcore = { workspace = true, features = ["wide"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Networking_WinSock",
+  "Win32_Foundation",
+] }
+
+[[bin]]
+name = "hostname"
+path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["ctcore_procs"]

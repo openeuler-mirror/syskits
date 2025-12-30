@@ -785,4 +785,226 @@ mod tests {
             vec!("my_device", "10", "2", "8", "20%", "my_mount")
         );
     }
+
+    #[test]
+    fn test_row_formatter_with_bytes_and_inodes() {
+        let options = DfOptions {
+            columns: vec![Column::Size, Column::Itotal],
+            block_size: BlockSize::Bytes(100),
+            ..Default::default()
+        };
+        let row = TableRow {
+            bytes: 100,
+            inodes: 10,
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(fmt.get_values(), vec!("1", "10"));
+    }
+
+    #[test]
+    fn test_row_formatter_with_human_readable_si() {
+        let options = DfOptions {
+            human_readable: Some(BlocksHumanReadable::Decimal),
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
+            ..Default::default()
+        };
+        let row = TableRow {
+            fs_device: "my_device".to_string(),
+            fs_type: "my_type".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 4000,
+            bytes_used: 1000,
+            bytes_avail: 3000,
+            bytes_usage: Some(0.25),
+
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(
+            fmt.get_values(),
+            vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
+        );
+    }
+
+    #[test]
+    fn test_row_formatter_with_human_readable_binary() {
+        let options = DfOptions {
+            human_readable: Some(BlocksHumanReadable::Binary),
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
+            ..Default::default()
+        };
+        let row = TableRow {
+            fs_device: "my_device".to_string(),
+            fs_type: "my_type".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 4096,
+            bytes_used: 1024,
+            bytes_avail: 3072,
+            bytes_usage: Some(0.25),
+
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(
+            fmt.get_values(),
+            vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
+        );
+    }
+
+    #[test]
+    fn test_row_formatter_with_round_up_usage() {
+        let options = DfOptions {
+            columns: vec![Column::Pcent],
+            ..Default::default()
+        };
+        let row = TableRow {
+            bytes_usage: Some(0.251),
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(fmt.get_values(), vec!("26%"));
+    }
+
+    #[test]
+    fn test_row_formatter_with_round_up_byte_values() {
+        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<String> {
+            let options = DfOptions {
+                block_size: BlockSize::Bytes(1000),
+                columns: vec![Column::Size, Column::Used, Column::Avail],
+                ..Default::default()
+            };
+
+            let row = TableRow {
+                bytes,
+                bytes_used,
+                bytes_avail,
+                ..Default::default()
+            };
+            TableRowFormatter::new(&row, &options, false).get_values()
+        }
+
+        assert_eq!(get_formatted_values(100, 100, 0), vec!("1", "1", "0"));
+        assert_eq!(get_formatted_values(100, 99, 1), vec!("1", "1", "1"));
+        assert_eq!(get_formatted_values(1000, 1000, 0), vec!("1", "1", "0"));
+        assert_eq!(get_formatted_values(1001, 1000, 1), vec!("2", "1", "1"));
+    }
+
+    #[test]
+    fn test_row_converter_with_invalid_numbers() {
+        // copy from wsl linux
+        let d = crate::Filesystem {
+            file: None,
+            mount_info: crate::CtMountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "none".to_string(),
+                fs_type: "9p".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_root: "/".to_string(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 244029695,
+                bfree: 125085030,
+                bavail: 125085030,
+                bavail_top_bit_set: false,
+                files: 999,
+                ffree: 1000000,
+            },
+        };
+
+        let row = TableRow::from(d);
+
+        assert_eq!(row.inodes_used, 0);
+    }
+
+    #[test]
+    fn test_table_column_width_computation_include_total_row() {
+        let d1 = crate::Filesystem {
+            file: None,
+            mount_info: crate::CtMountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "none".to_string(),
+                fs_type: "9p".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_root: "/".to_string(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 244029695,
+                bfree: 125085030,
+                bavail: 125085030,
+                bavail_top_bit_set: false,
+                files: 99999999999,
+                ffree: 999999,
+            },
+        };
+
+        let filesystems = vec![d1.clone(), d1];
+
+        let mut options = DfOptions {
+            show_total: true,
+            columns: vec![
+                Column::Source,
+                Column::Itotal,
+                Column::Iused,
+                Column::Iavail,
+            ],
+            ..Default::default()
+        };
+
+        let table_w_total = Table::new(&options, filesystems.clone());
+        assert_eq!(
+            table_w_total.to_string(),
+            "Filesystem           Inodes        IUsed   IFree\n\
+             none            99999999999  99999000000  999999\n\
+             none            99999999999  99999000000  999999\n\
+             total          199999999998 199998000000 1999998"
+        );
+
+        options.show_total = false;
+
+        let table_w_o_total = Table::new(&options, filesystems);
+        assert_eq!(
+            table_w_o_total.to_string(),
+            "Filesystem          Inodes       IUsed  IFree\n\
+             none           99999999999 99999000000 999999\n\
+             none           99999999999 99999000000 999999"
+        );
+    }
+
+    #[test]
+    fn test_row_accumulation_u64_overflow() {
+        let total = u64::MAX as u128;
+        let used1 = 3000u128;
+        let used2 = 50000u128;
+
+        let mut row1 = TableRow {
+            inodes: total,
+            inodes_used: used1,
+            inodes_free: total - used1,
+            ..Default::default()
+        };
+
+        let row2 = TableRow {
+            inodes: total,
+            inodes_used: used2,
+            inodes_free: total - used2,
+            ..Default::default()
+        };
+
+        row1 += row2;
+
+        assert_eq!(row1.inodes, total * 2);
+        assert_eq!(row1.inodes_used, used1 + used2);
+        assert_eq!(row1.inodes_free, total * 2 - used1 - used2);
+    }
 }

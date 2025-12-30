@@ -93,6 +93,7 @@ feat_common_core = [
   "cut",
   "pr",
   "logname",
+  "df",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -250,6 +251,7 @@ hostname = { optional = true, package = "ct_hostname", path = "src/ct/hostname" 
 cut = { optional = true, package = "ct_cut", path = "src/ct/cut" }
 pr = { optional = true, package = "ct_pr", path = "src/ct/pr" }
 logname = { optional = true, package = "ct_logname", path = "src/ct/logname" }
+df = { optional = true, package = "ct_df", path = "src/ct/df" }
 
 [dev-dependencies]
 chrono = { workspace = true }

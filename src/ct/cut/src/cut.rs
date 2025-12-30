@@ -1702,4 +1702,243 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    mod tests_cut_functions {
+
+        use crate::{
+            ct_app, cut_get_delimiters, cut_mode_param_parse, cut_mode_parse, opt_flags,
+            CutDelimiter,
+        };
+        use ctcore::ct_line_ending::CtLineEnding;
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_cut_get_delimiters() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "abc     def     ghi.\n\
+                   012     456     789.\n\
+                   ";
+
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                filename1,
+                "-w",
+                "--only-delimited",
+                "-f",
+                "1",
+            ];
+
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            let result = cut_get_delimiters(&matches, false);
+            assert!(result.is_ok());
+            let (delim, out_delim) = result.unwrap();
+            assert_eq!(delim, CutDelimiter::Whitespace);
+            assert_eq!(out_delim, None);
+        }
+
+        #[test]
+        fn test_cut_mode_parse_bytes() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "file",
+                "-w",
+                "--only-delimited",
+                "-b",
+                "1",
+            ];
+
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            // 获取命令行指定的额外选项。
+            let is_complement = matches.get_flag(opt_flags::COMPLEMENT);
+            let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
+
+            // 解析输入的分隔符与输出分隔符。
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+
+            // 从命令行参数中解析以 0 结尾的标志。
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
+
+            // 计算参与切割的模式参数（-b, -c, -f）的数量，用于确定切割模式并处理错误情况。
+            let mode_args_count = [
+                matches.indices_of(opt_flags::BYTES),
+                matches.indices_of(opt_flags::CHARACTERS),
+                matches.indices_of(opt_flags::FIELDS),
+            ]
+            .into_iter()
+            .map(|indices| indices.unwrap_or_default().count())
+            .sum();
+
+            let mode_parse = cut_mode_parse(
+                &matches,
+                is_complement,
+                is_only_delimited,
+                delimiter,
+                out_delimiter,
+                line_ending,
+                mode_args_count,
+            );
+
+            assert!(mode_parse.is_ok());
+        }
+
+        #[test]
+        fn test_cut_mode_parse_characters() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "file",
+                "-w",
+                "--only-delimited",
+                "-c",
+                "1",
+            ];
+
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            // 获取命令行指定的额外选项。
+            let is_complement = matches.get_flag(opt_flags::COMPLEMENT);
+            let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
+
+            // 解析输入的分隔符与输出分隔符。
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+
+            // 从命令行参数中解析以 0 结尾的标志。
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
+
+            // 计算参与切割的模式参数（-b, -c, -f）的数量，用于确定切割模式并处理错误情况。
+            let mode_args_count = [
+                matches.indices_of(opt_flags::BYTES),
+                matches.indices_of(opt_flags::CHARACTERS),
+                matches.indices_of(opt_flags::FIELDS),
+            ]
+            .into_iter()
+            .map(|indices| indices.unwrap_or_default().count())
+            .sum();
+
+            let mode_parse = cut_mode_parse(
+                &matches,
+                is_complement,
+                is_only_delimited,
+                delimiter,
+                out_delimiter,
+                line_ending,
+                mode_args_count,
+            );
+
+            assert!(mode_parse.is_ok());
+        }
+
+        #[test]
+        fn test_cut_mode_parse_fields() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "file",
+                "-w",
+                "--only-delimited",
+                "-f",
+                "1",
+            ];
+
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            // 获取命令行指定的额外选项。
+            let is_complement = matches.get_flag(opt_flags::COMPLEMENT);
+            let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
+
+            // 解析输入的分隔符与输出分隔符。
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+
+            // 从命令行参数中解析以 0 结尾的标志。
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
+
+            // 计算参与切割的模式参数（-b, -c, -f）的数量，用于确定切割模式并处理错误情况。
+            let mode_args_count = [
+                matches.indices_of(opt_flags::BYTES),
+                matches.indices_of(opt_flags::CHARACTERS),
+                matches.indices_of(opt_flags::FIELDS),
+            ]
+            .into_iter()
+            .map(|indices| indices.unwrap_or_default().count())
+            .sum();
+
+            let mode_parse = cut_mode_parse(
+                &matches,
+                is_complement,
+                is_only_delimited,
+                delimiter,
+                out_delimiter,
+                line_ending,
+                mode_args_count,
+            );
+
+            assert!(mode_parse.is_ok());
+        }
+
+        #[test]
+        fn test_cut_mode_param_parse_fields() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "file",
+                "-w",
+                "--only-delimited",
+                "-f",
+                "1",
+            ];
+
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            // 获取命令行指定的额外选项。
+            let is_complement = matches.get_flag(opt_flags::COMPLEMENT);
+            let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
+
+            // 解析输入的分隔符与输出分隔符。
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+
+            // 从命令行参数中解析以 0 结尾的标志。
+            let line_ending =
+                CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
+
+            // 计算参与切割的模式参数（-b, -c, -f）的数量，用于确定切割模式并处理错误情况。
+            let mode_args_count = [
+                matches.indices_of(opt_flags::BYTES),
+                matches.indices_of(opt_flags::CHARACTERS),
+                matches.indices_of(opt_flags::FIELDS),
+            ]
+            .into_iter()
+            .map(|indices| indices.unwrap_or_default().count())
+            .sum();
+
+            let mode_parse = cut_mode_parse(
+                &matches,
+                is_complement,
+                is_only_delimited,
+                delimiter,
+                out_delimiter,
+                line_ending,
+                mode_args_count,
+            );
+
+            let mode_parse = cut_mode_param_parse(&matches, mode_parse);
+
+            assert!(mode_parse.is_ok());
+        }
+    }
 }

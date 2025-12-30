@@ -1452,5 +1452,43 @@ mod tests {
             let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
             assert_eq!(unexpand_tabstops_parse(input), expected);
         }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_spaces_in_values() {
+            let input = "1, 2,3, 4,5";
+            let expected = Err(UnexpandParseError::InvalidCharacter(" 2".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_spaces_around_commas() {
+            let input = "1 ,2 ,3 ,4 ,5";
+            let expected = Ok(vec![1, 2, 3, 4, 5]);
+            assert_eq!(
+                unexpand_tabstops_parse(&input.trim().replace(" ", "")),
+                expected
+            );
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_mixed_invalid_characters() {
+            let input = "1,2,3,a4,5";
+            let expected = Err(UnexpandParseError::InvalidCharacter("a4".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_with_leading_zeros() {
+            let input = "01,02,03,04,05";
+            let expected = Ok(vec![1, 2, 3, 4, 5]);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_large_numbers() {
+            let input = "1,1000000000,2000000000,3000000000,4000000000";
+            let expected = Ok(vec![1, 1000000000, 2000000000, 3000000000, 4000000000]);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
     }
 }

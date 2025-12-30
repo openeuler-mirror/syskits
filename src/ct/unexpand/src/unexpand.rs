@@ -1376,4 +1376,81 @@ mod tests {
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.files, vec!["-".to_string()]);
         }
+
+
+    #[cfg(test)]
+    mod tabstops_parse_tests {
+        use super::*;
+
+        #[test]
+        fn test_unexpand_tabstops_parse_valid_input() {
+            let input = "1,2,3,4,5";
+            let expected = Ok(vec![1, 2, 3, 4, 5]);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_invalid_character() {
+            let input = "1,2,x,4,5";
+            let expected = Err(UnexpandParseError::InvalidCharacter("x".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_zero_value() {
+            let input = "1,2,0,4,5";
+            let expected = Err(UnexpandParseError::TabSizeCannotBeZero);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_non_ascending_values() {
+            let input = "1,3,2,4,5";
+            let expected = Err(UnexpandParseError::TabSizesMustBeAscending);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_too_large_value() {
+            let input = "1,2,99999999999999999999999999,4,5";
+            let expected = Err(UnexpandParseError::TabSizeTooLarge);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_empty_input() {
+            let input = "";
+            let expected: Result<Vec<usize>, UnexpandParseError> =
+                Err(UnexpandParseError::InvalidCharacter("".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_single_value() {
+            let input = "5";
+            let expected = Ok(vec![5]);
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_trailing_comma() {
+            let input = "1,2,3,4,5,";
+            let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_leading_comma() {
+            let input = ",1,2,3,4,5";
+            let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_multiple_commas() {
+            let input = "1,,2,3,4,5";
+            let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
+            assert_eq!(unexpand_tabstops_parse(input), expected);
+        }
+    }
 }

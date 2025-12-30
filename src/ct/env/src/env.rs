@@ -630,3 +630,1856 @@ pub fn env_main(args: impl ctcore::Args) -> CTResult<()> {
     EnvAppData::default().run_env(args)
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_env_main {
+        use crate::env_main;
+
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+
+        use tempfile::Builder;
+
+        #[test]
+        fn test_env_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_env_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_env_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_env_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_env_main_i() {
+            let args = vec![ctcore::ct_util_name(), "-i", "arch"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_ignore_environment() {
+            let args = vec![ctcore::ct_util_name(), "--ignore-environment", "arch"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_bad_args() {
+            let args = vec![ctcore::ct_util_name(), "--bad-arg"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_env_main_chdir_args() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_c_args() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-C", env_dir, "ls"];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_0() {
+            let args = vec![ctcore::ct_util_name(), "-0"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_null() {
+            let args = vec![ctcore::ct_util_name(), "--null"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        use crate::env;
+
+        #[test]
+        fn test_env_main_f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let f = test_file_1.to_str().unwrap();
+
+            let content = "FVAR1=hello\n\
+           FVAR2=CtyunOS\n\
+           FVAR3=Rust\n\
+           FVAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-f", f];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+
+            match env::var("FVAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_env_main_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename = test_file_1.to_str().unwrap();
+
+            let content = "ENV_VAR1=hello\n\
+           ENV_VAR2=CtyunOS\n\
+           ENV_VAR3=Rust\n\
+           ENV_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", filename, "ls"];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+
+            match env::var("ENV_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail:{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_env_main_file_unset() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "UNSET_VAR1=hello\n\
+           UNSET_VAR2=CtyunOS\n\
+           UNSET_VAR3=Rust\n\
+           UNSET_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-i",
+                "env",
+                "-u",
+                unset_filename,
+                "env",
+            ];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_env_main_file_unset_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "UNSET_VAR1=hello\n\
+           UNSET_VAR2=CtyunOS\n\
+           UNSET_VAR3=Rust\n\
+           UNSET_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--ignore-environment",
+                "env",
+                "--unset",
+                unset_filename,
+                "env",
+            ];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_env_main_debug() {
+            let args = vec![ctcore::ct_util_name(), "-v", "arch"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_debug_whole() {
+            let args = vec![ctcore::ct_util_name(), "--debug", "arch"];
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_split_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--split-string=''",
+                "cat",
+                file_path,
+            ];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_env_main_split_s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-S", "", "cat", file_path];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err()); //error  ,与 系统命令env不一致
+        }
+
+        #[test]
+        fn test_env_main_s_split_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--split-string=''",
+                "cat",
+                file_path,
+            ];
+
+            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_run_env {
+        use crate::EnvAppData;
+
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+
+        use tempfile::Builder;
+
+        #[test]
+        fn test_run_env_version() {
+            let cmd = vec![ctcore::ct_util_name(), "--version"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_run_env_v() {
+            let cmd = vec![ctcore::ct_util_name(), "-V"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_run_env_help() {
+            let cmd = vec![ctcore::ct_util_name(), "--help"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_run_env_h() {
+            let cmd = vec![ctcore::ct_util_name(), "-h"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_run_env_i() {
+            let cmd = vec![ctcore::ct_util_name(), "-i", "arch"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_ignore_environment() {
+            let cmd = vec![ctcore::ct_util_name(), "--ignore-environment", "arch"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_bad_cmd() {
+            let cmd = vec![ctcore::ct_util_name(), "--bad-arg"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_run_env_chdir_cmd() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_c_cmd() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "-C", env_dir, "ls"];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_0() {
+            let cmd = vec![ctcore::ct_util_name(), "-0"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_null() {
+            let cmd = vec![ctcore::ct_util_name(), "--null"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        use crate::env;
+
+        #[test]
+        fn test_run_env_f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let f = test_file_1.to_str().unwrap();
+
+            let content = "FVAR1=hello\n\
+           FVAR2=CtyunOS\n\
+           FVAR3=Rust\n\
+           FVAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "-f", f];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+
+            match env::var("FVAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_run_env_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename = test_file_1.to_str().unwrap();
+
+            let content = "ENV_VAR1=hello\n\
+           ENV_VAR2=CtyunOS\n\
+           ENV_VAR3=Rust\n\
+           ENV_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "--file", filename, "ls"];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+
+            match env::var("ENV_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail:{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_run_env_file_unset() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "UNSET_VAR1=hello\n\
+           UNSET_VAR2=CtyunOS\n\
+           UNSET_VAR3=Rust\n\
+           UNSET_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            let cmd = vec![
+                ctcore::ct_util_name(),
+                "-i",
+                "env",
+                "-u",
+                unset_filename,
+                "env",
+            ];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_ne!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_ne!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_ne!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_ne!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_run_env_file_unset_whole() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "UNSET_VAR1=hello\n\
+           UNSET_VAR2=CtyunOS\n\
+           UNSET_VAR3=Rust\n\
+           UNSET_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            let cmd = vec![
+                ctcore::ct_util_name(),
+                "--ignore-environment",
+                "env",
+                "--unset",
+                unset_filename,
+                "env",
+            ];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_ne!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_ne!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_ne!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_ne!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_run_env_debug() {
+            let cmd = vec![ctcore::ct_util_name(), "-v", "arch"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_debug_whole() {
+            let cmd = vec![ctcore::ct_util_name(), "--debug", "arch"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_split_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![
+                ctcore::ct_util_name(),
+                "--split-string=''",
+                "cat",
+                file_path,
+            ];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_run_env_split_s() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![ctcore::ct_util_name(), "-S", "", "cat", file_path];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_err()); //error  ,与 系统命令env不一致
+        }
+
+        #[test]
+        fn test_run_env_s_split_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let cmd = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--split-string=''",
+                "cat",
+                file_path,
+            ];
+
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.run_env(args);
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_parse_arguments {
+        use crate::EnvAppData;
+
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+
+        use tempfile::Builder;
+
+        #[test]
+        fn test_parse_arguments_version() {
+            let cmd = vec![ctcore::ct_util_name(), "--version"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.parse_arguments(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_parse_arguments_v() {
+            let cmd = vec![ctcore::ct_util_name(), "-V"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.parse_arguments(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_parse_arguments_help() {
+            let cmd = vec![ctcore::ct_util_name(), "--help"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.parse_arguments(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_parse_arguments_h() {
+            let cmd = vec![ctcore::ct_util_name(), "-h"];
+            let args = cmd.iter().map(|s| OsString::from(s));
+
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.parse_arguments(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn test_parse_arguments_i() {
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![OsString::from("-i"), OsString::from("arch")];
+
+            let expected_args = vec![OsString::from("-i"), OsString::from("arch")];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_ignore_environment() {
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("--ignore-environment"),
+                OsString::from("arch"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("--ignore-environment"),
+                OsString::from("arch"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_split_string_args() {
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("--split-string"),
+                OsString::from("arg1"),
+                OsString::from("-S"),
+                OsString::from("arg2"),
+                OsString::from("-vS"),
+                OsString::from("arg3"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("--split-string"),
+                OsString::from("arg1"),
+                OsString::from("-S"),
+                OsString::from("arg2"),
+                OsString::from("-vS"),
+                OsString::from("arg3"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_chdir_cmd() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("--chdir"),
+                OsString::from(env_dir),
+                OsString::from("ls"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("--chdir"),
+                OsString::from(env_dir),
+                OsString::from("ls"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_c_cmd() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("-C"),
+                OsString::from(env_dir),
+                OsString::from("ls"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("-C"),
+                OsString::from(env_dir),
+                OsString::from("ls"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_0() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let _ = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![OsString::from("-0")];
+
+            let expected_args = vec![OsString::from("-0")];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_null() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let _ = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![OsString::from("--null")];
+
+            let expected_args = vec![OsString::from("--null")];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_f() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let f = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![OsString::from("-f"), OsString::from(f)];
+
+            let expected_args = vec![OsString::from("-f"), OsString::from(f)];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_file() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let f = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let _ = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![OsString::from("--file"), OsString::from(f)];
+
+            let expected_args = vec![OsString::from("--file"), OsString::from(f)];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_unset() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let _ = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("--unset"),
+                OsString::from(unset_filename),
+                OsString::from("env"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("--unset"),
+                OsString::from(unset_filename),
+                OsString::from("env"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_u() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let _ = sub_dir_path.to_str().unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("-u"),
+                OsString::from(unset_filename),
+                OsString::from("env"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("-u"),
+                OsString::from(unset_filename),
+                OsString::from("env"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_debug_whole() {
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("--debug"),
+                OsString::from("arch"),
+                OsString::from("env"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("--debug"),
+                OsString::from("arch"),
+                OsString::from("env"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+
+        #[test]
+        fn test_parse_arguments_debug() {
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("-v"),
+                OsString::from("arch"),
+                OsString::from("env"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("-v"),
+                OsString::from("arch"),
+                OsString::from("env"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+        #[test]
+        fn test_parse_arguments_split_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("--split-string"),
+                OsString::from("arg1"),
+                OsString::from("cat"),
+                OsString::from(file_path),
+                OsString::from("arg3"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("--split-string"),
+                OsString::from("arg1"),
+                OsString::from("cat"),
+                OsString::from(file_path),
+                OsString::from("arg3"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+        #[test]
+        fn test_parse_arguments_s_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("-S"),
+                OsString::from("arg1"),
+                OsString::from("cat"),
+                OsString::from(file_path),
+                OsString::from("arg3"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("-S"),
+                OsString::from("arg1"),
+                OsString::from("cat"),
+                OsString::from(file_path),
+                OsString::from("arg3"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+        #[test]
+        fn test_parse_arguments_s_split_string() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![
+                OsString::from("-S"),
+                OsString::from("--split-string"),
+                OsString::from("arg1"),
+                OsString::from("cat"),
+                OsString::from(file_path),
+                OsString::from("arg3"),
+            ];
+
+            let expected_args = vec![
+                OsString::from("-S"),
+                OsString::from("--split-string"),
+                OsString::from("arg1"),
+                OsString::from("cat"),
+                OsString::from(file_path),
+                OsString::from("arg3"),
+            ];
+
+            let original_args = original_args.into_iter();
+            let result = env_app_data.parse_arguments(original_args);
+            assert!(result.is_ok());
+            let (original_args, _) = result.unwrap();
+
+            assert_eq!(original_args, expected_args);
+        }
+    }
+
+}

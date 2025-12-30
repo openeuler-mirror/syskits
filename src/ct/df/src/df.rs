@@ -9173,4 +9173,372 @@ mod tests {
             assert!(filesystem_paths.is_ok());
         }
     }
+        #[test]
+        fn test_ct_get_filesystem_df_lowercase_block_size_m() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=m"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+        #[test]
+        fn test_ct_get_filesystem_df_uppercase_b_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-BG"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_lowercase_b_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-Bg"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_uppercase_block_size_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=G"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_lowercase_block_size_g() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=g"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_uppercase_b_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-BT"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_lowercase_b_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-Bt"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_uppercase_block_size_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=T"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
+        #[test]
+        fn test_ct_get_filesystem_df_lowercase_block_size_t() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=t"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+        #[test]
+        fn test_ct_get_filesystem_df_uppercase_b_p() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-BP"];
+            let args_match = command.try_get_matches_from(args);
+
+            let binds = args_match.unwrap();
+
+            // 从命令行匹配项中解析DfOptions。
+            let options = DfOptions::from(&binds)
+                .map_err(DfError::OptionsError)
+                .unwrap();
+
+            let filesystem_paths = get_filesystem(binds, &options);
+
+            assert!(filesystem_paths.is_ok());
+        }
+
 }

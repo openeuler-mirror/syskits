@@ -400,4 +400,85 @@ mod tests {
             "1kB"
         );
     }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_above_kilobyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1001, BlocksSuffixType::Si),
+            "1.1kB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_almost_next_kilobyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1023, BlocksSuffixType::Si),
+            "1.1kB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_next_kilobyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1025, BlocksSuffixType::Si),
+            "1.1kB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_multiple_kilobytes_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(10_001, BlocksSuffixType::Si),
+            "11kB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_max_kilobytes_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(999_000, BlocksSuffixType::Si),
+            "999kB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_exactly_megabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(999_001, BlocksSuffixType::Si),
+            "1MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_almost_next_megabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(999_999, BlocksSuffixType::Si),
+            "1MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_exactly_megabyte_boundary_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_000_000, BlocksSuffixType::Si),
+            "1MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_above_megabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_000_001, BlocksSuffixType::Si),
+            "1.1MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_within_same_megabyte_range_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_100_000, BlocksSuffixType::Si),
+            "1.1MB"
+        );
+    }
+
 }

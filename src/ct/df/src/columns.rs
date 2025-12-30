@@ -4446,4 +4446,331 @@ mod tests_from_matches {
         );
     }
 
+    #[test]
+    fn test_from_matches_sync() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "--sync"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_portability_sync() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "--portability", "--sync"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_p_portability_sync() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![
+            ctcore::ct_util_name(),
+            df_dir,
+            "-P",
+            "--portability",
+            "--sync",
+        ];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_type() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "--type", "ext4"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_print_type() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "--print-type"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Fstype,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_t() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "-T"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Fstype,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_x() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "-x", "ext4"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_from_matches_exclude_type() {
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_app_file1")
+            .tempdir()
+            .unwrap();
+        let sub_dir_path = temp_dir.path().join("sub_dir");
+        fs::create_dir(&sub_dir_path).unwrap();
+        let test_file_1 = sub_dir_path.join("test_file_1.txt");
+        File::create(&test_file_1).unwrap();
+        let mut file = File::create(&test_file_1).unwrap();
+        let _ = test_file_1.to_str().unwrap();
+
+        let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+        file.write_all(content.as_bytes()).unwrap();
+
+        let df_dir = sub_dir_path.to_str().unwrap();
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), df_dir, "--exclude-type", "ext4"];
+        let result = command.try_get_matches_from(args);
+        let binding = result.unwrap();
+
+        let columns = Column::from_matches(&binding).unwrap();
+        assert_eq!(
+            columns,
+            vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ]
+        );
+    }
 }

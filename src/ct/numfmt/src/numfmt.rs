@@ -15041,5 +15041,977 @@ mod tests {
                 Some(&"none".to_string())
             );
         }
+
+        #[test]
+        fn test_ct_app_to_long_none_with_value_1099511627775() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "none", "1099511627775"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"none".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_none_with_value_1099511627776() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "none", "1099511627776"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"none".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_none_with_value_999999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "none", "999999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"none".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_none_with_value_1000000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "none", "1000000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"none".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_none_with_value_1125899906842623() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "none", "1125899906842623"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"none".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_none_with_value_1125899906842624() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "none", "1125899906842624"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"none".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_2() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "2"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1023() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1023"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1024() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1024"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1048575() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1048575"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1048576() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1048576"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1073741823() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1073741823"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1073741824() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1073741824"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1099511627775() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1099511627775"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1099511627776() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1099511627776"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_999999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "999999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1000000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1000000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1125899906842623() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1125899906842623"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_auto_with_value_1125899906842624() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "auto", "1125899906842624"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"auto".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_2() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "2"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1023() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1023"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1024() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1024"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1048575() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1048575"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1048576() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1048576"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1073741823() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1073741823"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1073741824() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1073741824"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1099511627775() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1099511627775"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1099511627776() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1099511627776"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_999999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "999999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1000000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1000000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1125899906842623() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1125899906842623"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_si_with_value_1125899906842624() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "si", "1125899906842624"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"si".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_2() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "2"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1023() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1023"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1024() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1024"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1048575() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1048575"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1048576() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1048576"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1073741823() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1073741823"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1073741824() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1073741824"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1099511627775() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1099511627775"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1099511627776() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1099511627776"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_999999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1000000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1125899906842623() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1125899906842623"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_i_with_value_1125899906842624() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1125899906842624"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec-i".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_2() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "2"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1023() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1023"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1024() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1024"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1048575() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1048575"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
     }
 }

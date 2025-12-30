@@ -334,4 +334,91 @@ mod tests {
             assert_eq!(None, result.unwrap().get_one::<String>(OPT_HOST));
         }
     }
+
+    mod tests_hostname_main {
+        use crate::hostname_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_hostname_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_hostname_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_hostname_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_hostname_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_hostname_main_domain() {
+            let args = vec![ctcore::ct_util_name(), "--domain"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_d() {
+            let args = vec![ctcore::ct_util_name(), "-d"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_ip_address() {
+            let args = vec![ctcore::ct_util_name(), "--ip-address"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_i() {
+            let args = vec![ctcore::ct_util_name(), "-i"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_fqdn() {
+            let args = vec![ctcore::ct_util_name(), "--fqdn"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_f() {
+            let args = vec![ctcore::ct_util_name(), "-f"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
 }

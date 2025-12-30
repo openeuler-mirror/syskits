@@ -16013,5 +16013,741 @@ mod tests {
                 Some(&"iec".to_string())
             );
         }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1048576() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1048576"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1073741823() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1073741823"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1073741824() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1073741824"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1099511627775() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1099511627775"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1099511627776() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1099511627776"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_999999999999999() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "999999999999999"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1000000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000000000000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1125899906842623() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1125899906842623"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_long_iec_with_value_1125899906842624() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to", "iec", "1125899906842624"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to"),
+                Some(&"iec".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_unit_long_none() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to-unit"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_to_unit_long_0() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to-unit", "0"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to-unit"),
+                Some(&"0".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_unit_long_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to-unit", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to-unit"),
+                Some(&"1".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_unit_long_2() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to-unit", "2"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to-unit"),
+                Some(&"2".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_unit_long_100000000000000000000000000000000() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--to-unit",
+                "100000000000000000000000000000000",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to-unit"),
+                Some(&"100000000000000000000000000000000".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_to_unit_long_aa() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to-unit", "aa"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("to-unit"),
+                Some(&"aa".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_0() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "0"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"0".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"1".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_100() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "100"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"100".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_a() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_negative_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "-1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"-1".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_negative_100() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "-100"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"-100".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_padding_long_negative_1000() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--padding", "-1000"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("padding"),
+                Some(&"-1000".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_long_0() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "0"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("header"),
+                Some(&"0".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_long_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("header"),
+                Some(&"1".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_long_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("header"),
+                Some(&"10".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_long_100() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "100"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("header"),
+                Some(&"100".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_long_negitive_1() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "-1"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("header"),
+                Some(&"-1".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_long_a() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("header"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_round_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--round"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_round_long_from_zero() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--round", "from-zero"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("round"),
+                Some(&"from-zero".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_round_long_up() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--round", "up"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("round"),
+                Some(&"up".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_round_long_down() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--round", "down"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("round"),
+                Some(&"down".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_round_long_towards_zero() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--round", "towards-zero"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("round"),
+                Some(&"towards-zero".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_round_long_nearest() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--round", "nearest"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("round"),
+                Some(&"nearest".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_k_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "K", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"K".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_ki_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Ki", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Ki".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_m_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "M", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"M".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_mi_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Mi", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Mi".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_g_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "G", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"G".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_gi_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Gi", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Gi".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_ti_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Ti", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Ti".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_t_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "T", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"T".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_p_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "P", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"P".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_pi_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Pi", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Pi".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_e_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "E", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"E".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_ei_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Ei", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Ei".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_z_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Z", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Z".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_zi_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Zi", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Zi".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_y_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Y", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Y".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_yi_10() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Yi", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Yi".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_wi_10_limit() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "Wi", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"Wi".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_suffix_long_uppercase_w_10_limit() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--suffix", "W", "10"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("suffix"),
+                Some(&"W".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_invalid_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--invalid"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_long_abort() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--invalid", "abort"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("invalid"),
+                Some(&"abort".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_invalid_long_fail() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--invalid", "fail"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("invalid"),
+                Some(&"fail".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_invalid_long_warn() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--invalid", "warn"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("invalid"),
+                Some(&"warn".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_invalid_long_ignore() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--invalid", "ignore"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("invalid"),
+                Some(&"ignore".to_string())
+            );
+        }
     }
 }

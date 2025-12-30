@@ -1649,5 +1649,45 @@ mod tests {
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_long_option_tabs() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--tabs", "N, LIST"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_no_utf8() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--no-utf8"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_a() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-a"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_t() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-t", "N, LIST"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_uppercase_u() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-U"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
     }
 }

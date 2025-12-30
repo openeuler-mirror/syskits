@@ -1491,4 +1491,36 @@ mod tests {
             assert_eq!(unexpand_tabstops_parse(input), expected);
         }
     }
+
+    #[cfg(test)]
+    mod parse_error_tests {
+        use super::*;
+
+        #[test]
+        fn test_invalid_character_display() {
+            let error = UnexpandParseError::InvalidCharacter("x".to_string());
+            assert_eq!(
+                format!("{}", error),
+                "tab size contains invalid character(s): 'x'"
+            );
+        }
+
+        #[test]
+        fn test_tab_size_cannot_be_zero_display() {
+            let error = UnexpandParseError::TabSizeCannotBeZero;
+            assert_eq!(format!("{}", error), "tab size cannot be 0");
+        }
+
+        #[test]
+        fn test_tab_size_too_large_display() {
+            let error = UnexpandParseError::TabSizeTooLarge;
+            assert_eq!(format!("{}", error), "tab stop value is too large");
+        }
+
+        #[test]
+        fn test_tab_sizes_must_be_ascending_display() {
+            let error = UnexpandParseError::TabSizesMustBeAscending;
+            assert_eq!(format!("{}", error), "tab sizes must be ascending");
+        }
+    }
 }

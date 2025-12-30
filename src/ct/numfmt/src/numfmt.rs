@@ -282,7 +282,7 @@ fn parse_fields(arg_matches: &ArgMatches) -> Result<Vec<CtRange>> {
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![CtRange {
             low: 1,
-            high: std::usize::MAX,
+            high: usize::MAX,
         }]
     } else {
         CtRange::from_list(fields)?

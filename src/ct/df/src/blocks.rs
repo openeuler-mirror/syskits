@@ -617,4 +617,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_blocks_bases_with_iec() {
+        let suffix_type = BlocksSuffixType::Iec;
+        let bases = suffix_type.blocks_bases();
+
+        assert_eq!(bases, BLOCKS_IEC_BASES);
+    }
+
+    #[test]
+    fn test_blocks_bases_with_si() {
+        let suffix_type = BlocksSuffixType::Si;
+        let bases = suffix_type.blocks_bases();
+
+        assert_eq!(bases, BLOCKS_SI_BASES);
+    }
+
+    #[test]
+    fn test_blocks_bases_with_human_readable_binary() {
+        let suffix_type = BlocksSuffixType::HumanReadable(BlocksHumanReadable::Binary);
+        let bases = suffix_type.blocks_bases();
+
+        assert_eq!(bases, BLOCKS_IEC_BASES);
+    }
+
+    #[test]
+    fn test_blocks_bases_with_human_readable_decimal() {
+        let suffix_type = BlocksSuffixType::HumanReadable(BlocksHumanReadable::Decimal);
+        let bases = suffix_type.blocks_bases();
+
+        assert_eq!(bases, BLOCKS_SI_BASES);
+    }
 }

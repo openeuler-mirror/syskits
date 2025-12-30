@@ -535,3 +535,254 @@ impl fmt::Display for Table {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use std::vec;
+
+    use crate::blocks::BlocksHumanReadable;
+    use crate::columns::Column;
+    use crate::table::{Table, TableHeader, TableHeaderMode, TableRow, TableRowFormatter};
+    use crate::{BlockSize, DfOptions};
+
+    const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
+        Column::Source,
+        Column::Fstype,
+        Column::Size,
+        Column::Used,
+        Column::Avail,
+        Column::Pcent,
+        Column::Target,
+    ];
+    const COLUMNS_WITH_INODES: [Column; 6] = [
+        Column::Source,
+        Column::Itotal,
+        Column::Iused,
+        Column::Iavail,
+        Column::Ipcent,
+        Column::Target,
+    ];
+
+    impl Default for TableRow {
+        fn default() -> Self {
+            Self {
+                file: Some("/path/to/file".to_string()),
+                fs_device: "my_device".to_string(),
+                fs_type: "my_type".to_string(),
+                fs_mount: "my_mount".to_string(),
+
+                bytes: 100,
+                bytes_used: 25,
+                bytes_avail: 75,
+                bytes_usage: Some(0.25),
+
+                #[cfg(target_os = "macos")]
+                bytes_capacity: Some(0.5),
+
+                inodes: 10,
+                inodes_used: 2,
+                inodes_free: 8,
+                inodes_usage: Some(0.2),
+            }
+        }
+    }
+
+    #[test]
+    fn test_default_header() {
+        let options = DfOptions::default();
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "1K-blocks",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
+        );
+    }
+
+    #[test]
+    fn test_header_with_fs_type() {
+        let options = DfOptions {
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "Type",
+                "1K-blocks",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
+        );
+    }
+
+    #[test]
+    fn test_header_with_inodes() {
+        let options = DfOptions {
+            columns: COLUMNS_WITH_INODES.to_vec(),
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "Inodes",
+                "IUsed",
+                "IFree",
+                "IUse%",
+                "Mounted on"
+            )
+        );
+    }
+
+    #[test]
+    fn test_header_with_block_size_1024() {
+        let options = DfOptions {
+            block_size: BlockSize::Bytes(3 * 1024),
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "3K-blocks",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
+        );
+    }
+
+    #[test]
+    fn test_human_readable_header() {
+        let options = DfOptions {
+            header_mode: TableHeaderMode::HumanReadable,
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!("Filesystem", "Size", "Used", "Avail", "Use%", "Mounted on")
+        );
+    }
+
+    #[test]
+    fn test_posix_portability_header() {
+        let options = DfOptions {
+            header_mode: TableHeaderMode::PosixPortability,
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "1024-blocks",
+                "Used",
+                "Available",
+                "Capacity",
+                "Mounted on"
+            )
+        );
+    }
+
+    #[test]
+    fn test_output_header() {
+        let options = DfOptions {
+            header_mode: TableHeaderMode::Output,
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "1K-blocks",
+                "Used",
+                "Avail",
+                "Use%",
+                "Mounted on"
+            )
+        );
+    }
+
+    #[test]
+    fn test_row_formatter() {
+        let options = DfOptions {
+            block_size: BlockSize::Bytes(1),
+            ..Default::default()
+        };
+        let row = TableRow {
+            fs_device: "my_device".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 100,
+            bytes_used: 25,
+            bytes_avail: 75,
+            bytes_usage: Some(0.25),
+
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(
+            fmt.get_values(),
+            vec!("my_device", "100", "25", "75", "25%", "my_mount")
+        );
+    }
+
+    #[test]
+    fn test_row_formatter_with_fs_type() {
+        let options = DfOptions {
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
+            block_size: BlockSize::Bytes(1),
+            ..Default::default()
+        };
+        let row = TableRow {
+            fs_device: "my_device".to_string(),
+            fs_type: "my_type".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 100,
+            bytes_used: 25,
+            bytes_avail: 75,
+            bytes_usage: Some(0.25),
+
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(
+            fmt.get_values(),
+            vec!("my_device", "my_type", "100", "25", "75", "25%", "my_mount")
+        );
+    }
+
+    #[test]
+    fn test_row_formatter_with_inodes() {
+        let options = DfOptions {
+            columns: COLUMNS_WITH_INODES.to_vec(),
+            block_size: BlockSize::Bytes(1),
+            ..Default::default()
+        };
+        let row = TableRow {
+            fs_device: "my_device".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            inodes: 10,
+            inodes_used: 2,
+            inodes_free: 8,
+            inodes_usage: Some(0.2),
+
+            ..Default::default()
+        };
+        let fmt = TableRowFormatter::new(&row, &options, false);
+        assert_eq!(
+            fmt.get_values(),
+            vec!("my_device", "10", "2", "8", "20%", "my_mount")
+        );
+    }
+}

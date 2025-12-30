@@ -240,3 +240,159 @@ impl FromStr for NumfmtInvalidModes {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_format() {
+        assert_eq!(NumfmtFormatOptions::default(), "%f".parse().unwrap());
+        assert_eq!(NumfmtFormatOptions::default(), "%  f".parse().unwrap());
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_parse_format_with_invalid_formats() {
+        assert!("".parse::<NumfmtFormatOptions>().is_err());
+        assert!("hello".parse::<NumfmtFormatOptions>().is_err());
+        assert!("hello%".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%-f".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%d".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%4 f".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%f%".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%f%%%".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%%f".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%%%%f".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%.-1f".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%. 1f".parse::<NumfmtFormatOptions>().is_err());
+        assert!("%18446744073709551616f"
+            .parse::<NumfmtFormatOptions>()
+            .is_err());
+        assert!("%.18446744073709551616f"
+            .parse::<NumfmtFormatOptions>()
+            .is_err());
+    }
+
+    #[test]
+    fn test_parse_format_with_prefix_and_suffix() {
+        let formats = vec![
+            ("--%f", "--", ""),
+            ("%f::", "", "::"),
+            ("--%f::", "--", "::"),
+            ("%f%%", "", "%%"),
+            ("%%%f", "%", ""),
+            ("%% %f", "%%", ""),
+        ];
+
+        for (format, expected_prefix, expected_suffix) in formats {
+            let options: NumfmtFormatOptions = format.parse().unwrap();
+            assert_eq!(expected_prefix, options.prefix);
+            assert_eq!(expected_suffix, options.suffix);
+        }
+    }
+
+    #[test]
+    fn test_parse_format_with_padding() {
+        let mut expected = NumfmtFormatOptions::default();
+        let formats = vec![("%12f", Some(12)), ("%-12f", Some(-12))];
+
+        for (format, expected_padding) in formats {
+            expected.padding = expected_padding;
+            assert_eq!(expected, format.parse().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_parse_format_with_precision() {
+        let mut expected = NumfmtFormatOptions::default();
+        let formats = vec![
+            ("%6.2f", Some(6), Some(2)),
+            ("%6.f", Some(6), Some(0)),
+            ("%.2f", None, Some(2)),
+            ("%.f", None, Some(0)),
+        ];
+
+        for (format, expected_padding, expected_precision) in formats {
+            expected.padding = expected_padding;
+            expected.precision = expected_precision;
+            assert_eq!(expected, format.parse().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_parse_format_with_grouping() {
+        let expected = NumfmtFormatOptions {
+            is_grouping: true,
+            ..Default::default()
+        };
+        assert_eq!(expected, "%'f".parse().unwrap());
+        assert_eq!(expected, "% ' f".parse().unwrap());
+        assert_eq!(expected, "%'''''''f".parse().unwrap());
+    }
+
+    #[test]
+    fn test_parse_format_with_zero_padding() {
+        let expected = NumfmtFormatOptions {
+            padding: Some(10),
+            is_zero_padding: true,
+            ..Default::default()
+        };
+        assert_eq!(expected, "%010f".parse().unwrap());
+        assert_eq!(expected, "% 0 10f".parse().unwrap());
+        assert_eq!(expected, "%0000000010f".parse().unwrap());
+    }
+
+    #[test]
+    fn test_parse_format_with_grouping_and_zero_padding() {
+        let expected = NumfmtFormatOptions {
+            is_grouping: true,
+            is_zero_padding: true,
+            ..Default::default()
+        };
+        assert_eq!(expected, "%0'f".parse().unwrap());
+        assert_eq!(expected, "%'0f".parse().unwrap());
+        assert_eq!(expected, "%0'0'0'f".parse().unwrap());
+        assert_eq!(expected, "%'0'0'0f".parse().unwrap());
+    }
+
+    #[test]
+    fn test_set_invalid_mode() {
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Abort),
+            NumfmtInvalidModes::from_str("abort")
+        );
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Abort),
+            NumfmtInvalidModes::from_str("ABORT")
+        );
+
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Fail),
+            NumfmtInvalidModes::from_str("fail")
+        );
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Fail),
+            NumfmtInvalidModes::from_str("FAIL")
+        );
+
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Ignore),
+            NumfmtInvalidModes::from_str("ignore")
+        );
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Ignore),
+            NumfmtInvalidModes::from_str("IGNORE")
+        );
+
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Warn),
+            NumfmtInvalidModes::from_str("warn")
+        );
+        assert_eq!(
+            Ok(NumfmtInvalidModes::Warn),
+            NumfmtInvalidModes::from_str("WARN")
+        );
+
+        assert!(NumfmtInvalidModes::from_str("something unknown").is_err());
+    }
+}

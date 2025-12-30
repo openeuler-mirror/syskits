@@ -8675,4 +8675,141 @@ mod tests {
             assert!(is_best(&[m2], &m1));
         }
     }
+
+    mod is_included {
+
+        use crate::{is_included, DfOptions};
+        use ctcore::ct_fsext::CtMountInfo;
+
+        /// Instantiate a [`CtMountInfo`] with the given fields.
+        fn mount_info(fs_type: &str, mount_dir: &str, remote: bool, dummy: bool) -> CtMountInfo {
+            CtMountInfo {
+                dev_id: String::new(),
+                dev_name: String::new(),
+                fs_type: String::from(fs_type),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote,
+                dummy,
+            }
+        }
+
+        #[test]
+        fn test_remote_included() {
+            let opt = DfOptions::default();
+            let m = mount_info("ext4", "/mnt/foo", true, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_remote_excluded() {
+            let opt = DfOptions {
+                show_local_fs: true,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", true, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_dummy_included() {
+            let opt = DfOptions {
+                show_all_fs: true,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, true);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_dummy_excluded() {
+            let opt = DfOptions::default();
+            let m = mount_info("ext4", "/mnt/foo", false, true);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_exclude_match() {
+            let exclude = Some(vec![String::from("ext4")]);
+            let opt = DfOptions {
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_exclude_no_match() {
+            let exclude = Some(vec![String::from("tmpfs")]);
+            let opt = DfOptions {
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_match() {
+            let include = Some(vec![String::from("ext4")]);
+            let opt = DfOptions {
+                include,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_no_match() {
+            let include = Some(vec![String::from("tmpfs")]);
+            let opt = DfOptions {
+                include,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_neither() {
+            let include = Some(vec![String::from("tmpfs")]);
+            let exclude = Some(vec![String::from("squashfs")]);
+            let opt = DfOptions {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_exclude() {
+            let include = Some(vec![String::from("tmpfs")]);
+            let exclude = Some(vec![String::from("ext4")]);
+            let opt = DfOptions {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_include() {
+            let include = Some(vec![String::from("ext4")]);
+            let exclude = Some(vec![String::from("squashfs")]);
+            let opt = DfOptions {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &opt));
+        }
+    }
 }

@@ -513,7 +513,7 @@ mod tests {
             unexpand_exe(&flags, &mut output).unwrap();
 
             let result = String::from_utf8(output).unwrap();
-            assert_eq!(result, "\t\tHello\tWorld\n");
+            assert_eq!(result, "\tHello\tWorld\n");
         }
 
         #[test]
@@ -539,7 +539,7 @@ mod tests {
             unexpand_exe(&flags, &mut output).unwrap();
 
             let result = String::from_utf8(output).unwrap();
-            assert_eq!(result, "\t\tHello\n\t\tWorld\n");
+            assert_eq!(result, "\tHello\n\tWorld\n");
         }
 
         #[test]
@@ -558,7 +558,7 @@ mod tests {
             unexpand_exe(&flags, &mut output).unwrap();
 
             let result = String::from_utf8(output).unwrap();
-            assert_eq!(result, "\t\tHello 世界\n");
+            assert_eq!(result, "\tHello 世界\n");
         }
 
         #[test]
@@ -617,7 +617,7 @@ mod tests {
             unexpand_line(&mut buf, &mut output, &flags, 0, &[4]).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
-                "\t\t\t\tHello".to_string()
+                "\t\tHello".to_string()
             );
         }
 
@@ -635,7 +635,7 @@ mod tests {
             unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
-                "Hello\t\tWorld".to_string()
+                "Hello\tWorld".to_string()
             );
         }
 
@@ -653,7 +653,7 @@ mod tests {
             unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
-                "Hello  世界".to_string()
+                "Hello 世界".to_string()
             );
         }
 
@@ -705,7 +705,7 @@ mod tests {
             unexpand_line(&mut buf, &mut output, &flags, 0, &[]).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
-                "Hello  World".to_string()
+                "Hello World".to_string()
             );
         }
 
@@ -723,7 +723,7 @@ mod tests {
             unexpand_line(&mut buf, &mut output, &flags, 0, &[4]).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
-                "      Hello".to_string()
+                "   Hello".to_string()
             );
         }
 
@@ -741,7 +741,7 @@ mod tests {
             unexpand_line(&mut buf, &mut output, &flags, 0, &[4, 8]).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
-                "\t\t      Hello".to_string()
+                "\t   Hello".to_string()
             );
         }
     }
@@ -806,42 +806,42 @@ mod tests {
         fn test_unexpand_write_tabs_single_tabstop() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[4], 0, 8, false, true, false);
-            assert_eq!(output.into_inner(), b"\t\t\t\t");
+            assert_eq!(output.into_inner(), b"\t\t");
         }
 
         #[test]
         fn test_unexpand_write_tabs_multiple_tabstops() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[4, 8], 0, 12, false, true, false);
-            assert_eq!(output.into_inner(), b"\t\t\t\t        ");
+            assert_eq!(output.into_inner(), b"\t\t    ");
         }
 
         #[test]
         fn test_unexpand_write_tabs_no_tabstops() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[], 0, 8, false, true, false);
-            assert_eq!(output.into_inner(), b"                ");
+            assert_eq!(output.into_inner(), b"        ");
         }
 
         #[test]
         fn test_unexpand_write_tabs_with_prevtab() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[4], 0, 8, true, true, false);
-            assert_eq!(output.into_inner(), b"\t\t\t\t");
+            assert_eq!(output.into_inner(), b"\t\t");
         }
 
         #[test]
         fn test_unexpand_write_tabs_with_amode() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[4], 0, 8, false, false, true);
-            assert_eq!(output.into_inner(), b"\t\t\t\t");
+            assert_eq!(output.into_inner(), b"\t\t");
         }
 
         #[test]
         fn test_unexpand_write_tabs_no_init_no_amode() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[4], 0, 8, false, false, false);
-            assert_eq!(output.into_inner(), b"                ");
+            assert_eq!(output.into_inner(), b"        ");
         }
 
         #[test]
@@ -862,7 +862,7 @@ mod tests {
         fn test_unexpand_write_tabs_col_greater_than_scol() {
             let mut output = Cursor::new(Vec::new());
             unexpand_write_tabs(&mut output, &[4], 2, 4, false, true, false);
-            assert_eq!(output.into_inner(), b"\t\t");
+            assert_eq!(output.into_inner(), b"\t");
         }
     }
 

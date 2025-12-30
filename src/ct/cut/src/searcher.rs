@@ -54,3 +54,73 @@ impl<'a, 'b, M: Matcher> Iterator for Searcher<'a, 'b, M> {
     }
 }
 
+#[cfg(test)]
+mod tests_searcher {
+
+    use super::super::matcher::ExactMatcher;
+    use super::*;
+
+    #[test]
+    fn test_normal() {
+        let matcher = ExactMatcher::new("a".as_bytes());
+        let iter = Searcher::new(&matcher, "a.a.a".as_bytes());
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(vec![(0, 1), (2, 3), (4, 5)], items);
+    }
+
+    #[test]
+    fn test_empty() {
+        let matcher = ExactMatcher::new("a".as_bytes());
+        let iter = Searcher::new(&matcher, "".as_bytes());
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(vec![] as Vec<(usize, usize)>, items);
+    }
+
+    fn test_multibyte(line: &[u8], expected: &[(usize, usize)]) {
+        let matcher = ExactMatcher::new("ab".as_bytes());
+        let iter = Searcher::new(&matcher, line);
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(expected, items);
+    }
+
+    #[test]
+    fn test_multibyte_normal() {
+        test_multibyte("...ab...ab...".as_bytes(), &[(3, 5), (8, 10)]);
+    }
+
+    #[test]
+    fn test_multibyte_needle_head_at_end() {
+        test_multibyte("a".as_bytes(), &[]);
+    }
+
+    #[test]
+    fn test_multibyte_starting_needle() {
+        test_multibyte("ab...ab...".as_bytes(), &[(0, 2), (5, 7)]);
+    }
+
+    #[test]
+    fn test_multibyte_trailing_needle() {
+        test_multibyte("...ab...ab".as_bytes(), &[(3, 5), (8, 10)]);
+    }
+
+    #[test]
+    fn test_multibyte_first_byte_false_match() {
+        test_multibyte("aA..aCaC..ab..aD".as_bytes(), &[(10, 12)]);
+    }
+
+    #[test]
+    fn test_searcher_with_exact_matcher() {
+        let matcher = ExactMatcher::new("<>".as_bytes());
+        let haystack = "<><>a<>b<><>cd<><>".as_bytes();
+        let mut searcher = Searcher::new(&matcher, haystack);
+        assert_eq!(searcher.next(), Some((0, 2)));
+        assert_eq!(searcher.next(), Some((2, 4)));
+        assert_eq!(searcher.next(), Some((5, 7)));
+        assert_eq!(searcher.next(), Some((8, 10)));
+        assert_eq!(searcher.next(), Some((10, 12)));
+        assert_eq!(searcher.next(), Some((14, 16)));
+        assert_eq!(searcher.next(), Some((16, 18)));
+        assert_eq!(searcher.next(), None);
+        assert_eq!(searcher.next(), None);
+    }
+}

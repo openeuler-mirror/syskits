@@ -124,3 +124,72 @@ mod tests_searcher {
         assert_eq!(searcher.next(), None);
     }
 }
+
+#[cfg(test)]
+mod whitespace_searcher_tests {
+
+    use super::super::matcher::WhitespaceMatcher;
+    use super::*;
+
+    #[test]
+    fn test_space() {
+        let matcher = WhitespaceMatcher {};
+        let iter = Searcher::new(&matcher, " . . ".as_bytes());
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(vec![(0, 1), (2, 3), (4, 5)], items);
+    }
+
+    #[test]
+    fn test_tab() {
+        let matcher = WhitespaceMatcher {};
+        let iter = Searcher::new(&matcher, "\t.\t.\t".as_bytes());
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(vec![(0, 1), (2, 3), (4, 5)], items);
+    }
+
+    #[test]
+    fn test_empty() {
+        let matcher = WhitespaceMatcher {};
+        let iter = Searcher::new(&matcher, "".as_bytes());
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(vec![] as Vec<(usize, usize)>, items);
+    }
+
+    fn test_multispace(line: &[u8], expected: &[(usize, usize)]) {
+        let matcher = WhitespaceMatcher {};
+        let iter = Searcher::new(&matcher, line);
+        let items: Vec<(usize, usize)> = iter.collect();
+        assert_eq!(expected, items);
+    }
+
+    #[test]
+    fn test_multispace_normal() {
+        test_multispace(
+            "...  ... \t...\t ... \t ...".as_bytes(),
+            &[(3, 5), (8, 10), (13, 15), (18, 21)],
+        );
+    }
+
+    #[test]
+    fn test_multispace_begin() {
+        test_multispace(" \t\t...".as_bytes(), &[(0, 3)]);
+    }
+
+    #[test]
+    fn test_multispace_end() {
+        test_multispace("...\t  ".as_bytes(), &[(3, 6)]);
+    }
+
+    #[test]
+    fn test_searcher_with_whitespace_matcher() {
+        let matcher = WhitespaceMatcher {};
+        let haystack = "\t a b \t cd\t\t".as_bytes();
+        let mut searcher = Searcher::new(&matcher, haystack);
+        assert_eq!(searcher.next(), Some((0, 2)));
+        assert_eq!(searcher.next(), Some((3, 4)));
+        assert_eq!(searcher.next(), Some((5, 8)));
+        assert_eq!(searcher.next(), Some((10, 12)));
+        assert_eq!(searcher.next(), None);
+        assert_eq!(searcher.next(), None);
+    }
+}

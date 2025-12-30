@@ -8581,4 +8581,53 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+    mod mount_info_lt {
+
+        use crate::mount_info_lt;
+        use ctcore::ct_fsext::CtMountInfo;
+
+        /// Instantiate a [`CtMountInfo`] with the given fields.
+        fn mount_info(dev_name: &str, mount_root: &str, mount_dir: &str) -> CtMountInfo {
+            CtMountInfo {
+                dev_id: String::new(),
+                dev_name: String::from(dev_name),
+                fs_type: String::new(),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::from(mount_root),
+                remote: false,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn test_absolute() {
+            // Prefer device name "/dev/foo" over "dev_foo".
+            let m1 = mount_info("/dev/foo", "/", "/mnt/bar");
+            let m2 = mount_info("dev_foo", "/", "/mnt/bar");
+            assert!(!mount_info_lt(&m1, &m2));
+        }
+
+        #[test]
+        fn test_shorter() {
+            // Prefer mount directory "/mnt/bar" over "/mnt/bar/baz"...
+            let m1 = mount_info("/dev/foo", "/", "/mnt/bar");
+            let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
+            assert!(!mount_info_lt(&m1, &m2));
+
+            // ..but prefer mount root "/root" over "/".
+            let m1 = mount_info("/dev/foo", "/root", "/mnt/bar");
+            let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
+            assert!(mount_info_lt(&m1, &m2));
+        }
+
+        #[test]
+        fn test_over_mounted() {
+            // Prefer the earlier entry if the devices are different but
+            // the mount directory is the same.
+            let m1 = mount_info("/dev/foo", "/", "/mnt/baz");
+            let m2 = mount_info("/dev/bar", "/", "/mnt/baz");
+            assert!(!mount_info_lt(&m1, &m2));
+        }
+    }
 }

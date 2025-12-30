@@ -89,6 +89,7 @@ feat_common_core = [
   "mktemp",
   "mv",
   "unexpand",
+  "hostname",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -242,6 +243,7 @@ mkdir = { optional = true, package = "ct_mkdir", path = "src/ct/mkdir" }
 mktemp = { optional = true, package = "ct_mktemp", path = "src/ct/mktemp" }
 mv = { optional = true, package = "ct_mv", path = "src/ct/mv" }
 unexpand = { optional = true, package = "ct_unexpand", path = "src/ct/unexpand" }
+hostname = { optional = true, package = "ct_hostname", path = "src/ct/hostname" }
 
 [dev-dependencies]
 chrono = { workspace = true }

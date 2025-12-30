@@ -1523,4 +1523,131 @@ mod tests {
             assert_eq!(format!("{}", error), "tab sizes must be ascending");
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use std::fs;
+
+        use clap::error::ErrorKind;
+
+        use crate::is_digit_or_comma;
+
+        use super::*;
+
+        #[test]
+        fn test_is_digit_or_comma() {
+            assert!(is_digit_or_comma('1'));
+            assert!(is_digit_or_comma(','));
+            assert!(!is_digit_or_comma('a'));
+        }
+
+        // unexpand 接口测试: unexpand [OPTION]... [FILE]...
+        //   -a, --all             convert all blanks, instead of just initial blanks
+        //       --first-only      convert only leading sequences of blanks (overrides -a)
+        //   -t, --tabs <N, LIST>  use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)
+        //   -U, --no-utf8         interpret input file as 8-bit ASCII rather than UTF-8
+        //   -h, --help            Print help
+        //   -V, --version         Print version
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            // 测试用例3：验证当提供未知参数时是否正确报错
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            // 测试用例4：验证当缺少必需的参数时是否正确报错
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_file() {
+            // Create a regular file for testing , 默认带文件
+            let regular_file_path = "test_file";
+            File::create(regular_file_path).expect("Failed to create regular file");
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), regular_file_path];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+
+            // Clean up: remove the regular file after the test
+            fs::remove_file(regular_file_path).expect("Failed to remove regular file");
+        }
+
+        #[test]
+        fn test_ct_app_long_option_all() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--all"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_first_only() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--first-only"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+    }
 }

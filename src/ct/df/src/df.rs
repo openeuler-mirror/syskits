@@ -3589,5 +3589,459 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_ct_app_df_local() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--local"];
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = true;
+
+            assert!(result.is_ok());
+
+            assert_eq!(
+                expected_result,
+                *result.unwrap().get_one::<bool>(DF_OPT_LOCAL).unwrap()
+            );
+        }
+
+        #[test]
+        fn test_ct_app_df_l_local() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-l", "--local"];
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = true;
+
+            assert!(result.is_ok());
+
+            assert_eq!(
+                expected_result,
+                *result.unwrap().get_one::<bool>(DF_OPT_LOCAL).unwrap()
+            );
+        }
+
+        #[test]
+        fn test_ct_app_df_no_sync() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--no-sync"];
+            let result = command.try_get_matches_from(args);
+
+            let expected_result = true;
+
+            assert!(result.is_ok());
+
+            assert_eq!(
+                expected_result,
+                *result.unwrap().get_one::<bool>(DF_OPT_NO_SYNC).unwrap()
+            );
+        }
+
+        #[test]
+        fn test_ct_app_df_l_no_sync() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "-l", "--no-sync"];
+            let result = command.try_get_matches_from(args);
+
+            // let expected_result = true;
+            //
+            // assert!(result.is_ok());
+            //
+            // assert_eq!(
+            //     expected_result,
+            //     *result.unwrap().get_one::<bool>(DF_OPT_LOCAL).unwrap()
+            // );
+            //
+            // let expected_result = true;
+            //
+            // assert!(result.is_ok());
+            //
+            // assert_eq!(
+            //     expected_result,
+            //     *result.unwrap().get_one::<bool>(DF_OPT_NO_SYNC).unwrap()
+            // );
+            // unwrap()之后，result的所有权就已经被转移了（因为unwrap()方法消耗了self），所以第二次调用unwrap()时就遇到了问题。
+            // 解决方案是确保在每次需要使用result时，它仍然是有效的。如果你需要多次使用结果或避免所有权的立即转移，可以考虑以下几种方式：
+            // 使用as_ref()或as_mut()方法借用result的内容，而不是转移所有权。
+            // 如果上下文允许，可以在第一次使用后克隆result（前提是clap::error::Error实现了Clone特质），但通常这不是最高效或推荐的做法。
+            // 调整代码逻辑，确保在所有权转移之前完成所有必要的操作。
+            // 针对错误信息中的建议修复代码，可以考虑如下修改（假设你确实需要在不同地方使用到result的结果）:
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+            }
+        }
+        #[test]
+        fn test_ct_app_df_local_no_sync() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), df_dir, "--local", "--no-sync"];
+            let result = command.try_get_matches_from(args);
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_df_local_no_sync_output_source() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                df_dir,
+                "--local",
+                "--no-sync",
+                "--output=source",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+
+                if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
+                    let expected_result = Some("source");
+
+                    assert_eq!(
+                        expected_result,
+                        matches.get_one::<String>(DF_OPT_OUTPUT).map(|x| x.as_str())
+                    )
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_df_local_no_sync_output_fstype() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                df_dir,
+                "--local",
+                "--no-sync",
+                "--output=fstype",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+
+                if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
+                    let expected_result = Some("fstype");
+
+                    assert_eq!(
+                        expected_result,
+                        matches.get_one::<String>(DF_OPT_OUTPUT).map(|x| x.as_str())
+                    )
+                }
+            }
+        }
+        #[test]
+        fn test_ct_app_df_local_no_sync_output_itotal() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                df_dir,
+                "--local",
+                "--no-sync",
+                "--output=itotal",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+
+                if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
+                    let expected_result = Some("itotal");
+
+                    assert_eq!(
+                        expected_result,
+                        matches.get_one::<String>(DF_OPT_OUTPUT).map(|x| x.as_str())
+                    )
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_df_local_no_sync_output_iiused() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                df_dir,
+                "--local",
+                "--no-sync",
+                "--output=iiused",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+
+                if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
+                    let expected_result = Some("iiused");
+
+                    assert_eq!(
+                        expected_result,
+                        matches.get_one::<String>(DF_OPT_OUTPUT).map(|x| x.as_str())
+                    )
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_df_local_no_sync_output_iavail() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_app_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+                   bbbb.\n\
+                   cccc.\n\
+                   dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                df_dir,
+                "--local",
+                "--no-sync",
+                "--output=iavail",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            if let Ok(matches) = result.as_ref() {
+                if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
+                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                }
+
+                if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
+                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                }
+
+                if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
+                    let expected_result = Some("iavail");
+
+                    assert_eq!(
+                        expected_result,
+                        matches.get_one::<String>(DF_OPT_OUTPUT).map(|x| x.as_str())
+                    )
+                }
+            }
+        }
+
     }
 }

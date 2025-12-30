@@ -420,5 +420,29 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_hostname_main_short() {
+            let args = vec![ctcore::ct_util_name(), "--short"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_s() {
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_hostname_main_hostname() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
     }
 }

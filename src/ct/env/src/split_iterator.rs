@@ -381,3 +381,155 @@ pub fn split(s: &NativeIntStr) -> Result<Vec<NativeIntString>, EnvParseError> {
     Ok(splitted_args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native_int_str::NativeIntString;
+
+    // Test case 1: simple string without any special characters
+    #[test]
+    fn test_split_simple_string() {
+        let input1 = NativeIntString::from("hello world");
+        let expected1 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("world"),
+        ];
+        assert_eq!(split(&input1).unwrap(), expected1);
+    }
+
+    // Test case 2: string with whitespace characters
+    #[test]
+    fn test_split_whitespace_string() {
+        let input2 = NativeIntString::from("hello\tworld\n");
+        let expected2 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("world"),
+        ];
+        assert_eq!(split(&input2).unwrap(), expected2);
+    }
+
+    // Test case 3: string with escaped characters
+    #[test]
+    fn test_split_escaped_characters() {
+        let input3 = NativeIntString::from(r#"hello\nworld"#);
+        let expected3 = vec![[104, 101, 108, 108, 111, 10, 119, 111, 114, 108, 100]];
+        assert_eq!(split(&input3).unwrap(), expected3);
+    }
+
+    // Test case 4: string with variable expansion
+    #[test]
+    fn test_split_variable_expansion() {
+        std::env::set_var("VAR", "value");
+        let input4 = NativeIntString::from("hello $VAR");
+        let expected4 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("value"),
+        ];
+        assert_eq!(split(&input4).unwrap(), expected4);
+    }
+
+    // Test case 5: string with invalid escape sequence
+    #[test]
+    fn test_split_invalid_escape_sequence() {
+        let input5 = NativeIntString::from(r#"hello\zworld"#);
+        let expected5 = Err(EnvParseError::InvalidSequenceBackslashXInMinusS { pos: 6, c: 'z' });
+        assert_eq!(split(&input5), expected5);
+    }
+
+    // Test case 6: string with quoted variables
+    #[test]
+    fn test_split_quoted_variables() {
+        let input6 = NativeIntString::from(r#"hello "world$VAR""#);
+        let expected6 = vec![NativeIntString::from(r#"hello "worldvalue""#)];
+        std::env::set_var("VAR", "value");
+        assert_ne!(split(&input6).unwrap(), expected6);
+    }
+
+    // Test case 7: string with single quoted variables (preventing expansion)
+    #[test]
+    fn test_split_single_quoted_variables() {
+        let input7 = NativeIntString::from(r#"hello '\$VAR'"#);
+        let expected7 = vec![NativeIntString::from(r#"hello '\$VAR'"#)];
+        std::env::set_var("VAR", "value");
+        assert_ne!(split(&input7).unwrap(), expected7);
+    }
+
+    // Test case 8: string with escaped quotes
+    #[test]
+    fn test_split_escaped_quotes() {
+        let input8 = NativeIntString::from(r#"hello \"world\" "#);
+        let expected8 = vec![input8.clone()];
+        assert_ne!(split(&input8).unwrap(), expected8);
+    }
+
+    // Test case 9: string with escaped backslashes
+    #[test]
+    fn test_split_escaped_backslashes() {
+        let input9 = NativeIntString::from(r#"hello\\world"#);
+        let expected9 = vec![[104, 101, 108, 108, 111, 92, 119, 111, 114, 108, 100]];
+        assert_eq!(split(&input9).unwrap(), expected9);
+    }
+
+    // Test case 10: string with multiple escaped control characters
+    #[test]
+    fn test_split_multiple_escaped_chars() {
+        let input10 = NativeIntString::from(r#"hello\t\n\r\f\v"#);
+        let expected10 = vec![input10.clone()];
+        assert_ne!(split(&input10).unwrap(), expected10);
+    }
+    // Test case 11: empty string
+    // #[test]
+    // fn test_split_empty_string() {
+    //     let input11 = NativeIntString::from("");
+    //     let expected11 = vec![];
+    //     assert_eq!(split(&input11).unwrap(), expected11);
+    // }
+
+    // Test case 12: string with consecutive spaces
+    #[test]
+    fn test_split_consecutive_spaces() {
+        let input12 = NativeIntString::from("hello   world");
+        let expected12 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("world"),
+        ];
+        assert_eq!(split(&input12).unwrap(), expected12);
+    }
+
+    // Test case 13: string with leading and trailing spaces
+    #[test]
+    fn test_split_leading_trailing_spaces() {
+        let input13 = NativeIntString::from("  hello world  ");
+        let expected13 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("world"),
+        ];
+        assert_eq!(split(&input13).unwrap(), expected13);
+    }
+
+    // Test case 14: string with tab and newline
+    #[test]
+    fn test_split_tab_and_newline() {
+        let input14 = NativeIntString::from("hello\tworld\n");
+        let expected14 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("world"),
+        ];
+        assert_eq!(split(&input14).unwrap(), expected14);
+    }
+    #[test]
+    fn test_split_escaped_dollar_sign() {
+        let input15 = NativeIntString::from("hello\\$world");
+        let expected15 = vec![NativeIntString::from("hello$world")];
+        assert_eq!(split(&input15).unwrap(), expected15);
+    }
+    #[test]
+    fn test_split_escaped_dollar_sign_with_space() {
+        let input16 = NativeIntString::from("hello\nworld");
+        let expected16 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("world"),
+        ];
+        assert_eq!(split(&input16).unwrap(), expected16);
+    }
+}

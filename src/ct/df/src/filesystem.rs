@@ -172,3 +172,92 @@ impl Filesystem {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod mount_info_from_path {
+
+        use ctcore::ct_fsext::CtMountInfo;
+
+        use crate::filesystem::filesystem_mount_info_from_path;
+
+        // 创建一个伪造的 `MountInfo`，使用给定的目录名。
+        fn mount_info(mount_dir: &str) -> CtMountInfo {
+            CtMountInfo {
+                dev_id: String::default(),          // 设备ID，默认值
+                dev_name: String::default(),        // 设备名称，默认值
+                fs_type: String::default(),         // 文件系统类型，默认值
+                mount_dir: String::from(mount_dir), // 挂载目录，使用给定的目录名
+                mount_option: String::default(),    // 挂载选项，默认值
+                mount_root: String::default(),      // 挂载根目录，默认值
+                remote: Default::default(),         // 远程信息，默认值
+                dummy: Default::default(),          // 保留字段，默认值
+            }
+        }
+
+        // 检查两个 `MountInfo` 实例是否相等。
+        fn mount_info_eq(m1: &CtMountInfo, m2: &CtMountInfo) -> bool {
+            // 比较两个 `MountInfo` 实例的所有字段是否相等
+            m1.dev_id == m2.dev_id
+                && m1.dev_name == m2.dev_name
+                && m1.fs_type == m2.fs_type
+                && m1.mount_dir == m2.mount_dir
+                && m1.mount_option == m2.mount_option
+                && m1.mount_root == m2.mount_root
+                && m1.remote == m2.remote
+                && m1.dummy == m2.dummy
+        }
+        #[test]
+        fn test_empty_mounts() {
+            assert!(filesystem_mount_info_from_path(&[], "/", false).is_none());
+        }
+
+        #[test]
+        fn test_exact_match() {
+            let mounts = [mount_info("/foo")];
+            let actual = filesystem_mount_info_from_path(&mounts, "/foo", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        fn test_prefix_match() {
+            let mounts = [mount_info("/foo")];
+            let actual = filesystem_mount_info_from_path(&mounts, "/foo/bar", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        fn test_multiple_matches() {
+            let mounts = [mount_info("/foo"), mount_info("/foo/bar")];
+            let actual = filesystem_mount_info_from_path(&mounts, "/foo/bar", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[1]));
+        }
+
+        #[test]
+        fn test_no_match() {
+            let mounts = [mount_info("/foo")];
+            assert!(filesystem_mount_info_from_path(&mounts, "/bar", false).is_none());
+        }
+
+        #[test]
+        fn test_partial_match() {
+            let mounts = [mount_info("/foo/bar")];
+            assert!(filesystem_mount_info_from_path(&mounts, "/foo/baz", false).is_none());
+        }
+
+        #[test]
+        fn test_dev_name_match() {
+            let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
+            let dev_name = std::fs::canonicalize(tmp.path())
+                .expect("Failed to canonicalize tmp path")
+                .to_string_lossy()
+                .to_string();
+
+            let mut mount_info = mount_info("/foo");
+            mount_info.dev_name = dev_name.clone();
+            let mounts = [mount_info];
+            let actual = filesystem_mount_info_from_path(&mounts, dev_name, false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
+        }
+    }
+}

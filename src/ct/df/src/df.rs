@@ -8812,4 +8812,16 @@ mod tests {
             assert!(is_included(&m, &opt));
         }
     }
+
+    mod filter_mount_list {
+
+        use crate::{filter_mount_list, DfOptions};
+
+        #[test]
+        fn test_empty() {
+            let opt = DfOptions::default();
+            let mount_infos = vec![];
+            assert!(filter_mount_list(mount_infos, &opt).is_empty());
+        }
+    }
 }

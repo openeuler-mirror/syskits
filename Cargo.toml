@@ -90,6 +90,7 @@ feat_common_core = [
   "mv",
   "unexpand",
   "hostname",
+  "cut",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -244,6 +245,7 @@ mktemp = { optional = true, package = "ct_mktemp", path = "src/ct/mktemp" }
 mv = { optional = true, package = "ct_mv", path = "src/ct/mv" }
 unexpand = { optional = true, package = "ct_unexpand", path = "src/ct/unexpand" }
 hostname = { optional = true, package = "ct_hostname", path = "src/ct/hostname" }
+cut = { optional = true, package = "ct_cut", path = "src/ct/cut" }
 
 [dev-dependencies]
 chrono = { workspace = true }

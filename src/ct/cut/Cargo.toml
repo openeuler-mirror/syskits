@@ -1,0 +1,28 @@
+[package]
+name = "ct_cut"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "cut ~ (ctutils) display byte/field columns of input lines"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/cut"
+
+[lib]
+path = "src/cut.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["ranges"] }
+memchr = { workspace = true }
+bstr = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "cut"
+path = "src/main.rs"

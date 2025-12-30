@@ -2309,4 +2309,96 @@ mod tests {
             assert!(numfmt_format_and_print_whitespace(s, &config).is_ok());
         }
     }
+    #[cfg(test)]
+    mod format_and_print_tests {
+        use super::*;
+        #[test]
+        fn test_numfmt_format_and_print_with_delimiter() {
+            let mut config = setup_default_config();
+            config.delimiter = Some(','.to_string());
+
+            assert!(numfmt_format_and_print("123456", &config).is_ok());
+        }
+        #[test]
+        fn test_numfmt_format_and_print_without_delimiter() {
+            let mut config = setup_default_config();
+            config.delimiter = None;
+
+            assert!(numfmt_format_and_print("123456", &config).is_ok());
+        }
+        // 测试错误情况，例如无效的配置
+        #[test]
+        fn test_numfmt_format_and_print_with_invalid_config() {
+            let mut config = setup_default_config();
+            config.delimiter = Some('\0'.to_string());
+
+            assert!(numfmt_format_and_print("123456", &config).is_ok());
+        }
+        // 测试空字符串
+        #[test]
+        fn test_numfmt_format_and_print_with_empty_string() {
+            let mut config = setup_default_config();
+            config.delimiter = Some('\t'.to_string());
+
+            assert!(numfmt_format_and_print("", &config).is_ok());
+        }
+        // 测试大数字
+        #[test]
+        fn test_numfmt_format_and_print_large_number() {
+            let mut config = setup_default_config();
+            config.delimiter = Some('.'.to_string());
+            assert!(numfmt_format_and_print("1234567890", &config).is_ok());
+        }
+    }
+
+    #[cfg(test)]
+    mod round_with_precision_tests {
+        use super::*;
+        #[test]
+        fn test_numfmt_round_with_precision() {
+            // Test case 1: Round down with precision 0
+            let result1 = numfmt_round_with_precision(3.14159, NumfmtRoundMethod::Down, 0);
+            assert_eq!(result1, 3.0);
+
+            // Test case 2: Round up with precision 2
+            let result2 = numfmt_round_with_precision(3.14159, NumfmtRoundMethod::Up, 2);
+            assert_eq!(result2, 3.15);
+
+            // Test case 3: Round to nearest with precision 1
+            let result3 = numfmt_round_with_precision(3.14159, NumfmtRoundMethod::Nearest, 1);
+            assert_eq!(result3, 3.1);
+        }
+        #[test]
+        #[allow(clippy::cognitive_complexity)]
+        fn test_base_round_with_precision() {
+            let rm = NumfmtRoundMethod::FromZero;
+            assert_eq!(1.0, numfmt_round_with_precision(0.12345, rm, 0));
+            assert_eq!(0.2, numfmt_round_with_precision(0.12345, rm, 1));
+            assert_eq!(0.13, numfmt_round_with_precision(0.12345, rm, 2));
+            assert_eq!(0.124, numfmt_round_with_precision(0.12345, rm, 3));
+            assert_eq!(0.1235, numfmt_round_with_precision(0.12345, rm, 4));
+            assert_eq!(0.12345, numfmt_round_with_precision(0.12345, rm, 5));
+
+            let rm = NumfmtRoundMethod::TowardsZero;
+            assert_eq!(0.0, numfmt_round_with_precision(0.12345, rm, 0));
+            assert_eq!(0.1, numfmt_round_with_precision(0.12345, rm, 1));
+            assert_eq!(0.12, numfmt_round_with_precision(0.12345, rm, 2));
+            assert_eq!(0.123, numfmt_round_with_precision(0.12345, rm, 3));
+            assert_eq!(0.1234, numfmt_round_with_precision(0.12345, rm, 4));
+            assert_eq!(0.12345, numfmt_round_with_precision(0.12345, rm, 5));
+        }
+
+        #[test]
+        fn test_base_parse_implicit_precision() {
+            assert_eq!(0, numfmt_parse_implicit_precision(""));
+            assert_eq!(0, numfmt_parse_implicit_precision("1"));
+            assert_eq!(1, numfmt_parse_implicit_precision("1.2"));
+            assert_eq!(2, numfmt_parse_implicit_precision("1.23"));
+            assert_eq!(3, numfmt_parse_implicit_precision("1.234"));
+            assert_eq!(0, numfmt_parse_implicit_precision("1K"));
+            assert_eq!(1, numfmt_parse_implicit_precision("1.2K"));
+            assert_eq!(2, numfmt_parse_implicit_precision("1.23K"));
+            assert_eq!(3, numfmt_parse_implicit_precision("1.234K"));
+        }
+    }
 }

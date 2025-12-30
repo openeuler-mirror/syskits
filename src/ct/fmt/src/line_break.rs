@@ -1,0 +1,546 @@
+/*
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
+ *     syskits is licensed under Mulan PSL v2.
+ *    You can use this software according to the terms and conditions of the Mulan PSL V2
+ *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *    See the Mulan PSL v2 for more details.
+ *
+ */
+
+use std::io::Write;
+use std::{cmp, mem};
+
+use crate::para_split::{FmtParaWords, FmtParagraph, FmtWordInfo};
+use crate::FmtConfigs;
+
+struct FmtBreakArgs<'a, W: Write + ?Sized> {
+    fmt_opts: &'a FmtConfigs,
+    init_len: usize,
+    indent_str: &'a str,
+    indent_len: usize,
+    is_uniform: bool,
+    out_stream: &'a mut W,
+}
+
+impl<'a, W: Write + ?Sized> FmtBreakArgs<'a, W> {
+    fn compute_width(&self, w_info: &FmtWordInfo, pos_n: usize, is_fresh: bool) -> usize {
+        match is_fresh {
+            true => 0,
+            false => {
+                let post = w_info.after_tab;
+                match w_info.before_tab {
+                    None => post,
+                    Some(pre) => {
+                        post + ((pre + pos_n) / self.fmt_opts.tab_width + 1)
+                            * self.fmt_opts.tab_width
+                            - pos_n
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn fmt_break_lines<W: ?Sized + Write>(
+    para_graph: &FmtParagraph,
+    fmt_opts: &FmtConfigs,
+    out_stream: &mut W,
+) -> std::io::Result<()> {
+    // 缩进
+    let p_indent = &para_graph.indent_str;
+    let p_indent_len = para_graph.indent_len;
+
+    // words
+    let p_words = FmtParaWords::new(fmt_opts, para_graph);
+    let mut p_word_info = p_words.words();
+
+    // 第一个单词将*always*出现在第一行 在此确保
+    let Some(w_info) = p_word_info.next() else {
+        return out_stream.write_all(b"\n");
+    };
+
+    // 打印初始值（如果存在）并获取其长度
+    let p_init_len = w_info.word_nchars
+        + if fmt_opts.is_crown || fmt_opts.is_tagged {
+            // 处理 "init"部分
+            out_stream.write_all(para_graph.init_str.as_bytes())?;
+            para_graph.init_len
+        } else if !para_graph.mail_header {
+            // 对于on-(crown, tagged) ，与正常缩进相同
+            out_stream.write_all(p_indent.as_bytes())?;
+            p_indent_len
+        } else {
+            // 除了邮件头没有缩进之外
+            0
+        };
+
+    // 在写入 init 之后写第一个字
+    out_stream.write_all(w_info.word.as_bytes())?;
+
+    // 本段是否要求统一间距？
+    let is_uniform = para_graph.mail_header || fmt_opts.is_uniform;
+
+    let mut break_args = FmtBreakArgs {
+        fmt_opts,
+        init_len: p_init_len,
+        indent_str: p_indent,
+        indent_len: p_indent_len,
+        is_uniform,
+        out_stream,
+    };
+
+    if fmt_opts.is_quick || para_graph.mail_header {
+        fmt_break_simple(p_word_info, &mut break_args)
+    } else {
+        fmt_break_knuth_plass(p_word_info, &mut break_args)
+    }
+}
+
+// break_simple 实现了一种 "贪婪 "的分行算法：打印单词，直到超过最大长度。
+// 超过最大长度，然后打印一个换行符和缩进符，然后继续。
+fn fmt_break_simple<'a, W: ?Sized + Write, T: Iterator<Item = &'a FmtWordInfo<'a>>>(
+    mut iter: T,
+    fmt_args: &mut FmtBreakArgs<'a, W>,
+) -> std::io::Result<()> {
+    iter.try_fold((fmt_args.init_len, false), |(l, prev_punct), winfo| {
+        fmt_accum_words_simple(fmt_args, l, prev_punct, winfo)
+    })?;
+    fmt_args.out_stream.write_all(b"\n")
+}
+
+fn fmt_accum_words_simple<'a, W: ?Sized + Write>(
+    fmt_args: &mut FmtBreakArgs<'a, W>,
+    l_size: usize,
+    prev_punct: bool,
+    w_info: &'a FmtWordInfo<'a>,
+) -> std::io::Result<(usize, bool)> {
+    // 计算该单词的长度，考虑制表符在该行该位置的展开情况
+    let w_len = w_info.word_nchars + fmt_args.compute_width(w_info, l_size, false);
+
+    let slen = fmt_compute_slen(
+        fmt_args.is_uniform,
+        w_info.is_new_line,
+        w_info.is_sentence_start,
+        prev_punct,
+    );
+
+    if l_size + w_len + slen > fmt_args.fmt_opts.width {
+        fmt_write_newline(fmt_args.indent_str, fmt_args.out_stream)?;
+        fmt_write_with_spaces(&w_info.word[w_info.word_start..], 0, fmt_args.out_stream)?;
+        Ok((
+            fmt_args.indent_len + w_info.word_nchars,
+            w_info.is_ends_punct,
+        ))
+    } else {
+        fmt_write_with_spaces(w_info.word, slen, fmt_args.out_stream)?;
+        Ok((l_size + w_len + slen, w_info.is_ends_punct))
+    }
+}
+
+// 最优分段算法
+fn fmt_break_knuth_plass<'a, W: ?Sized + Write, T: Clone + Iterator<Item = &'a FmtWordInfo<'a>>>(
+    mut iter: T,
+    fmt_args: &mut FmtBreakArgs<'a, W>,
+) -> std::io::Result<()> {
+    // 运行算法获取断点
+    let break_points = fmt_find_kp_breakpoints(iter.clone(), fmt_args);
+    // 遍历断点（注意，断点的断开顺序是相反的，因此我们要 .rev() 它
+    let result: std::io::Result<(bool, bool)> = break_points.iter().rev().try_fold(
+        (false, false),
+        |(mut prev_punct, mut fresh), &(next_break, break_before)| {
+            if fresh {
+                fmt_write_newline(fmt_args.indent_str, fmt_args.out_stream)?;
+            }
+            // 在每个断点上，不断发出单词，直到找到与该断点相匹配的单词为止
+            for w_info in &mut iter {
+                let (slen, word) = fmt_slice_if_fresh(
+                    fresh,
+                    w_info.word,
+                    w_info.word_start,
+                    fmt_args.is_uniform,
+                    w_info.is_new_line,
+                    w_info.is_sentence_start,
+                    prev_punct,
+                );
+                fresh = false;
+                prev_punct = w_info.is_ends_punct;
+
+                // 通过比较引用的地址，我们可以在这里找到相同的断点。
+                // 这没有问题，因为一旦我们断行，后退向量就不会发生变化。
+                let w_info_ptr = w_info as *const _;
+                let next_break_ptr = next_break as *const _;
+                if w_info_ptr == next_break_ptr {
+                    // 确定，我们找到了匹配的单词
+                    if break_before {
+                        fmt_write_newline(fmt_args.indent_str, fmt_args.out_stream)?;
+                        fmt_write_with_spaces(
+                            &w_info.word[w_info.word_start..],
+                            0,
+                            fmt_args.out_stream,
+                        )?;
+                    } else {
+                        // 在这个词之后中断，因此这意味着 "fresh "在下一次迭代中为真
+                        fmt_write_with_spaces(word, slen, fmt_args.out_stream)?;
+                        fresh = true;
+                    }
+                    break;
+                } else {
+                    fmt_write_with_spaces(word, slen, fmt_args.out_stream)?;
+                }
+            }
+            Ok((prev_punct, fresh))
+        },
+    );
+    let (mut is_prev_punct, mut is_fresh) = result?;
+
+    // 在最后一个换行符之后，写出最后一行的其余部分。
+    for w_info in iter {
+        if is_fresh {
+            fmt_write_newline(fmt_args.indent_str, fmt_args.out_stream)?;
+        }
+        let (s_len, word) = fmt_slice_if_fresh(
+            is_fresh,
+            w_info.word,
+            w_info.word_start,
+            fmt_args.is_uniform,
+            w_info.is_new_line,
+            w_info.is_sentence_start,
+            is_prev_punct,
+        );
+        is_prev_punct = w_info.is_ends_punct;
+        is_fresh = false;
+        fmt_write_with_spaces(word, s_len, fmt_args.out_stream)?;
+    }
+    fmt_args.out_stream.write_all(b"\n")
+}
+
+struct FmtLineBreak<'a> {
+    prev: usize,
+    linebreak: Option<&'a FmtWordInfo<'a>>,
+    is_break_before: bool,
+    demerits: i64,
+    prev_rat: f32,
+    length: usize,
+    is_fresh: bool,
+}
+
+#[allow(clippy::cognitive_complexity)]
+fn fmt_find_kp_breakpoints<'a, W: ?Sized + Write, T: Iterator<Item = &'a FmtWordInfo<'a>>>(
+    iter: T,
+    fmt_args: &FmtBreakArgs<'a, W>,
+) -> Vec<(&'a FmtWordInfo<'a>, bool)> {
+    let mut iter = iter.peekable();
+    // 设置初始空分隔线
+    let mut line_breaks = vec![FmtLineBreak {
+        prev: 0,
+        linebreak: None,
+        is_break_before: false,
+        demerits: 0,
+        prev_rat: 0.0,
+        length: fmt_args.init_len,
+        is_fresh: false,
+    }];
+    // this vec 保存当前激活的换行符；next_ 保存下一个单词将激活的换行符。下一个单词
+    let mut active_breaks = vec![0];
+    let mut next_active_breaks = vec![];
+
+    let stretch = fmt_args.fmt_opts.width - fmt_args.fmt_opts.goal;
+    let minlength = fmt_args.fmt_opts.goal - stretch;
+    let mut new_linebreaks = vec![];
+    let mut is_sentence_start = false;
+    let mut least_demerits = 0;
+    loop {
+        let Some(w) = iter.next() else {
+            break;
+        };
+
+        // 如果这是最后一个字，我们不会对这次断句追加扣分
+        let (is_last_word, is_sentence_end) = match iter.peek() {
+            None => (true, true),
+            Some(&&FmtWordInfo {
+                is_sentence_start: st,
+                is_new_line: nl,
+                ..
+            }) => (false, st || (nl && w.is_ends_punct)),
+        };
+
+        // 我们是否应该在下一句的开头加上额外的空格？
+        let s_len = fmt_compute_slen(fmt_args.is_uniform, w.is_new_line, is_sentence_start, false);
+
+        let mut ld_new = i64::MAX;
+        let mut ld_next = i64::MAX;
+        let mut ld_idx = 0;
+        new_linebreaks.clear();
+        next_active_breaks.clear();
+        // 浏览每个活动分段，扩展它，如果超过了所需的最小长度，还可能添加一个新的活动分段。如果我们超过了所需的最小长度
+        #[allow(clippy::explicit_iter_loop)]
+        for &i in active_breaks.iter() {
+            let active = &mut line_breaks[i];
+            // 对扣分进行归一化处理，以避免溢出，并记录这是否是最少的扣分
+            active.demerits -= least_demerits;
+            if active.demerits < ld_next {
+                ld_next = active.demerits;
+                ld_idx = i;
+            }
+
+            // 获得新长度
+            let t_len = w.word_nchars
+                + fmt_args.compute_width(w, active.length, active.is_fresh)
+                + s_len
+                + active.length;
+
+            // 如果 tlen 长于 args.opts.width，我们会将此分段从活动列表中删除
+            // 否则，我们将延长分隔符，并可能在此时添加一个新的分隔符
+            if t_len <= fmt_args.fmt_opts.width {
+                // 下次中断仍将有效
+                next_active_breaks.push(i);
+                // 我们可以把这个词放在这一行
+                active.is_fresh = false;
+                active.length = t_len;
+
+                // 如果我们超过了最小长度，我们也可以考虑在这里断开
+                if t_len >= minlength {
+                    let (new_demerits, new_ratio) = if is_last_word {
+                        // 最后一行的长度不会受到惩罚
+                        (0, 0.0)
+                    } else {
+                        fmt_compute_demerits(
+                            fmt_args.fmt_opts.goal as isize - t_len as isize,
+                            stretch,
+                            w.word_nchars,
+                            active.prev_rat,
+                        )
+                    };
+
+                    // 甚至不要考虑添加扣分过多的行
+                    // 还尝试通过检查符号来检测溢出
+                    let total_demerits = new_demerits + active.demerits;
+                    if new_demerits < FMT_BAD_INFTY_SQ
+                        && total_demerits < ld_new
+                        && active.demerits.signum() <= new_demerits.signum()
+                    {
+                        ld_new = total_demerits;
+                        new_linebreaks.push(FmtLineBreak {
+                            prev: i,
+                            linebreak: Some(w),
+                            is_break_before: false,
+                            demerits: total_demerits,
+                            prev_rat: new_ratio,
+                            length: fmt_args.indent_len,
+                            is_fresh: true,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 如果我们生成了新的换行符，则将最后一条添加到列表中
+        // 最后一条总是最好的，因为我们不会把它添加到 new_linebreaks 中，除非
+        // 它比目前最好的一条更好
+        match new_linebreaks.pop() {
+            None => (),
+            Some(lb) => {
+                next_active_breaks.push(line_breaks.len());
+                line_breaks.push(lb);
+            }
+        }
+
+        if next_active_breaks.is_empty() {
+            // 每个可能的换行符都太长！选择扣分最少的换行符，ld_idx
+            let new_break = fmt_restart_active_breaks(
+                fmt_args,
+                &line_breaks[ld_idx],
+                ld_idx,
+                w,
+                s_len,
+                minlength,
+            );
+            next_active_breaks.push(line_breaks.len());
+            line_breaks.push(new_break);
+            least_demerits = 0;
+        } else {
+            // 下一次，将扣分字段归一化
+            // 活动分隔线上，以减少溢出的可能性
+            least_demerits = cmp::max(ld_next, 0);
+        }
+        // 交换新的活动中断列表
+        mem::swap(&mut active_breaks, &mut next_active_breaks);
+        // 如果这是一个句子中的最后一个词，那么下一个词一定是下一个句子中的第一个词。
+        is_sentence_start = is_sentence_end;
+    }
+
+    // 返回最佳路径
+    fmt_build_best_path(&line_breaks, &active_breaks)
+}
+
+fn fmt_build_best_path<'a>(
+    paths: &[FmtLineBreak<'a>],
+    active_paths: &[usize],
+) -> Vec<(&'a FmtWordInfo<'a>, bool)> {
+    // 在活动路径中，我们选择扣分最少的路径
+    active_paths
+        .iter()
+        .min_by_key(|&&a| paths[a].demerits)
+        .map(|&(mut best_idx)| {
+            let mut breakwords = vec![];
+            // 现在，在断句列表中回溯指针，记录 我们应该断开的单词
+            loop {
+                let line_next_best = &paths[best_idx];
+                match line_next_best.linebreak {
+                    None => return breakwords,
+                    Some(prev) => {
+                        breakwords.push((prev, line_next_best.is_break_before));
+                        best_idx = line_next_best.prev;
+                    }
+                }
+            }
+        })
+        .unwrap_or_default()
+}
+
+// 由于扣分的计算方式，"infinite"坏处更像是 (1+BAD_INFTY)^2
+const FMT_BAD_INFTY: i64 = 10_000_000;
+const FMT_BAD_INFTY_SQ: i64 = FMT_BAD_INFTY * FMT_BAD_INFTY;
+// 坏度 = BAD_MULT * abs(r) ^ 3
+const FMT_BAD_MULT: f32 = 100.0;
+// DR_MULT 是线间 delta-R 的乘数
+const FMT_DR_MULT: f32 = 600.0;
+// DL_MULT 是行尾短字的惩罚乘数
+const FMT_DL_MULT: f32 = 300.0;
+
+fn fmt_compute_demerits(
+    delta_len: isize,
+    stretch: usize,
+    w_len: usize,
+    prev_rat: f32,
+) -> (i64, f32) {
+    // 我们使用了多少
+    let ratio = match delta_len {
+        0 => 0.0f32,
+        _ => delta_len as f32 / stretch as f32,
+    };
+
+    // 根据拉伸比计算坏度
+    let bad_line_len = match ratio.abs() > 1.0f32 {
+        true => FMT_BAD_INFTY,
+        false => (FMT_BAD_MULT * ratio.powi(3).abs()) as i64,
+    };
+
+    // 我们将惩罚以非常短的单词结尾的行文
+    let bad_word_len = match w_len >= stretch {
+        true => 0,
+        false => {
+            (FMT_DL_MULT
+                * ((stretch - w_len) as f32 / (stretch - 1) as f32)
+                    .powi(3)
+                    .abs()) as i64
+        }
+    };
+
+    // 我们会惩罚那些与前几行比率相差很大的行
+    let bad_delta_r = (FMT_DR_MULT * ((ratio - prev_rat) / 2.0).powi(3).abs()) as i64;
+
+    let demerits = i64::pow(1 + bad_line_len + bad_word_len + bad_delta_r, 2);
+
+    (demerits, ratio)
+}
+
+fn fmt_restart_active_breaks<'a, W: ?Sized + Write>(
+    fmt_args: &FmtBreakArgs<'a, W>,
+    active: &FmtLineBreak<'a>,
+    act_idx: usize,
+    w: &'a FmtWordInfo<'a>,
+    s_len: usize,
+    min: usize,
+) -> FmtLineBreak<'a> {
+    let (break_before, line_length) = if active.is_fresh {
+        // 一个单词是一行的第一个单词
+        (false, fmt_args.indent_len)
+    } else {
+        let w_len = w.word_nchars + fmt_args.compute_width(w, active.length, active.is_fresh);
+        let under_len = min as isize - active.length as isize;
+        let over_len = (w_len + s_len + active.length) as isize - fmt_args.fmt_opts.width as isize;
+        if over_len > under_len {
+            // 将该单词放在下一行
+            (true, fmt_args.indent_len + w.word_nchars)
+        } else {
+            (false, fmt_args.indent_len)
+        }
+    };
+
+    // 分隔线
+    FmtLineBreak {
+        prev: act_idx,
+        linebreak: Some(w),
+        is_break_before: break_before,
+        demerits: 0,
+        prev_rat: if break_before { 1.0 } else { -1.0 },
+        length: line_length,
+        is_fresh: !break_before,
+    }
+}
+
+// 根据模式、换行、句子起始，在单词前添加的空格数。
+fn fmt_compute_slen(is_uniform: bool, is_newline: bool, is_start: bool, is_punct: bool) -> usize {
+    if is_uniform || is_newline {
+        if is_start || (is_newline && is_punct) {
+            2
+        } else {
+            1
+        }
+    } else {
+        0
+    }
+}
+
+// 如果是新行，则 slen=0 并切掉前端空白。
+// 否则，计算 slen 并保留空白。
+fn fmt_slice_if_fresh(
+    is_fresh: bool,
+    word: &str,
+    start: usize,
+    is_uniform: bool,
+    is_newline: bool,
+    is_s_start: bool,
+    is_punct: bool,
+) -> (usize, &str) {
+    match is_fresh {
+        true => (0, &word[start..]),
+        false => (
+            fmt_compute_slen(is_uniform, is_newline, is_s_start, is_punct),
+            word,
+        ),
+    }
+}
+
+// 写入换行符并添加缩进。
+fn fmt_write_newline<W: ?Sized + Write>(
+    indent: &str,
+    output_stream: &mut W,
+) -> std::io::Result<()> {
+    output_stream.write_all(b"\n")?;
+    output_stream.write_all(indent.as_bytes())
+}
+
+// 写出单词，并留出空格。
+fn fmt_write_with_spaces<W: ?Sized + Write>(
+    word: &str,
+    s_len: usize,
+    output_stream: &mut W,
+) -> std::io::Result<()> {
+    match s_len {
+        1 => {
+            output_stream.write_all(b" ")?;
+        }
+        2 => {
+            output_stream.write_all(b"  ")?;
+        }
+        _ => {}
+    }
+
+    output_stream.write_all(word.as_bytes())
+}
+

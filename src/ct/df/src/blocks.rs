@@ -481,4 +481,80 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_to_magnitude_and_suffix_next_megabyte_range_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_100_001, BlocksSuffixType::Si),
+            "1.2MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_near_next_megabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_900_000, BlocksSuffixType::Si),
+            "1.9MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_crossing_next_megabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_900_001, BlocksSuffixType::Si),
+            "2MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_almost_next_megabytes_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(9_900_000, BlocksSuffixType::Si),
+            "9.9MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_crossing_next_ten_megabytes_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(9_900_001, BlocksSuffixType::Si),
+            "10MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_max_megabytes_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(999_000_000, BlocksSuffixType::Si),
+            "999MB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_exactly_gigabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(999_000_001, BlocksSuffixType::Si),
+            "1GB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_exact_gigabyte_boundary_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_000_000_000, BlocksSuffixType::Si),
+            "1GB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_above_gigabyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1_000_000_001, BlocksSuffixType::Si),
+            "1.1GB"
+        );
+    }
+    #[test]
+    fn test_block_size_display_bytes_to_kilobytes() {
+        assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K");
+    }
+
 }

@@ -70,3 +70,44 @@ impl fmt::Display for DisplayableSuffix {
         .and_then(|()| if *with_i { write!(f, "i") } else { Ok(()) })
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_display_suffix_no_i() {
+        let suffixes = [
+            (NumfmtRawSuffix::K, false, "K"),
+            (NumfmtRawSuffix::M, false, "M"),
+            (NumfmtRawSuffix::G, false, "G"),
+            (NumfmtRawSuffix::T, false, "T"),
+            (NumfmtRawSuffix::P, false, "P"),
+            (NumfmtRawSuffix::E, false, "E"),
+            (NumfmtRawSuffix::Z, false, "Z"),
+            (NumfmtRawSuffix::Y, false, "Y"),
+        ];
+
+        for (raw_suffix, with_i, expected) in suffixes {
+            let suffix = DisplayableSuffix((raw_suffix, with_i));
+            assert_eq!(format!("{}", suffix), expected);
+        }
+    }
+
+    #[test]
+    fn test_display_suffix_with_i() {
+        let suffixes = [
+            (NumfmtRawSuffix::K, true, "Ki"),
+            (NumfmtRawSuffix::M, true, "Mi"),
+            (NumfmtRawSuffix::G, true, "Gi"),
+            (NumfmtRawSuffix::T, true, "Ti"),
+            (NumfmtRawSuffix::P, true, "Pi"),
+            (NumfmtRawSuffix::E, true, "Ei"),
+            (NumfmtRawSuffix::Z, true, "Zi"),
+            (NumfmtRawSuffix::Y, true, "Yi"),
+        ];
+
+        for (raw_suffix, with_i, expected) in suffixes {
+            let suffix = DisplayableSuffix((raw_suffix, with_i));
+            assert_eq!(format!("{}", suffix), expected);
+        }
+    }
+}

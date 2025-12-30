@@ -88,3 +88,207 @@ pub fn ct_app() -> Command {
         .arg(arg)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod ct_main_tests {
+        use std::ffi::OsString;
+
+        use super::*;
+
+        #[test]
+        fn test_tty_main_execution_default() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_tty_main_execution_version() {
+            let args_vec = vec![ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = tty_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tty_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tty_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tty_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tty_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tty_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_tty_main_silent_long() {
+            let args = vec![ctcore::ct_util_name(), "--silent"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            if std::io::stdin().is_terminal() {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.is_err());
+            }
+        }
+        #[test]
+        fn test_tty_main_silent_short() {
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            if std::io::stdin().is_terminal() {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.is_err());
+            }
+        }
+
+        #[test]
+        fn test_tty_main_quiet_long() {
+            let args = vec![ctcore::ct_util_name(), "--quiet"];
+            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            if std::io::stdin().is_terminal() {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.is_err());
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // tty 接口: tty [OPTION]...
+        //
+        // Options:
+        //   -s, --silent   print nothing, only return an exit status [aliases: quiet]
+        //   -h, --help     Print help
+        //   -V, --version  Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+        #[test]
+        fn test_ct_app_execution_help_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_silent_long() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--silent"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_silent_short() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_quiet_long() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--quiet"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
+}

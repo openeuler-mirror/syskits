@@ -308,3 +308,96 @@ impl fmt::Display for BlockSize {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use std::env;
+
+    use crate::blocks::blocks_to_magnitude_and_suffix;
+    use crate::blocks::BlockSize;
+    use crate::blocks::BlocksHumanReadable;
+    use crate::blocks::BlocksSuffixType;
+    use crate::blocks::BLOCKS_IEC_BASES;
+    use crate::blocks::BLOCKS_SI_BASES;
+
+    #[test]
+    fn test_to_magnitude_and_suffix_1k() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1024, BlocksSuffixType::Iec),
+            "1K"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_2k() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(2048, BlocksSuffixType::Iec),
+            "2K"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_4k() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(4096, BlocksSuffixType::Iec),
+            "4K"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_1m() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1024 * 1024, BlocksSuffixType::Iec),
+            "1M"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_2m() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(2 * 1024 * 1024, BlocksSuffixType::Iec),
+            "2M"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_1g() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1024 * 1024 * 1024, BlocksSuffixType::Iec),
+            "1G"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_34g() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(34 * 1024 * 1024 * 1024, BlocksSuffixType::Iec),
+            "34G"
+        );
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    #[test]
+    fn test_to_magnitude_and_suffix_single_byte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1, BlocksSuffixType::Si),
+            "1B"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_below_kilobyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(999, BlocksSuffixType::Si),
+            "999B"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_exactly_kilobyte_si() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(1000, BlocksSuffixType::Si),
+            "1kB"
+        );
+    }
+}

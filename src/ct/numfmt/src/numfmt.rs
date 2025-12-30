@@ -8299,4 +8299,163 @@ mod tests {
             assert_eq!(options.unwrap(), expected_options);
         }
     }
+
+    #[cfg(test)]
+    mod handle_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn broken_buffer_returns_io_error() {
+            let mock_buffer = MockBuffer {};
+            let result = numfmt_handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
+                .expect_err("returned Ok after receiving IO error");
+            let result_debug = format!("{result:?}");
+            let result_display = format!("{result}");
+            assert_eq!(result_debug, "NumfmtIoError(\"broken pipe\")");
+            assert_eq!(result_display, "broken pipe");
+            assert_eq!(result.code(), 1);
+        }
+
+        #[test]
+        fn broken_buffer_returns_io_error_after_header() {
+            let mock_buffer = MockBuffer {};
+            let mut options = get_valid_options();
+            options.header = 0;
+            let result = numfmt_handle_buffer(BufReader::new(mock_buffer), &options)
+                .expect_err("returned Ok after receiving IO error");
+            let result_debug = format!("{:?}", result);
+            let result_display = format!("{}", result);
+            assert_eq!(result_debug, "NumfmtIoError(\"broken pipe\")");
+            assert_eq!(result_display, "broken pipe");
+            assert_eq!(result.code(), 1);
+        }
+
+        #[test]
+        fn non_numeric_returns_formatting_error() {
+            let input_value = b"135\nhello";
+            let result =
+                numfmt_handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
+                    .expect_err("returned Ok after receiving improperly formatted input");
+            let result_debug = format!("{result:?}");
+            let result_display = format!("{result}");
+            assert_eq!(
+                result_debug,
+                "NumfmtFormattingError(\"invalid suffix in input: 'hello'\")"
+            );
+            assert_eq!(result_display, "invalid suffix in input: 'hello'");
+            assert_eq!(result.code(), 2);
+        }
+
+        #[test]
+        fn valid_input_returns_ok() {
+            let input_value = b"165\n100\n300\n500";
+            let result =
+                numfmt_handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
+            assert!(result.is_ok(), "did not return Ok for valid input");
+        }
+
+        #[test]
+        fn warn_returns_ok_for_invalid_input() {
+            let input_value = b"5\n4Q\n";
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Warn;
+            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options);
+            assert!(result.is_ok(), "did not return Ok for invalid input");
+        }
+
+        #[test]
+        fn ignore_returns_ok_for_invalid_input() {
+            let input_value = b"5\n4Q\n";
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Ignore;
+            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options);
+            assert!(result.is_ok(), "did not return Ok for invalid input");
+        }
+
+        #[test]
+        fn buffer_fail_returns_status_2_for_invalid_input() {
+            let input_value = b"5\n4Q\n";
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Fail;
+            numfmt_handle_buffer(BufReader::new(&input_value[..]), &options).unwrap();
+            assert_eq!(
+                get_ct_exit_code(),
+                2,
+                "should set exit code 2 for formatting errors"
+            );
+        }
+
+        #[test]
+        fn abort_returns_status_2_for_invalid_input() {
+            let input_value = b"5\n4Q\n";
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Abort;
+            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options);
+            assert!(result.is_err(), "did not return err for invalid input");
+        }
+    }
+
+    #[cfg(test)]
+    mod handle_args_tests {
+        use super::*;
+
+        #[test]
+        fn args_fail_returns_status_2_for_invalid_input() {
+            let input_value = ["5", "4Q"].into_iter();
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Fail;
+            numfmt_handle_args(input_value, &options).unwrap();
+            assert_eq!(
+                get_ct_exit_code(),
+                2,
+                "should set exit code 2 for formatting errors"
+            );
+        }
+
+        #[test]
+        fn args_warn_returns_status_0_for_invalid_input() {
+            let input_value = ["5", "4Q"].into_iter();
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Warn;
+            let result = numfmt_handle_args(input_value, &options);
+            assert!(result.is_ok(), "did not return ok for invalid input");
+        }
+    }
+
+    #[cfg(test)]
+    mod parse_unit_size_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_unit_size() {
+            assert_eq!(1, numfmt_parse_unit_size("1").unwrap());
+            assert_eq!(1, numfmt_parse_unit_size("01").unwrap());
+            assert!(numfmt_parse_unit_size("1.1").is_err());
+            assert!(numfmt_parse_unit_size("0").is_err());
+            assert!(numfmt_parse_unit_size("-1").is_err());
+            assert!(numfmt_parse_unit_size("A").is_err());
+            assert!(numfmt_parse_unit_size("18446744073709551616").is_err());
+        }
+
+        #[test]
+        fn test_parse_unit_size_with_suffix() {
+            assert_eq!(1000, numfmt_parse_unit_size("K").unwrap());
+            assert_eq!(1024, numfmt_parse_unit_size("Ki").unwrap());
+            assert_eq!(2000, numfmt_parse_unit_size("2K").unwrap());
+            assert_eq!(2048, numfmt_parse_unit_size("2Ki").unwrap());
+            assert!(numfmt_parse_unit_size("0K").is_err());
+        }
+
+        #[test]
+        fn test_parse_unit_size_suffix() {
+            assert_eq!(1, numfmt_parse_unit_size_suffix("").unwrap());
+            assert_eq!(1000, numfmt_parse_unit_size_suffix("K").unwrap());
+            assert_eq!(1024, numfmt_parse_unit_size_suffix("Ki").unwrap());
+            assert_eq!(1000 * 1000, numfmt_parse_unit_size_suffix("M").unwrap());
+            assert_eq!(1024 * 1024, numfmt_parse_unit_size_suffix("Mi").unwrap());
+            assert!(numfmt_parse_unit_size_suffix("Kii").is_none());
+            assert!(numfmt_parse_unit_size_suffix("A").is_none());
+        }
+    }
+
 }

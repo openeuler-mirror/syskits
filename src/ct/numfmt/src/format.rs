@@ -464,3 +464,313 @@ pub fn numfmt_format_and_print(s: &str, numfmt_configs: &NumfmtConfigs) -> Resul
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flags::NumfmtInvalidModes;
+
+    fn setup_default_config() -> NumfmtConfigs {
+        NumfmtConfigs {
+            transform: NumfmtTransformOptions {
+                from: NumfmtUnit::Auto,
+                from_unit: 1,
+                to: NumfmtUnit::Si,
+                to_unit: 1,
+            },
+            padding: 0,
+            header: 0,
+            fields: vec![],
+            delimiter: None,
+            round: NumfmtRoundMethod::Up,
+            suffix: None,
+            format: Default::default(),
+            invalid: NumfmtInvalidModes::Abort,
+        }
+    }
+
+    #[cfg(test)]
+    mod numfmt_parse_suffix_tests {
+        use crate::format::numfmt_parse_suffix;
+        use crate::units::NumfmtRawSuffix;
+
+        #[test]
+        fn test_parse_with_suffix() {
+            let examples = [
+                ("100K", 100.0, Some((NumfmtRawSuffix::K, false))),
+                ("200Mi", 200.0, Some((NumfmtRawSuffix::M, true))),
+                ("300G", 300.0, Some((NumfmtRawSuffix::G, false))),
+                ("400Ti", 400.0, Some((NumfmtRawSuffix::T, true))),
+                ("500P", 500.0, Some((NumfmtRawSuffix::P, false))),
+                ("600Ei", 600.0, Some((NumfmtRawSuffix::E, true))),
+                ("700Z", 700.0, Some((NumfmtRawSuffix::Z, false))),
+                ("800Yi", 800.0, Some((NumfmtRawSuffix::Y, true))),
+            ];
+            for (input, expected_value, expected_suffix) in examples {
+                let result = numfmt_parse_suffix(input).unwrap();
+                assert_eq!(result, (expected_value, expected_suffix));
+            }
+        }
+
+        #[test]
+        fn test_parse_without_suffix() {
+            let result = numfmt_parse_suffix("1234").unwrap();
+            assert_eq!(result, (1234.0, None));
+        }
+
+        // #[test]
+        // fn test_parse_invalid_suffix() {
+        //     let inputs = ["100Kx", "200 Mi", "300Gi", "400.25T"];
+        //     for input in inputs {
+        //         assert!(numfmt_parse_suffix(input).is_err(), "Expected error for input: {}", input);
+        //     }
+        // }
+
+        #[test]
+        fn test_parse_empty_string() {
+            assert!(
+                numfmt_parse_suffix("").is_err(),
+                "Expected error for empty input"
+            );
+        }
+
+        #[test]
+        fn test_parse_extreme_values() {
+            let large_number = format!("{}K", f64::MAX);
+            let small_number = format!("{}M", f64::MIN);
+            assert!(
+                numfmt_parse_suffix(&large_number).is_ok(),
+                "Should handle large values"
+            );
+            assert!(
+                numfmt_parse_suffix(&small_number).is_ok(),
+                "Should handle small values"
+            );
+        }
+
+        #[test]
+        fn test_parse_with_non_standard_characters_in_suffix() {
+            assert!(
+                numfmt_parse_suffix("100K3").is_err(),
+                "Expected error for non-standard characters in suffix"
+            );
+        }
+
+        #[test]
+        fn test_parse_with_multiple_suffixes() {
+            assert!(
+                numfmt_parse_suffix("100KM").is_err(),
+                "Expected error for multiple suffixes"
+            );
+        }
+
+        #[test]
+        fn test_parse_with_spaces() {
+            assert!(
+                numfmt_parse_suffix("100 K").is_err(),
+                "Expected error for space between number and suffix"
+            );
+            assert!(
+                numfmt_parse_suffix("100 M ").is_err(),
+                "Expected error for space after suffix"
+            );
+        }
+
+        #[test]
+        fn test_parse_with_additional_characters_between_number_and_suffix() {
+            assert!(
+                numfmt_parse_suffix("100xK").is_err(),
+                "Expected error for additional characters between number and suffix"
+            );
+        }
+
+        #[test]
+        fn test_parse_with_high_precision_decimals() {
+            let result = numfmt_parse_suffix("123.456789K").unwrap();
+            assert_eq!(
+                result,
+                (123.456789, Some((NumfmtRawSuffix::K, false))),
+                "Should parse high precision decimals correctly"
+            );
+        }
+
+        #[test]
+        fn test_parse_with_non_ascii_characters() {
+            assert!(
+                numfmt_parse_suffix("100€K").is_err(),
+                "Expected error for non-ASCII characters"
+            );
+            assert!(
+                numfmt_parse_suffix("100K€").is_err(),
+                "Expected error for non-ASCII characters after suffix"
+            );
+        }
+    }
+    #[cfg(test)]
+    mod parse_implicit_precision_tests {
+        use super::*;
+        #[test]
+        fn test_no_decimal_point() {
+            assert_eq!(numfmt_parse_implicit_precision("100"), 0);
+        }
+
+        #[test]
+        fn test_decimal_point_no_digits() {
+            assert_eq!(numfmt_parse_implicit_precision("100."), 0);
+        }
+
+        #[test]
+        fn test_normal_decimal_point_with_digits() {
+            assert_eq!(numfmt_parse_implicit_precision("100.1234"), 4);
+        }
+
+        #[test]
+        fn test_decimal_point_with_non_digit_characters() {
+            assert_eq!(numfmt_parse_implicit_precision("100.1234abc"), 4);
+        }
+
+        #[test]
+        fn test_multiple_decimal_points() {
+            // 实际上这不是一个合法的浮点数表示，但测试可以用来看看函数怎样处理这种输入
+            assert_eq!(numfmt_parse_implicit_precision("100.12.34"), 2);
+        }
+    }
+    #[cfg(test)]
+    mod remove_suffix_tests {
+        use super::*;
+        // 假设NUMFMT_IEC_BASES数组如下
+        const NUMFMT_IEC_BASES: [f64; 9] = [
+            1.0,
+            1024.0,
+            1024.0 * 1024.0,
+            1024.0 * 1024.0 * 1024.0,
+            1024.0 * 1024.0 * 1024.0 * 1024.0,
+            1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
+            1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
+            1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
+            1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        ];
+
+        #[test]
+        fn test_si_suffix_handling() {
+            let i = 1.0;
+            let suffixes = vec![
+                (NumfmtRawSuffix::K, 1e3),
+                (NumfmtRawSuffix::M, 1e6),
+                (NumfmtRawSuffix::G, 1e9),
+                (NumfmtRawSuffix::T, 1e12),
+            ];
+            for (suffix, multiplier) in suffixes {
+                let result =
+                    numfmt_remove_suffix(i, Some((suffix, false)), &NumfmtUnit::Si).unwrap();
+                assert_eq!(result, i * multiplier);
+            }
+        }
+
+        #[test]
+        fn test_iec_suffix_handling() {
+            let i = 1.0;
+            let unit = NumfmtUnit::Iec(true);
+            for (index, suffix) in [
+                NumfmtRawSuffix::K,
+                NumfmtRawSuffix::M,
+                NumfmtRawSuffix::G,
+                NumfmtRawSuffix::T,
+            ]
+            .iter()
+            .enumerate()
+            {
+                let result = numfmt_remove_suffix(i, Some((*suffix, true)), &unit).unwrap();
+                assert_eq!(result, i * NUMFMT_IEC_BASES[index + 1]);
+            }
+        }
+
+        #[test]
+        fn test_error_handling_mismatch_suffix_unit() {
+            let result =
+                numfmt_remove_suffix(1.0, Some((NumfmtRawSuffix::K, true)), &NumfmtUnit::Si);
+            assert!(
+                result.is_err(),
+                "Expected an error due to mismatch suffix and unit"
+            );
+        }
+
+        #[test]
+        fn test_no_suffix_handling() {
+            let i = 123.0;
+            let result = numfmt_remove_suffix(i, None, &NumfmtUnit::Si).unwrap();
+            assert_eq!(
+                result, i,
+                "Expected the original number when no suffix is provided"
+            );
+        }
+
+        #[test]
+        fn test_unsupported_suffix_error() {
+            let result =
+                numfmt_remove_suffix(1.0, Some((NumfmtRawSuffix::Z, false)), &NumfmtUnit::None);
+            assert!(
+                result.is_err(),
+                "Expected an error for unsupported suffix with NumfmtUnit::None"
+            );
+        }
+        #[test]
+        fn test_large_value_suffix_handling() {
+            let i = 1e12; // 极大数值
+            let result =
+                numfmt_remove_suffix(i, Some((NumfmtRawSuffix::T, false)), &NumfmtUnit::Si)
+                    .unwrap();
+            assert_eq!(result, i * 1e12);
+        }
+
+        #[test]
+        fn test_small_value_suffix_handling() {
+            let i = 1e-12; // 极小数值
+            let result =
+                numfmt_remove_suffix(i, Some((NumfmtRawSuffix::K, false)), &NumfmtUnit::Si)
+                    .unwrap();
+            assert_eq!(result, i * 1e3);
+        }
+
+        #[test]
+        fn test_special_float_values_handling() {
+            // let nan_result = numfmt_remove_suffix(f64::NAN, Some((NumfmtRawSuffix::K, false)), &NumfmtUnit::Si);
+            // assert_eq!(nan_result.unwrap(), f64::NAN);
+
+            let inf_result = numfmt_remove_suffix(
+                f64::INFINITY,
+                Some((NumfmtRawSuffix::M, false)),
+                &NumfmtUnit::Si,
+            );
+            println!("{:?}", inf_result);
+            assert_eq!(inf_result.unwrap(), f64::INFINITY);
+        }
+
+        #[test]
+        fn test_complete_mismatch_error_handling() {
+            let result = numfmt_remove_suffix(
+                1.0,
+                Some((NumfmtRawSuffix::P, false)),
+                &NumfmtUnit::Iec(true),
+            );
+            assert!(
+                result.is_err(),
+                "Expected an error due to complete mismatch of suffix and unit settings"
+            );
+        }
+
+        #[test]
+        fn test_detailed_iec_units() {
+            let i = 1.0;
+            let unit = NumfmtUnit::Iec(true);
+            let suffixes = [
+                (NumfmtRawSuffix::K, NUMFMT_IEC_BASES[1]),
+                (NumfmtRawSuffix::M, NUMFMT_IEC_BASES[2]),
+                (NumfmtRawSuffix::G, NUMFMT_IEC_BASES[3]),
+            ];
+            for (suffix, base) in suffixes.iter() {
+                let result = numfmt_remove_suffix(i, Some((*suffix, true)), &unit).unwrap();
+                assert_eq!(result, i * base);
+            }
+        }
+    }
+}

@@ -773,4 +773,1540 @@ mod tests {
             }
         }
     }
+    #[cfg(test)]
+    mod transform_from_tests {
+        use super::*;
+
+        #[test]
+        fn test_basic_conversion() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::None,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert_eq!(numfmt_transform_from("400", &opts).unwrap(), 400.0);
+        }
+
+        #[test]
+        fn test_with_unit_and_rounding() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert_eq!(numfmt_transform_from("100K", &opts).unwrap(), 100000.0);
+        }
+
+        #[test]
+        fn test_negative_value_handling() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert_eq!(numfmt_transform_from("-300K", &opts).unwrap(), -300000.0);
+        }
+
+        #[test]
+        fn test_error_handling() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert!(numfmt_transform_from("unsupported", &opts).is_err());
+        }
+
+        #[test]
+        fn test_large_unit_conversion() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert_eq!(numfmt_transform_from("1M", &opts).unwrap(), 1_000_000.0);
+        }
+
+        #[test]
+        fn test_iec_unit_conversion() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Iec(true),
+                from_unit: 1024,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert_eq!(
+                numfmt_transform_from("1K", &opts).unwrap_err(),
+                "missing 'i' suffix in input: '1024K' (e.g Ki/Mi/Gi)".to_string()
+            );
+        }
+
+        #[test]
+        fn test_very_small_values() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert_eq!(numfmt_transform_from("0.001K", &opts).unwrap(), 1.0);
+        }
+
+        #[test]
+        fn test_special_float_values() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert!(numfmt_transform_from("NaN", &opts).is_err());
+            assert!(numfmt_transform_from("inf", &opts).is_err());
+        }
+
+        #[test]
+        fn test_invalid_multi_unit_input() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+            assert!(
+                numfmt_transform_from("100KM", &opts).is_err(),
+                "Expected an error for invalid multi-unit input"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod numfmt_div_round_tests {
+        use super::*;
+        #[test]
+        fn test_basic_division_and_rounding() {
+            assert_eq!(numfmt_div_round(10.0, 3.0, NumfmtRoundMethod::Up), 3.4);
+            assert_eq!(numfmt_div_round(10.0, 3.0, NumfmtRoundMethod::Down), 3.3);
+            assert_eq!(numfmt_div_round(10.0, 3.0, NumfmtRoundMethod::Nearest), 3.3);
+        }
+
+        #[test]
+        fn test_decimal_precision() {
+            assert_eq!(numfmt_div_round(1.0, 3.0, NumfmtRoundMethod::Up), 0.4);
+            assert_eq!(numfmt_div_round(1.0, 3.0, NumfmtRoundMethod::Down), 0.3);
+            assert_eq!(numfmt_div_round(1.0, 3.0, NumfmtRoundMethod::Nearest), 0.3);
+        }
+
+        #[test]
+        fn test_small_values_rounding() {
+            assert_eq!(numfmt_div_round(0.05, 2.0, NumfmtRoundMethod::Up), 0.1);
+            assert_eq!(numfmt_div_round(0.05, 2.0, NumfmtRoundMethod::Down), 0.0);
+        }
+
+        #[test]
+        fn test_zero_and_infinity_handling() {
+            assert_eq!(numfmt_div_round(0.0, 5.0, NumfmtRoundMethod::Nearest), 0.0);
+            assert_eq!(
+                numfmt_div_round(1.0, 0.0, NumfmtRoundMethod::Nearest),
+                f64::INFINITY
+            );
+        }
+
+        #[test]
+        fn test_negative_values_rounding() {
+            assert_eq!(numfmt_div_round(-10.0, 3.0, NumfmtRoundMethod::Up), -3.3);
+            assert_eq!(numfmt_div_round(-10.0, 3.0, NumfmtRoundMethod::Down), -3.4);
+            assert_eq!(
+                numfmt_div_round(-10.0, 3.0, NumfmtRoundMethod::Nearest),
+                -3.3
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod consider_suffix_tests {
+        use super::*;
+        use crate::units::{NumfmtRawSuffix::*, NumfmtWithI};
+
+        fn setup_si_options() -> NumfmtUnit {
+            NumfmtUnit::Si
+        }
+
+        fn setup_iec_options(with_i: NumfmtWithI) -> NumfmtUnit {
+            NumfmtUnit::Iec(with_i)
+        }
+
+        #[test]
+        fn test_no_conversion_needed() {
+            let unit = NumfmtUnit::None;
+            let result =
+                numfmt_consider_suffix(1234.0, &unit, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(result, (1234.0, None));
+        }
+
+        #[test]
+        fn test_si_conversion() {
+            let unit = setup_si_options();
+            let result = numfmt_consider_suffix(1e6, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, (1.0, Some((M, false))));
+        }
+
+        #[test]
+        fn test_iec_conversion() {
+            let unit = setup_iec_options(true);
+            let result =
+                numfmt_consider_suffix(1024.0 * 1024.0, &unit, NumfmtRoundMethod::Nearest, 0)
+                    .unwrap();
+            assert_eq!(result, (1.0, Some((M, true))));
+        }
+
+        #[test]
+        fn test_auto_unit_error() {
+            let unit = NumfmtUnit::Auto;
+            let result = numfmt_consider_suffix(1234.0, &unit, NumfmtRoundMethod::Nearest, 2);
+            assert!(result.is_err(), "Expected an error for unit 'auto'");
+        }
+
+        #[test]
+        fn test_number_too_big() {
+            let unit = setup_si_options();
+            let result = numfmt_consider_suffix(1e30, &unit, NumfmtRoundMethod::Nearest, 0);
+            assert!(result.is_err(), "Expected an error for too large number");
+        }
+
+        #[test]
+        fn test_different_rounding_methods() {
+            let unit = setup_si_options();
+            let round_up =
+                numfmt_consider_suffix(999_500.0, &unit, NumfmtRoundMethod::Up, 0).unwrap();
+            assert_eq!(round_up, (1.0, Some((M, false))));
+
+            let round_down =
+                numfmt_consider_suffix(999_499.0, &unit, NumfmtRoundMethod::Down, 0).unwrap();
+            assert_eq!(round_down, (999.0, Some((K, false))));
+        }
+
+        #[test]
+        fn test_precision_control() {
+            let unit = setup_si_options();
+            let high_precision =
+                numfmt_consider_suffix(1234567.0, &unit, NumfmtRoundMethod::Nearest, 3).unwrap();
+            assert_eq!(high_precision, (1.235, Some((M, false))));
+        }
+
+        #[test]
+        fn test_edge_cases_at_unit_boundaries() {
+            let unit = setup_si_options();
+            let edge_case =
+                numfmt_consider_suffix(999_999.999, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(edge_case, (1.0, Some((M, false))));
+        }
+
+        #[test]
+        fn test_multi_level_unit_thresholds() {
+            let unit = setup_si_options();
+            let result = numfmt_consider_suffix(1e9, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, (1.0, Some((G, false))));
+        }
+
+        #[test]
+        fn test_iec_precision_interaction() {
+            let unit = setup_iec_options(false);
+            let result =
+                numfmt_consider_suffix(1023.0 * 1024.0, &unit, NumfmtRoundMethod::Nearest, 3)
+                    .unwrap();
+            assert_eq!(result, (1023.0, Some((K, false))));
+        }
+
+        #[test]
+        fn test_negative_values() {
+            let unit = setup_si_options();
+            let result =
+                numfmt_consider_suffix(-1e6, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, (-1.0, Some((M, false))));
+        }
+
+        #[test]
+        fn test_very_small_values_unit_conversion() {
+            let unit = setup_si_options();
+            let result =
+                numfmt_consider_suffix(1e-6, &unit, NumfmtRoundMethod::Nearest, 9).unwrap();
+            assert_eq!(result, (1e-6, None)); // Assuming Micro represents μ
+        }
+
+        #[test]
+        fn test_unit_carry_over() {
+            let unit = setup_si_options();
+            let result =
+                numfmt_consider_suffix(999_950.0, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, (1.0, Some((M, false))));
+        }
+
+        #[test]
+        fn test_special_float_values() {
+            let unit = setup_si_options();
+            let result_nan = numfmt_consider_suffix(f64::NAN, &unit, NumfmtRoundMethod::Nearest, 2);
+            assert!(result_nan.is_err(), "Expected an error for NaN input");
+
+            let result_inf =
+                numfmt_consider_suffix(f64::INFINITY, &unit, NumfmtRoundMethod::Nearest, 2);
+            assert!(result_inf.is_err(), "Expected an error for Infinity input");
+        }
+
+        #[test]
+        fn test_values_close_to_unit_thresholds() {
+            let unit = setup_si_options();
+            let result =
+                numfmt_consider_suffix(999_999.5, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, (1.0, Some((M, false))));
+        }
+    }
+
+    #[cfg(test)]
+    mod transform_to_tests {
+        use super::*;
+        fn setup_transform_options() -> NumfmtTransformOptions {
+            NumfmtTransformOptions {
+                from: NumfmtUnit::None,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            }
+        }
+
+        #[test]
+        fn test_basic_no_conversion() {
+            let opts = setup_transform_options();
+            let result =
+                numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(result, "1234.57");
+        }
+
+        #[test]
+        fn test_unit_conversion() {
+            let mut opts = setup_transform_options();
+            opts.from = NumfmtUnit::Si;
+            opts.to = NumfmtUnit::Si;
+            opts.to_unit = 1000; // Converting to kilounits
+            let result =
+                numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(result, "0.00K");
+        }
+
+        #[test]
+        fn test_rounding_methods() {
+            let opts = setup_transform_options();
+            let round_up = numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Up, 2).unwrap();
+            assert_eq!(round_up, "1234.57");
+
+            let round_down =
+                numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Down, 2).unwrap();
+            assert_eq!(round_down, "1234.56");
+
+            let round_nearest =
+                numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(round_nearest, "1235");
+        }
+
+        #[test]
+        fn test_precision_control() {
+            let opts = setup_transform_options();
+            let high_precision =
+                numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 4).unwrap();
+            assert_eq!(high_precision, "1234.5678");
+
+            let no_precision =
+                numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(no_precision, "1235");
+        }
+
+        #[test]
+        fn test_edge_cases() {
+            let opts = setup_transform_options();
+            let zero_value =
+                numfmt_transform_to(0.0, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(zero_value, "0.00");
+
+            let very_small_value =
+                numfmt_transform_to(0.0001234, &opts, NumfmtRoundMethod::Nearest, 6).unwrap();
+            assert_eq!(very_small_value, "0.000123");
+
+            let very_large_value =
+                numfmt_transform_to(123456789.0, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(very_large_value, "123456789.00");
+        }
+
+        #[test]
+        fn test_iec_true_to_si_conversion() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Iec(true),
+                from_unit: 1024,
+                to: NumfmtUnit::Si,
+                to_unit: 1000,
+            };
+            let result = numfmt_transform_to(2048.0, &opts, NumfmtRoundMethod::Nearest, 1).unwrap();
+            assert_eq!(result, "0.0K");
+        }
+
+        #[test]
+        fn test_iec_false_to_si_conversion() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Iec(false),
+                from_unit: 1024,
+                to: NumfmtUnit::Si,
+                to_unit: 1000,
+            };
+            let result = numfmt_transform_to(2048.0, &opts, NumfmtRoundMethod::Nearest, 1).unwrap();
+            assert_eq!(result, "0.0K");
+        }
+
+        #[test]
+        fn test_decimal_and_negative_values() {
+            let opts = setup_transform_options();
+            let negative_value =
+                numfmt_transform_to(-1234.5678, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(negative_value, "-1234.57");
+
+            let decimal_value =
+                numfmt_transform_to(0.98765, &opts, NumfmtRoundMethod::Nearest, 4).unwrap();
+            assert_eq!(decimal_value, "0.9877");
+        }
+
+        #[test]
+        fn test_very_large_values() {
+            let opts = setup_transform_options();
+            let large_value =
+                numfmt_transform_to(1e12, &opts, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(large_value, "1000000000000");
+        }
+
+        #[test]
+        fn test_non_standard_unit_conversion() {
+            let mut opts = setup_transform_options();
+            opts.to_unit = 500; // 非标准单位
+            let result = numfmt_transform_to(1500.0, &opts, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, "3");
+        }
+
+        #[test]
+        fn test_output_with_suffix() {
+            let mut opts = setup_transform_options();
+            opts.to = NumfmtUnit::Si;
+            let result = numfmt_transform_to(1000.0, &opts, NumfmtRoundMethod::Nearest, 1).unwrap();
+            assert_eq!(result, "1.0K"); // 假设这里是以k为后缀
+        }
+
+        #[test]
+        fn test_non_numeric_input() {
+            let opts = setup_transform_options();
+            let result = numfmt_transform_to(
+                "abc".parse().unwrap_or_default(),
+                &opts,
+                NumfmtRoundMethod::Nearest,
+                2,
+            );
+            println!("{:?}", result);
+            assert_eq!(result.unwrap(), "0.00");
+        }
+
+        #[test]
+        fn test_extreme_decimal_precision() {
+            let opts = setup_transform_options();
+            let result =
+                numfmt_transform_to(123.456, &opts, NumfmtRoundMethod::Nearest, 10).unwrap();
+            assert_eq!(result, "123.4560000000");
+        }
+
+        #[test]
+        fn test_extreme_unit_ratio_conversion() {
+            let mut opts = setup_transform_options();
+            opts.to_unit = 1_000_000; // 使用极端大的单位比例
+            let result =
+                numfmt_transform_to(1_000_000_000.0, &opts, NumfmtRoundMethod::Nearest, 0).unwrap();
+            assert_eq!(result, "1000");
+        }
+
+        #[test]
+        fn test_zero_input() {
+            let opts = setup_transform_options();
+            let result = numfmt_transform_to(0.0, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
+            assert_eq!(result, "0.00");
+        }
+
+        #[test]
+        fn test_very_small_input_values() {
+            let opts = setup_transform_options();
+            let result =
+                numfmt_transform_to(0.000001234, &opts, NumfmtRoundMethod::Nearest, 10).unwrap();
+            assert_eq!(result, "0.0000012340");
+        }
+
+        #[test]
+        fn test_invalid_rounding_method() {
+            let opts = setup_transform_options();
+            let result = numfmt_transform_to(123.456, &opts, NumfmtRoundMethod::Up, 2);
+            println!("{:?}", result);
+            assert_eq!(result.unwrap(), "123.46");
+        }
+
+        #[test]
+        fn test_input_with_special_characters() {
+            let opts = setup_transform_options();
+            let result = numfmt_transform_to(
+                "12.34$".parse().unwrap_or_default(),
+                &opts,
+                NumfmtRoundMethod::Nearest,
+                2,
+            );
+            println!("{:?}", result);
+            assert_eq!(result.unwrap(), "0.00");
+        }
+
+        #[test]
+        fn test_rounding_boundary_conditions() {
+            let opts = setup_transform_options();
+            let round_up_at_boundary =
+                numfmt_transform_to(2.995, &opts, NumfmtRoundMethod::Up, 2).unwrap();
+            assert_eq!(round_up_at_boundary, "3.00");
+
+            let round_down_at_boundary =
+                numfmt_transform_to(2.994, &opts, NumfmtRoundMethod::Down, 2).unwrap();
+            assert_eq!(round_down_at_boundary, "2.99");
+        }
+
+        #[test]
+        fn test_performance() {
+            let opts = setup_transform_options();
+            let start_time = std::time::Instant::now();
+            for _ in 0..10000 {
+                let _ = numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 2);
+            }
+            let duration = start_time.elapsed();
+            assert!(
+                duration.as_secs_f64() < 1.0,
+                "Performance test failed, took too long"
+            );
+        }
+    }
+    #[cfg(test)]
+    mod format_string_tests {
+        use super::*;
+        use crate::NumfmtFormatOptions;
+        #[test]
+        fn test_format_string_basic() {
+            let config = setup_default_config();
+            let s = "123456789";
+            let shell_expected_output = "124M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_field_selection() {
+            let mut config = setup_default_config();
+            config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }]; // 选择第二个字段
+            let s = "123456789";
+            let shell_expected_output = "124M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_basic_err() {
+            let mut config = setup_default_config();
+            config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }]; // 选择第二个字段
+            let s = "123456789\n234567890";
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+        }
+
+        #[test]
+        fn test_format_string_padding_and_alignment() {
+            let mut config = setup_default_config();
+            config.padding = 10;
+            let s = "123456789";
+            let shell_expected_output = "124M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_padding_and_alignment_9() {
+            let mut config = setup_default_config();
+            config.padding = 9;
+            let s = "1";
+            let shell_expected_output = "1".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_auto_to_auto_err() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Auto;
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "123456789";
+            let shell_expected_output = "Unit 'auto' isn't supported with --to options".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_none_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "123456789";
+            let shell_expected_output = "Unit 'auto' isn't supported with --to options".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_iec_false_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(false);
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "123456789";
+            let shell_expected_output = "Unit 'auto' isn't supported with --to options".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_iec_true_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "123456789";
+            let shell_expected_output =
+                "missing 'i' suffix in input: '123456789' (e.g Ki/Mi/Gi)".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_si_true_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "123456789";
+            let shell_expected_output = "Unit 'auto' isn't supported with --to options".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_auto_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Auto;
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096";
+            let shell_expected_output = "102420484096".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_none_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096";
+            let shell_expected_output = "102420484096".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_iec_false_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(false);
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096";
+            let shell_expected_output = "102420484096".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_iec_true_to_none_102420484096() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096";
+            let shell_expected_output =
+                "missing 'i' suffix in input: '102420484096' (e.g Ki/Mi/Gi)".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_iec_true_to_none_102420484096i() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096i";
+            let shell_expected_output = "invalid suffix in input: '102420484096i'".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_iec_true_to_none_102420484096ki() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096Ki";
+            let shell_expected_output = "104878575714304".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_si_to_none_102420484096ki() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096Ki";
+            let shell_expected_output = "This suffix is unsupported for specified unit".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_si_to_none_102420484096k() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096K";
+            let shell_expected_output = "102420484096000".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_si_to_none_102420484096() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::None;
+            let s = "102420484096";
+            let shell_expected_output = "102420484096".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_si_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_transformations_from_iec_false_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(false);
+            config.transform.to = NumfmtUnit::Si;
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_iec_true_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::Si;
+            let s = "102420484096";
+            let shell_expected_output =
+                "missing 'i' suffix in input: '102420484096' (e.g Ki/Mi/Gi)".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_none_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_transformations_from_auto_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Auto;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_suffix_some_f() {
+            let mut config = setup_default_config();
+            config.suffix = Some("f".to_string());
+            let s = "102420484096";
+            let shell_expected_output = "103Gf".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_suffix_none() {
+            let mut config = setup_default_config();
+            config.suffix = None;
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_format_default() {
+            let mut config = setup_default_config();
+            config.format = Default::default();
+
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_format_config() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: None,
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: false,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+103G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_format_config_grouping_true() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: true,
+                padding: None,
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: false,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+103G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_format_config_zero_padding_true() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: None,
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: true,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+103G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_format_config_padding_1() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: Some(1),
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: false,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+103G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_format_config_padding_10() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: Some(10),
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: false,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+      103G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_format_config_padding_10_zero_padding_true() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: Some(10),
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: true,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+000000103G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_format_config_padding_10_precision_10() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: Some(10),
+                precision: Some(10),
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: false,
+            };
+
+            let s = "102420484096";
+            let shell_expected_output = "+102.4204840960G-".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_header_0() {
+            let mut config = setup_default_config();
+            config.header = 0;
+
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_header() {
+            let mut config = setup_default_config();
+            config.header = 2;
+
+            let s = "102420484096";
+            let shell_expected_output = "103G".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_rounding_down() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::Down;
+            let s = "102420484.096";
+            let shell_expected_output = "102M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_rounding_from_zero() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::FromZero;
+            let s = "102420484.096";
+            let shell_expected_output = "103M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_rounding_towards_zero() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::TowardsZero;
+            let s = "102420484.096";
+            let shell_expected_output = "102M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_rounding_nearest() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::Nearest;
+            let s = "102420484.096";
+            let shell_expected_output = "102M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_rounding_up() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::Up;
+            let s = "102420484.096";
+            let shell_expected_output = "103M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+
+        #[test]
+        fn test_format_string_invalid_about() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Abort;
+            let s = "102420484.096";
+            let shell_expected_output = "103M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_invalid_fail() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Fail;
+            let s = "102420484.096";
+            let shell_expected_output = "103M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_invalid_warn() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Warn;
+            let s = "102420484.096";
+            let shell_expected_output = "103M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_invalid_ignore() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Ignore;
+            let s = "102420484.096";
+            let shell_expected_output = "103M".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
+        }
+        #[test]
+        fn test_format_string_null_handling() {
+            let config = setup_default_config();
+            let s = ""; // 非法输入
+            let shell_expected_output = "invalid number: ''".to_string();
+            let output = numfmt_format_string(s, &config, Some(1));
+            println!("{:?}", output);
+            assert!(output.is_err());
+            assert_eq!(output.unwrap_err(), shell_expected_output);
+        }
+    }
+
+    #[cfg(test)]
+    mod format_and_print_delimited_tests {
+        use super::*;
+        #[test]
+        fn test_basic_delimited() {
+            let mut config = setup_default_config();
+            config.delimiter = Some(" ".to_string());
+            let s = "123 456 789";
+            assert!(numfmt_format_and_print_delimited(s, &config).is_ok());
+        }
+
+        #[test]
+        fn test_custom_delimiter() {
+            let mut config = setup_default_config();
+            config.delimiter = Some(",".to_string());
+            let s = "100,200,300";
+            assert!(numfmt_format_and_print_delimited(s, &config).is_ok());
+        }
+
+        #[test]
+        fn test_field_selection() {
+            let mut config = setup_default_config();
+            config.delimiter = Some(" ".to_string());
+            config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }]; // 选择第二个字段
+            let s = "100 200 300";
+            assert!(numfmt_format_and_print_delimited(s, &config).is_ok());
+        }
+
+        #[test]
+        fn test_transformations() {
+            let mut config = setup_default_config();
+            config.delimiter = Some(" ".to_string());
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "1024 2048 4096";
+            assert!(numfmt_format_and_print_delimited(s, &config).is_ok());
+        }
+
+        #[test]
+        fn test_edge_cases() {
+            let mut config = setup_default_config();
+            config.delimiter = Some(",".to_string());
+            let s = ",100,,200,";
+            assert!(numfmt_format_and_print_delimited(s, &config).is_ok());
+        }
+    }
+    #[cfg(test)]
+    mod format_and_print_whitespace_tests {
+        use super::*;
+        use crate::flags::NumfmtFormatOptions;
+        #[test]
+        fn test_basic() {
+            let config = setup_default_config();
+            let s = "123 456 789";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_field_selection() {
+            let mut config = setup_default_config();
+            config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }]; // 选择第二个字段
+            let s = "123 456 789";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_basic2() {
+            let mut config = setup_default_config();
+            config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }]; // 选择第二个字段
+            let s = "123 456 789\n234 567 890";
+            let _shell_expected_output = "";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_padding_and_alignment() {
+            let mut config = setup_default_config();
+            config.padding = 10;
+            let s = "123 456 789";
+            let _shell_expected_output = "       123       456       789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_padding_and_alignment_9() {
+            let mut config = setup_default_config();
+            config.padding = 9;
+            let s = "1";
+            let _shell_expected_output = "         1\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_auto_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Auto;
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_none_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_iec_false_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(false);
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_iec_true_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_si_true_to_auto() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::Auto;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_auto_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Auto;
+            config.transform.to = NumfmtUnit::None;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_none_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::None;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_iec_false_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(false);
+            config.transform.to = NumfmtUnit::None;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_iec_true_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::None;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_si_to_none() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::None;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_si_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Si;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_transformations_from_iec_false_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(false);
+            config.transform.to = NumfmtUnit::Si;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_iec_true_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Iec(true);
+            config.transform.to = NumfmtUnit::Si;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_none_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_transformations_from_auto_to_si() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::Auto;
+            config.transform.to = NumfmtUnit::Si;
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_suffix_some_f() {
+            let mut config = setup_default_config();
+            config.suffix = Some("f".to_string());
+
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_suffix_none() {
+            let mut config = setup_default_config();
+            config.suffix = None;
+
+            let s = "1024 2048 4096";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_format_default() {
+            let mut config = setup_default_config();
+            config.format = Default::default();
+
+            let s = "1024 2048 4096";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_format_config() {
+            let mut config = setup_default_config();
+            config.format = NumfmtFormatOptions {
+                is_grouping: false,
+                padding: None,
+                precision: None,
+                prefix: "+".to_string(),
+                suffix: "-".to_string(),
+                is_zero_padding: false,
+            };
+
+            let s = "1024 2048 4096";
+
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_header_0() {
+            let mut config = setup_default_config();
+            config.header = 0;
+
+            let s = "1024 2048 4096\n11111\n222222\n333333\n444444\n555555\n666666\n777777\n888888\n999999\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_header() {
+            let mut config = setup_default_config();
+            config.header = 2;
+
+            let s = "1024 2048 4096\n11111\n222222\n333333\n444444\n555555\n666666\n777777\n888888\n999999\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_rounding_down() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::Down;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_rounding_from_zero() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::FromZero;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_rounding_towards_zero() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::TowardsZero;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_rounding_nearest() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::Nearest;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_rounding_up() {
+            let mut config = setup_default_config();
+            config.round = NumfmtRoundMethod::Up;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+
+        #[test]
+        fn test_invalid_about() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Abort;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_invalid_fail() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Fail;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_invalid_warn() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Warn;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_invalid_ignore() {
+            let mut config = setup_default_config();
+            config.invalid = NumfmtInvalidModes::Ignore;
+            let s = "123.9 456.2 789.8";
+            let _shell_expected_output = "123 456 789\n";
+            let output = numfmt_format_and_print_whitespace(s, &config);
+            assert!(output.is_ok());
+        }
+        #[test]
+        fn test_null_handling() {
+            let config = setup_default_config();
+            let s = ""; // 非法输入
+            assert!(numfmt_format_and_print_whitespace(s, &config).is_ok());
+        }
+    }
 }

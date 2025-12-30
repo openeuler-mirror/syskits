@@ -70,7 +70,6 @@ pub fn ct_app() -> Command {
         .arg(arg)
 }
 
-
 // 将`i`中的单词复制到`buf`中，中间用空格隔开。
 fn yes_args_into_buff<'a>(
     buffer: &mut Vec<u8>,

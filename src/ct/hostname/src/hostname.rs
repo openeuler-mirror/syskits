@@ -198,3 +198,110 @@ fn hostname_display(args_match: &ArgMatches) -> CTResult<()> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    mod tests_ct_app {
+        use crate::{ct_app, OPT_DOMAIN, OPT_FQDN, OPT_HOST, OPT_IP_ADDRESS, OPT_SHORT};
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_domain() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--domain"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_DOMAIN));
+        }
+
+        #[test]
+        fn test_ct_app_d() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_DOMAIN));
+        }
+
+        #[test]
+        fn test_ct_app_ip_address() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--ip-address"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_IP_ADDRESS));
+        }
+
+        #[test]
+        fn test_ct_app_i() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-i"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_IP_ADDRESS));
+        }
+
+        #[test]
+        fn test_ct_app_fqdn() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--fqdn"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_FQDN));
+        }
+
+        #[test]
+        fn test_ct_app_f() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-f"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(OPT_FQDN));
+        }
+    }
+}

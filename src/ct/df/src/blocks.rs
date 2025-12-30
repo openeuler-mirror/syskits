@@ -557,4 +557,64 @@ mod tests {
         assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K");
     }
 
+    #[test]
+    fn test_block_size_display_bytes_to_multiple_kilobytes() {
+        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2K");
+    }
+
+    #[test]
+    fn test_block_size_display_bytes_to_megabytes() {
+        assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3M");
+    }
+
+    #[test]
+    fn test_block_size_display_128_kilobytes() {
+        assert_eq!(format!("{}", BlockSize::Bytes(128_000)), "128kB");
+    }
+
+    #[test]
+    fn test_block_size_display_1_point_1_megabytes() {
+        assert_eq!(format!("{}", BlockSize::Bytes(1000 * 1024)), "1.1MB");
+    }
+
+    #[test]
+    fn test_block_size_display_1_terabyte() {
+        assert_eq!(format!("{}", BlockSize::Bytes(1_000_000_000_000)), "1TB");
+    }
+
+    #[test]
+    fn test_default_block_size_with_posix() {
+        // 当没有设置 POSIXLY_CORRECT 环境变量时，检查默认块大小是否为 1024 字节。
+        assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
+
+        // 设置 POSIXLY_CORRECT 环境变量后，检查默认块大小是否变为 512 字节。
+        env::set_var("POSIXLY_CORRECT", "1");
+        assert_eq!(BlockSize::Bytes(512), BlockSize::default());
+        // 清理环境变量，避免影响其他测试。
+        env::remove_var("POSIXLY_CORRECT");
+    }
+    #[test]
+    fn test_block_size_from_str_bytes() {
+        assert_eq!(1024, BlockSize::Bytes(1024).as_u64());
+    }
+    #[test]
+    fn test_block_size_from_str_kilobytes() {
+        assert_eq!(1100, BlockSize::Bytes(1100).as_u64());
+    }
+    #[test]
+    fn test_block_size_from_str_megabytes() {
+        assert_eq!(1_100_000, BlockSize::Bytes(1_100_000).as_u64());
+    }
+    #[test]
+    fn test_block_size_from_str_gigabytes() {
+        assert_eq!(1_100_000_000, BlockSize::Bytes(1_100_000_000).as_u64());
+    }
+    #[test]
+    fn test_block_size_from_str_terabytes() {
+        assert_eq!(
+            1_100_000_000_000,
+            BlockSize::Bytes(1_100_000_000_000).as_u64()
+        );
+    }
+
 }

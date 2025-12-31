@@ -1,0 +1,24 @@
+[package]
+name = "ct_mkfifo"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "mkfifo ~ (ctutils) create FIFOs (named pipes)"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/mkfifo"
+
+[lib]
+path = "src/mkfifo.rs"
+
+[dependencies]
+clap = { workspace = true }
+libc = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "mkfifo"
+path = "src/main.rs"

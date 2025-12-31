@@ -405,4 +405,53 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    mod tests_echo_functions {
+        use crate::{echo_execute, echo_print_escaped};
+        use std::io::Cursor;
+        use std::ops::ControlFlow;
+
+        #[test]
+        fn test_echo_execute() {
+            let result = echo_execute(false, true, &["hello".to_string(), "world".to_string()])
+                .expect("echo_execute failed");
+
+            assert_eq!(result, ());
+
+            let result = echo_execute(true, false, &["hello".to_string(), "world".to_string()])
+                .expect("echo_execute failed");
+
+            assert_eq!(result, ());
+
+            let result = echo_execute(true, true, &["hello".to_string(), "world".to_string()])
+                .expect("echo_execute failed");
+
+            assert_eq!(result, ());
+        }
+
+        #[test]
+        fn test_echo_print_escaped_continue() {
+            let mut output = Cursor::new(Vec::new());
+            let result = echo_print_escaped("\\n\\t\\x41", &mut output);
+
+            // println!("{:#?}", result.unwrap());/**/
+            assert_eq!(
+                result.unwrap(),
+                (Ok(ControlFlow::Continue(())) as Result<_, ()>).expect("REASON")
+            );
+            assert_eq!(output.into_inner(), b"\n\tA");
+        }
+
+        #[test]
+        fn test_echo_print_escaped_break() {
+            let mut output = Cursor::new(Vec::new());
+            let result = echo_print_escaped("\\c", &mut output);
+
+            // println!("{:#?}", result.unwrap());/**/
+            assert_eq!(
+                result.unwrap(),
+                (Ok(ControlFlow::Break(())) as Result<_, ()>).expect("REASON")
+            );
+        }
+    }
 }

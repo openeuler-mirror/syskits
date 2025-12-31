@@ -125,3 +125,63 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_printf_main {
+        use crate::printf_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_printf_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = printf_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_printf_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = printf_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_printf_main_f() {
+            let args = vec![ctcore::ct_util_name(), "%0.3f", "1.23456"];
+            let result = printf_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_printf_app {
+        use crate::ct_app;
+
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+}

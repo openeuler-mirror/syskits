@@ -26,7 +26,18 @@ const ARCH_ABOUT: &str = ct_help_about!("arch.md");
 const ARCH_SUMMARY: &str = ct_help_usage!("arch.md");
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    arch_main(args).map(|_| ())
+    let result = arch_main(args);
+
+    match result {
+        Ok(s) => {
+            println!("{}", s);
+            Ok(())
+        }
+        Err(e) => {
+            // println!("{}", e);
+            Err(e)
+        }
+    }
 }
 
 pub fn arch_main(args: impl ctcore::Args) -> CTResult<String> {

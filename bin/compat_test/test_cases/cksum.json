@@ -1,0 +1,100 @@
+{
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "cksum",
+      "description": "测试cksum命令对单个文件计算校验和",
+      "setup_commands": [
+        "echo -n 'Hello World' > test_cksum.txt"
+      ],
+      "args": [
+        "test_cksum.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "3576645817 11 test_cksum.txt\n",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f test_cksum.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cksum",
+      "description": "测试cksum对多个文件的多行输出及顺序",
+      "setup_commands": [
+        "echo 'one' > file1.txt",
+        "echo 'two' > file2.txt",
+        "echo 'three' > file3.txt"
+      ],
+      "args": [
+        "file1.txt",
+        "file2.txt",
+        "file3.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "815791956 4 file1.txt\n4132719841 4 file2.txt\n3917984520 6 file3.txt\n",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f file1.txt file2.txt file3.txt"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "测试cksum命令对标准输入计算校验和",
+      "args": [],
+      "tstdin": "abc\n",
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1219131554 4\n",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": false,
+          "ignore_stderr": false
+        }
+      }
+    },
+    {
+      "command": "cksum",
+      "description": "测试使用 - 表示标准输入",
+      "args": ["-"],
+      "tstdin": "Hello stdin\n",
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "4038471504 13 -\n",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": false,
+          "ignore_stderr": false
+        }
+      }
+    }
+  ]
+}

@@ -108,6 +108,7 @@ feat_common_core = [
   "dircolors",
   "pwd",
   "dirname",
+  "printenv",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -280,6 +281,7 @@ rmdir = { optional = true, package = "ct_rmdir", path = "src/ct/rmdir" }
 dircolors = { optional = true, package = "ct_dircolors", path = "src/ct/dircolors" }
 pwd = { optional = true, package = "ct_pwd", path = "src/ct/pwd" }
 dirname = { optional = true, package = "ct_dirname", path = "src/ct/dirname" }
+printenv = { optional = true, package = "ct_printenv", path = "src/ct/printenv" }
 
 [dev-dependencies]
 chrono = { workspace = true }

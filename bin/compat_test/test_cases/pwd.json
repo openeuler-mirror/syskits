@@ -1,0 +1,68 @@
+{
+    "tests": [
+        {
+            "command": "pwd",
+            "description": "pwd: 显示当前工作目录",
+            "args": [],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "pwd",
+            "description": "pwd: 带参数调用(无视参数)",
+            "args": ["abcd"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "hello",
+            "command": "pwd",
+            "description": "pwd: 使用标准输入",
+            "args": [],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+}

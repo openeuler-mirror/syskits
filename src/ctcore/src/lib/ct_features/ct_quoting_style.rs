@@ -361,7 +361,7 @@ impl fmt::Display for CtQuotes {
 
 #[cfg(test)]
 mod tests {
-    use crate::ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle};
+    use crate::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
     use std::ffi::OsStr;
 
     //拼写检查器忽略（tests/words）one'two one'two

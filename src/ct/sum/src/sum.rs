@@ -16,12 +16,12 @@
 //! 2. 计算文件的块数：
 //!    计算文件的大小，并以块的形式报告。块的大小可以是 512 字节（System V 算法）或 1024 字节（BSD 算法）。
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
 use std::fs::File;
-use std::io::{stdin, Read};
+use std::io::{Read, stdin};
 use std::path::Path;
 
 const SUM_USAGE: &str = ct_help_usage!("sum.md");
@@ -31,7 +31,7 @@ const SUM_ABOUT: &str = ct_help_about!("sum.md");
 // 这种实现方式针对 b 是一个常量的情况进行了优化，
 // 尤其是 b 是 2 的幂时。
 const fn sum_div_ceil(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
+    a.div_ceil(b)
 }
 
 fn sum_bsd(mut reader: Box<dyn Read>) -> (usize, u16) {
@@ -397,7 +397,7 @@ mod tests {
         use super::*;
         use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
-        use tempfile::{tempdir, NamedTempFile};
+        use tempfile::{NamedTempFile, tempdir};
 
         #[test]
         fn test_open_stdin() {

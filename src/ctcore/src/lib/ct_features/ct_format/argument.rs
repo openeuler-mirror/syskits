@@ -13,7 +13,7 @@
 use crate::{
     ct_error::set_ct_exit_code,
     ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
-    ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle},
+    ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name},
     ct_show_error, ct_show_warning,
 };
 use os_display::Quotable;

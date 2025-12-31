@@ -24,7 +24,7 @@ use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::rc::Rc;
-use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
 use std::thread::{self, JoinHandle};
 
 use compare::Compare;
@@ -34,8 +34,8 @@ use ctcore::ct_error::CTResult;
 
 use crate::chunks::{self, Chunk, ChunkRecycled};
 use crate::tmp_dir::TmpDirWrapper;
-use crate::{sort_compare_by, sort_open};
 use crate::{SortError, SortGlobalConfigs, SortOutput};
+use crate::{sort_compare_by, sort_open};
 
 /// 如果输出文件也出现在输入文件中，则复制输出文件的内容
 /// 并用该副本替换输入文件中出现的输出文件。
@@ -278,7 +278,7 @@ pub struct MergeFileMerger<'a> {
     reader_join_handle: JoinHandle<CTResult<()>>,
 }
 
-impl<'a> MergeFileMerger<'a> {
+impl MergeFileMerger<'_> {
     /// 将合并后的内容写入输出文件。
     pub fn write_all(self, settings: &SortGlobalConfigs, output: SortOutput) -> CTResult<()> {
         let mut out = output.into_write();
@@ -359,7 +359,7 @@ struct MergeFileComparator<'a> {
     settings: &'a SortGlobalConfigs,
 }
 
-impl<'a> Compare<MergeableFile> for MergeFileComparator<'a> {
+impl Compare<MergeableFile> for MergeFileComparator<'_> {
     fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
         let mut cmp = sort_compare_by(
             &a.current_chunk.lines()[a.line_idx],
@@ -2344,12 +2344,14 @@ mod tests {
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
 
-            assert!(merge_replace_output_file_in_input_files(
-                &mut files,
-                Some("/path/to/output.txt"),
-                &mut tmp_dir,
-            )
-            .is_ok());
+            assert!(
+                merge_replace_output_file_in_input_files(
+                    &mut files,
+                    Some("/path/to/output.txt"),
+                    &mut tmp_dir,
+                )
+                .is_ok()
+            );
         }
 
         #[test]
@@ -2360,12 +2362,14 @@ mod tests {
             ];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
 
-            assert!(merge_replace_output_file_in_input_files(
-                &mut files,
-                Some("/path/to/output.txt"),
-                &mut tmp_dir,
-            )
-            .is_ok());
+            assert!(
+                merge_replace_output_file_in_input_files(
+                    &mut files,
+                    Some("/path/to/output.txt"),
+                    &mut tmp_dir,
+                )
+                .is_ok()
+            );
             assert_eq!(files[0], files[1]);
             println!("{:?}", files[0].to_string_lossy());
             // assert!(files[0].to_string_lossy().contains("cttils_sort"));
@@ -2378,12 +2382,14 @@ mod tests {
                 OsString::from("/path/to/file2.txt"),
             ];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
-            assert!(merge_replace_output_file_in_input_files(
-                &mut files,
-                Some("/path/to/output.txt"),
-                &mut tmp_dir,
-            )
-            .is_ok());
+            assert!(
+                merge_replace_output_file_in_input_files(
+                    &mut files,
+                    Some("/path/to/output.txt"),
+                    &mut tmp_dir,
+                )
+                .is_ok()
+            );
             assert_eq!(
                 files,
                 vec![

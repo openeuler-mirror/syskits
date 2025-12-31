@@ -12,8 +12,8 @@
 //! 沙箱环境实现模块
 //! 提供命令执行的隔离环境，支持资源限制和环境变量管理
 
-use crate::test_case::{FileType, TestCase, TestFile};
 use crate::CommandResult;
+use crate::test_case::{FileType, TestCase, TestFile};
 use crate::{Result, TestError};
 use nix::sys::resource::{self, Resource};
 use nix::sys::signal::{self};
@@ -22,8 +22,8 @@ use std::fs::{self, File, Permissions};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tempfile::TempDir;
 
 /// 信号处理器

@@ -24,8 +24,8 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
+use filetime::{FileTime, set_file_times, set_symlink_file_times};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
@@ -419,7 +419,7 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid date ct_format {}", s.quote()),
-            ))
+            ));
         }
     };
 
@@ -431,7 +431,7 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid date ts ct_format {}", ts.quote()),
-            ))
+            ));
         }
     };
 
@@ -475,11 +475,11 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -504,7 +504,7 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
                 return Err(CtSimpleError::new(
                     1,
                     format!("GetFinalPathNameByHandleW failed with code {ret}"),
-                ))
+                ));
             }
             0 => {
                 return Err(CtSimpleError::new(
@@ -792,7 +792,7 @@ mod tests {
 
     #[cfg(test)]
     mod stat_tests {
-        use std::fs::{create_dir, File};
+        use std::fs::{File, create_dir};
         use std::io::Write;
         use std::os::unix::fs::symlink;
 
@@ -1691,9 +1691,11 @@ mod tests {
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         // 我们可以通过不设置stdout来触发错误（将失败，代码为1）
-        assert!(super::touch_pathbuf_from_stdout()
-            .expect_err("pathbuf_from_stdout should have failed")
-            .to_string()
-            .contains("GetFinalPathNameByHandleW failed with code 1"));
+        assert!(
+            super::touch_pathbuf_from_stdout()
+                .expect_err("pathbuf_from_stdout should have failed")
+                .to_string()
+                .contains("GetFinalPathNameByHandleW failed with code 1")
+        );
     }
 }

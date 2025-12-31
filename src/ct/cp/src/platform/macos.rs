@@ -89,7 +89,7 @@ pub(crate) fn copy_on_write(
         // support COW).
         match reflink_mode {
             CpReflinkMode::Always => {
-                return Err(format!("failed to clone {source:?} from {dest:?}: {error}").into())
+                return Err(format!("failed to clone {source:?} from {dest:?}: {error}").into());
             }
             _ => {
                 copy_debug.reflink = CpOffloadReflinkDebug::Yes;
@@ -108,20 +108,20 @@ pub(crate) fn copy_on_write(
 }
 #[cfg(test)]
 mod tests {
-    use crate::copy_on_write;
     use crate::CopyDebug;
     use crate::CpOffloadReflinkDebug;
     use crate::CpReflinkMode;
     use crate::CpSparseDebug;
     use crate::CpSparseMode;
+    use crate::copy_on_write;
 
     use ctcore::ct_error::CTError;
     use std::fs;
-    use std::fs::create_dir_all;
-    use std::fs::set_permissions;
     use std::fs::File;
     use std::fs::OpenOptions;
     use std::fs::Permissions;
+    use std::fs::create_dir_all;
+    use std::fs::set_permissions;
     use std::path::Path;
     use tempfile::Builder;
     #[test]

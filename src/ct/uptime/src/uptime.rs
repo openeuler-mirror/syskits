@@ -12,7 +12,7 @@
 //! uptime 命令来查看系统的运行时间和平均负载情况
 
 use chrono::{Local, TimeZone, Utc};
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};

@@ -11,11 +11,11 @@
 
 //! logname指令，它会显示目前用户的名称。
 
-use clap::{crate_version, Command};
+use clap::{Command, crate_version};
 use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage, ct_show_error};
 use std::ffi::CStr;
 
-extern "C" {
+unsafe extern "C" {
     // POSIX 要求使用 getlogin（或同等代码）
     pub fn getlogin() -> *const libc::c_char;
 }

@@ -9,14 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use crate::ct_quoting_style::{escape_name, CtQuotingStyle};
+use crate::ct_quoting_style::{CtQuotingStyle, escape_name};
 
 use super::{
+    ArgumentIter, FormatChar, FormatError,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, ArgumentIter, FormatChar, FormatError,
+    parse_escape_only,
 };
 use std::{io::Write, ops::ControlFlow};
 
@@ -534,7 +535,6 @@ fn eat_asterisk_or_number(rest: &mut &[u8], index: &mut usize) -> Option<CanAste
  * @return 返回一个选项，如果解析成功，则为包含解析结果的 Some(usize)，
  *         如果无法解析数字（例如，没有数字或解析过程中发生溢出），则为 None。
  */
-
 fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
     // 查找第一个非数字字符的位置
     match rest[*index..].iter().position(|b| !b.is_ascii_digit()) {

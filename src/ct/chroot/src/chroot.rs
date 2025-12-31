@@ -13,9 +13,9 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, ArgAction, Command};
-use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, UClapError};
-use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
+use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
+use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::libc::{self, setgid, setgroups, setuid};
 use ctcore::{ct_entries, ct_format_usage, ct_help_about, ct_help_usage};
 
@@ -114,7 +114,7 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
             } else {
                 ChrootError::CommandFailed(cmd[0].to_string(), e)
             }
-            .into())
+            .into());
         }
     };
 

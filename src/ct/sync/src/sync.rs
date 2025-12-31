@@ -12,7 +12,7 @@
 //! sync 命令在 Linux 中用于确保系统内存中的数据被立即写入到硬盘中，防止数据丢失。
 /* synced with: sync (GNU coreutils) 8.13 */
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};

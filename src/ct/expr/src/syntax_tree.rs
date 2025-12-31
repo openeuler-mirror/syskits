@@ -122,11 +122,7 @@ impl SyntaxTreeRelationOp {
                 Self::Geq => a >= b,
             }
         };
-        if is_b {
-            Ok(1.into())
-        } else {
-            Ok(0.into())
-        }
+        if is_b { Ok(1.into()) } else { Ok(0.into()) }
     }
 }
 

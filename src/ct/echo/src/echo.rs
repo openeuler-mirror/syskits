@@ -10,10 +10,10 @@
  *
  */
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;

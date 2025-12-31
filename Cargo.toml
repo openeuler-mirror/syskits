@@ -10,7 +10,7 @@ license = "Mulan PSL v2.0"
 homepage = "https://www.ctyun.cn/developer"
 keywords = ["syskits", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 [package]
 name = "syskits"
@@ -25,7 +25,7 @@ description = "CTyunOS implemented as universal (cross-platform) utils, written 
 repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
 default-run = "syskits"
 readme = "README.md"
-rust-version = "1.70.0"
+rust-version = "1.85.0"
 build = "build.rs"
 
 [features]

@@ -13,15 +13,15 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_posix::{ct_posix_version, OBSOLETE};
+use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 
 const UNIQ_ABOUT: &str = ct_help_about!("uniq.md");
@@ -378,10 +378,7 @@ fn uniq_should_extract_obs_skip_chars(
         && ct_posix_version().is_some_and(|v| v <= OBSOLETE)
         && !is_preceding_long_opt_req_value
         && !is_preceding_short_opt_req_value
-        && str_slice
-            .chars()
-            .nth(1)
-            .map_or(false, |c| c.is_ascii_digit())
+        && str_slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
 }
 
 /// [`uniq_filter_args`] 的辅助函数
@@ -2155,8 +2152,8 @@ mod tests {
     #[cfg(test)]
     mod map_clap_errors_tests {
         use super::*;
-        use clap::error::ErrorKind as ClapErrorKind;
-        use clap::Error as ClapError; // Assuming you use ContextKind elsewhere
+        use clap::Error as ClapError;
+        use clap::error::ErrorKind as ClapErrorKind; // Assuming you use ContextKind elsewhere
 
         fn generate_clap_error(
             error_kind: ClapErrorKind,

@@ -22,14 +22,6 @@ const MAX_PATH: usize = 266;
 #[cfg(windows)]
 static EXIT_ERR: i32 = 1;
 
-#[cfg(any(
-    windows,
-    target_os = "freebsd",
-    target_vendor = "apple",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use crate::ct_crash;
 #[cfg(windows)]
 use crate::ct_show_warning;
 
@@ -64,7 +56,7 @@ fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
 
 #[cfg(unix)]
 use libc::{
-    mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
+    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t, strerror,
 };
 use std::borrow::Cow;
 #[cfg(unix)]
@@ -78,41 +70,9 @@ use std::mem;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "openbsd"
-))]
 pub use libc::statfs as StatFs;
-#[cfg(any(
-    target_os = "netbsd",
-    target_os = "bitrig",
-    target_os = "dragonfly",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "redox"
-))]
-pub use libc::statvfs as StatFs;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "openbsd",
-))]
 pub use libc::statfs as statfs_fn;
-#[cfg(any(
-    target_os = "netbsd",
-    target_os = "bitrig",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "dragonfly",
-    target_os = "redox"
-))]
-pub use libc::statvfs as statfs_fn;
 
 pub trait CtBirthTime {
     fn birth(&self) -> Option<(u64, u32)>;
@@ -266,9 +226,10 @@ impl CtMountInfo {
 
 #[cfg(any(
     target_os = "freebsd",
-    target_vendor = "apple",
-    target_os = "netbsd",
+    target_os = "dragonfly",
     target_os = "openbsd",
+    target_os = "netbsd",
+    target_vendor = "apple",
 ))]
 impl From<StatFs> for CtMountInfo {
     fn from(statfs: StatFs) -> Self {
@@ -346,16 +307,18 @@ fn mount_dev_id(mount_dir: &str) -> String {
 
 #[cfg(any(
     target_os = "freebsd",
-    target_vendor = "apple",
+    target_os = "dragonfly",
+    target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "openbsd"
+    target_vendor = "apple",
 ))]
 use libc::c_int;
 #[cfg(any(
     target_os = "freebsd",
-    target_vendor = "apple",
+    target_os = "dragonfly",
+    target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "openbsd"
+    target_vendor = "apple",
 ))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
@@ -416,9 +379,10 @@ pub fn read_fs_list() -> Result<Vec<CtMountInfo>, std::io::Error> {
     }
     #[cfg(any(
         target_os = "freebsd",
-        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "openbsd",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_vendor = "apple",
     ))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
@@ -660,10 +624,6 @@ impl FsMeta for StatFs {
         return self.f_bsize.into();
         #[cfg(any(
             target_env = "musl",
-            target_os = "freebsd",
-            target_os = "illumos",
-            target_os = "solaris",
-            target_os = "redox",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_bsize.try_into().unwrap();
@@ -793,7 +753,7 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
             unsafe { &*(&self.f_fsid as *const nix::sys::statfs::fsid_t as *const [u32; 2]) };
-        (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
+        ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
         target_vendor = "apple",

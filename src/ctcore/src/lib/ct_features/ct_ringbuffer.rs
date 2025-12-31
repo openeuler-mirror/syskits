@@ -47,8 +47,6 @@ use std::collections::VecDeque;
 /// [`push_back`]: struct.RingBuffer.html#method.push_back
 /// [`from_iter`]: struct.RingBuffer.html#method.from_iter
 ///
-
-//环形buffer
 pub struct CtRingBuffer<T> {
     pub data: VecDeque<T>,
     size: usize,

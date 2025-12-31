@@ -24,15 +24,11 @@ use std::path::Path;
 /// # Returns
 ///
 /// A result indicating success or failure.
-
 pub fn ct_copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     let ct_source = source.as_ref();
     let ct_dest = dest.as_ref();
 
-    let attrs = match xattr::list(ct_source) {
-        Ok(attrs) => attrs,
-        Err(err) => return Err(err),
-    };
+    let attrs = xattr::list(ct_source)?;
 
     for attr in attrs {
         let value = match xattr::get(ct_source, &attr) {
@@ -58,7 +54,7 @@ pub fn ct_copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()>
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
-
+///
 pub fn ct_retrieve_xattrs<P: AsRef<Path>>(
     source: P,
 ) -> std::io::Result<HashMap<OsString, Vec<u8>>> {

@@ -35,7 +35,7 @@ pub enum ReadBufDecoderError<'a> {
     Io(io::Error),
 }
 
-impl<'a> fmt::Display for ReadBufDecoderError<'a> {
+impl fmt::Display for ReadBufDecoderError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReadBufDecoderError::InvalidByteSequence(bytes) => {
@@ -46,7 +46,7 @@ impl<'a> fmt::Display for ReadBufDecoderError<'a> {
     }
 }
 
-impl<'a> Error for ReadBufDecoderError<'a> {
+impl Error for ReadBufDecoderError<'_> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
             ReadBufDecoderError::InvalidByteSequence(_) => None,

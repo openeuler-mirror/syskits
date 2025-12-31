@@ -114,14 +114,14 @@ where
 mod tests {
     use std::ffi::OsStr;
 
-    use clap::{builder::TypedValueParser, error::ErrorKind, Command};
+    use clap::{Command, builder::TypedValueParser, error::ErrorKind};
 
     use super::CtShortcutValueParser;
 
     #[cfg(test)]
     mod tests {
         use super::*;
-        use clap::{builder::PossibleValue, Arg, Command};
+        use clap::{Arg, Command, builder::PossibleValue};
 
         use clap::error::ErrorKind;
 

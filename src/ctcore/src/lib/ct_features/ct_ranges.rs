@@ -168,7 +168,7 @@ pub fn contain(ranges: &[CtRange], n: usize) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{complement, CtRange};
+    use super::{CtRange, complement};
     use std::str::FromStr;
 
     fn m(a: Vec<CtRange>, b: &[CtRange]) {

@@ -12,7 +12,7 @@
 #[cfg(target_os = "linux")]
 use nix::errno::Errno;
 #[cfg(target_os = "linux")]
-use nix::fcntl::{open, OFlag};
+use nix::fcntl::{OFlag, open};
 #[cfg(target_os = "linux")]
 use nix::sys::stat::Mode;
 #[cfg(target_os = "linux")]
@@ -26,28 +26,34 @@ use std::path::Path;
 
 #[cfg(target_os = "linux")]
 pub unsafe fn do_sync() -> isize {
-    libc::sync();
-    0
+    unsafe {
+        libc::sync();
+        0
+    }
 }
 
 #[cfg(target_os = "linux")]
 pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
-    for path in files {
-        let f = File::open(path).unwrap();
-        let fd = f.as_raw_fd();
-        libc::syscall(libc::SYS_syncfs, fd);
+    unsafe {
+        for path in files {
+            let f = File::open(path).unwrap();
+            let fd = f.as_raw_fd();
+            libc::syscall(libc::SYS_syncfs, fd);
+        }
+        0
     }
-    0
 }
 
 #[cfg(target_os = "linux")]
 pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
-    for path in files {
-        let f = File::open(path).unwrap();
-        let fd = f.as_raw_fd();
-        libc::syscall(libc::SYS_fdatasync, fd);
+    unsafe {
+        for path in files {
+            let f = File::open(path).unwrap();
+            let fd = f.as_raw_fd();
+            libc::syscall(libc::SYS_fdatasync, fd);
+        }
+        0
     }
-    0
 }
 
 // 使用 Nix 打开文件，以便为 FIFO 文件设置 NONBLOCK 标志

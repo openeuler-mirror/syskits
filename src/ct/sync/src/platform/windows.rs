@@ -22,7 +22,7 @@ use std::path::Path;
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{
-    GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+    ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
 };
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{

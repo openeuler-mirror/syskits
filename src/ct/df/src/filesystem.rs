@@ -16,10 +16,10 @@
 
 use std::path::Path;
 
-#[cfg(unix)]
-use ctcore::ct_fsext::statfs;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::FsUsage;
+#[cfg(unix)]
+use ctcore::ct_fsext::statfs;
 
 /// 文件系统的基本表示。
 ///

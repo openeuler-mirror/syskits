@@ -12,7 +12,7 @@
 //! Common functions to manage permissions
 
 use crate::ct_display::Quotable;
-use crate::ct_error::{strip_errno, CTResult, CtSimpleError};
+use crate::ct_error::{CTResult, CtSimpleError, strip_errno};
 pub use crate::ct_features::ct_entries;
 use crate::ct_show_error;
 use clap::{Arg, ArgMatches, Command};
@@ -27,7 +27,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, MAIN_SEPARATOR_STR};
+use std::path::{MAIN_SEPARATOR_STR, Path};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]

@@ -11,9 +11,9 @@
 
 use platform_info::*;
 
+use clap::Command;
 #[warn(unused_imports)]
 use clap::crate_version;
-use clap::Command;
 
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;

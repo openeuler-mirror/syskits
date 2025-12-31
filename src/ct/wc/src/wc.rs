@@ -11,7 +11,7 @@
  */
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::borrow::{Borrow, Cow};
 use std::cmp::max;
 use std::ffi::OsString;
@@ -23,7 +23,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_error::{CTError, CTResult, FromIo};
-use ctcore::ct_quoting_style::{escape_name, CtQuotingStyle};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_show;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 
@@ -839,7 +839,9 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
             let _ =
                 print_stats(settings, &word_count, maybe_title_str, number_width).map_err(|err| {
                     let title = maybe_title_str.unwrap_or("<stdin>");
-                    ct_show!(err.map_err_context(|| format!("failed to print result for {}", title)))
+                    ct_show!(
+                        err.map_err_context(|| format!("failed to print result for {}", title))
+                    )
                 });
         }
     }
@@ -891,10 +893,10 @@ mod tests {
     use std::io::Write;
     use std::path::PathBuf;
 
-    use clap::error::ErrorKind;
     use clap::ArgMatches;
-    use tempfile::tempfile;
+    use clap::error::ErrorKind;
     use tempfile::NamedTempFile;
+    use tempfile::tempfile;
 
     use super::*;
 

@@ -12,7 +12,7 @@
 //! uname 是一个 Linux 系统命令，用于显示系统的基本信息。
 //! 它提供了关于操作系统的内核名称、版本、主机名、硬件平台（体系结构）和操作系统发行版等信息。
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use platform_info::*;
 
 use ctcore::{

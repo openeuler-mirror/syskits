@@ -12,14 +12,14 @@
 
 // 在GNU/Linux系统中，nice命令的主要作用是调整程序的执行优先级，从而影响其对CPU资源的访问
 
-use libc::{c_char, c_int, execvp, PRIO_PROCESS};
+use libc::{PRIO_PROCESS, c_char, c_int, execvp};
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::{
-    ct_error::{set_ct_exit_code, CTResult, CTsageError, CtSimpleError, UClapError},
+    ct_error::{CTResult, CTsageError, CtSimpleError, UClapError, set_ct_exit_code},
     ct_format_usage, ct_help_about, ct_help_usage, ct_show_error,
 };
 
@@ -231,7 +231,7 @@ fn nice_adjustment(args_match: &ArgMatches, nice_ness: &mut c_int) -> Result<i32
                     return Err(Err(CtSimpleError::new(
                         125,
                         format!("\"{n_str}\" is not a valid number: {e}"),
-                    )))
+                    )));
                 }
             }
         }

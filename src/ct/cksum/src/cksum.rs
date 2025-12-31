@@ -11,14 +11,14 @@
  */
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version, value_parser};
 use ctcore::{
     ct_encoding,
     ct_error::{CTError, CTResult, CtSimpleError, FromIo},
     ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show,
     ct_sum::{
-        div_ceil, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224, Sha256,
-        Sha384, Sha512, BSD, SYSV,
+        BSD, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1, Sha224, Sha256,
+        Sha384, Sha512, div_ceil,
     },
 };
 use hex::decode;
@@ -27,7 +27,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 
@@ -164,7 +164,7 @@ struct CksumOptions {
 /// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
 #[allow(clippy::cognitive_complexity)]
 /**
- * 计算文件或标准输入的校验和。
+ *   计算文件或标准输入的校验和。
  *
  * @param mut options 包含校验和计算选项的结构体。
  * @param files 一个迭代器，提供要计算校验和的文件名或“-”表示标准输入。
@@ -2074,7 +2074,6 @@ mod tests {
     #[cfg(test)]
     mod tests_detect_algo {
 
-        use crate::cksum_detect_algo;
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
@@ -2086,6 +2085,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
+        use crate::cksum_detect_algo;
 
         #[test]
         fn test_detect_algo_sysv() {
@@ -2198,7 +2198,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::{cksum, cksum_detect_algo, ct_app, opt_flags, CksumOptions, CksumOutputFormat};
+        use crate::{CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, ct_app, opt_flags};
         use std::ffi::OsStr;
         use std::fs;
         use std::fs::File;

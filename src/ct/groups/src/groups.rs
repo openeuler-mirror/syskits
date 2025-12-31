@@ -14,14 +14,14 @@
 
 use ctcore::{
     ct_display::Quotable,
-    ct_entries::{get_groups_gnu, gid2grp, CtPasswd, Locate},
+    ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp},
     ct_error::{CTError, CTResult},
     ct_format_usage, ct_help_about, ct_help_usage, ct_show,
 };
 use std::error::Error;
 use std::fmt::Display;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 
 mod opt_flags {
     pub const USERS: &str = "USERNAME";

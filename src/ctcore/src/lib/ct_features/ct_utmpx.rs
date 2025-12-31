@@ -227,7 +227,7 @@ impl CtUtmpx {
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
-            use dns_lookup::{getaddrinfo, AddrInfoHints};
+            use dns_lookup::{AddrInfoHints, getaddrinfo};
 
             const AI_CANONNAME: i32 = 0x2;
             let hints = AddrInfoHints {

@@ -13,9 +13,9 @@
 // ! fmt命令可以从指定的文件里面读取内容，并且将其按照指定格式重新编排后，输出到标准输出设备。
 
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
@@ -165,7 +165,10 @@ impl FmtConfigs {
             (None, None) => (FMT_DEFAULT_WIDTH, FMT_DEFAULT_GOAL),
         };
 
-        debug_assert!(width >= goal, "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}.");
+        debug_assert!(
+            width >= goal,
+            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
+        );
 
         if width > FMT_MAX_WIDTH {
             return Err(CtSimpleError::new(
@@ -4264,8 +4267,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_long_with_record_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_long_with_record_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -4589,8 +4592,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_group_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_group_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -4663,8 +4666,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_record_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_record_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -5732,8 +5735,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_group_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_group_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -5806,8 +5809,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_record_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_record_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -6083,8 +6086,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_group_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_group_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -6114,8 +6117,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_unit_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_unit_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -6145,8 +6148,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_record_separator(
-        ) {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_record_separator()
+         {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");

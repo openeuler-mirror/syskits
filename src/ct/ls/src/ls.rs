@@ -14,7 +14,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
-use std::io::{stdout, BufWriter, ErrorKind, Write};
+use std::io::{BufWriter, ErrorKind, Write, stdout};
 #[cfg(windows)]
 #[allow(unused_imports)]
 use std::os::windows::fs::MetadataExt;
@@ -34,7 +34,7 @@ use std::time::Duration;
 use std::{collections::HashSet, io::IsTerminal};
 
 use clap::builder::{NonEmptyStringValueParser, ValueParser};
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use glob::{MatchOptions, Pattern};
 use lscolors::{LsColors, Style};
 use number_prefix::NumberPrefix;
@@ -44,9 +44,9 @@ use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_size::parse_size_u64;
@@ -59,12 +59,12 @@ use ctcore::{ct_parse_glob, ct_show, ct_show_error, ct_show_warning};
 use ctcore::ct_entries;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_quoting_style;
-use ctcore::ct_quoting_style::escape_name;
 use ctcore::ct_quoting_style::CtQuotingStyle;
-#[cfg(target_os = "linux")]
-use ctcore::libc::{dev_t, major, minor};
+use ctcore::ct_quoting_style::escape_name;
 #[cfg(unix)]
 use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+#[cfg(target_os = "linux")]
+use ctcore::libc::{dev_t, major, minor};
 use dired::DiredOutput;
 
 mod dired;
@@ -214,11 +214,11 @@ impl Display for LsError {
             }
             LsError::LsTimeStyleParseError(s, possible_time_styles) => {
                 write!(
-                     formatter,
-                     "invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help",
-                     s.quote(),
-                     possible_time_styles
-                 )
+                    formatter,
+                    "invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help",
+                    s.quote(),
+                    possible_time_styles
+                )
             }
             LsError::LsInvalidLineWidth(s) => {
                 write!(formatter, "invalid line width: {}", s.quote())
@@ -3054,11 +3054,7 @@ fn display_len_or_rdev(mdata: &Metadata, config: &LsConfig) -> SizeOrDeviceId {
     let len_adjusted = {
         let d = mdata.len() / config.file_size_block_size;
         let r = mdata.len() % config.file_size_block_size;
-        if r == 0 {
-            d
-        } else {
-            d + 1
-        }
+        if r == 0 { d } else { d + 1 }
     };
     SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }
@@ -3120,7 +3116,7 @@ fn classify_file<W: Write>(path: &PathData, out: &mut W) -> Option<char> {
 /// * `config.color`使用[`color_name`]决定是否给`name`着色。
 /// * `config.indicator_style`使用[`classify_file`]为`name`添加特定字符。
 /// * `config.format` 用于在 `Format::Long` 时显示符号链接目标。此函数还
-/// 如果指定了 `config.color` 则负责给符号链接目标名称着色。
+///   如果指定了 `config.color` 则负责给符号链接目标名称着色。
 /// * `config.context`用于在使用`feat_selinux`编译时将安全上下文预输入`name`。
 /// * `config.hyperlink`决定是否超链接项目。
 ///
@@ -3556,7 +3552,7 @@ mod tests {
         use chrono::DateTime;
         use chrono::Local;
         use tempfile::NamedTempFile;
-        use tempfile::{tempdir, TempDir};
+        use tempfile::{TempDir, tempdir};
         use users::get_user_by_uid;
 
         use super::*;
@@ -5643,8 +5639,8 @@ mod tests {
         }
 
         #[test]
-        fn test_display_item_quoting_style_shell_escape_false_always_quote_false_show_control_false(
-        ) {
+        fn test_display_item_quoting_style_shell_escape_false_always_quote_false_show_control_false()
+         {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("File1");
             let mut file = File::create(&file_path).unwrap();
@@ -5954,42 +5950,6 @@ mod tests {
 
             let block_size = get_block_size(&metadata, &config);
             assert_eq!(block_size, metadata.len()); // Expecting file length as block size
-        }
-
-        #[test]
-        #[cfg(unix)]
-        fn test_unix_block_device_block_size() {
-            // 定义一个常见块设备路径列表
-            let block_devices = vec![
-                "/dev/sda",
-                "/dev/vda",   // 常见的虚拟磁盘设备
-                "/dev/xvda",  // Xen 虚拟磁盘
-                "/dev/loop0", // Loop 设备
-            ];
-
-            // 尝试找到一个可用的块设备
-            let metadata = block_devices
-                .iter()
-                .find_map(|device| fs::metadata(device).ok());
-
-            // 如果没有找到任何可用的块设备，则跳过测试
-            let metadata = match metadata {
-                Some(meta) => meta,
-                None => {
-                    println!("Skipping test: no suitable block device found");
-                    return;
-                }
-            };
-
-            let mut config = setup_default_config();
-            config.size_format = LsSizeFormat::Binary;
-            config.block_size = 512;
-
-            let block_size = get_block_size(&metadata, &config);
-
-            // 检查块大小计算是否符合预期
-            // 注意：不同的设备可能会返回不同的值，所以我们只检查返回值是否合理
-            assert!(block_size >= 0, "Block size should be non-negative");
         }
 
         #[test]
@@ -6864,8 +6824,8 @@ mod tests {
         }
 
         #[test]
-        fn test_list_directory_true_recursive_false_dired_false_hyperlink_false_quoting_style_literal(
-        ) {
+        fn test_list_directory_true_recursive_false_dired_false_hyperlink_false_quoting_style_literal()
+         {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("test_file.txt");
             File::create(&file_path).unwrap();
@@ -6883,8 +6843,8 @@ mod tests {
         }
 
         #[test]
-        fn test_list_directory_false_recursive_false_dired_false_hyperlink_false_quoting_style_literal(
-        ) {
+        fn test_list_directory_false_recursive_false_dired_false_hyperlink_false_quoting_style_literal()
+         {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("test_file.txt");
             File::create(&file_path).unwrap();
@@ -6902,8 +6862,8 @@ mod tests {
         }
 
         #[test]
-        fn test_list_directory_true_recursive_true_dired_false_hyperlink_false_quoting_style_literal(
-        ) {
+        fn test_list_directory_true_recursive_true_dired_false_hyperlink_false_quoting_style_literal()
+         {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("test_file.txt");
             File::create(&file_path).unwrap();
@@ -6921,8 +6881,8 @@ mod tests {
         }
 
         #[test]
-        fn test_list_directory_true_recursive_true_dired_true_hyperlink_false_quoting_style_literal(
-        ) {
+        fn test_list_directory_true_recursive_true_dired_true_hyperlink_false_quoting_style_literal()
+         {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("test_file.txt");
             File::create(&file_path).unwrap();
@@ -8613,13 +8573,13 @@ mod tests {
 
                 assert_eq!(config.width, 80);
 
-                std::env::set_var("COLUMNS", "60");
+                unsafe { std::env::set_var("COLUMNS", "60") };
                 let command2 = ct_app();
                 let args2 = vec![ctcore::ct_util_name()];
                 let matches = command2.try_get_matches_from(args2).unwrap();
                 let config = LsConfig::from(&matches).unwrap();
                 assert_eq!(config.width, 60);
-                std::env::remove_var("COLUMNS");
+                unsafe { std::env::remove_var("COLUMNS") };
             }
         }
 
@@ -10007,7 +9967,7 @@ mod tests {
             let command = get_quoting_test_command();
 
             // Set the QUOTING_STYLE environment variable
-            std::env::set_var("QUOTING_STYLE", "shell-escape");
+            unsafe { std::env::set_var("QUOTING_STYLE", "shell-escape") };
 
             let args = vec!["quotingtest", "--quoting-style=shell-escape"];
             let matches = command.try_get_matches_from(args).unwrap();
@@ -10024,7 +9984,7 @@ mod tests {
             );
 
             // Clear the environment variable after the test
-            std::env::remove_var("QUOTING_STYLE");
+            unsafe { std::env::remove_var("QUOTING_STYLE") };
         }
 
         #[test]
@@ -10032,7 +9992,7 @@ mod tests {
             let command = get_quoting_test_command();
 
             // Set the QUOTING_STYLE environment variable with an invalid value
-            std::env::set_var("QUOTING_STYLE", "invalid_style");
+            unsafe { std::env::set_var("QUOTING_STYLE", "invalid_style") };
 
             let args = vec!["quotingtest"];
             let matches = command.try_get_matches_from(args).unwrap();
@@ -10041,7 +10001,7 @@ mod tests {
             // The function should print an error message and fallback to the default style
 
             // Clear the environment variable after the test
-            std::env::remove_var("QUOTING_STYLE");
+            unsafe { std::env::remove_var("QUOTING_STYLE") };
         }
 
         #[test]
@@ -10236,9 +10196,9 @@ mod tests {
             let mut buffer = String::new();
             write!(buffer, "{}", error).unwrap();
             assert_eq!(
-                 "invalid --time-style argument 'custom'\nPossible values are: [\"default\", \"long\", \"full\"]\n\nFor more information try --help",
-                 buffer
-             );
+                "invalid --time-style argument 'custom'\nPossible values are: [\"default\", \"long\", \"full\"]\n\nFor more information try --help",
+                buffer
+            );
         }
 
         #[test]
@@ -10437,56 +10397,60 @@ mod tests {
         fn test_is_color_compatible_term() {
             // Test case 1: TERM and COLORTERM are not set
             {
-                std::env::remove_var("TERM");
-                std::env::remove_var("COLORTERM");
+                unsafe { std::env::remove_var("TERM") };
+                unsafe { std::env::remove_var("COLORTERM") };
 
                 assert!(is_color_compatible_term());
             }
 
             // Test case 2: TERM is set but empty
             {
-                std::env::set_var("TERM", "");
-                std::env::remove_var("COLORTERM");
+                unsafe { std::env::set_var("TERM", "") };
+                unsafe { std::env::remove_var("COLORTERM") };
 
                 assert!(is_color_compatible_term());
             }
 
             // Test case 3: TERM is set and non-empty, but does not match
             {
-                std::env::set_var("TERM", "xterm");
-                std::env::remove_var("COLORTERM");
+                unsafe { std::env::set_var("TERM", "xterm") };
+                unsafe { std::env::remove_var("COLORTERM") };
 
                 assert!(is_color_compatible_term());
             }
 
             // Test case 4: TERM is set and non-empty, and matches
             {
-                std::env::set_var("TERM", "xterm-color");
-                std::env::remove_var("COLORTERM");
+                unsafe { std::env::set_var("TERM", "xterm-color") };
+                unsafe { std::env::remove_var("COLORTERM") };
 
                 assert!(is_color_compatible_term());
             }
 
             // Test case 5: TERM is set and non-empty, and matches with wildcard
             {
-                std::env::set_var("TERM", "xterm-256color");
-                std::env::remove_var("COLORTERM");
+                unsafe { std::env::set_var("TERM", "xterm-256color") };
+                unsafe { std::env::remove_var("COLORTERM") };
 
                 assert!(is_color_compatible_term());
             }
 
             // Test case 6: TERM and COLORTERM are set and non-empty, but TERM does not match
             {
-                std::env::set_var("TERM", "vt100");
-                std::env::set_var("COLORTERM", "truecolor");
+                unsafe { std::env::set_var("TERM", "vt100") };
+                unsafe { std::env::set_var("COLORTERM", "truecolor") };
 
                 assert!(is_color_compatible_term());
             }
 
             // Test case 7: TERM and COLORTERM are set and non-empty, and TERM matches
             {
-                std::env::set_var("TERM", "screen");
-                std::env::set_var("COLORTERM", "truecolor");
+                unsafe {
+                    std::env::set_var("TERM", "screen");
+                }
+                unsafe {
+                    std::env::set_var("COLORTERM", "truecolor");
+                }
 
                 assert!(is_color_compatible_term());
             }
@@ -14248,9 +14212,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-o"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::format::LS_LONG_NO_GROUP));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::format::LS_LONG_NO_GROUP)
+            );
         }
 
         #[test]
@@ -14259,9 +14225,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-g"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::format::LS_LONG_NO_OWNER));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::format::LS_LONG_NO_OWNER)
+            );
         }
 
         #[test]
@@ -14282,9 +14250,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-n"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::format::LS_LONG_NUMERIC_UID_GID));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::format::LS_LONG_NUMERIC_UID_GID)
+            );
         }
 
         #[test]
@@ -14293,9 +14263,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--numeric-uid-gid"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::format::LS_LONG_NUMERIC_UID_GID));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::format::LS_LONG_NUMERIC_UID_GID)
+            );
         }
 
         #[test]
@@ -14424,9 +14396,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-q"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::LS_HIDE_CONTROL_CHARS));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::LS_HIDE_CONTROL_CHARS)
+            );
         }
 
         #[test]
@@ -14435,9 +14409,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--hide-control-chars"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::LS_HIDE_CONTROL_CHARS));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::LS_HIDE_CONTROL_CHARS)
+            );
         }
 
         #[test]
@@ -14446,9 +14422,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--show-control-chars"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::LS_SHOW_CONTROL_CHARS));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::LS_SHOW_CONTROL_CHARS)
+            );
         }
 
         #[test]
@@ -14730,9 +14708,11 @@ mod tests {
             ];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::dereference::LS_DIR_ARGS));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::dereference::LS_DIR_ARGS)
+            );
         }
 
         #[test]
@@ -14840,9 +14820,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-h"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::size::LS_HUMAN_READABLE));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::size::LS_HUMAN_READABLE)
+            );
         }
 
         #[test]
@@ -14851,9 +14833,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--human-readable"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::size::LS_HUMAN_READABLE));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::size::LS_HUMAN_READABLE)
+            );
         }
 
         #[test]
@@ -15002,9 +14986,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-s"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::size::LS_ALLOCATION_SIZE));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::size::LS_ALLOCATION_SIZE)
+            );
         }
 
         #[test]
@@ -15013,9 +14999,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--size"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::size::LS_ALLOCATION_SIZE));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::size::LS_ALLOCATION_SIZE)
+            );
         }
 
         #[test]
@@ -15159,9 +15147,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-F"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15170,9 +15160,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15181,9 +15173,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=none"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15192,9 +15186,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=no"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15203,9 +15199,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=never"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15214,9 +15212,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=if-tty"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15225,9 +15225,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=tty"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15236,9 +15238,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=auto"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15247,9 +15251,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=force"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15258,9 +15264,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=yes"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15269,9 +15277,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--classify=always"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_CLASSIFY));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_CLASSIFY)
+            );
         }
 
         #[test]
@@ -15280,9 +15290,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--file-type"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_FILE_TYPE));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_FILE_TYPE)
+            );
         }
 
         #[test]
@@ -15291,9 +15303,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-p"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::indicator_style::LS_SLASH));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::indicator_style::LS_SLASH)
+            );
         }
 
         #[test]
@@ -15374,9 +15388,11 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--group-directories-first"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            assert!(matches
-                .unwrap()
-                .contains_id(ls_flags::LS_GROUP_DIRECTORIES_FIRST));
+            assert!(
+                matches
+                    .unwrap()
+                    .contains_id(ls_flags::LS_GROUP_DIRECTORIES_FIRST)
+            );
         }
 
         #[test]

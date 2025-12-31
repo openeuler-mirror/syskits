@@ -11,8 +11,8 @@
 
 //! tty 命令行工具，用于打印当前终端设备的文件名
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use ctcore::ct_error::{set_ct_exit_code, CTResult};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::io::{IsTerminal, Write};
 

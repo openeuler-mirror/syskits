@@ -24,3 +24,7 @@ tempfile = { workspace = true }
 [[bin]]
 name = "dir"
 path = "src/main.rs"
+
+# [features]
+# feat_selinux = ["selinux"]
+# feat_acl = ["exacl"]

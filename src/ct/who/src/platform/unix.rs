@@ -18,8 +18,8 @@ use std::path::PathBuf;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::ct_utmpx::{self, time, CtUtmpx};
-use ctcore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
+use ctcore::ct_utmpx::{self, CtUtmpx, time};
+use ctcore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 
 use crate::ct_app;
 use crate::who_flags;

@@ -450,7 +450,7 @@ impl ParseSizeError {
 mod tests {
     use super::*;
 
-    use crate::ct_parse_size::{parse_size_u128, parse_size_u64, CtParser, ParseSizeError};
+    use crate::ct_parse_size::{CtParser, ParseSizeError, parse_size_u64, parse_size_u128};
 
 
      #[test]
@@ -618,7 +618,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn test_base_overflow_x64() {
         assert!(parse_size_u64("10000000000000000000000").is_err());
         assert!(parse_size_u64("1000000000T").is_err());
@@ -649,7 +648,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn test_base_overflow_to_max_u64() {
         assert_eq!(parse_size_u64_max("1Y"), Ok(u64::MAX));
 
@@ -663,7 +661,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn test_base_overflow_to_max_u128() {
         assert_eq!(
             parse_size_u128_max("10R"),

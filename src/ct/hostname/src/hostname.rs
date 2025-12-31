@@ -43,7 +43,7 @@ static OPT_HOST: &str = "host";
 mod wsa {
     use std::io;
 
-    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSAStartup, WSADATA};
+    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSADATA, WSAStartup};
 
     pub(super) struct WsaHandle(());
 
@@ -201,7 +201,7 @@ fn hostname_display(args_match: &ArgMatches) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     mod tests_ct_app {
-        use crate::{ct_app, OPT_DOMAIN, OPT_FQDN, OPT_HOST, OPT_IP_ADDRESS, OPT_SHORT};
+        use crate::{OPT_DOMAIN, OPT_FQDN, OPT_HOST, OPT_IP_ADDRESS, OPT_SHORT, ct_app};
         use clap::error::ErrorKind;
 
         #[test]

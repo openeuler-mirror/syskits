@@ -80,7 +80,7 @@ pub struct FmtFileLines<'a> {
     lines: Lines<&'a mut FmtFileOrStdReader>,
 }
 
-impl<'a> FmtFileLines<'a> {
+impl FmtFileLines<'_> {
     fn new<'b>(opts: &'b FmtConfigs, lines: Lines<&'b mut FmtFileOrStdReader>) -> FmtFileLines<'b> {
         FmtFileLines { opts, lines }
     }
@@ -150,7 +150,7 @@ impl<'a> FmtFileLines<'a> {
     }
 }
 
-impl<'a> Iterator for FmtFileLines<'a> {
+impl Iterator for FmtFileLines<'_> {
     type Item = FmtLine;
 
     fn next(&mut self) -> Option<FmtLine> {
@@ -232,7 +232,7 @@ pub struct FmtParagraphStream<'a> {
     opts: &'a FmtConfigs,
 }
 
-impl<'a> FmtParagraphStream<'a> {
+impl FmtParagraphStream<'_> {
     pub fn new<'b>(
         opts: &'b FmtConfigs,
         reader: &'b mut FmtFileOrStdReader,
@@ -276,7 +276,7 @@ impl<'a> FmtParagraphStream<'a> {
     }
 }
 
-impl<'a> Iterator for FmtParagraphStream<'a> {
+impl Iterator for FmtParagraphStream<'_> {
     type Item = Result<FmtParagraph, String>;
 
     #[allow(clippy::cognitive_complexity)]
@@ -489,7 +489,7 @@ struct FmtWordSplit<'a> {
     is_prev_punct: bool,
 }
 
-impl<'a> FmtWordSplit<'a> {
+impl FmtWordSplit<'_> {
     fn analyze_tabs(&self, string: &str) -> (Option<usize>, usize, Option<usize>) {
         // 给定一个字符串，确定（制表符前的长度）和（第一个制表符后的打印长度）
         // 如果没有制表符，则 beforetab =-1，aftertab 为打印长度
@@ -515,7 +515,7 @@ impl<'a> FmtWordSplit<'a> {
     }
 }
 
-impl<'a> FmtWordSplit<'a> {
+impl FmtWordSplit<'_> {
     fn new<'b>(fmt_opts: &'b FmtConfigs, string: &'b str) -> FmtWordSplit<'b> {
         // 分词 *must* 以非空格字符开始
         let trim_string = string.trim_start();

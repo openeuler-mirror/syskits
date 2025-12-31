@@ -12,13 +12,13 @@
 
 // nohup命令的作用是在Unix/Linux系统中允许一个命令在用户退出终端后继续在后台运行
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, UClapError};
+use ctcore::ct_error::{CTError, CTResult, UClapError, set_ct_exit_code};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
 
+use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
-use libc::{SIGHUP, SIG_IGN};
 
 use std::env;
 use std::ffi::CString;

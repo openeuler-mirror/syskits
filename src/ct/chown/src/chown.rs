@@ -12,12 +12,12 @@
 
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
-use ctcore::ct_perms::{chown_base, opt_flags, CtGidUidOwnerFilter, CtIfFrom};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -432,10 +432,14 @@ mod test {
         assert!(matches!(chown_parse_spec(":", ':'), Ok((None, None))));
         assert!(matches!(chown_parse_spec(".", ':'), Ok((None, None))));
         assert!(matches!(chown_parse_spec(".", '.'), Ok((None, None))));
-        assert!(format!("{}", chown_parse_spec("::", ':').err().unwrap())
-            .starts_with("invalid group: "));
-        assert!(format!("{}", chown_parse_spec("..", ':').err().unwrap())
-            .starts_with("invalid group: "));
+        assert!(
+            format!("{}", chown_parse_spec("::", ':').err().unwrap())
+                .starts_with("invalid group: ")
+        );
+        assert!(
+            format!("{}", chown_parse_spec("..", ':').err().unwrap())
+                .starts_with("invalid group: ")
+        );
     }
 
     /// Test for parsing IDs that don't correspond to a named user or group.
@@ -855,7 +859,7 @@ mod test {
 
         let result = ctmain(args.iter().map(|s| OsString::from(s)));
         assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
-                               // Remove the directory hierarchy
+        // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
     #[test]
@@ -887,7 +891,7 @@ mod test {
 
         let result = ctmain(args.iter().map(|s| OsString::from(s)));
         assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
-                               // Remove the directory hierarchy
+        // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
 }

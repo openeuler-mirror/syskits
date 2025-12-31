@@ -12,9 +12,9 @@
 //! rmdir命令在Linux和其他类Unix系统中用于删除空目录, 如果目录非空，rmdir命令将会失败.
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, strip_errno, CTResult};
+use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
@@ -250,8 +250,8 @@ mod tests {
     #[cfg(test)]
     mod remove_empty_tests {
         use super::*;
-        use std::fs::{self, create_dir, File};
-        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::fs::{self, File, create_dir};
+        use std::os::unix::fs::{PermissionsExt, symlink};
         use tempfile::TempDir;
 
         #[test]
@@ -431,8 +431,8 @@ mod tests {
     mod remove_tests {
         use super::*;
         use std::fs;
-        use std::fs::{create_dir, create_dir_all, File};
-        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::fs::{File, create_dir, create_dir_all};
+        use std::os::unix::fs::{PermissionsExt, symlink};
         use std::path::PathBuf;
         use tempfile::TempDir;
 

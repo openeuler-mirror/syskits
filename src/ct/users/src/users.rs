@@ -17,7 +17,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, crate_version};
 
 use ctcore::ct_error::CTResult;
 use ctcore::ct_utmpx::{self, CtUtmpx};

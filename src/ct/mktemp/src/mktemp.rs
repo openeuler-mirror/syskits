@@ -19,13 +19,13 @@ use std::io::ErrorKind;
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
 use rand::Rng;
 use tempfile::Builder;
 
-use ctcore::ct_display::{ct_println_verbatim, Quotable};
+use ctcore::ct_display::{Quotable, ct_println_verbatim};
 use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 
@@ -690,7 +690,7 @@ mod tests {
 
             // test_options_from_with_environment_tmpdir
             {
-                std::env::set_var("TMPDIR", "/custom/env_tmpdir");
+                unsafe { std::env::set_var("TMPDIR", "/custom/env_tmpdir") };
                 let matches = get_matches_from(&[ctcore::ct_util_name(), "-t"]);
                 let options = MkTempFlags::from(&matches);
                 assert_eq!(options.is_directory, false);
@@ -700,24 +700,24 @@ mod tests {
                 assert_eq!(options.suffix, None);
                 assert_eq!(options.is_treat_as_template, true);
                 assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
-                std::env::remove_var("TMPDIR");
+                unsafe { std::env::remove_var("TMPDIR") };
             }
 
             // fn test_params_from_with_env_var_tmpdir()
             {
-                std::env::set_var("TMPDIR", "/custom/env_tmpdir");
+                unsafe { std::env::set_var("TMPDIR", "/custom/env_tmpdir") };
                 let options = create_options(false, false, false, None, None, true, "test.XXXXXX");
                 let params = MkTempParams::from(options).expect("Failed to create Params");
                 assert_eq!(params.directory, PathBuf::from(""));
                 assert_eq!(params.prefix, "test.");
                 assert_eq!(params.rand_num_chars, 6);
                 assert_eq!(params.suffix, "");
-                std::env::remove_var("TMPDIR");
+                unsafe { std::env::remove_var("TMPDIR") };
             }
 
             // fn test_exec_with_environment_tmpdir()
             {
-                std::env::set_var("TMPDIR", "/custom/tmpdir");
+                unsafe { std::env::set_var("TMPDIR", "/custom/tmpdir") };
                 let tmpdir = PathBuf::from("/custom/tmpdir");
                 fs::create_dir_all(&tmpdir).expect("Failed to create custom tmpdir");
                 let prefix = "testfile";
@@ -730,7 +730,7 @@ mod tests {
                 assert!(result.starts_with(&tmpdir));
                 fs::remove_file(&result).expect("Failed to clean up temp file");
                 // fs::remove_dir_all(tmpdir).expect("Failed to clean up custom tmpdir");
-                std::env::remove_var("TMPDIR");
+                unsafe { std::env::remove_var("TMPDIR") };
             }
         }
 
@@ -1028,7 +1028,10 @@ mod tests {
             );
             let result = MkTempParams::from(options);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().to_string(), "invalid template, '/absolute/template.XXXXXX'; with --tmpdir, it may not be absolute");
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "invalid template, '/absolute/template.XXXXXX'; with --tmpdir, it may not be absolute"
+            );
         }
 
         #[test]
@@ -1576,10 +1579,12 @@ mod tests {
             let result = mktemp_dir(&tmpdir, &prefix, rand, suffix);
 
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("aaaaaaaaaaaaaaaaa"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("aaaaaaaaaaaaaaaaa")
+            );
         }
 
         #[test]
@@ -1632,10 +1637,12 @@ mod tests {
             let suffix = ".d";
             let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("No such file or directory"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("No such file or directory")
+            );
         }
 
         #[test]
@@ -1662,7 +1669,7 @@ mod tests {
             let prefix = "testdir3";
             let rand = 0;
             let suffix = ".d";
-            let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
+            let _result = mktemp_dir(&tmpdir, prefix, rand, suffix);
             // assert!(result.is_err());
             // fs::remove_dir_all(result.unwrap()).expect("Failed to clean up temp directory");
             // fs::remove_dir_all(tmpdir).expect("Failed to clean up relative tmpdir");
@@ -1676,10 +1683,12 @@ mod tests {
             let suffix = ".d";
             let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("failed to create directory via template"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("failed to create directory via template")
+            );
         }
 
         #[test]
@@ -1690,10 +1699,12 @@ mod tests {
             let rand = 6;
             let result = mktemp_dir(&tmpdir, prefix, rand, suffix);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("failed to create directory via template"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("failed to create directory via template")
+            );
         }
 
         #[test]
@@ -1749,10 +1760,12 @@ mod tests {
             let suffix = ".tmp";
             let result = mktemp_file(&tmpdir, &prefix, rand, suffix);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("File name too long"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("File name too long")
+            );
         }
 
         #[test]
@@ -1763,10 +1776,12 @@ mod tests {
             let rand = 6;
             let result = mktemp_file(&tmpdir, prefix, rand, suffix);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("File name too long"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("File name too long")
+            );
         }
 
         #[test]
@@ -1807,10 +1822,12 @@ mod tests {
             let suffix = ".tmp";
             let result = mktemp_file(&tmpdir, prefix, rand, suffix);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("failed to create file via template"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("failed to create file via template")
+            );
         }
 
         #[test]
@@ -1850,10 +1867,12 @@ mod tests {
                 .expect("Failed to create temp file");
             assert!(result.exists());
             assert!(result.is_file());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             assert!(result.to_str().unwrap().contains(prefix));
             assert!(result.to_str().unwrap().ends_with(suffix));
             fs::remove_file(result).expect("Failed to clean up temp file");
@@ -1869,10 +1888,12 @@ mod tests {
                 .expect("Failed to create temp directory");
             assert!(result.exists());
             assert!(result.is_dir());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             assert!(result.to_str().unwrap().contains(prefix));
             assert!(result.to_str().unwrap().ends_with(suffix));
             fs::remove_dir_all(result).expect("Failed to clean up temp directory");
@@ -1886,10 +1907,12 @@ mod tests {
             let rand = 6;
             let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("No such file or directory"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("No such file or directory")
+            );
         }
 
         #[test]
@@ -1912,10 +1935,12 @@ mod tests {
             let rand = 6;
             let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("No such file or directory"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("No such file or directory")
+            );
         }
 
         #[test]
@@ -1928,10 +1953,12 @@ mod tests {
                 .expect("Failed to create temp file with special characters");
             assert!(result.exists());
             assert!(result.is_file());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             assert!(result.to_str().unwrap().contains(prefix));
             assert!(result.to_str().unwrap().ends_with(suffix));
             fs::remove_file(result).expect("Failed to clean up temp file");
@@ -1947,10 +1974,12 @@ mod tests {
                 .expect("Failed to create temp directory with special characters");
             assert!(result.exists());
             assert!(result.is_dir());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             assert!(result.to_str().unwrap().contains(prefix));
             assert!(result.to_str().unwrap().ends_with(suffix));
             fs::remove_dir_all(result).expect("Failed to clean up temp directory");
@@ -1965,10 +1994,12 @@ mod tests {
             let result = mktemp_exec(&tmpdir, &prefix, rand, suffix, false);
 
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("File name too long"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("File name too long")
+            );
         }
 
         #[test]
@@ -1980,10 +2011,12 @@ mod tests {
             let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false);
 
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("File name too long"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("File name too long")
+            );
         }
 
         #[test]
@@ -1996,10 +2029,12 @@ mod tests {
                 .expect("Failed to create temp file with empty prefix and suffix");
             assert!(result.exists());
             assert!(result.is_file());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             fs::remove_file(result).expect("Failed to clean up temp file");
         }
 
@@ -2013,10 +2048,12 @@ mod tests {
                 .expect("Failed to create temp directory with empty prefix and suffix");
             assert!(result.exists());
             assert!(result.is_dir());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             fs::remove_dir_all(result).expect("Failed to clean up temp directory");
         }
 
@@ -2030,10 +2067,12 @@ mod tests {
                 .expect("Failed to create temp file with default template");
             assert!(result.exists());
             assert!(result.is_file());
-            assert!(result
-                .to_str()
-                .unwrap()
-                .starts_with(tmpdir.to_str().unwrap()));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .starts_with(tmpdir.to_str().unwrap())
+            );
             assert!(result.to_str().unwrap().contains("tmp."));
             fs::remove_file(result).expect("Failed to clean up temp file");
         }
@@ -2046,10 +2085,12 @@ mod tests {
             let rand = 6;
             let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("failed to create file via template"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("failed to create file via template")
+            );
         }
 
         #[test]
@@ -2060,10 +2101,12 @@ mod tests {
             let rand = 6;
             let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false);
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("failed to create file via template"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("failed to create file via template")
+            );
         }
 
         #[test]
@@ -2309,7 +2352,10 @@ mod tests {
             );
             let result = mktemp(&options);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().to_string(), "failed to create file via template '/absolute/template.XXXXXX': No such file or directory");
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "failed to create file via template '/absolute/template.XXXXXX': No such file or directory"
+            );
         }
     }
     #[cfg(test)]

@@ -14,7 +14,7 @@
 use std::thread;
 use std::time::Duration;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use fundu::{DurationParser, ParseError, SaturatingInto};
 
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
@@ -121,10 +121,12 @@ pub fn ct_app() -> Command {
     let command_version = crate_version!();
     let application_info = SLEEP_ABOUT;
     let usage_description = ct_format_usage(SLEEP_USAGE);
-    let args = vec![Arg::new(sleep_flags::SLEEP_NUMBER)
-        .help("pause for NUMBER seconds")
-        .value_name(sleep_flags::SLEEP_NUMBER)
-        .action(ArgAction::Append)];
+    let args = vec![
+        Arg::new(sleep_flags::SLEEP_NUMBER)
+            .help("pause for NUMBER seconds")
+            .value_name(sleep_flags::SLEEP_NUMBER)
+            .action(ArgAction::Append),
+    ];
 
     Command::new(utility_name)
         .version(command_version)

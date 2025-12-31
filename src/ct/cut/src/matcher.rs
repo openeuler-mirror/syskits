@@ -34,7 +34,7 @@ impl<'a> ExactMatcher<'a> {
 }
 
 // 实现Matcher接口，用于精确匹配。
-impl<'a> Matcher for ExactMatcher<'a> {
+impl Matcher for ExactMatcher<'_> {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
         let mut pos = 0usize;
         loop {
@@ -42,7 +42,7 @@ impl<'a> Matcher for ExactMatcher<'a> {
             match memchr(self.needle[0], &haystack[pos..]) {
                 Some(match_idx) => {
                     let match_idx = match_idx + pos; // 考虑到搜索是从pos开始的
-                                                     // 如果needle长度为1，或者haystack的后续部分以needle的剩余部分开始，则找到匹配。
+                    // 如果needle长度为1，或者haystack的后续部分以needle的剩余部分开始，则找到匹配。
                     if self.needle.len() == 1
                         || haystack[match_idx + 1..].starts_with(&self.needle[1..])
                     {

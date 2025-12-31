@@ -32,17 +32,17 @@
 //     可以通过重定向（>）将转换后的输出保存到文件。
 //     可以与其他命令组合，例如 cat file.txt | expand -t 4 | less 会显示制表符被转换为4个空格的文本内容。
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
+use clap::crate_version;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
+use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
 use ctcore::ct_help_usage;
@@ -53,13 +53,13 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 
-use std::io::stdin;
-use std::io::stdout;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
+use std::io::stdin;
+use std::io::stdout;
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -919,8 +919,8 @@ mod tests {
 
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
-            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
-            ExpandParseError, RemainingMode, DEFAULT_TABSTOP,
+            DEFAULT_TABSTOP, ExpandParseError, RemainingMode, expand_next_tabstop, expand_open,
+            expand_shortcuts, expand_tabstops_parse,
         };
 
         use crate::is_digit_or_comma;

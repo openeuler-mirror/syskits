@@ -11,13 +11,13 @@
 
 //! tsort 命令行工具，用于对有依赖关系的项目进行拓扑排序
 
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
-use std::io::{stdin, BufReader, Read};
+use std::io::{BufReader, Read, stdin};
 use std::path::Path;
 
 const TSORT_ABOUT: &str = ct_help_about!("tsort.md");
@@ -390,10 +390,12 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), file_name];
             let result = tsort_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("input contains an odd number of tokens"));
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("input contains an odd number of tokens")
+            );
         }
 
         #[test]

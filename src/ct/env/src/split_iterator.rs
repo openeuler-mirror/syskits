@@ -16,14 +16,14 @@
 //!
 //! [GNU env] <https://www.gnu.org/software/coreutils/manual/html_node/env-invocation.html#g_t_002dS_002f_002d_002dsplit_002dstring-syntax>
 
-#![forbid(unsafe_code)]
+// #![forbid(unsafe_code)]
 
 use std::borrow::Cow;
 
-use crate::native_int_str::from_native_int_representation;
 use crate::native_int_str::NativeCharInt;
 use crate::native_int_str::NativeIntStr;
 use crate::native_int_str::NativeIntString;
+use crate::native_int_str::from_native_int_representation;
 use crate::parse_error::EnvParseError;
 use crate::string_expander::StringExpander;
 use crate::string_parser::StringParser;
@@ -261,7 +261,7 @@ impl<'a> SplitIterator<'a> {
                     return Err(EnvParseError::MissingClosingQuote {
                         pos: self.get_parser().get_peek_position(),
                         c: '\'',
-                    })
+                    });
                 }
                 Some(SPLIT_SINGLE_QUOTES) => {
                     self.skip_one()?;
@@ -312,7 +312,7 @@ impl<'a> SplitIterator<'a> {
                     return Err(EnvParseError::MissingClosingQuote {
                         pos: self.get_parser().get_peek_position(),
                         c: '"',
-                    })
+                    });
                 }
                 Some(SPLIT_DOLLAR) => {
                     self.substitute_variable()?;
@@ -419,7 +419,7 @@ mod tests {
     // Test case 4: string with variable expansion
     #[test]
     fn test_split_variable_expansion() {
-        std::env::set_var("VAR", "value");
+        unsafe { std::env::set_var("VAR", "value") };
         let input4 = NativeIntString::from("hello $VAR");
         let expected4 = vec![
             NativeIntString::from("hello"),
@@ -441,7 +441,7 @@ mod tests {
     fn test_split_quoted_variables() {
         let input6 = NativeIntString::from(r#"hello "world$VAR""#);
         let expected6 = vec![NativeIntString::from(r#"hello "worldvalue""#)];
-        std::env::set_var("VAR", "value");
+        unsafe { std::env::set_var("VAR", "value") };
         assert_ne!(split(&input6).unwrap(), expected6);
     }
 
@@ -450,7 +450,7 @@ mod tests {
     fn test_split_single_quoted_variables() {
         let input7 = NativeIntString::from(r#"hello '\$VAR'"#);
         let expected7 = vec![NativeIntString::from(r#"hello '\$VAR'"#)];
-        std::env::set_var("VAR", "value");
+        unsafe { std::env::set_var("VAR", "value") };
         assert_ne!(split(&input7).unwrap(), expected7);
     }
 

@@ -13,12 +13,12 @@ use ctcore::ct_display::Quotable;
 
 use crate::flags::{NumfmtConfigs, NumfmtRoundMethod, NumfmtTransformOptions};
 use crate::units::DisplayableSuffix;
+use crate::units::NUMFMT_IEC_BASES;
+use crate::units::NUMFMT_SI_BASES;
 use crate::units::NumfmtRawSuffix;
 use crate::units::NumfmtSuffix;
 use crate::units::NumfmtUnit;
 use crate::units::Result;
-use crate::units::NUMFMT_IEC_BASES;
-use crate::units::NUMFMT_SI_BASES;
 
 /// 遍历一行的字段，其中每个字段都是一个连续的非空格序列。
 /// 非空格的连续序列，可选择以一个或多个前导空格字符作为前缀。
@@ -176,11 +176,7 @@ fn numfmt_transform_from(s: &str, numfmt_opts: &NumfmtTransformOptions) -> Resul
     numfmt_remove_suffix(i, suffix, &numfmt_opts.from).map(|number| {
         // 如果用户没有提供 --from 参数，GNU numfmt 不会对数值进行四舍五入。
         if numfmt_opts.from == NumfmtUnit::None {
-            if number == -0.0 {
-                0.0
-            } else {
-                number
-            }
+            if number == -0.0 { 0.0 } else { number }
         } else if number < 0.0 {
             -number.abs().ceil()
         } else {

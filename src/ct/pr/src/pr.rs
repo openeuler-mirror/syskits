@@ -9,16 +9,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::fs::{metadata, File};
-use std::io::{stdin, stdout, BufRead, BufReader, Error, Lines, Read, Write};
+use std::fs::{File, metadata};
+use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use itertools::Itertools;
-use quick_error::quick_error;
 use quick_error::ResultExt;
+use quick_error::quick_error;
 use regex::Regex;
 
 use ctcore::ct_display::Quotable;
@@ -1002,7 +1002,7 @@ fn pr_read_stream_and_create_pages(
                 let current_page = x + 1;
 
                 current_page >= start_page
-                    && last_page.map_or(true, |last_page| current_page <= last_page)
+                    && last_page.is_none_or(|last_page| current_page <= last_page)
             }),
     )
 }
@@ -7243,16 +7243,16 @@ mod tests {
             output_opts.is_double_space = true;
             // output_opts.content_lines_per_page = 20
 
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_output_page(&lines, &output_opts, &mut writer, 1).unwrap();
@@ -7268,16 +7268,16 @@ mod tests {
             output_opts.is_double_space = true;
             output_opts.content_lines_per_page = 20;
 
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_output_page(&lines, &output_opts, &mut writer, 1).unwrap();
@@ -7292,16 +7292,16 @@ mod tests {
             output_opts.is_double_space = true;
             output_opts.content_line_separator = "\n".to_string();
 
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_output_page(&lines, &output_opts, &mut writer, 1).unwrap();
@@ -7317,16 +7317,16 @@ mod tests {
             output_opts.is_double_space = true;
             output_opts.content_lines_per_page = 20;
             output_opts.content_line_separator = "\n".to_string();
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_output_page(&lines, &output_opts, &mut writer, 1).unwrap();
@@ -8004,8 +8004,8 @@ mod tests {
         }
 
         #[test]
-        fn test_output_page_column_mode_options_width_3_columns_3_column_separator_line_across_false(
-        ) {
+        fn test_output_page_column_mode_options_width_3_columns_3_column_separator_line_across_false()
+         {
             let mut output_opts = test_default_pr_output_opts();
             output_opts.column_mode_options = Some(crate::PrColumnModeOptions {
                 width: 3,
@@ -8045,8 +8045,8 @@ mod tests {
         }
 
         #[test]
-        fn test_output_page_column_mode_options_width_3_columns_3_column_separator_line_across_true(
-        ) {
+        fn test_output_page_column_mode_options_width_3_columns_3_column_separator_line_across_true()
+         {
             let mut output_opts = test_default_pr_output_opts();
             output_opts.column_mode_options = Some(crate::PrColumnModeOptions {
                 width: 3,
@@ -8832,16 +8832,16 @@ mod tests {
             output_opts.is_double_space = true;
             // output_opts.content_lines_per_page = 20
 
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_write_columns(&lines, &output_opts, &mut writer).unwrap();
@@ -8857,16 +8857,16 @@ mod tests {
             output_opts.is_double_space = true;
             output_opts.content_lines_per_page = 20;
 
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_write_columns(&lines, &output_opts, &mut writer).unwrap();
@@ -8881,16 +8881,16 @@ mod tests {
             output_opts.is_double_space = true;
             output_opts.content_line_separator = "\n".to_string();
 
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_write_columns(&lines, &output_opts, &mut writer).unwrap();
@@ -8906,16 +8906,16 @@ mod tests {
             output_opts.is_double_space = true;
             output_opts.content_lines_per_page = 20;
             output_opts.content_line_separator = "\n".to_string();
-            let lines = vec![
-                 PrFileLine {
-                     file_id: 1,
-                     line_number: 1,
-                     page_number: 1,
-                     group_key: 1,
-                     line_content: Ok(String::from("Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest")),
-                     form_feeds_after: 0,
-                 }
-             ];
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok(String::from(
+                    "Line 1 test CTyunOS pr lines show, testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+                )),
+                form_feeds_after: 0,
+            }];
 
             let mut writer = Vec::new();
             let result = pr_write_columns(&lines, &output_opts, &mut writer).unwrap();
@@ -9592,8 +9592,8 @@ mod tests {
         }
 
         #[test]
-        fn test_write_column_column_mode_options_width_3_columns_3_column_separator_line_across_false(
-        ) {
+        fn test_write_column_column_mode_options_width_3_columns_3_column_separator_line_across_false()
+         {
             let mut output_opts = test_default_pr_output_opts();
             output_opts.column_mode_options = Some(crate::PrColumnModeOptions {
                 width: 3,
@@ -9633,8 +9633,8 @@ mod tests {
         }
 
         #[test]
-        fn test_write_column_column_mode_options_width_3_columns_3_column_separator_line_across_true(
-        ) {
+        fn test_write_column_column_mode_options_width_3_columns_3_column_separator_line_across_true()
+         {
             let mut output_opts = test_default_pr_output_opts();
             output_opts.column_mode_options = Some(crate::PrColumnModeOptions {
                 width: 3,
@@ -10540,15 +10540,17 @@ mod tests {
             let index = 0;
             let line_width = Some(10); // 页面宽度设置过窄导致错误
             let indexes = 1;
-            assert!(pr_get_line_for_printing(
-                &output_opts,
-                &file_line,
-                columns,
-                index,
-                &line_width,
-                indexes,
-            )
-            .is_err());
+            assert!(
+                pr_get_line_for_printing(
+                    &output_opts,
+                    &file_line,
+                    columns,
+                    index,
+                    &line_width,
+                    indexes,
+                )
+                .is_err()
+            );
         }
 
         #[test]
@@ -10934,12 +10936,15 @@ mod tests {
             let page = 1;
             // 注意：具体处理长标题的逻辑（如截断）需根据实际业务需求编写，此处假设直接使用而不做特殊处理
             let expected = vec![
-                 String::new(),
-                 String::new(),
-                 format!("Apr 28 17:18 2024 An extremely long header that should be truncated or handled appropriately Page {}", page),
-                 String::new(),
-                 String::new(),
-             ];
+                String::new(),
+                String::new(),
+                format!(
+                    "Apr 28 17:18 2024 An extremely long header that should be truncated or handled appropriately Page {}",
+                    page
+                ),
+                String::new(),
+                String::new(),
+            ];
             let result = pr_header_content(&output_opts, page);
             assert_eq!(result, expected);
         }
@@ -20084,9 +20089,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "--separator", "\n", "-w", "88"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20096,9 +20103,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "-s", "\n", "-w", "88"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20108,9 +20117,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "--separator", "\n", "--width", "88"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20120,9 +20131,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "-s", "\n", "--width", "88"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20132,9 +20145,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "--separator", "\n"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20144,9 +20159,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "-s", "\n"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20162,9 +20179,11 @@ mod tests {
             ];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20174,9 +20193,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "-W", "68", "--sep-string", "a"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20186,9 +20207,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "--page-width", "68", "-S", "aa"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20198,9 +20221,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "-W", "68", "-S", "aa"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20230,9 +20255,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "--sep-string", "aa"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            );
         }
 
         #[test]
@@ -20242,9 +20269,11 @@ mod tests {
             let invalid_args = vec![ctcore::ct_util_name(), "-S", "aa"];
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            );
         }
 
         #[test]

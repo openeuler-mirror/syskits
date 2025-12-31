@@ -111,6 +111,7 @@ feat_common_core = [
   "printenv",
   "printf",
   "echo",
+  "touch",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -286,6 +287,7 @@ dirname = { optional = true, package = "ct_dirname", path = "src/ct/dirname" }
 printenv = { optional = true, package = "ct_printenv", path = "src/ct/printenv" }
 printf = { optional = true, package = "ct_printf", path = "src/ct/printf" }
 echo = { optional = true, package = "ct_echo", path = "src/ct/echo" }
+touch = { optional = true, package = "ct_touch", path = "src/ct/touch" }
 
 [dev-dependencies]
 chrono = { workspace = true }

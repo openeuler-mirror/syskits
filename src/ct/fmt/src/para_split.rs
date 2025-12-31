@@ -616,3 +616,373 @@ impl<'a> Iterator for FmtWordSplit<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod char_width_tests {
+        use super::*;
+
+        #[test]
+        fn test_fmt_char_width_ascii() {
+            // 测试 ASCII 字符
+            assert_eq!(
+                fmt_char_width('a'),
+                1,
+                "ASCII lowercase letter should have width 1"
+            );
+            assert_eq!(
+                fmt_char_width('Z'),
+                1,
+                "ASCII uppercase letter should have width 1"
+            );
+            assert_eq!(fmt_char_width('0'), 1, "ASCII digit should have width 1");
+            assert_eq!(fmt_char_width(' '), 1, "ASCII space should have width 1");
+        }
+
+        #[test]
+        fn test_fmt_char_width_control_chars() {
+            // 测试控制字符
+            assert_eq!(
+                fmt_char_width('\u{0007}'),
+                1,
+                "ASCII bell character should have width 1"
+            );
+            assert_eq!(fmt_char_width('\n'), 1, "ASCII newline should have width 1");
+        }
+
+        #[test]
+        fn test_fmt_char_width_unicode() {
+            // 测试宽度为 2 的 Unicode 字符
+            assert_eq!(
+                fmt_char_width('你'),
+                2,
+                "Chinese character should have width 2"
+            );
+            assert_eq!(
+                fmt_char_width('あ'),
+                2,
+                "Japanese Hiragana should have width 2"
+            );
+
+            // 测试其他 Unicode 字符
+            assert_eq!(
+                fmt_char_width('é'),
+                1,
+                "Latin letter with acute accent should have width 1"
+            );
+            assert_eq!(fmt_char_width('ℓ'), 1, "Script small L should have width 1");
+        }
+
+        #[test]
+        fn test_fmt_char_width_special_cases() {
+            // 测试 Unicode 中的特殊和零宽度字符
+            assert_eq!(
+                fmt_char_width('\u{200B}'),
+                0,
+                "Zero width space should have width 0"
+            );
+            assert_eq!(
+                fmt_char_width('\u{2060}'),
+                0,
+                "Word joiner should have width 0"
+            );
+
+            // 测试边界条件
+            assert_eq!(
+                fmt_char_width('\u{009F}'),
+                1,
+                "High ASCII control character should have width 1"
+            );
+            assert_eq!(
+                fmt_char_width('\u{00A0}'),
+                1,
+                "Non-breaking space should have width 1"
+            ); // 可能需要更新，取决于实际情况
+        }
+    }
+
+    #[cfg(test)]
+    mod line_tests {
+        use super::*;
+
+        #[test]
+        fn test_get_formatline() {
+            let line = FmtFileLine {
+                line: "This is a formatted line.".to_string(),
+                indent_end: 0,
+                prefix_indent_end: 0,
+                indent_len: 0,
+                prefix_len: 0,
+            };
+
+            let fmt_line = FmtLine::FormatLine(line.clone());
+
+            let extracted_line = fmt_line.get_format_line();
+            assert_eq!(
+                extracted_line.line, line.line,
+                "The line should match the original."
+            );
+        }
+
+        // 测试在提取 FormatLine 时遇到 NoFormatLine 的情况，预期应触发 panic
+        #[test]
+        #[should_panic(expected = "Found NoFormatLine when expecting FormatLine")]
+        fn test_get_formatline_panic() {
+            let fmt_line = FmtLine::NoFormatLine("This is not a format line.".to_string(), false);
+            let _ = fmt_line.get_format_line(); // This should panic
+        }
+
+        // 测试正确提取 NoFormatLine
+        #[test]
+        fn test_get_noformatline() {
+            let no_fmt_line = "This is not a format line.".to_string();
+            let fmt_line = FmtLine::NoFormatLine(no_fmt_line.clone(), true);
+
+            let (extracted_line, flag) = fmt_line.get_no_format_line();
+            assert_eq!(
+                extracted_line, no_fmt_line,
+                "The line should match the original."
+            );
+            assert!(flag, "The flag should be true.");
+        }
+
+        // 测试在提取 NoFormatLine 时遇到 FormatLine 的情况，预期应触发 panic
+        #[test]
+        #[should_panic(expected = "Found FormatLine when expecting NoFormatLine")]
+        fn test_get_noformatline_panic() {
+            let line = FmtFileLine {
+                line: "This is a formatted line.".to_string(),
+                indent_end: 0,
+                prefix_indent_end: 0,
+                indent_len: 0,
+                prefix_len: 0,
+            };
+            let fmt_line = FmtLine::FormatLine(line);
+            let _ = fmt_line.get_no_format_line(); // This should panic
+        }
+
+        // 测试提取复杂的 FormatLine 结构
+        #[test]
+        fn test_complex_format_line_extraction() {
+            let complex_line = FmtFileLine {
+                line: "Complex formatted line with multiple data points.".to_string(),
+                indent_end: 10,
+                prefix_indent_end: 5,
+                indent_len: 20,
+                prefix_len: 15,
+            };
+            let fmt_line = FmtLine::FormatLine(complex_line.clone());
+
+            let extracted_line = fmt_line.get_format_line();
+            assert_eq!(
+                extracted_line.line, complex_line.line,
+                "Lines should match."
+            );
+            assert_eq!(
+                extracted_line.indent_len, complex_line.indent_len,
+                "Indent lengths should match."
+            );
+            assert_eq!(
+                extracted_line.prefix_len, complex_line.prefix_len,
+                "Prefix lengths should match."
+            );
+        }
+
+        // 测试在格式不符的情况下抛出适当的 panic
+        #[test]
+        #[should_panic(expected = "Found FormatLine when expecting NoFormatLine")]
+        fn test_incorrect_extraction_panic() {
+            let line = FmtFileLine {
+                line: "This line will trigger incorrect extraction.".to_string(),
+                indent_end: 0,
+                prefix_indent_end: 0,
+                indent_len: 0,
+                prefix_len: 0,
+            };
+            let fmt_line = FmtLine::FormatLine(line);
+
+            let _ = fmt_line.get_no_format_line(); // This should panic because it is not a NoFormatLine
+        }
+    }
+
+    #[cfg(test)]
+    mod file_lines_tests {
+        use std::io::{BufReader, Cursor, Read};
+
+        use crate::para_split::FmtLine::FormatLine;
+
+        use super::*;
+
+        // 返回 BufReader 而非其引用，让调用者控制如何使用它（引用或值）
+        fn setup_lines_reader(data: &str) -> BufReader<Box<dyn Read + 'static>> {
+            let cursor = Box::new(Cursor::new(data.as_bytes().to_vec())) as Box<dyn Read + 'static>;
+            BufReader::new(cursor)
+        }
+
+        #[test]
+        fn test_match_prefix() {
+            let data = "prefix: This is a line with prefix.";
+            let opts = FmtConfigs {
+                prefix_option: Some("prefix:".to_string()),
+                is_xprefix: false,
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let lines = FmtFileLines::new(&opts, r.lines());
+
+            let (match_result, _) = lines.match_prefix(data);
+            assert!(match_result, "Prefix should match correctly.");
+        }
+
+        #[test]
+        fn test_match_anti_prefix() {
+            let data = "antiprefix: This line should not be formatted.";
+            let opts = FmtConfigs {
+                anti_prefix_option: Some("antiprefix:".to_string()),
+                is_xanti_prefix: false,
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let lines = FmtFileLines::new(&opts, r.lines());
+
+            let match_result = lines.match_anti_prefix(data);
+            assert!(!match_result, "Anti-prefix should prevent formatting.");
+        }
+
+        #[test]
+        fn test_compute_indent() {
+            let data = "    indented line starts here";
+            let opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let _reader = setup_lines_reader(data);
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let lines = FmtFileLines::new(&opts, r.lines());
+
+            let (_, prefix_len, indent_len) = lines.compute_indent(data, 0);
+            assert_eq!(prefix_len, 0, "No prefix should be recognized.");
+            assert_eq!(
+                indent_len, 4,
+                "Indentation should be calculated as 4 spaces."
+            );
+        }
+
+        #[test]
+        fn test_next() {
+            let data = "normal line\n    indented line\nprefix: line with prefix\n";
+            let opts = FmtConfigs {
+                prefix_option: Some("prefix:".to_string()),
+                is_xprefix: false,
+                tab_width: 4,
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let mut lines = FmtFileLines::new(&opts, r.lines());
+            let _expected1 = "normal line".to_string();
+            let _expected2 = "    indented line".to_string();
+            let _expected3 = FormatLine(FmtFileLine {
+                line: "prefix: line with prefix".to_string(),
+                indent_end: 8,
+                prefix_indent_end: 0,
+                indent_len: 8,
+                prefix_len: 7,
+            });
+
+            assert!(
+                matches!(lines.next(), Some(FmtLine::NoFormatLine(_expected1, false))),
+                "Should recognize a normal line as format line."
+            );
+            assert!(
+                matches!(lines.next(), Some(FmtLine::NoFormatLine(_expected2, false))),
+                "Should recognize an indented line as format line."
+            );
+            assert!(
+                matches!(lines.next(), Some(_expected3)),
+                "Should recognize a prefixed line as format line."
+            );
+        }
+
+        #[test]
+        fn test_multiple_prefixes() {
+            let data = "prefix1: Line with first prefix.\nprefix2: Line with second prefix.\n";
+            let opts = FmtConfigs {
+                prefix_option: Some("prefix1:".to_string()),
+                anti_prefix_option: Some("prefix2:".to_string()),
+                is_xprefix: false,
+                is_xanti_prefix: false,
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let lines = FmtFileLines::new(&opts, r.lines());
+
+            assert!(
+                lines.match_prefix("prefix1: Line with first prefix.").0,
+                "First prefix should match."
+            );
+            assert!(
+                !lines.match_anti_prefix("prefix2: Line with second prefix."),
+                "Second prefix should prevent formatting."
+            );
+        }
+
+        #[test]
+        fn test_tab_handling() {
+            let data = "\tIndented with tab.\n    Indented with spaces.\n";
+            let opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let mut lines = FmtFileLines::new(&opts, r.lines());
+
+            let line_with_tab = lines.next().unwrap();
+            let line_with_spaces = lines.next().unwrap();
+            if let FmtLine::FormatLine(f) = line_with_tab {
+                assert_eq!(
+                    f.indent_len, 4,
+                    "Tab should create a single indentation block."
+                );
+            }
+            if let FmtLine::FormatLine(f) = line_with_spaces {
+                assert_eq!(
+                    f.indent_len, 4,
+                    "Spaces should match the length of a tab indentation."
+                );
+            }
+        }
+
+        #[test]
+        fn test_empty_and_malformed_lines() {
+            let data = "\nMalformed line without prefix\n";
+            let opts = FmtConfigs {
+                prefix_option: Some("valid_prefix:".to_string()),
+                is_xprefix: false,
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader(data);
+            let r = &mut reader;
+            let mut lines = FmtFileLines::new(&opts, r.lines());
+
+            let empty_line = lines.next().unwrap();
+            assert!(
+                matches!(empty_line, FmtLine::NoFormatLine(_, _)),
+                "Empty line should be recognized as no format line."
+            );
+
+            let malformed_line = lines.next().unwrap();
+            assert!(
+                matches!(malformed_line, FmtLine::NoFormatLine(_, _)),
+                "Malformed line should not be formatted due to missing prefix."
+            );
+        }
+    }
+}

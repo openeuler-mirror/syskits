@@ -1438,4 +1438,242 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // touch 接口: touch [OPTION]... FILE...
+        //
+        // Arguments:
+        //   [files]...
+        //
+        // Options:
+        //       --help              Print help information.
+        //   -a                      change only the access time
+        //   -t <STAMP>              use [[CC]YY]MMDDhhmm[.ss] instead of the current time
+        //   -d, --date <STRING>     parse argument and use it instead of current time
+        //   -m                      change only the modification time
+        //   -c, --no-create         do not create any files
+        //   -h, --no-dereference    affect each symbolic link instead of any referenced file (only for systems that can change the timestamps of a symlink)
+        //   -r, --reference <FILE>  use this file's times instead of the current time
+        //       --time <WORD>       change only the specified time: "access", "atime", or "use" are equivalent to -a; "modify" or "mtime" are equivalent to -m [possible values: access, atime, use, modify, mtime]
+        //   -V, --version           Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_access_time_short() {
+            let file_name = "test_ct_app_access_time_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-a", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_instead_of_the_current_time_short() {
+            let file_name = "test_ct_app_instead_of_the_current_time_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-t", "12011233", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parse_the_current_time_long() {
+            let file_name = "test_ct_app_parse_the_current_time_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--date", "@2147483647", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parse_the_current_time_short() {
+            let file_name = "test_ct_app_parse_the_current_time_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-d", "@2147483647", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_change_modification_time_short() {
+            let file_name = "test_ct_app_change_modification_time_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-m", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_create_long() {
+            let file_name = "test_ct_app_no_create_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--no-create", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_create_short() {
+            let file_name = "test_ct_app_no_create_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-c", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_dereference_short() {
+            let file_name = "test_ct_app_no_dereference_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-h", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_dereference_long() {
+            let file_name = "test_ct_app_no_dereference_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--no-dereference", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reference_long() {
+            let file_name = "test_ct_app_reference_long";
+            let reference_file_name = "reference_file";
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reference",
+                reference_file_name,
+                "--no-dereference",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reference_short() {
+            let file_name = "test_ct_app_reference_short";
+            let reference_file_name = "reference_file";
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file_name,
+                "--no-dereference",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_time_long_access() {
+            let file_name = "test_ct_app_time_long_access";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "access", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_time_long_atime() {
+            let file_name = "test_ct_app_time_long_atime";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "atime", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_time_long_use() {
+            let file_name = "test_ct_app_time_long_use";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "use", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

@@ -1083,6 +1083,12 @@ where
         output_summary(bad_format, failed_cksum, failed_open_file)?;
     }
 
+    if flags.is_check {
+        if bad_format > 0 || failed_cksum > 0 || failed_open_file > 0 {
+            return Err(CtSimpleError::new(1, ""));
+        }
+    }
+
     Ok(())
 }
 

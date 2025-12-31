@@ -234,3 +234,55 @@ unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
     std::ptr::null()
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_echo_main {
+        use crate::nohup_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_false_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = nohup_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_false_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = nohup_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+    }
+
+    mod tests_false_app {
+        use crate::ct_app;
+
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+    }
+}

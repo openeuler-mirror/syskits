@@ -10918,5 +10918,1332 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_semicolon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                ";",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_colon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                ":",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_vertical() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "|",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_tab() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\t",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_group_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\u{001d}",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_unit_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\u{001f}",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_long_with_record_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\u{001e}",
+                "--exact-skip-prefix",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_space() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", " ", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_letter() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "a", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_digital() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "5", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_comma() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ",", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_semicolon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ";", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_colon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ":", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_vertical() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "|", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_tab() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\t", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_group_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "\u{001d}",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_unit_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "\u{001f}",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_long_exact_skip_prefix_short_with_record_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "\u{001e}",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_space() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                " ",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_letter() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "a",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_digital() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "5",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_comma() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                ",",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_semicolon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                ";",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_colon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                ":",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_vertical() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "|",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_tab() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\t",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_group_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001d}",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_unit_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001f}",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_long_exact_skip_prefix_short_with_record_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001e}",
+                "-X",
+                file_name,
+            ];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_space() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", " ", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_letter() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "a", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_digital() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "5", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_comma() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ",", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_semicolon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ";", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_colon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ":", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_vertical() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "|", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_tab() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\t", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_group_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001d}", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_unit_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001f}", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_skip_prefix_short_exact_skip_prefix_short_with_record_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001e}", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_space() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " ", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_letter() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_digital() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_comma() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ",", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_semicolon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_colon() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_vertical() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_tab() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_group_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_unit_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_prefix_short_exact_skip_prefix_short_with_record_separator() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}", "-X", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_long_none() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_long_0() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "0", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_long_1() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "1", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_long_10() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "10", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_long_100() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "100", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_long_1000() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "1000", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_short_none() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_short_0() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "0", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
+        #[test]
+        fn test_fmt_main_width_short_1() {
+            let file_name = "test_fmt_file";
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "1", file_name];
+            let result = fmt_main(cmd_args.iter().map(|s| OsString::from(s)));
+            // 使用模式匹配提取字段值
+            match result {
+                Err(output) => {
+                    let code = output.code();
+                    let message = output.usage();
+                    println!("Error code: {}", code);
+                    println!("Error message: {}", message);
+                    assert_eq!(code, 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, ());
+                }
+            }
+        }
+
     }
 }

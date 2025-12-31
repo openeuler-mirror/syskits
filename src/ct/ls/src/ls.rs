@@ -8993,10 +8993,12 @@ mod tests {
             let matches = command.try_get_matches_from(args).unwrap();
             let config = LsConfig::from(&matches).unwrap();
 
-
             #[cfg(feature = "selinux")]
             {
-                assert_eq!(config.is_selinux_supported, selinux::kernel_support() != selinux::KernelSupport::Unsupported)
+                assert_eq!(
+                    config.is_selinux_supported,
+                    selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                )
             }
             #[cfg(not(feature = "selinux"))]
             {

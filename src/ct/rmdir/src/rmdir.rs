@@ -757,4 +757,147 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // rmdir 接口: rmdir [OPTION]... DIRECTORY...
+        //
+        // Arguments:
+        //   [dirs]...
+        //
+        // Options:
+        //       --ignore-fail-on-non-empty  ignore each failure that is solely because a directory is non-empty
+        //   -p, --parents                   remove DIRECTORY and its ancestors; e.g.,
+        //                                                     'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a
+        //   -v, --verbose                   output a diagnostic for every directory processed
+        //   -h, --help                      Print help
+        //   -V, --version                   Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let missing_args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parents_long() {
+            let file_name = "test_ct_app_parents_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--parents", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parents_short() {
+            let file_name = "test_ct_app_parents_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-p", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ignore_fail_on_non_empty_long() {
+            let file_name = "test_ct_app_ignore_fail_on_non_empty_long";
+            let command = ct_app();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--ignore-fail-on-non-empty",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_verbose_long() {
+            let file_name = "test_ct_app_verbose_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--verbose", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_verbose_short() {
+            let file_name = "test_ct_app_verbose_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-v", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

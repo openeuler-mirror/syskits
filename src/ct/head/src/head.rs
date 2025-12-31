@@ -18,7 +18,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
 use std::ffi::OsString;
-use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 
 const BUF_SIZE: usize = 65536;
 
@@ -576,7 +576,7 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
     };
 
     // 处理可能的错误
-    if let Err(e) = res {
+    if let Err(_e) = res {
         let name = if file == "-" { "standard input" } else { file };
         ct_show!(CtSimpleError::new(
             1,

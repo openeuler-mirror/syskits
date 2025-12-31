@@ -98,6 +98,7 @@ feat_common_core = [
   "tty",
   "env",
   "fmt",
+  "tsort",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -260,6 +261,7 @@ numfmt = { optional = true, package = "ct_numfmt", path = "src/ct/numfmt" }
 tty = { optional = true, package = "ct_tty", path = "src/ct/tty" }
 env = { optional = true, package = "ct_env", path = "src/ct/env" }
 fmt = { optional = true, package = "ct_fmt", path = "src/ct/fmt" }
+tsort = { optional = true, package = "ct_tsort", path = "src/ct/tsort" }
 
 [dev-dependencies]
 chrono = { workspace = true }

@@ -2223,5 +2223,122 @@ mod tests {
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_size_short_default_1000() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_default_1000";
+            let args = vec![ctcore::ct_util_name(), "-s", "1000", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_10_kb() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_10_KB";
+            let args = vec![ctcore::ct_util_name(), "-s", "10KB", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_10_k() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_10_k";
+            let args = vec![ctcore::ct_util_name(), "-s", "10K", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_10_mb() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_10_MB";
+            let args = vec![ctcore::ct_util_name(), "-s", "10MB", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_10_m() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_10_M";
+            let args = vec![ctcore::ct_util_name(), "-s", "10M", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_10_gb() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_10_gb";
+            let args = vec![ctcore::ct_util_name(), "-s", "10GB", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_10_g() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_10_g";
+            let args = vec![ctcore::ct_util_name(), "-s", "10G", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_extend_by_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_extend_by_100";
+            let args = vec![ctcore::ct_util_name(), "-s", "+100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_reduce_by_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_reduce_by_100";
+            let args = vec![ctcore::ct_util_name(), "-s=-100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_at_most_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_extend_by_100";
+            let args = vec![ctcore::ct_util_name(), "-s", "<100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_at_least_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_at_least_100";
+            let args = vec![ctcore::ct_util_name(), "-s", ">100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_round_down_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_round_down_100";
+            let args = vec![ctcore::ct_util_name(), "-s", "/100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_short_round_up_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_short_round_up_100";
+            let args = vec![ctcore::ct_util_name(), "-s", "%100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
     }
 }

@@ -1156,4 +1156,260 @@ mod tests {
             assert_eq!(dt_converted.timestamp(), dt_tokyo.timestamp());
         }
     }
+
+    #[cfg(test)]
+    mod ct_main_tests {
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_touch_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_access_time_short() {
+            let filename = "test_touch_main_access_time_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-a", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_instead_of_the_current_time_short() {
+            let filename = "test_touch_main_instead_of_the_current_time_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-t", "12011233", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_parse_the_current_time_long() {
+            let filename = "test_touch_main_parse_the_current_time_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--date", "@2147483647", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_parse_the_current_time_short() {
+            let filename = "test_touch_main_parse_the_current_time_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-d", "@2147483647", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_change_modification_time_short() {
+            let filename = "test_touch_main_change_modification_time_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-m", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_no_create_long() {
+            let filename = "test_touch_main_no_create_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--no-create", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_no_create_short() {
+            let filename = "test_touch_main_no_create_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-c", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_no_dereference_short() {
+            let filename = "test_touch_main_no_dereference_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-h", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_no_dereference_long() {
+            let filename = "test_touch_main_no_dereference_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--no-dereference", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_reference_long() {
+            let filename = "test_touch_main_reference_long";
+            let reference_filename = "reference_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_path = dir.path().join(reference_filename);
+            let _ = File::create(&reference_path).unwrap();
+            let reference_file_name = reference_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reference",
+                reference_file_name,
+                "--no-dereference",
+                file_name,
+            ];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_reference_short() {
+            let filename = "test_touch_main_reference_short";
+            let reference_filename = "reference_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_path = dir.path().join(reference_filename);
+            let _ = File::create(&reference_path).unwrap();
+            let reference_file_name = reference_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file_name,
+                "--no-dereference",
+                file_name,
+            ];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_time_long_access() {
+            let filename = "test_touch_main_time_long_access";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "access", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_time_long_atime() {
+            let filename = "test_touch_main_time_long_atime";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "atime", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_time_long_use() {
+            let filename = "test_touch_main_time_long_use";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "use", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+    }
 }

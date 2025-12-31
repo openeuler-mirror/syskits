@@ -647,3 +647,92 @@ pub fn head_main(args: impl ctcore::Args) -> CTResult<()> {
     };
     ct_head(&args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod test_find_nth_line_from_end {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_basic_newline_separator() {
+            let mut input = Cursor::new("x\ny\nz\n");
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 6); // 从末尾数第0行，返回最后一个换行符后的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 4); // 从末尾数第1行，返回倒数第二个换行符后的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 2); // 从末尾数第2行，返回第一个换行符后的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 3, b'\n').unwrap(), 0);
+            // 超出行数，返回0
+        }
+
+        #[test]
+        fn test_custom_separator() {
+            let mut input = Cursor::new("a;b;c;");
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b';').unwrap(), 6);
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b';').unwrap(), 4);
+            assert_eq!(find_nth_line_from_end(&mut input, 2, b';').unwrap(), 2);
+        }
+
+        #[test]
+        fn test_empty_input() {
+            let mut input = Cursor::new("");
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 0);
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
+        }
+
+        #[test]
+        fn test_no_separator() {
+            let mut input = Cursor::new("abc");
+            // 对于没有分隔符的输入：
+            // n=0 时，由于没有找到任何分隔符，返回0
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 0);
+            // n>0 时，由于没有找到任何分隔符，也返回0
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
+        }
+
+        #[test]
+        fn test_only_separators() {
+            let mut input = Cursor::new("\n\n\n");
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 3);
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+            assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 1);
+            assert_eq!(find_nth_line_from_end(&mut input, 3, b'\n').unwrap(), 0);
+        }
+
+        #[test]
+        fn test_unicode_content() {
+            let mut input = Cursor::new("你好\n世界\n再见\n");
+            // 每个汉字占3个字节，每个换行符占1个字节
+            // "你好\n" = 7字节
+            // "世界\n" = 7字节
+            // "再见\n" = 7字节
+            // 总共21字节
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 21); // 最后一个换行符后的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 14); // 倒数第二个换行符后的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 7);
+            // 第一个换行符后的位置
+        }
+
+        #[test]
+        fn test_large_line_count() {
+            let mut input = Cursor::new("x\ny\nz\n");
+            assert_eq!(find_nth_line_from_end(&mut input, 1000, b'\n').unwrap(), 0);
+        }
+
+        #[test]
+        fn test_without_final_separator() {
+            let mut input = Cursor::new("a\nb\nc");
+            // "a\n" = 2字节
+            // "b\n" = 2字节
+            // "c" = 1字节
+            // 总共5字节
+            // n=0 时返回最后一个换行符的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 4);
+            // n=1 时返回第一个换行符的位置
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+            // n=2 时，由于没有更多换行符，返回0
+            assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 0);
+        }
+    }
+}

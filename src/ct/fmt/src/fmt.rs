@@ -21838,5 +21838,1341 @@ mod tests {
             assert!(result.is_ok());
             assert_eq!(result.unwrap().get_flag("uniform-spacing"), true);
         }
+
+        #[test]
+        fn test_ct_app_with_file_uniform_spacing_short() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-u", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("uniform-spacing"), true);
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", " ", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "a", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "5", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ",", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ";", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ":", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "|", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\t", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001d}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001f}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_long_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001e}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", " ", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "a", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "5", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ",", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ";", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ":", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "|", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\t", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001d}",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001f}",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001e}",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", " ", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "a", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "5", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ",", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ";", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ":", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "|", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\t", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001d}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001f}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_short_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001e}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " ", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ",", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                " ",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "a",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "5",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                ",",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                ";",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                ":",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "|",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\t",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\u{001d}",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\u{001f}",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_long_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "\u{001e}",
+                "--exact-prefix",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " ", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ",", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_prefix_short_exact_prefix_short_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}", "-x", file_name];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_with_file_skip_prefix_long_exact_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                " ",
+                "-x",
+                file_name,
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&" ".to_string())
+            );
+        }
     }
 }

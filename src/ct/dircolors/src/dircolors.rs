@@ -646,3 +646,110 @@ pub fn generate_dircolors_config() -> String {
     config
 }
 
+#[cfg(test)]
+mod tests {
+    use super::dircolors_escape;
+
+    #[test]
+    fn test_escape() {
+        assert_eq!("", dircolors_escape(""));
+        assert_eq!("'\\''", dircolors_escape("'"));
+        assert_eq!("\\:", dircolors_escape(":"));
+        assert_eq!("\\:", dircolors_escape("\\:"));
+    }
+
+    mod tests_dircolors_main {
+        use crate::dircolors_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_dircolors_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dircolors_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dircolors_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dircolors_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dircolors_main_b() {
+            let args = vec![ctcore::ct_util_name(), "-b"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dircolors_main_sh() {
+            let args = vec![ctcore::ct_util_name(), "--sh"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dircolors_main_c() {
+            let args = vec![ctcore::ct_util_name(), "-c"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dircolors_main_csh() {
+            let args = vec![ctcore::ct_util_name(), "--csh"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dircolors_main_p() {
+            let args = vec![ctcore::ct_util_name(), "-p"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dircolors_main_print_database() {
+            let args = vec![ctcore::ct_util_name(), "--print-database"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dircolors_main_print_ls_colors() {
+            let args = vec![ctcore::ct_util_name(), "--print-ls-colors"];
+            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+}

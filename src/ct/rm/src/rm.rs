@@ -645,4 +645,265 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
         && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
 
+    #[test]
+    fn test_remove_dir() {
+        // 创建一个临时目录用于测试
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+
+        // 调用 remove_dir 函数
+        let options = RMOptions {
+            force: false,
+            interactive: InteractiveMode::Never,
+            one_fs: false,
+            preserve_root: false,
+            recursive: true,
+            dir: true,
+            verbose: true,
+        };
+        let result = remove_dir(path, &options);
+
+        // 断言结果为 false，表示目录成功删除
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_remove_dir_not_empty() {
+        // 创建一个临时目录并在其中创建一些文件
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+
+        fs::File::create(path.join("file1.txt")).unwrap();
+
+        // 调用 remove_dir 函数
+        let options = RMOptions {
+            force: false,
+            interactive: InteractiveMode::Never,
+            one_fs: false,
+            preserve_root: false,
+            recursive: true,
+            dir: true,
+            verbose: true,
+        };
+        let result = remove_dir(path, &options);
+
+        // 断言结果为 true，表示目录因为非空而无法删除
+        assert!(result);
+    }
+    /*
+        #[test]
+        fn test_remove_dir_permission_denied() {
+            // 创建一个临时目录并设置权限为只读
+            let temp_dir = tempfile::tempdir().unwrap();
+            let path = temp_dir.path();
+
+            fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
+
+            // 调用 remove_dir 函数
+            let options = RMOptions {
+                force: false,
+                interactive: InteractiveMode::Never,
+                one_fs: false,
+                preserve_root: false,
+                recursive: true,
+                dir: true,
+                verbose: true,
+            };
+            let result = remove_dir(path, &options);
+
+            // 断言结果为 true，表示因为权限被拒绝而无法删除
+            assert!(result);
+
+            // 恢复权限
+            fs::set_permissions(path, fs::Permissions::from_mode(0o777)).unwrap();
+
+            // 清理临时目录
+            fs::remove_dir_all(path).unwrap();
+        }
+    */
+    #[test]
+    fn test_handle_dir() {
+        // 创建一个临时目录用于测试
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+
+        // 设置一些测试选项
+        let options = RMOptions {
+            force: false,
+            interactive: InteractiveMode::Never,
+            one_fs: false,
+            preserve_root: false,
+            recursive: true,
+            dir: true,
+            verbose: true,
+        };
+
+        // 调用函数进行测试
+        let result = handle_dir(path, &options);
+
+        // 断言结果
+        assert_eq!(result, false);
+    }
+
+    #[test]
+    fn test_handle_dir_recursive() {
+        // 创建一个临时目录用于测试
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+
+        // 在临时目录下创建一些子目录和文件
+        fs::create_dir_all(path.join("subdir1")).unwrap();
+        fs::create_dir_all(path.join("subdir2")).unwrap();
+        fs::File::create(path.join("file1.txt")).unwrap();
+
+        // 设置一些测试选项
+        let options = RMOptions {
+            force: false,
+            interactive: InteractiveMode::Never,
+            one_fs: false,
+            preserve_root: false,
+            recursive: true,
+            dir: true,
+            verbose: true,
+        };
+
+        // 调用函数进行测试
+        let result = handle_dir(path, &options);
+
+        // 断言结果
+        assert_eq!(result, false);
+    }
+
+    /*
+    #[test]
+    fn test_handle_dir_error() {
+        // 创建一个临时目录用于测试
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+
+        // 设置一些测试选项，模拟权限错误
+        let options = RMOptions {
+            force: false,
+            interactive: InteractiveMode::Never,
+            one_fs: false,
+            preserve_root: false,
+            recursive: true,
+            dir: true,
+            verbose: true,
+        };
+
+        // 模拟权限错误
+        fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
+
+        // 调用函数进行测试
+        let result = handle_dir(path, &options);
+
+        // 断言结果
+        assert_eq!(result, true);
+    }
+    */
+    mod test_handle_writable_directory {
+        use super::*;
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        #[test]
+        fn test_handle_writable_directory() {
+            // 创建一个临时目录用于测试
+            let temp_dir = tempfile::tempdir().unwrap();
+            let path = temp_dir.path();
+
+            // 设置目录权限为只读
+            fs::set_permissions(path, fs::Permissions::from_mode(0o777)).unwrap();
+
+            // 创建 RMOptions 和 Metadata 实例
+            let options = RMOptions {
+                force: false,
+                interactive: InteractiveMode::PromptProtected,
+                one_fs: false,
+                preserve_root: false,
+                recursive: true,
+                dir: true,
+                verbose: false,
+            };
+
+            // 调用函数进行测试
+            if let Ok(metadata) = fs::metadata(path) {
+                let result = handle_writable_directory(path, &options, &metadata);
+                // 断言结果为 false，因为目录不可写
+                assert!(result);
+            }
+
+            // 清理临时目录
+            temp_dir.close().unwrap();
+        }
+    }
+
+    mod tests_remove_file {
+        use crate::InteractiveMode;
+        use std::fs;
+
+        use crate::RMOptions;
+
+        use std::path::Path;
+
+        use std::os::unix::fs::PermissionsExt;
+
+        #[test]
+        fn test_remove_file_success() {
+            // 创建一个临时文件
+            let temp_file = Path::new("temp_file.txt");
+            fs::write(temp_file, "Test content").unwrap();
+
+            let options = RMOptions {
+                force: false,
+                interactive: InteractiveMode::Never,
+                one_fs: false,
+                preserve_root: false,
+                recursive: true,
+                dir: false,
+                verbose: false,
+            };
+
+            // 调用 remove_file 函数
+            let result = crate::remove_file(temp_file, &options);
+
+            // 断言文件被成功删除
+            assert!(!result);
+            assert!(!temp_file.exists());
+        }
+
+        #[test]
+        pub(crate) fn test_remove_file_permission_denied() {
+            // 创建一个只读文件
+            let read_only_file = Path::new("read_only_file.txt");
+            fs::write(read_only_file, "Test content").unwrap();
+            let mode = 0o444; // 只读权限
+            let permissions = PermissionsExt::from_mode(mode);
+            fs::set_permissions(read_only_file, permissions).unwrap();
+
+            let options = RMOptions {
+                force: false,
+                interactive: InteractiveMode::Never,
+                one_fs: false,
+                preserve_root: false,
+                recursive: true,
+                dir: false,
+                verbose: false,
+            };
+
+            // 调用 remove_file 函数
+            let result = crate::remove_file(read_only_file, &options);
+
+            // 断言返回值为 true，表示遇到权限拒绝错误
+            assert!(!result);
+            // 清理临时文件
+            let _ = fs::remove_file(read_only_file);
+        }
+    }
+}

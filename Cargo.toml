@@ -10,7 +10,7 @@ members = [
 default-members = ["bin/syskits"] # 设置 syskits 应用为默认构建目标
 
 [workspace.package] # workspace 信息，共享的package配置项
-version = "3.1.6"
+version = "3.1.7-beta"
 authors = ["CTyunOS linux developers"]
 license = "Mulan PSL v2.0"
 homepage = "https://www.ctyun.cn/developer"

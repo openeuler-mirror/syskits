@@ -103,3 +103,186 @@ pub fn ct_app() -> Command {
         .arg(arg)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        #[repr(C)]
+        #[derive(Debug)]
+        struct UtmpRecord {
+            ut_type: u16,
+            ut_pid: i32,
+            ut_line: [u8; 32],
+            ut_id: [u8; 4],
+            ut_user: [u8; 32],
+            ut_host: [u8; 256],
+            ut_exit: [i32; 2],
+            ut_session: i32,
+            ut_tv: [i32; 2],
+            ut_addr_v6: [i32; 4],
+            __unused: [u8; 20], // To match the size of C struct
+        }
+
+        impl UtmpRecord {
+            fn new(username: &str, terminal: &str, hostname: &str) -> Self {
+                let mut ut_line = [0; 32];
+                ut_line[..terminal.len()].copy_from_slice(terminal.as_bytes());
+
+                let mut ut_user = [0; 32];
+                ut_user[..username.len()].copy_from_slice(username.as_bytes());
+
+                let mut ut_host = [0; 256];
+                ut_host[..hostname.len()].copy_from_slice(hostname.as_bytes());
+
+                UtmpRecord {
+                    ut_type: 7, // USER_PROCESS
+                    ut_pid: 0,
+                    ut_line,
+                    ut_id: [0; 4],
+                    ut_user,
+                    ut_host,
+                    ut_exit: [0; 2],
+                    ut_session: 0,
+                    ut_tv: [0; 2],
+                    ut_addr_v6: [0; 4],
+                    __unused: [0; 20],
+                }
+            }
+        }
+
+        #[test]
+        fn test_users_main_argument_parsing_file() {
+            let dir = TempDir::with_prefix("test_pr_").unwrap();
+            let file_path = dir.path().join("pr_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+
+            let users = vec![
+                ("user1", "tty1", "localhost"),
+                ("user2", "tty2", "localhost"),
+                ("user3", "tty3", "localhost"),
+            ];
+            for (username, terminal, hostname) in users {
+                let record = UtmpRecord::new(username, terminal, hostname);
+                let record_bytes: &[u8] = unsafe {
+                    std::slice::from_raw_parts(
+                        &record as *const _ as *const u8,
+                        std::mem::size_of::<UtmpRecord>(),
+                    )
+                };
+                tmp_file.write_all(record_bytes).unwrap();
+            }
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "user1");
+        }
+
+        #[test]
+        fn test_users_main_argument_parsing_utmp_file() {
+            let source = "/var/run/utmp";
+            let destination = "./utmp_test";
+            std::fs::copy(source, destination).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), destination];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+
+            fs::remove_file(destination).expect("Failed to remove file");
+        }
+
+        #[test]
+        fn test_users_main_argument_parsing_wtmp_file() {
+            let source = "/var/log/wtmp";
+            let destination = "./wtmp_test";
+
+            std::fs::copy(source, destination).unwrap();
+            let args = vec![ctcore::ct_util_name(), destination];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            if PathBuf::from(destination).exists() {
+                fs::remove_file(destination).expect("Failed to remove file");
+            }
+        }
+
+        #[test]
+        fn test_users_main_argument_parsing_no_file() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_users_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_users_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_users_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_users_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_users_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_users_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_users_main_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        // #[test]
+        // fn test_users_main_argument_parsing_wtmp_file() {
+        //     let source = "/var/log/wtmp";
+        //     let destination = "./wtmp_test";
+        //
+        //     std::fs::copy(source, destination).unwrap();
+        //     let args = vec![ctcore::ct_util_name(), destination];
+        //     let result = users_main(args.iter().map(|s| OsString::from(s)));
+        //     assert!(result.is_ok());
+        //
+        //     fs::remove_file(destination).expect("Failed to remove file");
+        // }
+    }
+}

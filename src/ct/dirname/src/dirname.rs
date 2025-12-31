@@ -107,3 +107,164 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_dirname_main {
+        use crate::dirname_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_dirname_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dirname_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dirname_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dirname_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_dirname_main_z() {
+            let args = vec![ctcore::ct_util_name(), "-z", "3/etc/audi-efwe/few/35/2"];
+            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_dirname_main_zero() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--zero",
+                " 3/etc/audi-efwe/few/35/2",
+            ];
+            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_ct_app {
+        use crate::ct_app;
+
+        use crate::opt_flags::ZERO;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_dirname_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+        #[test]
+        fn test_dirname_zpp_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_dirname_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_dirname_app_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_dirname_app_z() {
+            let args = vec![ctcore::ct_util_name(), "-z", "3/etc/audi-efwe/few/35/2"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(ZERO));
+        }
+
+        #[test]
+        fn test_dirname_app_zero() {
+            let args = vec![ctcore::ct_util_name(), "--zero", "3/etc/audi-efwe/few/35/2"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(ZERO));
+        }
+    }
+
+    mod tests_dirname_process {
+
+        use crate::dirname_process;
+        use ctcore::ct_line_ending::CtLineEnding;
+
+        use std::vec;
+
+        #[test]
+        fn test_dirname_process_with_empty_dirnames() {
+            let line_ending = CtLineEnding::default();
+            let dirnames = vec![];
+            let result = dirname_process(line_ending, &dirnames);
+
+            assert!(result.is_some());
+            assert!(result.unwrap().is_err());
+        }
+
+        #[test]
+        fn test_dirname_process_with_non_empty_dirnames() {
+            let line_ending = CtLineEnding::default();
+            let dirnames = vec!["dir1", "dir2", "dir3"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>();
+
+            let result = dirname_process(line_ending, &dirnames);
+
+            assert!(result.is_none());
+        }
+    }
+}

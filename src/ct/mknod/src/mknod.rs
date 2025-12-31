@@ -220,3 +220,109 @@ fn parse_type(tpe: &str) -> Result<MknodFileType, String> {
         })
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_mknod_main {
+        use crate::{ct_app, mknod_main};
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_mknod_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = mknod_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_mknod_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = mknod_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_mknod_main_b() {
+            let args = vec![ctcore::ct_util_name(), "file", "b", "8", "1"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mknod_main_c() {
+            let args = vec![ctcore::ct_util_name(), "file", "c", "1", "100"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mknod_main_p() {
+            let args = vec![ctcore::ct_util_name(), "file", "p"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_mknod_app {
+        use crate::ct_app;
+
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_b() {
+            let args = vec![ctcore::ct_util_name(), "file", "b", "8", "1"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_c() {
+            let args = vec![ctcore::ct_util_name(), "file", "c", "1", "100"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_p() {
+            let args = vec![ctcore::ct_util_name(), "file", "p"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+    }
+}

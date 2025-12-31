@@ -115,4 +115,82 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod tests_ct_app {
+        use super::*;
+        // hostid 接口: hostid [options]...
+        // Print the numeric identifier (in hexadecimal) for the current host
+        // Usage: target/debug/syskits hostid [options]
+        // Options:
+        //   -h, --help     Print help
+        //   -V, --version  Print version
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            // 测试用例3：验证当提供未知参数时是否正确报错
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            // 测试用例4：验证当缺少必需的参数时是否正确报错
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+    }
 }

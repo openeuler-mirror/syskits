@@ -328,4 +328,132 @@ mod tests {
             assert!(!graph.is_has_edge("A", "A")); // self loops are not added
         }
     }
+
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::io::Write;
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_tsort_main_execution_default_nul_file() {
+            let file_name = "test_tsort_main_execution_default_nul_file";
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_default_file_no_data() {
+            let dir = tempdir().unwrap();
+            let file_path = dir
+                .path()
+                .join("test_tsort_main_execution_default_file_no_data");
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_default_file_data() {
+            let dir = tempdir().unwrap();
+            let file_path = dir
+                .path()
+                .join("test_tsort_main_execution_default_file_data");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b c\nc d e\nf c g\nb c d").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_default_file_data_odd_number_err() {
+            let dir = tempdir().unwrap();
+            let file_path = dir
+                .path()
+                .join("test_tsort_main_execution_default_file_data");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b c\nc d").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("input contains an odd number of tokens"));
+        }
+
+        #[test]
+        fn test_tsort_main_execution_default_file_data_err() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("sort_test_file");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b\nb a").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_version() {
+            let args_vec = vec![ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = tsort_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_tsort_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+    }
+
 }

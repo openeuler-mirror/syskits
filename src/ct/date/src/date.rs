@@ -3018,4 +3018,73 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    mod tests_date_format {
+
+        use crate::date_main;
+        use std::ffi::OsString;
+
+        // 定义一个宏来生成测试用例
+        macro_rules! test_date_format {
+            ($name:ident, $format:expr) => {
+                #[test]
+                fn $name() {
+                    let args = vec![
+                        OsString::from(ctcore::ct_util_name()), // 假设这是获取程序名的方法
+                        OsString::from(format!("+{}", $format)),
+                    ];
+
+                    assert!(date_main(args.into_iter()).is_ok());
+                }
+            };
+        }
+
+        // 使用宏生成测试用例
+        // 定义所有格式化参数的测试用例
+        test_date_format!(test_date_format_a, "%a"); // 本地化的缩写星期几名称
+        test_date_format!(test_date_format_aa, "%A"); // 本地化的完整星期几名称
+        test_date_format!(test_date_format_b, "%b"); // 本地化的缩写月份名称
+        test_date_format!(test_date_format_bb, "%B"); // 本地化的完整月份名称
+        test_date_format!(test_date_format_c, "%c"); // 本地化的日期和时间表示
+        test_date_format!(test_date_format_cc, "%C"); // 世纪数（年份的前两位）
+        test_date_format!(test_date_format_d, "%d"); // 月份中的日子（01-31）
+        test_date_format!(test_date_format_dd, "%D"); // 日期，格式为%m/%d/%y
+        test_date_format!(test_date_format_e, "%e"); // 月份中的日子，空格填充
+        test_date_format!(test_date_format_ff, "%F"); // 完整日期，格式为%Y-%m-%d
+        test_date_format!(test_date_format_g, "%g"); // ISO周号的年份的后两位数字
+        test_date_format!(test_date_format_gg, "%G"); // ISO周号的年份
+        test_date_format!(test_date_format_h, "%h"); // 与%b相同，本地化的缩写月份名称
+        test_date_format!(test_date_format_hh, "%H"); // 小时数（00-23）
+        test_date_format!(test_date_format_ii, "%I"); // 小时数（01-12）
+        test_date_format!(test_date_format_j, "%j"); // 一年中的天数（001-366）
+        test_date_format!(test_date_format_k, "%k"); // 小时数（0-23），空格填充
+        test_date_format!(test_date_format_l, "%l"); // 小时数（1-12），空格填充
+        test_date_format!(test_date_format_m, "%m"); // 月份（01-12）
+        test_date_format!(test_date_format_mm, "%M"); // 分钟数（00-59）
+        test_date_format!(test_date_format_n, "%n"); // 换行符
+        test_date_format!(test_date_format_nn, "%N"); // 纳秒数（000000000-999999999）
+        test_date_format!(test_date_format_p, "%p"); // 本地化的AM或PM
+        test_date_format!(test_date_format_pp, "%P"); // 与%p相同，但为小写
+                                                      // test_date_format!(test_date_format_q, "%q"); // 季度号（1-4）  //TODO 与系统命令不一致，系统命令支持该参数
+        test_date_format!(test_date_format_r, "%r"); // 本地化的12小时制时间
+        test_date_format!(test_date_format_rr, "%R"); // 24小时制的时间，格式为%H:%M
+        test_date_format!(test_date_format_s, "%s"); // 自1970-01-01 00:00:00 UTC以来的秒数
+        test_date_format!(test_date_format_ss, "%S"); // 秒数（00-60）
+        test_date_format!(test_date_format_t, "%t"); // 制表符
+        test_date_format!(test_date_format_tt, "%T"); // 时间，格式为%H:%M:%S
+        test_date_format!(test_date_format_u, "%u"); // 星期几的数字（1-7），1为星期一
+        test_date_format!(test_date_format_uu, "%U"); // 一年中的周数，星期日为每周的开始
+        test_date_format!(test_date_format_vv, "%V"); // ISO周数，星期一为每周的开始
+        test_date_format!(test_date_format_w, "%w"); // 星期几的数字（0-6），0为星期日
+        test_date_format!(test_date_format_ww, "%W"); // 一年中的周数，星期一为每周的开始
+        test_date_format!(test_date_format_x, "%x"); // 本地化的日期表示
+        test_date_format!(test_date_format_xx, "%X"); // 本地化的时间表示
+        test_date_format!(test_date_format_y, "%y"); // 年份的后两位数字
+        test_date_format!(test_date_format_yy, "%Y"); // 年份
+        test_date_format!(test_date_format_z, "%z"); // 数字时区（+hhmm或-hhmm）
+        test_date_format!(test_date_format_colon_z, "%:z"); // 数字时区，格式为±hh:mm
+        test_date_format!(test_date_format_double_colon_z, "%::z"); // 数字时区，格式为±hh:mm:ss
+        test_date_format!(test_date_format_triple_colon_z, "%:::z"); // 数字时区，以':'分隔至必要的精度
+        test_date_format!(test_date_format_zz, "%Z"); // 字母时区缩写
+    }
 }

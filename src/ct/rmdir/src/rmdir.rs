@@ -609,4 +609,152 @@ mod tests {
             assert!(!parent_dir_path.exists());
         }
     }
+    #[cfg(test)]
+    mod ct_main_tests {
+        use std::fs::create_dir_all;
+        use tempfile::TempDir;
+
+        use super::*;
+
+        #[test]
+        fn test_rmdir_main_execution_version() {
+            let args_vec = vec![ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_rmdir_main_execution_other_version() {
+            let args_vec = vec![ctcore::ct_util_name(), "-V"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_rmdir_main_execution_help() {
+            let args_vec = vec![ctcore::ct_util_name(), "--help"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_rmdir_main_execution_help_short() {
+            let args_vec = vec![ctcore::ct_util_name(), "-h"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_rmdir_main_execution_unsupport_help() {
+            let args_vec = vec![ctcore::ct_util_name(), "-H"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_rmdir_main_invalid_argument() {
+            let args_vec = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_rmdir_main_support_missing_argument() {
+            let args_vec = vec![ctcore::ct_util_name()];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_rmdir_main_parents_long() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let args_vec = vec![
+                ctcore::ct_util_name(),
+                "--parents",
+                dir_path.to_str().unwrap(),
+            ];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_rmdir_main_parents_short() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let args_vec = vec![ctcore::ct_util_name(), "-p", dir_path.to_str().unwrap()];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_rmdir_main_ignore_fail_on_non_empty_long() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let args_vec = vec![
+                ctcore::ct_util_name(),
+                "--ignore-fail-on-non-empty",
+                dir_path.to_str().unwrap(),
+            ];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = rmdir_main(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_rmdir_main_verbose_long() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let args_vec = vec![
+                ctcore::ct_util_name(),
+                "--verbose",
+                dir_path.to_str().unwrap(),
+            ];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+
+            let result = rmdir_main(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_rmdir_main_verbose_short() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let args_vec = vec![ctcore::ct_util_name(), "-v", dir_path.to_str().unwrap()];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+
+            let result = rmdir_main(args);
+            assert!(result.is_ok());
+        }
+    }
+
 }

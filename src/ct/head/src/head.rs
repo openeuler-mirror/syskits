@@ -1002,4 +1002,126 @@ mod tests {
             assert_eq!(buffer, "你好".as_bytes());
         }
     }
+    mod test_ct_head {
+        use super::*;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // 辅助函数：创建临时文件并写入内容
+        fn create_temp_file(content: &str) -> NamedTempFile {
+            let mut file = NamedTempFile::new().unwrap();
+            write!(file, "{}", content).unwrap();
+            file
+        }
+
+        /*
+        #[test]
+        fn test_ct_head_stdin() {
+            // 测试标准输入
+            let options = HeadOptions {
+                quiet: false,
+                verbose: false,
+                line_ending: CtLineEnding::Newline,
+                presume_input_pipe: true,
+                mode: Mode::FirstLines(2),
+                files: vec!["-".to_string()],
+            };
+
+            assert!(ct_head(&options).is_ok());
+        }
+        */
+        #[test]
+        fn test_ct_head_single_file() {
+            // 创建临时文件
+            let content = "line1\nline2\nline3\nline4\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path().to_str().unwrap().to_string();
+
+            let options = HeadOptions {
+                quiet: false,
+                verbose: false,
+                line_ending: CtLineEnding::Newline,
+                presume_input_pipe: false,
+                mode: Mode::FirstLines(2),
+                files: vec![path],
+            };
+
+            assert!(ct_head(&options).is_ok());
+        }
+
+        #[test]
+        fn test_ct_head_multiple_files() {
+            // 创建两个临时文件
+            let file1 = create_temp_file("file1-line1\nfile1-line2\n");
+            let file2 = create_temp_file("file2-line1\nfile2-line2\n");
+
+            let options = HeadOptions {
+                quiet: false,
+                verbose: true,
+                line_ending: CtLineEnding::Newline,
+                presume_input_pipe: false,
+                mode: Mode::FirstLines(1),
+                files: vec![
+                    file1.path().to_str().unwrap().to_string(),
+                    file2.path().to_str().unwrap().to_string(),
+                ],
+            };
+
+            assert!(ct_head(&options).is_ok());
+        }
+
+        #[test]
+        fn test_ct_head_nonexistent_file() {
+            let options = HeadOptions {
+                quiet: false,
+                verbose: false,
+                line_ending: CtLineEnding::Newline,
+                presume_input_pipe: false,
+                mode: Mode::FirstLines(1),
+                files: vec!["nonexistent_file.txt".to_string()],
+            };
+
+            // 文件不存在时应该返回 Ok，但会设置错误码
+            assert!(ct_head(&options).is_ok());
+        }
+
+        #[test]
+        fn test_ct_head_bytes_mode() {
+            let content = "Hello, World!";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path().to_str().unwrap().to_string();
+
+            let options = HeadOptions {
+                quiet: false,
+                verbose: false,
+                line_ending: CtLineEnding::Newline,
+                presume_input_pipe: false,
+                mode: Mode::FirstBytes(5),
+                files: vec![path],
+            };
+
+            assert!(ct_head(&options).is_ok());
+        }
+
+        #[test]
+        fn test_ct_head_quiet_mode() {
+            let file1 = create_temp_file("content1");
+            let file2 = create_temp_file("content2");
+
+            let options = HeadOptions {
+                quiet: true,
+                verbose: false,
+                line_ending: CtLineEnding::Newline,
+                presume_input_pipe: false,
+                mode: Mode::FirstLines(1),
+                files: vec![
+                    file1.path().to_str().unwrap().to_string(),
+                    file2.path().to_str().unwrap().to_string(),
+                ],
+            };
+
+            assert!(ct_head(&options).is_ok());
+        }
+    }
 }

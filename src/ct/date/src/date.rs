@@ -1782,4 +1782,285 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    mod tests_date_main {
+        use crate::date_main;
+
+        use std::ffi::OsString;
+
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::Builder;
+
+        #[test]
+        fn test_date_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_date_yesterday() {
+            let args = vec![ctcore::ct_util_name(), "--date", "yesterday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_today() {
+            let args = vec![ctcore::ct_util_name(), "--date", "today"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_tomorrow() {
+            let args = vec![ctcore::ct_util_name(), "--date", "tomorrow"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_month() {
+            let args = vec![ctcore::ct_util_name(), "--date", "month"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_week() {
+            let args = vec![ctcore::ct_util_name(), "--date", "week"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_friday() {
+            let args = vec![ctcore::ct_util_name(), "--date", "Friday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_date() {
+            let args = vec![ctcore::ct_util_name(), "--date", "2024-05-01"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_string() {
+            let args = vec![ctcore::ct_util_name(), "--date", "May 1 2024"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_yesterday() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next yesterday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_today() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next today"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_tomorrow() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next tomorrow"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_month() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next month"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_week() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next week"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_friday() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next Friday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_date() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next 2024-05-01"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_next_string() {
+            let args = vec![ctcore::ct_util_name(), "--date", "next May 1 2024"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_yesterday() {
+            let args = vec![ctcore::ct_util_name(), "-d", "yesterday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_today() {
+            let args = vec![ctcore::ct_util_name(), "-d", "today"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_tomorrow() {
+            let args = vec![ctcore::ct_util_name(), "-d", "tomorrow"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_month() {
+            let args = vec![ctcore::ct_util_name(), "-d", "month"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_week() {
+            let args = vec![ctcore::ct_util_name(), "-d", "week"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_friday() {
+            let args = vec![ctcore::ct_util_name(), "-d", "Friday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_date() {
+            let args = vec![ctcore::ct_util_name(), "-d", "2024-05-01"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_string() {
+            let args = vec![ctcore::ct_util_name(), "-d", "May 1 2024"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_next_yesterday() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next yesterday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_next_today() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next today"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_next_tomorrow() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next tomorrow"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
 }

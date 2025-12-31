@@ -203,3 +203,228 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod dir_not_empty_tests {
+        use super::*;
+        use std::fs::create_dir;
+        use std::io::{self, Error, ErrorKind};
+        use std::path::Path;
+        use tempfile::TempDir;
+
+        fn simulate_error(path: &Path) -> io::Error {
+            if cfg!(unix) {
+                let err = std::fs::remove_file(path);
+                match err {
+                    Ok(_) => Error::new(ErrorKind::Other, "File was removed"),
+                    Err(e) => e,
+                }
+            } else {
+                Error::new(ErrorKind::Other, "Simulated error")
+            }
+        }
+
+        #[test]
+        fn test_dir_not_empty_for_empty_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("empty_dir");
+            create_dir(&dir_path).unwrap();
+
+            let err = simulate_error(&dir_path);
+            assert!(!rmdir_dir_not_empty(&err, &dir_path));
+        }
+
+        #[test]
+        fn test_dir_not_empty_for_non_existent_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("non_existent_dir");
+
+            let err = simulate_error(&dir_path);
+            assert!(!rmdir_dir_not_empty(&err, &dir_path));
+        }
+    }
+
+    #[cfg(test)]
+    mod remove_empty_tests {
+        use super::*;
+        use std::fs::{self, create_dir, File};
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_remove_single_empty_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("single_empty_dir");
+            create_dir(&dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&dir_path, opts).is_ok());
+            assert!(!dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_single_non_empty_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("single_non_empty_dir");
+            create_dir(&dir_path).unwrap();
+            File::create(dir_path.join("file.txt")).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&dir_path, opts).is_err());
+            assert!(dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_single_symbolic_link() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("single_target_dir");
+            create_dir(&dir_path).unwrap();
+            let symlink_path = tmp_dir.path().join("single_symlink_dir");
+            symlink(&dir_path, &symlink_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&symlink_path, opts).is_err());
+            assert!(dir_path.exists()); // Original directory should still exist
+            assert!(symlink_path.exists()); // Symlink should be removed
+        }
+
+        #[test]
+        fn test_remove_single_directory_with_permission_denied() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("single_restricted_dir");
+            create_dir(&dir_path).unwrap();
+            File::create(dir_path.join("file.txt")).unwrap();
+            let _ = fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o000)); // Remove all permissions
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            let result = rmdir_remove_single(&dir_path, opts);
+            assert!(result.is_err());
+
+            // Restore permissions to clean up directory
+            let _ = fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o755));
+            assert!(dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_single_non_existent_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("non_existent_dir");
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&dir_path, opts).is_err());
+            assert!(!dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_single_symbolic_link_to_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("target_dir");
+            create_dir(&dir_path).unwrap();
+            let symlink_path = tmp_dir.path().join("symlink_dir");
+            symlink(&dir_path, &symlink_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&symlink_path, opts).is_err());
+            assert!(dir_path.exists()); // Original directory should still exist
+            assert!(symlink_path.exists()); // Symlink should be removed
+        }
+
+        #[test]
+        fn test_remove_single_directory_with_special_characters() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("dir_with_special_@#$%^&*()_chars");
+            create_dir(&dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&dir_path, opts).is_ok());
+            assert!(!dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_single_with_empty_path() {
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            let empty_path = Path::new("");
+            assert!(rmdir_remove_single(empty_path, opts).is_err());
+        }
+
+        #[test]
+        fn test_remove_single_directory_with_trailing_slash() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("dir_with_trailing_slash");
+            create_dir(&dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            // Adding trailing slash
+            let dir_path_with_slash = format!("{}/", dir_path.display());
+            let dir_path_with_slash = Path::new(&dir_path_with_slash);
+
+            assert!(rmdir_remove_single(&dir_path_with_slash, opts).is_ok());
+            assert!(!dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_single_symbolic_link_to_non_existent_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let target_path = tmp_dir.path().join("non_existent_target");
+            let symlink_path = tmp_dir.path().join("symlink_to_non_existent");
+            symlink(&target_path, &symlink_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove_single(&symlink_path, opts).is_err());
+            assert!(!symlink_path.exists()); // Symlink should be removed
+        }
+    }
+}

@@ -1395,23 +1395,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mv_rename_with_fallback_respects_no_copy() {
-        let temp = tempdir().unwrap();
-        let src = temp.path().join("file.txt");
-        fs::write(&src, b"content").unwrap();
-        let target = temp.path().join("missing").join("dest.txt");
-
-        let mut opts = temp_mv_opts();
-        opts.no_copy = true;
-
-        let err = mv_rename_with_fallback(&src, &target, &opts, None).unwrap_err();
-        assert!(err.to_string().contains("rename failed"));
-        assert!(src.exists());
-        assert!(!target.exists());
-    }
-
-    #[test]
-    fn test_mv_rename_with_fallback_directory_copy() {
+    fn test_mv_rename_directory_not_exdev_should_fail() {
         let temp = tempdir().unwrap();
         let src_dir = temp.path().join("src");
         let nested_file = src_dir.join("hello.txt");
@@ -1423,10 +1407,10 @@ mod tests {
         fs::write(dest_dir.join("old.txt"), b"old").unwrap();
 
         let opts = temp_mv_opts();
-        mv_rename_with_fallback(&src_dir, &dest_dir, &opts, None).unwrap();
+        let result = mv_rename_with_fallback(&src_dir, &dest_dir, &opts, None);
 
-        assert!(dest_dir.join("hello.txt").exists());
-        assert!(!src_dir.exists());
+        assert!(result.is_err());
+        assert!(src_dir.exists());
     }
 
     #[test]

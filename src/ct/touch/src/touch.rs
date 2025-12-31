@@ -1675,5 +1675,35 @@ mod tests {
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_time_long_modify() {
+            let file_name = "test_ct_app_time_long_modify";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "modify", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_time_long_mtime() {
+            let file_name = "test_ct_app_time_long_mtime";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "mtime", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
+        // 我们可以通过不设置stdout来触发错误（将失败，代码为1）
+        assert!(super::touch_pathbuf_from_stdout()
+            .expect_err("pathbuf_from_stdout should have failed")
+            .to_string()
+            .contains("GetFinalPathNameByHandleW failed with code 1"));
     }
 }

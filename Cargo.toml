@@ -104,6 +104,7 @@ feat_common_core = [
   "mkfifo",
   "truncate",
   "mknod",
+  "rmdir",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -272,6 +273,7 @@ users = { optional = true, package = "ct_users", path = "src/ct/users" }
 mkfifo = { optional = true, package = "ct_mkfifo", path = "src/ct/mkfifo" }
 truncate = { optional = true, package = "ct_truncate", path = "src/ct/truncate" }
 mknod = { optional = true, package = "ct_mknod", path = "src/ct/mknod" }
+rmdir = { optional = true, package = "ct_rmdir", path = "src/ct/rmdir" }
 
 [dev-dependencies]
 chrono = { workspace = true }

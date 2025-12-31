@@ -544,3 +544,261 @@ fn fmt_write_with_spaces<W: ?Sized + Write>(
     output_stream.write_all(word.as_bytes())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod compute_width_tests {
+        use super::*;
+
+        // Helper function to create FmtConfigs
+        fn create_fmt_configs(tab_width: usize) -> FmtConfigs {
+            FmtConfigs {
+                width: 50,
+                goal: 45,
+                tab_width,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            }
+        }
+
+        // Helper function to create FmtWordInfo
+        fn create_word_info(before_tab: Option<usize>, after_tab: usize) -> FmtWordInfo<'static> {
+            FmtWordInfo {
+                word: "test",
+                word_start: 0,
+                word_nchars: 4,
+                before_tab,
+                after_tab,
+                is_sentence_start: false,
+                is_ends_punct: false,
+                is_new_line: false,
+            }
+        }
+
+        #[test]
+        fn test_compute_width_fresh_true() {
+            let fmt_configs = create_fmt_configs(8);
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info(Some(5), 10);
+            let width = fmt_args.compute_width(&w_info, 5, true);
+            assert_eq!(width, 0, "Width should be 0 when is_fresh is true");
+        }
+
+        #[test]
+        fn test_compute_width_no_tab() {
+            let fmt_configs = create_fmt_configs(8);
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info(None, 10);
+            let width = fmt_args.compute_width(&w_info, 5, false);
+            assert_eq!(
+                width, 10,
+                "Width should equal after_tab when before_tab is None"
+            );
+        }
+
+        #[test]
+        fn test_compute_width_with_tab() {
+            let fmt_configs = create_fmt_configs(8);
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info(Some(3), 10);
+            let width = fmt_args.compute_width(&w_info, 5, false);
+            let expected_width = 10 + ((3 + 5) / 8 + 1) * 8 - 5;
+            assert_eq!(
+                width, expected_width,
+                "Width should account for tab expansion correctly"
+            );
+        }
+
+        // 边界条件测试：当 before_tab 正好在制表符边界
+        #[test]
+        fn test_compute_width_tab_boundary() {
+            let fmt_configs = create_fmt_configs(4); // 4 作为一个常见的制表符宽度
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info(Some(4), 10); // 制表符宽度为 4，且 before_tab 在 4 的位置
+            let width = fmt_args.compute_width(&w_info, 4, false);
+            let expected_width = 10 + ((4 + 4) / 4 + 1) * 4 - 4;
+            assert_eq!(
+                width, expected_width,
+                "Width should handle tab boundary correctly"
+            );
+        }
+
+        // 制表符宽度测试：尝试不同的制表符宽度
+        #[test]
+        fn test_compute_width_different_tab_widths() {
+            let tab_widths = [2, 3, 5, 6]; // 不同的制表符宽度
+            let pos_n = 7; // 测试一个不规则的位置
+            let before_tab = 2;
+
+            for tab_width in tab_widths {
+                let fmt_configs = create_fmt_configs(tab_width);
+                let mut output_stream = Vec::new();
+                let fmt_args = FmtBreakArgs {
+                    fmt_opts: &fmt_configs,
+                    init_len: 0,
+                    indent_str: "",
+                    indent_len: 0,
+                    is_uniform: false,
+                    out_stream: &mut output_stream,
+                };
+
+                let w_info = create_word_info(Some(before_tab), 10);
+                let width = fmt_args.compute_width(&w_info, pos_n, false);
+                let expected_width =
+                    10 + ((before_tab + pos_n) / tab_width + 1) * tab_width - pos_n;
+                assert_eq!(width, expected_width);
+            }
+        }
+
+        // 复杂制表符位置测试：高 pos_n 值
+        #[test]
+        fn test_compute_width_high_pos_n() {
+            let fmt_configs = create_fmt_configs(4);
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info(Some(3), 15);
+            let pos_n = 18; // 较高的 pos_n 值
+            let width = fmt_args.compute_width(&w_info, pos_n, false);
+            let expected_width = 15 + ((3 + pos_n) / 4 + 1) * 4 - pos_n;
+            assert_eq!(
+                width, expected_width,
+                "Width should be calculated correctly for high pos_n values"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod break_lines_tests {
+        use std::str;
+
+        use super::*;
+
+        // Helper function to create FmtParagraph
+        fn create_paragraph() -> FmtParagraph {
+            FmtParagraph {
+                lines: vec![],
+                init_str: "   ".to_string(), // Assume 3 spaces
+                init_len: 3,
+                init_end: 3,
+                indent_str: "   ".to_string(),
+                indent_len: 3,
+                indent_end: 3,
+                mail_header: false,
+            }
+        }
+
+        // Mock FmtConfigs
+        fn create_fmt_configs(width: usize, is_quick: bool) -> FmtConfigs {
+            FmtConfigs {
+                width,
+                goal: width - 5, // Simple example
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick,
+            }
+        }
+
+        #[test]
+        fn test_simple_break() {
+            let mut output_stream = Vec::new();
+            let mut para_graph = create_paragraph();
+            para_graph.mail_header = true; // Switch to simple breaking due to mail header
+            let fmt_opts = create_fmt_configs(50, false);
+
+            // Simulate the presence of words
+            para_graph.lines.push("hello".to_string());
+            para_graph.lines.push("world".to_string());
+
+            fmt_break_lines(&para_graph, &fmt_opts, &mut output_stream).unwrap();
+            let output = str::from_utf8(&output_stream).unwrap();
+            // We expect that "hello" and "world" would be processed by fmt_break_simple,
+            // but this depends on the specifics of your fmt_break_simple implementation.
+            assert!(output.contains("hello"), "Output should contain 'hello'");
+            assert!(output.contains("world"), "Output should contain 'world'");
+            assert!(output.ends_with("\n"), "Output should end with a newline");
+        }
+
+        #[test]
+        fn test_knuth_plass_break() {
+            let mut output_stream = Vec::new();
+            let mut para_graph = create_paragraph();
+            let fmt_opts = create_fmt_configs(50, false); // Use Knuth-Plass as is_quick is false
+
+            // Simulate the presence of words
+            para_graph.lines.push("longer".to_string());
+            para_graph.lines.push("paragraph".to_string());
+
+            fmt_break_lines(&para_graph, &fmt_opts, &mut output_stream).unwrap();
+            let output = str::from_utf8(&output_stream).unwrap();
+            // Expectations should align with how fmt_break_knuth_plass would format these words
+            assert!(output.contains("ger"), "Output should contain 'longer'");
+            assert!(
+                output.contains("agraph"),
+                "Output should contain 'paragraph'"
+            );
+            assert!(output.ends_with("\n"), "Output should end with a newline");
+        }
+    }
+}

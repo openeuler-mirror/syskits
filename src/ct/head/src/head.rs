@@ -811,5 +811,77 @@ mod tests {
             assert_eq!(buffer, b"");
         }
     }
-        
+    mod test_read_but_last_n_bytes {
+        use super::*;
+        use std::io::BufReader;
+
+        #[test]
+        fn test_read_but_last_n_bytes_exact() {
+            let input = "Hello, World!";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 6, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"Hello, ");
+        }
+
+        #[test]
+        fn test_read_but_last_n_bytes_more_than_available() {
+            let input = "Hello";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 10, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+
+        #[test]
+        fn test_read_but_last_n_bytes_zero() {
+            let input = "Hello";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 0, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_read_but_last_n_bytes_empty_input() {
+            let input = "";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 5, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+
+        #[test]
+        fn test_read_but_last_n_bytes_with_newlines() {
+            let input = "line1\nline2\nline3";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 5, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"line1\nline2\n");
+        }
+
+        #[test]
+        fn test_read_but_last_n_bytes_unicode() {
+            let input = "你好世界"; // 每个汉字占3个字节
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 3, Some(&mut buffer)).unwrap();
+
+            // "你好世界" 总共12个字节
+            // 去掉最后3个字节（即"界"的一部分）后应该剩下9个字节
+            // 这9个字节应该包含 "你好世"
+            assert_eq!(buffer, "你好世".as_bytes());
+            assert_eq!(buffer.len(), 9); // 验证字节长度
+        }
+
+        #[test]
+        fn test_read_but_last_n_bytes_exact_size() {
+            let input = "Hello";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_but_last_n_bytes(&mut reader, 5, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+    }
+       
 }

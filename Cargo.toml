@@ -106,6 +106,7 @@ feat_common_core = [
   "mknod",
   "rmdir",
   "dircolors",
+  "pwd",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -276,6 +277,7 @@ truncate = { optional = true, package = "ct_truncate", path = "src/ct/truncate" 
 mknod = { optional = true, package = "ct_mknod", path = "src/ct/mknod" }
 rmdir = { optional = true, package = "ct_rmdir", path = "src/ct/rmdir" }
 dircolors = { optional = true, package = "ct_dircolors", path = "src/ct/dircolors" }
+pwd = { optional = true, package = "ct_pwd", path = "src/ct/pwd" }
 
 [dev-dependencies]
 chrono = { workspace = true }

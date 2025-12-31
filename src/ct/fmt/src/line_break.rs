@@ -1536,4 +1536,54 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod write_newline_tests {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_fmt_write_newline() {
+            let mut output = Cursor::new(Vec::new());
+            let result = fmt_write_newline("    ", &mut output);
+
+            assert_eq!(result.is_ok(), true);
+            assert_eq!(output.get_ref(), b"\n    ");
+        }
+    }
+
+    #[cfg(test)]
+    mod write_with_spaces_tests {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_fmt_write_with_spaces() {
+            let mut output = Cursor::new(Vec::new());
+
+            // Test case with s_len = 2
+            let word = "hello";
+            let s_len = 2;
+            let result = fmt_write_with_spaces(word, s_len, &mut output);
+            assert!(result.is_ok());
+            assert_eq!(output.get_ref(), b"  hello");
+
+            // Test case with s_len = 1
+            let mut output = Cursor::new(Vec::new());
+            let word = "world";
+            let s_len = 1;
+            let result = fmt_write_with_spaces(word, s_len, &mut output);
+            assert!(result.is_ok());
+            assert_eq!(output.get_ref(), b" world");
+
+            // Test case with s_len != 1 or 2
+            let mut output = Cursor::new(Vec::new());
+            let word = "foo";
+            let s_len = 3;
+            let result = fmt_write_with_spaces(word, s_len, &mut output);
+            assert!(result.is_ok());
+            assert_eq!(output.get_ref(), b"foo");
+        }
+    }
 }

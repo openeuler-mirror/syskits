@@ -801,4 +801,340 @@ mod tests {
             assert!(output.ends_with("\n"), "Output should end with a newline");
         }
     }
+
+    #[cfg(test)]
+    mod break_simple_tests {
+        use std::str;
+
+        use super::*;
+
+        // Helper function to create a mock FmtWordInfo
+        fn create_word_info(
+            word: &'static str,
+            word_start: usize,
+            nchars: usize,
+            is_new_line: bool,
+            is_sentence_start: bool,
+            is_ends_punct: bool,
+        ) -> FmtWordInfo<'static> {
+            FmtWordInfo {
+                word,
+                word_start,
+                word_nchars: nchars,
+                before_tab: None,
+                after_tab: nchars,
+                is_sentence_start,
+                is_ends_punct,
+                is_new_line,
+            }
+        }
+
+        #[test]
+        fn test_single_word_fits() {
+            let mut output_stream = Vec::new();
+            let fmt_configs = FmtConfigs {
+                width: 50,
+                goal: 45,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let word_info = create_word_info("hello", 0, 5, false, false, false);
+            let words = vec![word_info];
+            fmt_break_simple(words.iter(), &mut fmt_args).unwrap();
+            let output = str::from_utf8(&output_stream).unwrap();
+            assert_eq!(
+                output, "hello\n",
+                "Output should contain the word 'hello' followed by a newline"
+            );
+        }
+
+        #[test]
+        fn test_multiple_words_line_wrap() {
+            let mut output_stream = Vec::new();
+            let fmt_configs = FmtConfigs {
+                width: 10, // Ensure line wrap occurs
+                goal: 10,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let word_info1 = create_word_info("hello", 0, 5, false, false, false);
+            let word_info2 = create_word_info("world", 0, 5, false, false, false);
+            let words = vec![word_info1, word_info2];
+            fmt_break_simple(words.iter(), &mut fmt_args).unwrap();
+            let output = str::from_utf8(&output_stream).unwrap();
+            assert_eq!(output, "hello\nworld\n", "Output should have words 'hello' and 'world' separated by newlines due to wrapping");
+        }
+    }
+
+    #[cfg(test)]
+    mod accum_words_simple_tests {
+        use super::*;
+
+        fn create_word_info(
+            word: &'static str,
+            word_start: usize,
+            nchars: usize,
+            is_new_line: bool,
+            is_sentence_start: bool,
+            is_ends_punct: bool,
+        ) -> FmtWordInfo<'static> {
+            FmtWordInfo {
+                word,
+                word_start,
+                word_nchars: nchars,
+                before_tab: None,
+                after_tab: nchars,
+                is_sentence_start,
+                is_ends_punct,
+                is_new_line,
+            }
+        }
+
+        #[test]
+        fn test_word_fits_on_line() {
+            let fmt_configs = FmtConfigs {
+                width: 20,
+                goal: 15,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut output_stream = Vec::new();
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info("hello", 0, 5, false, false, false);
+            let (new_size, _) = fmt_accum_words_simple(&mut fmt_args, 0, false, &w_info).unwrap();
+            let output = std::str::from_utf8(&output_stream).unwrap();
+            assert_eq!(new_size, 10, "New line size should be 5");
+            assert_eq!(output, "hello", "Output should contain the word 'hello'");
+        }
+
+        #[test]
+        fn test_word_exceeds_line_width() {
+            let fmt_configs = FmtConfigs {
+                width: 10,
+                goal: 8,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut output_stream = Vec::new();
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let w_info = create_word_info("hello", 0, 5, false, false, false);
+            let (new_size, _) = fmt_accum_words_simple(&mut fmt_args, 6, false, &w_info).unwrap();
+            let output = std::str::from_utf8(&output_stream).unwrap();
+            assert_eq!(new_size, 5, "New line size should reset to 5 after newline");
+            assert_eq!(
+                output, "\nhello",
+                "Output should contain a newline followed by 'hello'"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod break_knuth_plass_tests {
+        use std::str;
+
+        use super::*;
+
+        fn create_word_info(
+            word: &'static str,
+            is_ends_punct: bool,
+            is_new_line: bool,
+            is_sentence_start: bool,
+        ) -> FmtWordInfo<'static> {
+            FmtWordInfo {
+                word,
+                word_start: 0,
+                word_nchars: word.len(),
+                before_tab: None,
+                after_tab: word.len(),
+                is_sentence_start,
+                is_ends_punct,
+                is_new_line,
+            }
+        }
+
+        #[test]
+        fn test_empty_input() -> std::io::Result<()> {
+            let mut output_stream = Vec::new();
+            let fmt_configs = FmtConfigs {
+                width: 50,
+                goal: 45,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let words: Vec<FmtWordInfo> = vec![];
+            fmt_break_knuth_plass(words.iter(), &mut fmt_args)?;
+            assert_eq!(
+                str::from_utf8(&output_stream).unwrap(),
+                "\n",
+                "Should end with a newline"
+            );
+            Ok(())
+        }
+
+        #[test]
+        fn test_single_word() -> std::io::Result<()> {
+            let mut output_stream = Vec::new();
+            let fmt_configs = FmtConfigs {
+                width: 50,
+                goal: 45,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let word = create_word_info("hello", false, false, true);
+            let words = vec![word];
+            fmt_break_knuth_plass(words.iter(), &mut fmt_args).unwrap();
+            assert_eq!(
+                str::from_utf8(&output_stream).unwrap(),
+                "hello\n",
+                "Output should match expected single word with a newline"
+            );
+            Ok(())
+        }
+
+        #[test]
+        fn test_multiple_words_newline_break() -> std::io::Result<()> {
+            let mut output_stream = Vec::new();
+            let fmt_configs = FmtConfigs {
+                width: 15, // Force a line break due to width
+                goal: 10,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            };
+            let mut fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let word1 = create_word_info("hello", false, false, true);
+            let word2 = create_word_info("world", true, true, false);
+            let words = vec![word1, word2];
+            fmt_break_knuth_plass(words.iter(), &mut fmt_args).unwrap();
+            assert_eq!(
+                str::from_utf8(&output_stream).unwrap(),
+                "hello\nworld\n",
+                "Output should have words separated by a newline due to wrapping"
+            );
+            Ok(())
+        }
+    }
+
 }

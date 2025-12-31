@@ -1889,4 +1889,339 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // truncate 接口: truncate [OPTION]... [FILE]...
+        //
+        // Arguments:
+        //   <FILE>...
+        //
+        // Options:
+        //   -o, --io-blocks          treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)
+        //   -c, --no-create          do not create files that do not exist
+        //   -r, --reference <RFILE>  base the size of each file on the size of RFILE
+        //   -s, --size <SIZE>        set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified
+        //   -h, --help               Print help
+        //   -V, --version            Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_io_blocks_long() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let args = vec![ctcore::ct_util_name(), "--io-blocks", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_io_blocks_short() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let args = vec![ctcore::ct_util_name(), "-o", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_no_create_long() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let args = vec![ctcore::ct_util_name(), "--no-create", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_no_create_short() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let args = vec![ctcore::ct_util_name(), "-c", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_ct_app_reference_long() {
+            let command = ct_app();
+            let file = "test_ct_app_reference_long";
+            let reference_file = "test_ct_app_reference_long_reference_file";
+            let args = vec![ctcore::ct_util_name(), "--reference", reference_file, file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reference_short() {
+            let command = ct_app();
+            let file = "test_ct_app_reference_short";
+            let reference_file = "test_ct_app_reference_short_reference_file";
+            let args = vec![ctcore::ct_util_name(), "-r", reference_file, file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_io_blocks_long_reference_short() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let reference_file = "reference_file";
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file,
+                "--io-blocks",
+                file,
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_io_blocks_short_reference_short() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let reference_file = "reference_file";
+            let args = vec![ctcore::ct_util_name(), "-r", reference_file, "-o", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_create_long_reference_short() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let reference_file = "reference_file";
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file,
+                "--no-create",
+                file,
+            ];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_no_create_short_reference_short() {
+            let command = ct_app();
+            let file = "test_ct_app_io_blocks_long";
+            let reference_file = "reference_file";
+            let args = vec![ctcore::ct_util_name(), "-r", reference_file, "-c", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_default_1000() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_default_1000";
+            let args = vec![ctcore::ct_util_name(), "--size", "1000", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_10_kb() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_10_KB";
+            let args = vec![ctcore::ct_util_name(), "--size", "10KB", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_10_k() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_10_k";
+            let args = vec![ctcore::ct_util_name(), "--size", "10K", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_10_mb() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_10_MB";
+            let args = vec![ctcore::ct_util_name(), "--size", "10MB", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_10_m() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_10_M";
+            let args = vec![ctcore::ct_util_name(), "--size", "10M", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_10_gb() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_10_gb";
+            let args = vec![ctcore::ct_util_name(), "--size", "10GB", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_10_g() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_10_g";
+            let args = vec![ctcore::ct_util_name(), "--size", "10G", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_extend_by_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_extend_by_100";
+            let args = vec![ctcore::ct_util_name(), "--size", "+100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_reduce_by_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_reduce_by_100";
+            let args = vec![ctcore::ct_util_name(), "--size=-100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_at_most_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_extend_by_100";
+            let args = vec![ctcore::ct_util_name(), "--size", "<100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_at_least_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_at_least_100";
+            let args = vec![ctcore::ct_util_name(), "--size", ">100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_round_down_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_round_down_100";
+            let args = vec![ctcore::ct_util_name(), "--size", "/100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_long_round_up_100() {
+            let command = ct_app();
+            let file = "test_ct_app_size_long_round_up_100";
+            let args = vec![ctcore::ct_util_name(), "--size", "%100", file];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

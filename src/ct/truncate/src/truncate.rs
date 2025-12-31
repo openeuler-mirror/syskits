@@ -402,3 +402,439 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+
+    #[cfg(test)]
+    mod is_modifier_tests {
+        use super::*;
+
+        #[test]
+        fn test_is_modifier() {
+            // 测试所有有效的修饰符
+            assert!(is_modifier('+'));
+            assert!(is_modifier('-'));
+            assert!(is_modifier('<'));
+            assert!(is_modifier('>'));
+            assert!(is_modifier('/'));
+            assert!(is_modifier('%'));
+
+            // 测试无效的修饰符
+            assert!(!is_modifier('a'));
+            assert!(!is_modifier('1'));
+            assert!(!is_modifier(' '));
+            assert!(!is_modifier('='));
+            assert!(!is_modifier('!'));
+            assert!(!is_modifier('@'));
+        }
+
+        #[test]
+        fn test_is_modifier_edge_cases() {
+            // 测试边界条件
+            assert!(!is_modifier('\0')); // 空字符
+            assert!(!is_modifier('\n')); // 换行字符
+            assert!(!is_modifier('\t')); // 制表符
+        }
+    }
+    #[cfg(test)]
+    mod truncate_tests {
+        use std::fs::metadata;
+        use std::io::Write;
+
+        use tempfile::NamedTempFile;
+
+        use super::*;
+
+        #[test]
+        fn test_truncate_with_reference_and_size() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 使用参考文件和相对大小调整目标文件的大小
+            truncate(
+                false,
+                false,
+                Some(reference_file_path.clone()),
+                Some("+5".to_string()),
+                &target_files,
+            )
+            .unwrap();
+            assert_eq!(metadata(&target_file_path).unwrap().len(), 19); // "Hello, world!" 长度 + 5
+
+            truncate(
+                false,
+                false,
+                Some(reference_file_path.clone()),
+                Some("-3".to_string()),
+                &target_files,
+            )
+            .unwrap();
+            assert_eq!(metadata(&target_file_path).unwrap().len(), 11); // "Hello, world!" 长度 - 3
+        }
+
+        #[test]
+        fn test_truncate_with_reference_only() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 使用参考文件调整目标文件的大小
+            truncate(
+                false,
+                false,
+                Some(reference_file_path.clone()),
+                None,
+                &target_files,
+            )
+            .unwrap();
+            assert_eq!(metadata(&target_file_path).unwrap().len(), 14); // "Hello, world!" 的长度是 13
+        }
+
+        #[test]
+        fn test_truncate_with_size_only() {
+            // 创建目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 使用绝对大小进行调整
+            truncate(false, false, None, Some("10".to_string()), &target_files).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 10);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 10);
+        }
+
+        #[test]
+        fn test_truncate_no_create() {
+            // 文件不存在的情况
+            let non_existent_file = "test_truncate_no_create";
+            let target_files = vec![non_existent_file.to_string()];
+
+            // 设置 create 为 false
+            let result = truncate(true, false, None, Some("+5".to_string()), &target_files);
+            assert!(result.is_ok());
+            assert!(!std::path::Path::new(non_existent_file).exists());
+
+            // 设置 create 为 true
+            truncate(false, false, None, Some("+5".to_string()), &target_files).unwrap();
+            assert_eq!(metadata(non_existent_file).unwrap().len(), 5);
+
+            // 清理
+            std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_errors() {
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 测试无效大小字符串
+            let result = truncate(
+                false,
+                false,
+                None,
+                Some("invalid".to_string()),
+                &target_files,
+            );
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("Invalid number"));
+
+            // 测试参考文件不存在的情况
+            let result = truncate(
+                false,
+                false,
+                Some("test_truncate_errors2".to_string()),
+                Some("+5".to_string()),
+                &target_files,
+            );
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("cannot stat"));
+
+            // 测试除以零的情况
+            let result = truncate(false, false, None, Some("/0".to_string()), &target_files);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("division by zero"));
+        }
+    }
+    #[cfg(test)]
+    mod truncate_size_only_tests {
+        use std::fs::metadata;
+        use std::io::Write;
+
+        use tempfile::NamedTempFile;
+
+        use super::*;
+
+        #[test]
+        fn test_truncate_size_only() {
+            // 创建目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 测试相对调整大小：Extend
+            truncate_size_only("+5", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 19);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 19);
+
+            // 测试相对调整大小：Reduce
+            truncate_size_only("-3", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 16);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 16);
+
+            // 测试相对调整大小：AtMost
+            truncate_size_only("<8", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 8);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 8);
+
+            // 测试相对调整大小：AtLeast
+            truncate_size_only(">20", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 20);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 20);
+
+            // 测试相对调整大小：RoundDown
+            truncate_size_only("/4", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 20); // 20 already multiple of 4
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 20); // 20 already multiple of 4
+
+            // 测试相对调整大小：RoundUp
+            truncate_size_only("%3", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 22); // next multiple of 3
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 22); // next multiple of 3
+        }
+
+        #[test]
+        fn test_truncate_size_only_errors() {
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 测试无效大小字符串
+            let result = truncate_size_only("invalid", &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("Invalid number"));
+
+            // 测试除以零的情况
+            let result = truncate_size_only("/0", &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("division by zero"));
+
+            let result = truncate_size_only("%0", &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("division by zero"));
+        }
+
+        #[test]
+        fn test_truncate_size_only_no_create() {
+            // 文件不存在的情况
+            let non_existent_file = "test_truncate_size_only_no_create";
+            let target_files = vec![non_existent_file.to_string()];
+
+            // 设置 create 为 false
+            let result = truncate_size_only("+5", &target_files, false);
+            assert!(result.is_ok());
+            assert!(!std::path::Path::new(non_existent_file).exists());
+
+            // 设置 create 为 true
+            truncate_size_only("+5", &target_files, true).unwrap();
+            assert_eq!(metadata(non_existent_file).unwrap().len(), 5);
+
+            // 清理
+            std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_size_only_zero_length() {
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 使用绝对大小进行调整（零长度）
+            truncate_size_only("0", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file_path).unwrap().len(), 0);
+        }
+
+        #[test]
+        fn test_truncate_size_only_multiple_files() {
+            // 创建多个目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 使用绝对大小进行调整
+            truncate_size_only("10", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 10);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 10);
+        }
+    }
+
+    #[cfg(test)]
+    mod truncate_reference_file_only_tests {
+        use std::fs::metadata;
+        use std::io::Write;
+
+        use tempfile::NamedTempFile;
+
+        use super::*;
+
+        #[test]
+        fn test_truncate_reference_file_only() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建多个目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 使用参考文件来调整目标文件的大小
+            truncate_reference_file_only(&reference_file_path, &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 14); // "Hello, world!" 的长度是 13
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 14);
+        }
+
+        #[test]
+        fn test_truncate_reference_file_only_no_create() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 文件不存在的情况
+            let non_existent_file = "test_truncate_reference_file_only_no_create";
+            let target_files = vec![non_existent_file.to_string()];
+
+            // 设置 create 为 false
+            let result = truncate_reference_file_only(&reference_file_path, &target_files, false);
+            assert!(result.is_ok());
+
+            // 设置 create 为 true
+            truncate_reference_file_only(&reference_file_path, &target_files, true).unwrap();
+            assert_eq!(metadata(non_existent_file).unwrap().len(), 14); // "Hello, world!" 的长度是 13
+
+            // 清理
+            std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_reference_file_only_empty_reference() {
+            // 创建一个零长度的参考文件
+            let reference_file = NamedTempFile::new().unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 使用零长度的参考文件进行调整大小
+            truncate_reference_file_only(&reference_file_path, &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file_path).unwrap().len(), 0);
+        }
+
+        #[test]
+        fn test_truncate_reference_file_only_multiple_files() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建多个目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 使用参考文件来调整多个目标文件的大小
+            truncate_reference_file_only(&reference_file_path, &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 14); // "Hello, world!" 的长度是 13
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 14);
+        }
+
+        #[test]
+        fn test_truncate_reference_file_only_reference_not_found() {
+            // 参考文件不存在的情况
+            let reference_file_path = "test_truncate_reference_file_only_reference_not_found";
+
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 尝试使用不存在的参考文件进行调整大小
+            let result = truncate_reference_file_only(reference_file_path, &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("cannot stat"));
+        }
+    }
+}

@@ -1,0 +1,320 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 基本列出当前目录（默认行为），不包含隐藏文件，按名称排序，一行一个文件",
+            "setup_commands": [
+                "mkdir test_dir_dir_basic",
+                "cd test_dir_dir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": [],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "a.txt\nb.txt\nc.txt\nsubdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_dir_dir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 指定目录参数，正确列出该目录内容",
+            "setup_commands": [
+                "mkdir test_dir_dir_arg",
+                "mkdir test_dir_dir_arg/target",
+                "touch test_dir_dir_arg/target/a.txt",
+                "touch test_dir_dir_arg/target/b.txt",
+                "touch test_dir_dir_arg/target/.hidden",
+                "mkdir test_dir_dir_arg/target/subdir"
+            ],
+            "args": [
+                "test_dir_dir_arg/target"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "a.txt\nb.txt\nsubdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_arg"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 普通文件作为参数时，直接输出文件名，不当作目录处理",
+            "setup_commands": [
+                "mkdir test_dir_dir_file_arg",
+                "touch test_dir_dir_file_arg/file1.txt",
+                "touch test_dir_dir_file_arg/file2.txt"
+            ],
+            "args": [
+                "test_dir_dir_file_arg/file1.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "file1.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_file_arg"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 文件 + 目录混合参数，文件先输出，目录后输出并带 header",
+            "setup_commands": [
+                "mkdir test_dir_dir_mix",
+                "mkdir test_dir_dir_mix/subdir",
+                "touch test_dir_dir_mix/file1.txt",
+                "touch test_dir_dir_mix/file2.txt",
+                "touch test_dir_dir_mix/subdir/a.txt",
+                "touch test_dir_dir_mix/subdir/b.txt"
+            ],
+            "args": [
+                "test_dir_dir_mix/file1.txt",
+                "test_dir_dir_mix/subdir"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "file1.txt\n\ntest_dir_dir_mix/subdir:\na.txt\nb.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_mix"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 参数包含不存在的路径，应报错(错误中英文差异)",
+            "setup_commands": [
+                "mkdir test_dir_dir_missing",
+                "touch test_dir_dir_missing/file1.txt",
+                "touch test_dir_dir_missing/file2.txt"
+            ],
+            "args": [
+                "test_dir_dir_missing/file1.txt",
+                "test_dir_dir_missing/missing_file.txt",
+                "test_dir_dir_missing/file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": "dir: cannot access 'test_dir_dir_missing/missing_file.txt': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_missing"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 显示隐藏文件，-a 包含 . 和 ..",
+            "setup_commands": [
+                "mkdir test_dir_dir_hidden",
+                "touch test_dir_dir_hidden/file1.txt",
+                "touch test_dir_dir_hidden/.hidden1",
+                "touch test_dir_dir_hidden/.hidden2",
+                "mkdir test_dir_dir_hidden/.hidden_dir"
+            ],
+            "args": [
+                "-a",
+                "test_dir_dir_hidden"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": ".\n..\n.hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_hidden"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 显示隐藏文件，-A 不包含 . 和 ..",
+            "setup_commands": [
+                "mkdir test_dir_dir_hidden",
+                "touch test_dir_dir_hidden/file1.txt",
+                "touch test_dir_dir_hidden/.hidden1",
+                "touch test_dir_dir_hidden/.hidden2",
+                "mkdir test_dir_dir_hidden/.hidden_dir"
+            ],
+            "args": [
+                "-A",
+                "test_dir_dir_hidden"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": ".hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_hidden"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 长格式输出 (-l)(日期有中英文差异)",
+            "setup_commands": [
+                "mkdir test_dir_dir_long",
+                "touch test_dir_dir_long/file1.txt",
+                "touch test_dir_dir_long/file2.txt",
+                "mkdir test_dir_dir_long/subdir",
+                "chmod 644 test_dir_dir_long/file1.txt",
+                "chmod 600 test_dir_dir_long/file2.txt",
+                "chmod 755 test_dir_dir_long/subdir"
+            ],
+            "args": [
+                "-l",
+                "test_dir_dir_long"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "rw-r--r-- 1 $USER $USER 0 file1.txt\nrw------- 1 $USER $USER 0 file2.txt\ndrwxr-xr-x 2 $USER $USER 4096 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_long"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 默认排序，按名称升序输出",
+            "setup_commands": [
+                "mkdir test_dir_dir_sort",
+                "touch test_dir_dir_sort/fileB.txt",
+                "touch test_dir_dir_sort/fileA.txt",
+                "touch test_dir_dir_sort/fileC.txt"
+            ],
+            "args": [
+                "test_dir_dir_sort"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "fileA.txt\nfileB.txt\nfileC.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_sort"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 递归列出目录 (-R)",
+            "setup_commands": [
+                "mkdir -p test_dir_dir_recursive/dir1/dir1_sub",
+                "mkdir -p test_dir_dir_recursive/dir2",
+                "touch test_dir_dir_recursive/file1.txt",
+                "touch test_dir_dir_recursive/dir1/file2.txt",
+                "touch test_dir_dir_recursive/dir1/dir1_sub/file3.txt",
+                "touch test_dir_dir_recursive/dir2/file4.txt"
+            ],
+            "args": [
+                "-R",
+                "test_dir_dir_recursive"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "file1.txt\n\ndir1:\nfile2.txt\n\ndir1/dir1_sub:\nfile3.txt\n\ndir2:\nfile4.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_recursive"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 符号链接默认行为",
+            "setup_commands": [
+                "mkdir test_dir_dir_symlink",
+                "touch test_dir_dir_symlink/file1.txt",
+                "ln -s file1.txt test_dir_dir_symlink/link_to_file1",
+                "mkdir test_dir_dir_symlink/subdir",
+                "ln -s subdir test_dir_dir_symlink/link_to_subdir"
+            ],
+            "args": [
+                "link_to_file1",
+                "link_to_subdir",
+                "test_dir_dir_symlink"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "dir: 长格式输出 + 反向排序 (-l -r)(中英文有部分差异)",
+            "setup_commands": [
+                "mkdir test_dir_dir_long_r",
+                "touch test_dir_dir_long_r/fileA.txt",
+                "touch test_dir_dir_long_r/fileB.txt",
+                "mkdir test_dir_dir_long_r/subdir1",
+                "mkdir test_dir_dir_long_r/subdir2",
+                "chmod 644 test_dir_dir_long_r/fileA.txt",
+                "chmod 600 test_dir_dir_long_r/fileB.txt",
+                "chmod 755 test_dir_dir_long_r/subdir1",
+                "chmod 755 test_dir_dir_long_r/subdir2"
+            ],
+            "args": [
+                "-l",
+                "-r",
+                "test_dir_dir_long_r"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "drwxr-xr-x 2 $USER $USER 4096 subdir2\ndrwxr-xr-x 2 $USER $USER 4096 subdir1\nrw------- 1 $USER $USER 0 fileB.txt\nrw-r--r-- 1 $USER $USER 0 fileA.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_dir_long_r"
+            ]
+        }
+    ]
+  }

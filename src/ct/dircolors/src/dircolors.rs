@@ -752,4 +752,127 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    mod tests_ct_app {
+        use crate::ct_app;
+
+        use crate::opt_flags::{BOURNE_SHELL, C_SHELL, PRINT_DATABASE, PRINT_LS_COLORS};
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_dircolors_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+        #[test]
+        fn test_dircolors_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_dircolors_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_dircolors_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_dircolors_main_b() {
+            let args = vec![ctcore::ct_util_name(), "-b"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(BOURNE_SHELL));
+        }
+
+        #[test]
+        fn test_dircolors_main_sh() {
+            let args = vec![ctcore::ct_util_name(), "--sh"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(BOURNE_SHELL));
+        }
+
+        #[test]
+        fn test_dircolors_main_c() {
+            let args = vec![ctcore::ct_util_name(), "-c"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(C_SHELL));
+        }
+
+        #[test]
+        fn test_dircolors_main_csh() {
+            let args = vec![ctcore::ct_util_name(), "--csh"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(C_SHELL));
+        }
+
+        #[test]
+        fn test_dircolors_main_p() {
+            let args = vec![ctcore::ct_util_name(), "-p"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(PRINT_DATABASE));
+        }
+
+        #[test]
+        fn test_dircolors_main_print_database() {
+            let args = vec![ctcore::ct_util_name(), "--print-database"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(PRINT_DATABASE));
+        }
+
+        #[test]
+        fn test_dircolors_main_print_ls_colors() {
+            let args = vec![ctcore::ct_util_name(), "--print-ls-colors"];
+            let command = ct_app();
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(PRINT_LS_COLORS));
+        }
+    }
 }

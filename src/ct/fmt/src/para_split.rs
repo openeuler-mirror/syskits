@@ -985,4 +985,359 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod paragraph_stream_tests {
+        use std::io::{BufReader, Cursor};
+
+        use super::*;
+
+        /// Helper function to create a FmtFileOrStdReader from a string
+        fn create_reader(data: &str) -> FmtFileOrStdReader {
+            let cursor = Cursor::new(data.to_string());
+            BufReader::new(Box::new(cursor))
+        }
+
+        #[test]
+        fn test_is_mail_header_valid() {
+            let line = FmtFileLine {
+                line: "From someone@example.com".to_string(),
+                indent_end: 0,
+                indent_len: 0,
+                prefix_len: 0,
+                prefix_indent_end: 0,
+            };
+            assert!(
+                FmtParagraphStream::is_mail_header(&line),
+                "Valid mail header was not recognized"
+            );
+        }
+
+        #[test]
+        fn test_next_paragraph_mail_header() {
+            let fmt_opts = FmtConfigs {
+                width: 80,
+                goal: 75,
+                tab_width: 4,
+                is_mail: true,
+                ..Default::default()
+            };
+            let data = "From someone@example.com\nSubject: Test Email\nContent starts here\n";
+            let mut reader = create_reader(data);
+            let mut stream = FmtParagraphStream::new(&fmt_opts, &mut reader);
+
+            if let Some(Ok(para)) = stream.next() {
+                assert!(para.mail_header, "Failed to recognize the mail header");
+                assert_eq!(
+                    para.lines.len(),
+                    1,
+                    "Did not correctly parse the number of lines in the mail header"
+                );
+            } else {
+                panic!("Mail header paragraph was not created");
+            }
+        }
+
+        #[test]
+        fn test_next_paragraph_regular_text() {
+            let fmt_opts = FmtConfigs {
+                width: 80,
+                goal: 75,
+                tab_width: 4,
+                is_mail: false,
+                ..Default::default()
+            };
+            let data = "This is a line.\nContinuing the same paragraph.\n";
+            let mut reader = create_reader(data);
+            let mut stream = FmtParagraphStream::new(&fmt_opts, &mut reader);
+
+            let first_paragraph = stream.next();
+            assert!(
+                matches!(first_paragraph, Some(Ok(_))),
+                "Failed to create the first paragraph"
+            );
+        }
+
+        #[test]
+        fn test_multiple_paragraphs() {
+            let fmt_opts = FmtConfigs {
+                width: 80,
+                goal: 75,
+                tab_width: 4,
+                is_mail: false,
+                ..Default::default()
+            };
+            let data = "First paragraph line one.\nFirst paragraph line two.\n\nSecond paragraph line one.\n";
+            let mut reader = create_reader(data);
+            let mut stream = FmtParagraphStream::new(&fmt_opts, &mut reader);
+
+            // First paragraph
+            let first_paragraph = stream.next();
+            assert!(
+                matches!(first_paragraph, Some(Ok(para)) if para.lines.len() == 2),
+                "First paragraph should have two lines"
+            );
+        }
+
+        #[test]
+        fn test_malformed_lines() {
+            let fmt_opts = FmtConfigs {
+                width: 80,
+                goal: 75,
+                tab_width: 4,
+                is_mail: false,
+                ..Default::default()
+            };
+            let data = "Good line.\nBad line no end.\nAnother good line.\n";
+            let mut reader = create_reader(data);
+            let mut stream = FmtParagraphStream::new(&fmt_opts, &mut reader);
+
+            let paragraph = stream.next();
+            assert!(
+                matches!(paragraph, Some(Ok(para)) if para.lines.len() == 3),
+                "Paragraph should include all lines despite bad formatting"
+            );
+        }
+
+        #[test]
+        fn test_paragraph_with_mail_header_and_regular_text() {
+            let fmt_opts = FmtConfigs {
+                width: 80,
+                goal: 75,
+                tab_width: 4,
+                is_mail: true,
+                ..Default::default()
+            };
+            let data = "From: someone@example.com\nSubject: Test\nContent starts here\n\nNew paragraph without header.\n";
+            let mut reader = create_reader(data);
+            let mut stream = FmtParagraphStream::new(&fmt_opts, &mut reader);
+
+            // Mail header paragraph
+            let mail_paragraph = stream.next();
+            assert!(
+                matches!(mail_paragraph, Some(Ok(para)) if para.mail_header),
+                "Mail header paragraph was not recognized correctly"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod para_words_create_words_tests {
+        use super::*;
+
+        fn create_fmt_configs() -> FmtConfigs {
+            FmtConfigs {
+                width: 80,
+                goal: 75,
+                tab_width: 4,
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+            }
+        }
+
+        fn create_paragraph(
+            lines: Vec<&str>,
+            mail_header: bool,
+            init_len: usize,
+            indent_len: usize,
+        ) -> FmtParagraph {
+            FmtParagraph {
+                lines: lines.iter().map(|&line| line.to_string()).collect(),
+                init_str: String::new(),
+                init_len,
+                init_end: init_len,
+                indent_str: String::new(),
+                indent_len,
+                indent_end: indent_len,
+                mail_header,
+            }
+        }
+
+        #[test]
+        fn test_create_words_mail_header() {
+            let fmt_opts = create_fmt_configs();
+            let para =
+                create_paragraph(vec!["From: user@example.com", "Subject: Test"], true, 0, 0);
+            let para_words = FmtParaWords::new(&fmt_opts, &para);
+
+            assert_eq!(para_words.words.len(), 4);
+            assert_eq!(para_words.words[0].word, "From:");
+            assert_eq!(para_words.words[1].word, "user@example.com");
+            assert_eq!(para_words.words[2].word, "Subject:");
+            assert_eq!(para_words.words[3].word, "Test");
+        }
+
+        #[test]
+        fn test_create_words_crown_mode() {
+            let mut fmt_opts = create_fmt_configs();
+            fmt_opts.is_crown = true;
+            let para = create_paragraph(vec!["   This is the first line"], false, 3, 3);
+            let para_words = FmtParaWords::new(&fmt_opts, &para);
+
+            assert_eq!(para_words.words.len(), 5); // Assumes word splitting is correct
+            assert_eq!(para_words.words[0].word, "This");
+            assert_eq!(para_words.words[3].word, " first");
+        }
+
+        #[test]
+        fn test_create_words_tagged_mode() {
+            let mut fmt_opts = create_fmt_configs();
+            fmt_opts.is_tagged = true;
+            let para = create_paragraph(
+                vec!["# This is the first line", "# and this is the second line"],
+                false,
+                2,
+                2,
+            );
+            let para_words = FmtParaWords::new(&fmt_opts, &para);
+
+            assert_eq!(para_words.words.len(), 11); // Assumes word splitting is correct
+            assert_eq!(para_words.words[0].word, "This");
+            assert_eq!(para_words.words[5].word, "and");
+        }
+    }
+
+    #[cfg(test)]
+    mod configs_is_punctuation_tests {
+        use super::*;
+
+        #[test]
+        fn test_is_punctuation_valid() {
+            assert!(
+                FmtWordSplit::is_punctuation('!'),
+                "Exclamation mark should be considered punctuation."
+            );
+            assert!(
+                FmtWordSplit::is_punctuation('.'),
+                "Period should be considered punctuation."
+            );
+            assert!(
+                FmtWordSplit::is_punctuation('?'),
+                "Question mark should be considered punctuation."
+            );
+        }
+
+        #[test]
+        fn test_is_punctuation_invalid() {
+            assert!(
+                !FmtWordSplit::is_punctuation(','),
+                "Comma should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation('a'),
+                "Alphabet should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation('1'),
+                "Numeric should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation(' '),
+                "Space should not be considered punctuation."
+            );
+        }
+
+        #[test]
+        fn test_is_punctuation_edge_cases() {
+            assert!(
+                !FmtWordSplit::is_punctuation('\t'),
+                "Tab should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation('\n'),
+                "Newline should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation('-'),
+                "Dash should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation(';'),
+                "Semicolon should not be considered punctuation."
+            );
+            assert!(
+                !FmtWordSplit::is_punctuation(':'),
+                "Colon should not be considered punctuation."
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod configs_analyze_tabs_tests {
+        use super::*;
+
+        #[test]
+        fn test_analyze_tabs_no_tabs() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let splitter = FmtWordSplit::new(&fmt_opts, "   hello world");
+            let (before_tab, after_tab, word_start) = splitter.analyze_tabs("hello world");
+            assert_eq!(before_tab, None);
+            assert_eq!(after_tab, 0);
+            assert_eq!(word_start, Some(0));
+        }
+
+        #[test]
+        fn test_analyze_tabs_with_tab() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let splitter = FmtWordSplit::new(&fmt_opts, "\thello\tworld");
+            let (before_tab, after_tab, word_start) = splitter.analyze_tabs("\thello\tworld");
+            assert_eq!(before_tab, Some(0));
+            assert_eq!(after_tab, 0); // Assumes tab expansion to next tab stop
+            assert_eq!(word_start, Some(1));
+        }
+
+        #[test]
+        fn test_analyze_tabs_multiple_tabs() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let splitter = FmtWordSplit::new(&fmt_opts, "\thello\t\tworld");
+            let (before_tab, after_tab, word_start) = splitter.analyze_tabs("\thello\t\tworld");
+            assert_eq!(before_tab, Some(0));
+            assert_eq!(after_tab, 0); // Two tabs expanded to next tab stops
+            assert_eq!(word_start, Some(1));
+        }
+
+        #[test]
+        fn test_analyze_tabs_consecutive_spaces() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let splitter = FmtWordSplit::new(&fmt_opts, "   hello   world");
+            let (before_tab, after_tab, word_start) = splitter.analyze_tabs("hello   world");
+            assert_eq!(before_tab, None);
+            assert_eq!(after_tab, 0); // "hello" + 3 spaces
+            assert_eq!(word_start, Some(0));
+        }
+
+        #[test]
+        fn test_analyze_tabs_tab_space_mix() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let splitter = FmtWordSplit::new(&fmt_opts, "\t   hello\t   world");
+            let (before_tab, after_tab, word_start) = splitter.analyze_tabs("   hello\t   world");
+            assert_eq!(before_tab, None);
+            assert_eq!(after_tab, 3); // "   hello" + spaces expanded to next tab stop
+            assert_eq!(word_start, Some(3)); // After initial tabs
+        }
+    }
+
 }

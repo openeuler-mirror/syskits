@@ -295,4 +295,272 @@ fn compare_results(
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_case::{
+        CommandExecution, FunctionalVerification, IgnoreFields, TestCase, TestExpectation,
+    };
 
+    // 创建一个简单的测试用例
+    fn create_test_case(
+        stdout: Option<String>,
+        stderr: Option<String>,
+        exit_code: Option<i32>,
+        ignore_stdout: bool,
+        ignore_stderr: bool,
+        ignore_exit_code: bool,
+    ) -> TestCase {
+        TestCase {
+            command: "test_command".to_string(),
+            description: "Test case description".to_string(),
+            args: vec!["arg1".to_string(), "arg2".to_string()],
+            expectation: TestExpectation {
+                execution: CommandExecution {
+                    exit_code,
+                    stdout,
+                    stderr,
+                },
+                verifications: Vec::new(),
+                use_patterns: false,
+                env_changes: std::collections::HashMap::new(),
+                file_changes: Vec::new(),
+                ignore_fields: IgnoreFields {
+                    ignore_exit_code,
+                    ignore_stdout,
+                    ignore_stderr,
+                    ignore_verifications: false,
+                },
+            },
+            setup_commands: Vec::new(),
+            cleanup_commands: Vec::new(),
+            requires_root: false,
+            timeout: 30,
+            tags: Vec::new(),
+            environment: Default::default(),
+        }
+    }
+
+    // 创建命令结果
+    fn create_command_result(stdout: &str, stderr: &str, exit_code: i32) -> CommandResult {
+        CommandResult {
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+            exit_code,
+        }
+    }
+
+    #[test]
+    fn test_compare_results_all_match() {
+        // 创建测试用例，所有字段都匹配
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_stdout_differs() {
+        // 创建测试用例，stdout不匹配
+        let test_case = create_test_case(
+            Some("expected_output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("expected_output", "error", 0);
+        let actual = create_command_result("actual_output", "error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(!result.passed);
+        assert_eq!(result.differences.len(), 1);
+        assert!(result.differences[0].contains("stdout differs"));
+    }
+
+    #[test]
+    fn test_compare_results_stderr_differs() {
+        // 创建测试用例，stderr不匹配
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            Some("expected_error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("output", "expected_error", 0);
+        let actual = create_command_result("output", "actual_error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(!result.passed);
+        assert_eq!(result.differences.len(), 1);
+        assert!(result.differences[0].contains("stderr differs"));
+    }
+
+    #[test]
+    fn test_compare_results_exit_code_differs() {
+        // 创建测试用例，exit_code不匹配
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 1);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(!result.passed);
+        assert_eq!(result.differences.len(), 1);
+        assert!(result.differences[0].contains("exit code differs"));
+    }
+
+    #[test]
+    fn test_compare_results_ignore_stdout() {
+        // 创建测试用例，忽略stdout比较
+        let test_case = create_test_case(
+            Some("expected_output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            true, // ignore_stdout
+            false,
+            false,
+        );
+
+        let expected = create_command_result("expected_output", "error", 0);
+        let actual = create_command_result("actual_output", "error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_ignore_stderr() {
+        // 创建测试用例，忽略stderr比较
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            Some("expected_error".to_string()),
+            Some(0),
+            false,
+            true, // ignore_stderr
+            false,
+        );
+
+        let expected = create_command_result("output", "expected_error", 0);
+        let actual = create_command_result("output", "actual_error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_ignore_exit_code() {
+        // 创建测试用例，忽略exit_code比较
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            true, // ignore_exit_code
+        );
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 1);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_null_stdout() {
+        // 创建测试用例，stdout为null
+        let test_case = create_test_case(
+            None, // stdout is null
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("expected_output", "error", 0);
+        let actual = create_command_result("actual_output", "error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_null_stderr() {
+        // 创建测试用例，stderr为null
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            None, // stderr is null
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("output", "expected_error", 0);
+        let actual = create_command_result("output", "actual_error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_null_exit_code() {
+        // 创建测试用例，exit_code为null
+        let test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            None, // exit_code is null
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 1);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+}

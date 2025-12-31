@@ -1307,4 +1307,233 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod restart_active_breaks_tests {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_fmt_restart_active_breaks() {
+            let mut output = Cursor::new(Vec::new());
+            let fmt_args = FmtBreakArgs {
+                indent_len: 4,
+                is_uniform: false,
+                fmt_opts: &FmtConfigs {
+                    is_crown: false,
+                    is_tagged: false,
+                    is_mail: false,
+                    is_split_only: false,
+                    prefix_option: None,
+                    is_xprefix: false,
+                    anti_prefix_option: None,
+                    is_xanti_prefix: false,
+                    is_uniform: false,
+                    is_quick: false,
+                    width: 80,
+                    goal: 0,
+                    tab_width: 0,
+                },
+                init_len: 0,
+                indent_str: "",
+                out_stream: &mut output,
+            };
+            let w = FmtWordInfo {
+                word: "",
+                word_start: 0,
+                word_nchars: 5,
+                before_tab: None,
+                after_tab: 0,
+                is_sentence_start: false,
+                is_ends_punct: false,
+                is_new_line: false,
+            };
+            let active = FmtLineBreak {
+                prev: 0,
+                linebreak: None,
+                is_break_before: false,
+                demerits: 0,
+                prev_rat: 1.0,
+                length: 0,
+                is_fresh: true,
+            };
+            let s_len = 2;
+            let min = 10;
+
+            let result = fmt_restart_active_breaks(&fmt_args, &active, 1, &w, s_len, min);
+
+            assert_eq!(result.prev, 1);
+            assert_eq!(result.linebreak, Some(&w));
+            assert_eq!(result.is_break_before, false);
+            assert_eq!(result.demerits, 0);
+            assert_eq!(result.prev_rat, -1.0);
+            assert_eq!(result.length, 4);
+            assert_eq!(result.is_fresh, true);
+        }
+
+        #[test]
+        fn test_fmt_restart_active_breaks_edge_cases() {
+            let fmt_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 80,
+                goal: 0,
+                tab_width: 0,
+            };
+
+            let fmt_args = FmtBreakArgs {
+                indent_len: 4,
+                is_uniform: false,
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                out_stream: &mut Cursor::new(Vec::new()),
+            };
+
+            // 边界条件：act_idx为0，应保持新鲜行状态
+            let w0 = FmtWordInfo {
+                word: "",
+                word_start: 0,
+                word_nchars: 5,
+                before_tab: None,
+                after_tab: 0,
+                is_sentence_start: false,
+                is_ends_punct: false,
+                is_new_line: false,
+            };
+            let active0 = FmtLineBreak {
+                prev: 0,
+                linebreak: None,
+                is_break_before: false,
+                demerits: 0,
+                prev_rat: 1.0,
+                length: 0,
+                is_fresh: true,
+            };
+            let result0 = fmt_restart_active_breaks(&fmt_args, &active0, 0, &w0, 2, 10);
+            assert_eq!(result0.prev, 0);
+            assert_eq!(
+                result0.linebreak,
+                Some(&FmtWordInfo {
+                    word: "",
+                    word_start: 0,
+                    word_nchars: 5,
+                    before_tab: None,
+                    after_tab: 0,
+                    is_sentence_start: false,
+                    is_ends_punct: false,
+                    is_new_line: false
+                })
+            );
+            assert_eq!(result0.is_break_before, false);
+            assert_eq!(result0.demerits, 0);
+            assert_eq!(result0.prev_rat, -1.0);
+            assert_eq!(result0.length, 4);
+            assert!(result0.is_fresh);
+
+            // 边界条件：word长度等于宽度，应触发换行
+            let w1 = FmtWordInfo {
+                word: "",
+                word_start: 0,
+                word_nchars: fmt_args.fmt_opts.width,
+                before_tab: None,
+                after_tab: 0,
+                is_sentence_start: false,
+                is_ends_punct: false,
+                is_new_line: false,
+            };
+            let active1 = FmtLineBreak {
+                prev: 0,
+                linebreak: None,
+                is_break_before: false,
+                demerits: 0,
+                prev_rat: 1.0,
+                length: 0,
+                is_fresh: true,
+            };
+            let result1 = fmt_restart_active_breaks(&fmt_args, &active1, 1, &w1, 2, 10);
+            assert!(!result1.is_break_before);
+
+            // 边界条件：min等于line_length，理论上不会触发换行
+            let w2 = FmtWordInfo {
+                word: "",
+                word_start: 0,
+                word_nchars: 5,
+                before_tab: None,
+                after_tab: 0,
+                is_sentence_start: false,
+                is_ends_punct: false,
+                is_new_line: false,
+            };
+            let active2 = FmtLineBreak {
+                prev: 4,
+                linebreak: None,
+                is_break_before: false,
+                demerits: 0,
+                prev_rat: 1.0,
+                length: 4,
+                is_fresh: false,
+            };
+            let result2 = fmt_restart_active_breaks(&fmt_args, &active2, 1, &w2, 2, 4);
+            assert!(!result2.is_break_before); // 预期不换行
+        }
+    }
+
+    #[cfg(test)]
+    mod compute_slen_tests {
+        use super::*;
+
+        #[test]
+        fn test_fmt_compute_slen() {
+            assert_eq!(fmt_compute_slen(true, false, true, false), 2);
+            assert_eq!(fmt_compute_slen(true, false, false, false), 1);
+            assert_eq!(fmt_compute_slen(false, true, true, false), 2);
+            assert_eq!(fmt_compute_slen(false, true, false, true), 2);
+            assert_eq!(fmt_compute_slen(false, true, false, false), 1);
+            assert_eq!(fmt_compute_slen(false, false, true, false), 0);
+            assert_eq!(fmt_compute_slen(false, false, false, true), 0);
+            assert_eq!(fmt_compute_slen(false, false, false, false), 0);
+        }
+    }
+
+    #[cfg(test)]
+    mod slice_if_fresh_tests {
+        use super::*;
+
+        #[test]
+        fn test_fmt_slice_if_fresh_fresh() {
+            let result = fmt_slice_if_fresh(true, "hello", 2, true, false, true, false);
+            assert_eq!(result, (0, "llo"));
+        }
+
+        #[test]
+        fn test_fmt_slice_if_fresh_not_fresh_uniform() {
+            let result = fmt_slice_if_fresh(false, "world", 0, true, false, true, false);
+            let expected = (2, "world");
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_fmt_slice_if_fresh_not_fresh_not_uniform_newline() {
+            let result = fmt_slice_if_fresh(false, "foo\nbar", 3, false, true, false, false);
+            let expected = (1, "foo\nbar");
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_fmt_slice_if_fresh_not_fresh_not_uniform_s_start_punct() {
+            let result = fmt_slice_if_fresh(false, "hello!", 2, false, false, true, true);
+            let expected = (0, "hello!");
+            assert_eq!(result, expected);
+        }
+    }
+
 }

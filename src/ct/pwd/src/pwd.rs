@@ -170,3 +170,509 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args(args)
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        #[test]
+        fn test_pwd_main_execution_version() {
+            let args_vec = vec![ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = pwd_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_pwd_main_execution_other_version() {
+            let args_vec = vec![ctcore::ct_util_name(), "-V"];
+
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = pwd_main(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_pwd_main_execution_help() {
+            let args_vec = vec![ctcore::ct_util_name(), "--help"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = pwd_main(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_pwd_main_execution_help_short() {
+            let args_vec = vec![ctcore::ct_util_name(), "-h"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = pwd_main(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_pwd_main_execution_unsupport_help() {
+            let args_vec = vec![ctcore::ct_util_name(), "-H"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = pwd_main(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_pwd_main_invalid_argument() {
+            let args_vec = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let args = args_vec.iter().map(|s| OsString::from(s));
+            let result = pwd_main(args);
+            assert!(result.is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod env_data_tests {
+        use super::*;
+        use std::env;
+        use std::ffi::OsString;
+        use std::fs;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_env_data() {
+            // test_pwd_main_support_missing_argument()
+            {
+                let args_vec = vec![ctcore::ct_util_name()];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_logical_long()
+            {
+                let args_vec = vec![ctcore::ct_util_name(), "--logical"];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_logical_short()
+            {
+                let args_vec = vec![ctcore::ct_util_name(), "-L"];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            //  test_pwd_main_physical_long()
+            {
+                let args_vec = vec![ctcore::ct_util_name(), "--physical"];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_physical_short()
+            {
+                let args_vec = vec![ctcore::ct_util_name(), "-P"];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_logical_long_with_file()
+            {
+                let file_name = "test_pwd_main_logical_long";
+
+                let args_vec = vec![ctcore::ct_util_name(), "--logical", file_name];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_logical_short_with_file()
+            {
+                let file_name = "test_pwd_main_logical_short";
+
+                let args_vec = vec![ctcore::ct_util_name(), "-L", file_name];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_physical_long_with_file()
+            {
+                let file_name = "test_pwd_main_physical_long";
+
+                let args_vec = vec![ctcore::ct_util_name(), "--physical", file_name];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_pwd_main_physical_short_with_file()
+            {
+                let file_name = "test_pwd_main_physical_short";
+
+                let args_vec = vec![ctcore::ct_util_name(), "-P", file_name];
+                let args = args_vec.iter().map(|s| OsString::from(s));
+                let result = pwd_main(args);
+                assert!(result.is_ok());
+            }
+
+            // test_physical_path_basic()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                assert_eq!(result, temp_dir_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_nested_symlink()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let nested_dir = temp_dir_path.join("nested");
+                std::fs::create_dir(&nested_dir).expect("failed to create nested dir");
+
+                let target_path = nested_dir.join("target");
+                let symlink_path = nested_dir.join("symlink");
+                std::fs::create_dir(&target_path).expect("failed to create target dir");
+
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&target_path, &symlink_path)
+                    .expect("failed to create symlink");
+                #[cfg(windows)]
+                std::os::windows::fs::symlink_dir(&target_path, &symlink_path)
+                    .expect("failed to create symlink");
+
+                env::set_current_dir(&symlink_path).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                let expected_path = target_path
+                    .canonicalize()
+                    .expect("failed to canonicalize target path");
+                assert_eq!(result, expected_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_multiple_symlinks()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let nested_dir = temp_dir_path.join("nested");
+                std::fs::create_dir(&nested_dir).expect("failed to create nested dir");
+
+                let target_path = nested_dir.join("target");
+                let symlink_path1 = nested_dir.join("symlink1");
+                let symlink_path2 = temp_dir_path.join("symlink2");
+
+                std::fs::create_dir(&target_path).expect("failed to create target dir");
+
+                #[cfg(unix)]
+                {
+                    std::os::unix::fs::symlink(&target_path, &symlink_path1)
+                        .expect("failed to create symlink1");
+                    std::os::unix::fs::symlink(&symlink_path1, &symlink_path2)
+                        .expect("failed to create symlink2");
+                }
+
+                #[cfg(windows)]
+                {
+                    std::os::windows::fs::symlink_dir(&target_path, &symlink_path1)
+                        .expect("failed to create symlink1");
+                    std::os::windows::fs::symlink_dir(&symlink_path1, &symlink_path2)
+                        .expect("failed to create symlink2");
+                }
+
+                env::set_current_dir(&symlink_path2).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                let expected_path = target_path
+                    .canonicalize()
+                    .expect("failed to canonicalize target path");
+                assert_eq!(result, expected_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_nonexistent_directory()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+
+                let nonexistent_path = temp_dir_path.join("nonexistent");
+
+                env::set_current_dir(&nonexistent_path)
+                    .expect_err("should fail to change directory");
+                let result = pwd_physical_path();
+                assert!(result.is_ok());
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_long_path()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let long_path = temp_dir_path.join("a".repeat(255));
+                std::fs::create_dir_all(&long_path).expect("failed to create long path dir");
+                env::set_current_dir(&long_path).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                let expected_path = long_path
+                    .canonicalize()
+                    .expect("failed to canonicalize long path");
+                assert_eq!(result, expected_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_basic()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                assert_eq!(result, temp_dir_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_nested_symlink()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let nested_dir = temp_dir_path.join("nested");
+                std::fs::create_dir(&nested_dir).expect("failed to create nested dir");
+
+                let target_path = nested_dir.join("target");
+                let symlink_path = nested_dir.join("symlink");
+                std::fs::create_dir(&target_path).expect("failed to create target dir");
+
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&target_path, &symlink_path)
+                    .expect("failed to create symlink");
+                #[cfg(windows)]
+                std::os::windows::fs::symlink_dir(&target_path, &symlink_path)
+                    .expect("failed to create symlink");
+
+                env::set_current_dir(&symlink_path).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                let expected_path = target_path
+                    .canonicalize()
+                    .expect("failed to canonicalize target path");
+                assert_eq!(result, expected_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_multiple_symlinks()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let nested_dir = temp_dir_path.join("nested");
+                std::fs::create_dir(&nested_dir).expect("failed to create nested dir");
+
+                let target_path = nested_dir.join("target");
+                let symlink_path1 = nested_dir.join("symlink1");
+                let symlink_path2 = temp_dir_path.join("symlink2");
+
+                std::fs::create_dir(&target_path).expect("failed to create target dir");
+
+                #[cfg(unix)]
+                {
+                    std::os::unix::fs::symlink(&target_path, &symlink_path1)
+                        .expect("failed to create symlink1");
+                    std::os::unix::fs::symlink(&symlink_path1, &symlink_path2)
+                        .expect("failed to create symlink2");
+                }
+
+                #[cfg(windows)]
+                {
+                    std::os::windows::fs::symlink_dir(&target_path, &symlink_path1)
+                        .expect("failed to create symlink1");
+                    std::os::windows::fs::symlink_dir(&symlink_path1, &symlink_path2)
+                        .expect("failed to create symlink2");
+                }
+
+                env::set_current_dir(&symlink_path2).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                let expected_path = target_path
+                    .canonicalize()
+                    .expect("failed to canonicalize target path");
+                assert_eq!(result, expected_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_nonexistent_directory()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+
+                let nonexistent_path = temp_dir_path.join("nonexistent");
+
+                env::set_current_dir(&nonexistent_path)
+                    .expect_err("should fail to change directory");
+                let result = pwd_physical_path();
+                assert!(result.is_ok());
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_physical_path_with_long_path()
+            {
+                let temp_dir = TempDir::new().unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let long_path = temp_dir_path.join("a".repeat(255));
+                std::fs::create_dir_all(&long_path).expect("failed to create long path dir");
+                env::set_current_dir(&long_path).expect("failed to change directory");
+
+                let result = pwd_physical_path().expect("failed to get physical path");
+                let expected_path = long_path
+                    .canonicalize()
+                    .expect("failed to canonicalize long path");
+                assert_eq!(result, expected_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_unix()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                let logical_path_buf = temp_dir_path.join("logical");
+                fs::create_dir(&logical_path_buf).expect("failed to create logical dir");
+
+                let symlink_path = temp_dir_path.join("symlink");
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&logical_path_buf, &symlink_path)
+                    .expect("failed to create symlink");
+                #[cfg(windows)]
+                std::os::windows::fs::symlink_dir(&logical_path_buf, &symlink_path)
+                    .expect("failed to create symlink");
+
+                // 切换到符号链接目录
+                env::set_current_dir(&symlink_path).expect("failed to change directory");
+                env::set_var("PWD", &symlink_path);
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, symlink_path);
+                env::remove_var("PWD");
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_invalid_pwd()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+                env::set_var("PWD", "/invalid/path");
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, temp_dir_path);
+                env::remove_var("PWD");
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_unix_no_pwd()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+                env::remove_var("PWD");
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, temp_dir_path);
+                env::remove_var("PWD");
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_unix_relative_pwd()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+                env::set_var("PWD", "relative/path");
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, temp_dir_path);
+                env::remove_var("PWD");
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_windows_valid_pwd()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+                env::set_var("PWD", &temp_dir_path);
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, temp_dir_path);
+                env::remove_var("PWD");
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_windows_invalid_pwd()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+                env::set_var("PWD", "C:\\invalid\\path");
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, temp_dir_path);
+                env::remove_var("PWD");
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+
+            // test_logical_path_windows_no_pwd()
+            {
+                let temp_dir = TempDir::with_prefix("test_logical_path_").unwrap();
+                let temp_dir_path = temp_dir.path().to_path_buf();
+
+                env::set_current_dir(&temp_dir_path).expect("failed to change directory");
+                env::remove_var("PWD");
+
+                let result = pwd_logical_path().expect("failed to get logical path");
+                assert_eq!(result, temp_dir_path);
+
+                temp_dir.close().expect("failed to close temp dir");
+            }
+        }
+    }
+}

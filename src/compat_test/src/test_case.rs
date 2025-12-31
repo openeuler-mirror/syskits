@@ -287,3 +287,116 @@ impl From<CommandExecution> for CommandResult {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_test_case() {
+        let json = r#"{
+            "command": "echo",
+            "description": "测试基本的 echo 命令",
+            "args": ["Hello, World!"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello, World!\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "use_patterns": false,
+                "env_changes": {},
+                "file_changes": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false
+                }
+            },
+            "setup_commands": [],
+            "cleanup_commands": [],
+            "requires_root": false,
+            "timeout": 5,
+            "tags": ["basic"],
+            "environment": {
+                "files": [],
+                "env_vars": {},
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }"#;
+
+        let test_case: TestCase = serde_json::from_str(json).unwrap();
+        assert_eq!(test_case.command, "echo");
+        assert_eq!(test_case.args, vec!["Hello, World!"]);
+        assert_eq!(test_case.expectation.execution.exit_code, 0);
+        assert_eq!(
+            test_case.expectation.execution.stdout,
+            Some("Hello, World!\n".to_string())
+        );
+    }
+
+    #[test]
+    fn test_deserialize_test_suite() {
+        let json = r#"{
+            "tests": [
+                {
+                    "command": "ls",
+                    "description": "测试文件列表功能",
+                    "args": ["-l", "test_dir"],
+                    "setup_commands": [
+                        "mkdir -p test_dir",
+                        "touch test_dir/file1"
+                    ],
+                    "expectation": {
+                        "execution": {
+                            "exit_code": 0,
+                            "stdout": "",
+                            "stderr": ""
+                        },
+                        "verifications": [
+                            {
+                                "command": "test -d test_dir",
+                                "expected_exit": 0,
+                                "expected_stdout": "",
+                                "expected_stderr": ""
+                            }
+                        ],
+                        "use_patterns": false,
+                        "env_changes": {},
+                        "file_changes": [],
+                        "ignore_fields": {
+                            "ignore_exit_code": false,
+                            "ignore_stdout": false,
+                            "ignore_stderr": false
+                        }
+                    },
+                    "cleanup_commands": [
+                        "rm -rf test_dir"
+                    ],
+                    "requires_root": false,
+                    "timeout": 5,
+                    "tags": ["basic"],
+                    "environment": {
+                        "files": [],
+                        "env_vars": {},
+                        "working_dir": null,
+                        "run_as_user": null,
+                        "run_as_group": null,
+                        "umask": null,
+                        "resource_limits": null
+                    }
+                }
+            ]
+        }"#;
+
+        let test_suite: TestSuite = serde_json::from_str(json).unwrap();
+        assert_eq!(test_suite.tests.len(), 1);
+        assert_eq!(test_suite.tests[0].command, "ls");
+        assert_eq!(test_suite.tests[0].setup_commands.len(), 2);
+        assert_eq!(test_suite.tests[0].cleanup_commands.len(), 1);
+    }
+}

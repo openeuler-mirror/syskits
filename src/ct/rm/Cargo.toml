@@ -1,0 +1,31 @@
+[package]
+name = "ct_rm"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "rm ~ (ctutils) remove PATHNAME"
+
+homepage = "https://www.ctyun.cn/developer"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/rm"
+keywords = ["syskits", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+[lib]
+path = "src/rm.rs"
+
+[dependencies]
+clap = { workspace = true }
+walkdir = { workspace = true }
+ctcore = { workspace = true, features = ["fs", "pipes"] }
+tempfile = "3.5.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+
+[[bin]]
+name = "rm"
+path = "src/main.rs"

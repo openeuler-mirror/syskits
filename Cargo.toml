@@ -16,7 +16,6 @@ edition = "2024"
 name = "syskits"
 version.workspace = true
 authors.workspace = true
-license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
@@ -131,6 +130,7 @@ feat_common_core = [
   "nproc",
   "basename",
   "hostid",
+  "rm",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -342,6 +342,8 @@ unlink = { optional = true, package = "ct_unlink", path = "src/ct/unlink" }
 uniq = { optional = true, package = "ct_uniq", path = "src/ct/uniq" }
 nice = { optional = true, package = "ct_nice", path = "src/ct/nice" }
 hostid = { optional = true, package = "ct_hostid", path = "src/ct/hostid" }
+rm = { optional = true, package = "ct_rm", path = "src/ct/rm" }
+
 [dev-dependencies]
 chrono = { workspace = true }
 conv = "0.3"
@@ -359,6 +361,7 @@ ctcore = { workspace = true, features = ["entries", "process", "signals"] }
 walkdir = { workspace = true }
 hex-literal = "0.4.1"
 rstest = { workspace = true }
+cargo-llvm-cov = "0.6.15"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 procfs = { version = "0.16", default-features = false }

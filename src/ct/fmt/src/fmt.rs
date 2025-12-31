@@ -7447,4 +7447,256 @@ mod tests {
             assert_eq!(configs, expected_configs);
         }
     }
+
+    #[cfg(test)]
+    mod process_file_tests {
+        use std::fs;
+        use std::fs::File;
+        use std::io::{Cursor, Write};
+
+        use tempfile::TempDir;
+
+        use super::*;
+
+        fn setup_fmt_configs() -> FmtConfigs {
+            FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 70,
+                goal: 68,
+                tab_width: 4,
+            }
+        }
+
+        #[test]
+        fn test_fmt_process_file_with_real_file() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_input.txt");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"Some file content\nAnother line");
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = setup_fmt_configs();
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            assert_eq!(
+                String::from_utf8(output_stream.into_inner()).unwrap(),
+                "Some file content Another line\n"
+            );
+        }
+
+        #[test]
+        fn test_fmt_process_file_with_error() {
+            let file_name = "non_existent.txt";
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = setup_fmt_configs();
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok()); // Function handles error by returning Ok(())
+            assert!(output_stream.into_inner().is_empty()); // No output should be written
+        }
+
+        #[test]
+        fn test_fmt_process_file_with_empty_input() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("empty.txt");
+            File::create(&test_file_path).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = setup_fmt_configs();
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            assert!(output_stream.into_inner().is_empty()); // No output for empty input
+        }
+
+        #[test]
+        fn test_large_file_content() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("large_test_input.txt");
+            let content = "Line\n".repeat(10000); // Large content
+            let mut file = File::create(&test_file_path).unwrap();
+            write!(file, "{}", content).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = setup_fmt_configs();
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            // Expecting certain processing result based on how fmt_break_lines is defined
+            assert!(!output_stream.into_inner().is_empty());
+        }
+
+        // Test handling Unicode characters
+        #[test]
+        fn test_unicode_characters() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("unicode_input.txt");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, "こんにちは、世界！\n再见，世界！");
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = setup_fmt_configs();
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            assert_eq!(
+                String::from_utf8(output_stream.into_inner()).unwrap(),
+                "こんにちは、世界！ 再见，世界！\n"
+            );
+        }
+
+        // Test different newline conventions (Unix vs. Windows)
+        #[test]
+        fn test_newline_conventions() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("newline_input.txt");
+            let content = "This is a line\nThis is another line\r\nThis is yet another line\r\n";
+            let mut file = File::create(&test_file_path).unwrap();
+            write!(file, "{}", content).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = setup_fmt_configs();
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            // Checking that newlines are handled consistently
+            assert_eq!(
+                String::from_utf8(output_stream.into_inner()).unwrap(),
+                "This is a line This is another line This is yet another line\n"
+            );
+        }
+
+        fn get_fmt_configs(
+            crown: bool,
+            tagged: bool,
+            mail: bool,
+            split_only: bool,
+            width: usize,
+        ) -> FmtConfigs {
+            FmtConfigs {
+                is_crown: crown,
+                is_tagged: tagged,
+                is_mail: mail,
+                is_split_only: split_only,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: width,
+                goal: width - 2, // Example adjustment
+                tab_width: 4,
+            }
+        }
+
+        #[test]
+        fn test_crown_config_effect() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("input.txt");
+            let content = "This is a \r\ntest input for \r\nthe crown configuration.";
+            let mut file = File::create(&test_file_path).unwrap();
+            write!(file, "{}", content).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = get_fmt_configs(true, false, false, false, 50);
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            // Check if output formatting corresponds to crown mode specifics
+            assert_eq!(
+                String::from_utf8(output_stream.into_inner()).unwrap(),
+                "This is a test input for the crown configuration.\n"
+            );
+        }
+
+        #[test]
+        fn test_tagged_config_effect() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("input.txt");
+            let content = "This is a \r\ntest input for \r\nthe crown configuration.";
+            let mut file = File::create(&test_file_path).unwrap();
+            write!(file, "{}", content).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = get_fmt_configs(false, true, false, false, 50);
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            // Check for tagged formatting specifics
+            assert_eq!(
+                String::from_utf8(output_stream.into_inner()).unwrap(),
+                "This is a\ntest input for\nthe crown configuration.\n"
+            );
+        }
+
+        #[test]
+        fn test_mail_config_effect() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("input.txt");
+            let content = "This is a \r\ntest input for \r\nthe crown configuration.";
+            let mut file = File::create(&test_file_path).unwrap();
+            write!(file, "{}", content).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = get_fmt_configs(false, false, true, false, 50);
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            // Check if mail formatting is correctly applied
+            assert_eq!(
+                String::from_utf8(output_stream.into_inner()).unwrap(),
+                "This is a test input for the crown configuration.\n"
+            );
+        }
+
+        #[test]
+        fn test_width_config_effect() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("input.txt");
+            let content = "This is a \r\ntest input for \r\nthe crown configuration.";
+            let mut file = File::create(&test_file_path).unwrap();
+            write!(file, "{}", content).unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let mut output_stream = Cursor::new(Vec::new());
+            let fmt_configs = get_fmt_configs(false, false, false, false, 80); // Test with wider width
+
+            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            assert!(result.is_ok());
+            // Check if output lines are formatted within the specified width
+            let output = String::from_utf8(output_stream.into_inner()).unwrap();
+            assert!(
+                output.lines().all(|line| line.len() <= 80),
+                "All lines should be within 80 characters"
+            );
+        }
+    }
 }

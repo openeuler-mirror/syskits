@@ -18841,4 +18841,741 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use std::fs;
+
+        use clap::error::ErrorKind;
+        use tempfile::TempDir;
+
+        use super::*;
+
+        // fmt 接口: fmt [OPTION]... [FILE]...
+        //
+        // Arguments:
+        //   [files]...
+        //
+        // Options:
+        //   -c, --crown-margin          First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.
+        //   -t, --tagged-paragraph      Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.
+        //   -m, --preserve-headers      Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.
+        //   -s, --split-only            Split lines only, do not reflow.
+        //   -u, --uniform-spacing       Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.
+        //   -p, --prefix <PREFIX>       Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.
+        //   -P, --skip-prefix <PSKIP>   Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP
+        //   -x, --exact-prefix          PREFIX must match at the beginning of the line with no preceding whitespace.
+        //   -X, --exact-skip-prefix     PSKIP must match at the beginning of the line with no preceding whitespace.
+        //   -w, --width <WIDTH>         Fill output lines up to a maximum of WIDTH columns, default 75.
+        //   -g, --goal <GOAL>           Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.
+        //   -q, --quick                 Break lines more quickly at the expense of a potentially more ragged appearance.
+        //   -T, --tab-width <TABWIDTH>  Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.
+        //   -h, --help                  Print help
+        //   -V, --version               Print version
+        //
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            // 测试用例3：验证当提供未知参数时是否正确报错
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            // 测试用例4：验证当缺少必需的参数时是否正确报错
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        // #[test]
+        // fn test_ct_app_support_missing_argument() {
+        //     let command = ct_app();
+        //
+        //     // 测试用例4：验证当缺少必需的参数时是否正确报错
+        //     let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+        //     let result = command.try_get_matches_from(missing_args);
+        //     assert!(result.is_ok());
+        // }
+
+        #[test]
+        fn test_ct_app_crown_margin_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--crown-margin"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("crown-margin"), true);
+        }
+
+        #[test]
+        fn test_ct_app_crown_margin_short() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-c"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("crown-margin"), true);
+        }
+
+        #[test]
+        fn test_ct_app_tagged_paragraph_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--tagged-paragraph"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("tagged-paragraph"), true);
+        }
+
+        #[test]
+        fn test_ct_app_tagged_paragraph_short() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("tagged-paragraph"), true);
+        }
+
+        #[test]
+        fn test_ct_app_preserve_headers_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--preserve-headers"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("preserve-headers"), true);
+        }
+
+        #[test]
+        fn test_ct_app_preserve_headers_short() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-m"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("preserve-headers"), true);
+        }
+
+        #[test]
+        fn test_ct_app_split_only_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--split-only"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("split-only"), true);
+        }
+
+        #[test]
+        fn test_ct_app_split_only_short() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-s"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("split-only"), true);
+        }
+
+        #[test]
+        fn test_ct_app_uniform_spacing_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--uniform-spacing"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("uniform-spacing"), true);
+        }
+
+        #[test]
+        fn test_ct_app_uniform_spacing_short() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-u"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().get_flag("uniform-spacing"), true);
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", " "];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "5"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ","];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ";"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ":"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "|"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001d}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001f}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001e}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", " "];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "5"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ","];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ";"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ":"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "|"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\u{001d}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\u{001f}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\u{001e}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", " "];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "5"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ","];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ";"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ":"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "|"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001d}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001f}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_short_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001e}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " "];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ","];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+    }
 }

@@ -558,3 +558,352 @@ fn set_system_datetime(date: DateTime<Utc>) -> CTResult<()> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_ct_app {
+        use crate::ct_app;
+        use clap::error::ErrorKind;
+
+        use std::ffi::OsString;
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::Builder;
+        // 定义一个宏来生成测试用例
+        macro_rules! test_date_format {
+            ($name:ident, $format:expr) => {
+                #[test]
+                fn $name() {
+                    let args = vec![
+                        OsString::from(ctcore::ct_util_name()), // 假设这是获取程序名的方法
+                        OsString::from(format!("+{}", $format)),
+                    ];
+
+                    assert!(ct_app().try_get_matches_from(args.into_iter()).is_ok());
+                }
+            };
+        }
+
+        // 使用宏生成测试用例
+        // 定义所有格式化参数的测试用例
+        test_date_format!(test_date_format_a, "%a"); // 本地化的缩写星期几名称
+        test_date_format!(test_date_format_aa, "%A"); // 本地化的完整星期几名称
+        test_date_format!(test_date_format_b, "%b"); // 本地化的缩写月份名称
+        test_date_format!(test_date_format_bb, "%B"); // 本地化的完整月份名称
+        test_date_format!(test_date_format_c, "%c"); // 本地化的日期和时间表示
+        test_date_format!(test_date_format_cc, "%C"); // 世纪数（年份的前两位）
+        test_date_format!(test_date_format_d, "%d"); // 月份中的日子（01-31）
+        test_date_format!(test_date_format_dd, "%D"); // 日期，格式为%m/%d/%y
+        test_date_format!(test_date_format_e, "%e"); // 月份中的日子，空格填充
+        test_date_format!(test_date_format_ff, "%F"); // 完整日期，格式为%Y-%m-%d
+        test_date_format!(test_date_format_g, "%g"); // ISO周号的年份的后两位数字
+        test_date_format!(test_date_format_gg, "%G"); // ISO周号的年份
+        test_date_format!(test_date_format_h, "%h"); // 与%b相同，本地化的缩写月份名称
+        test_date_format!(test_date_format_hh, "%H"); // 小时数（00-23）
+        test_date_format!(test_date_format_ii, "%I"); // 小时数（01-12）
+        test_date_format!(test_date_format_j, "%j"); // 一年中的天数（001-366）
+        test_date_format!(test_date_format_k, "%k"); // 小时数（0-23），空格填充
+        test_date_format!(test_date_format_l, "%l"); // 小时数（1-12），空格填充
+        test_date_format!(test_date_format_m, "%m"); // 月份（01-12）
+        test_date_format!(test_date_format_mm, "%M"); // 分钟数（00-59）
+        test_date_format!(test_date_format_n, "%n"); // 换行符
+        test_date_format!(test_date_format_nn, "%N"); // 纳秒数（000000000-999999999）
+        test_date_format!(test_date_format_p, "%p"); // 本地化的AM或PM
+        test_date_format!(test_date_format_pp, "%P"); // 与%p相同，但为小写
+                                                      // test_date_format!(test_date_format_q, "%q"); // 季度号（1-4）  //TODO 与系统命令不一致，系统命令支持该参数
+        test_date_format!(test_date_format_r, "%r"); // 本地化的12小时制时间
+        test_date_format!(test_date_format_rr, "%R"); // 24小时制的时间，格式为%H:%M
+        test_date_format!(test_date_format_s, "%s"); // 自1970-01-01 00:00:00 UTC以来的秒数
+        test_date_format!(test_date_format_ss, "%S"); // 秒数（00-60）
+        test_date_format!(test_date_format_t, "%t"); // 制表符
+        test_date_format!(test_date_format_tt, "%T"); // 时间，格式为%H:%M:%S
+        test_date_format!(test_date_format_u, "%u"); // 星期几的数字（1-7），1为星期一
+        test_date_format!(test_date_format_uu, "%U"); // 一年中的周数，星期日为每周的开始
+        test_date_format!(test_date_format_vv, "%V"); // ISO周数，星期一为每周的开始
+        test_date_format!(test_date_format_w, "%w"); // 星期几的数字（0-6），0为星期日
+        test_date_format!(test_date_format_ww, "%W"); // 一年中的周数，星期一为每周的开始
+        test_date_format!(test_date_format_x, "%x"); // 本地化的日期表示
+        test_date_format!(test_date_format_xx, "%X"); // 本地化的时间表示
+        test_date_format!(test_date_format_y, "%y"); // 年份的后两位数字
+        test_date_format!(test_date_format_yy, "%Y"); // 年份
+        test_date_format!(test_date_format_z, "%z"); // 数字时区（+hhmm或-hhmm）
+        test_date_format!(test_date_format_colon_z, "%:z"); // 数字时区，格式为±hh:mm
+        test_date_format!(test_date_format_double_colon_z, "%::z"); // 数字时区，格式为±hh:mm:ss
+        test_date_format!(test_date_format_triple_colon_z, "%:::z"); // 数字时区，以':'分隔至必要的精度
+        test_date_format!(test_date_format_zz, "%Z"); // 字母时区缩写
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_date_yesterday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "yesterday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_today() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "today"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_tomorrow() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "tomorrow"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_month() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "month"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_week() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "week"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_friday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "Friday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "2024-05-01"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_string() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "May 1 2024"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_yesterday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "yesterday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_today() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "today"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_tomorrow() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "tomorrow"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_month() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "month"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_week() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "week"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_friday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "Friday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "2024-05-01"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_date_next_string() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--date", "next", "May 1 2024"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_yesterday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "yesterday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_today() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "today"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_tomorrow() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "tomorrow"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_month() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "month"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_week() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "week"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_friday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "Friday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "2024-05-01"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_string() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "May 1 2024"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_yesterday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "yesterday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_today() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "today"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_tomorrow() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "tomorrow"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+    }
+}

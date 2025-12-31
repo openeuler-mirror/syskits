@@ -1,0 +1,26 @@
+[package]
+name = "ct_head"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "head ~ (ctutils) display the first lines of input"
+
+homepage = "https://www.ctyun.cn/developer"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/head"
+keywords = ["syskits", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+[lib]
+path = "src/head.rs"
+
+[dependencies]
+clap = { workspace = true }
+memchr = { workspace = true }
+ctcore = { workspace = true, features = ["ringbuffer", "lines"] }
+tempfile = "3.5.0"
+
+[[bin]]
+name = "head"
+path = "src/main.rs"
+

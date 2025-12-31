@@ -7334,4 +7334,602 @@ mod tests {
             assert!(ret.is_err());
         }
     }
+
+    mod tests_ct_app {
+        use crate::ct_app;
+        use clap::error::ErrorKind;
+
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+
+        use tempfile::Builder;
+
+        #[test]
+        fn test_ct_app_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_i() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-i", "arch"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_ignore_environment() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--ignore-environment", "arch"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_bad_args() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--bad-arg"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_chdir_args() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_c_args() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let _ = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let env_dir = sub_dir_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-C", env_dir, "ls"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_0() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-0"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_null() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--null"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        use crate::env;
+
+        #[test]
+        fn test_ct_app_f() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let f = test_file_1.to_str().unwrap();
+
+            let content = "FVAR1=hello\n\
+           FVAR2=CtyunOS\n\
+           FVAR3=Rust\n\
+           FVAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-f", f];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+
+            match env::var("FVAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("FVAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_file() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename = test_file_1.to_str().unwrap();
+
+            let content = "ENV_VAR1=hello\n\
+           ENV_VAR2=CtyunOS\n\
+           ENV_VAR3=Rust\n\
+           ENV_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", filename, "ls"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+
+            match env::var("ENV_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail:{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("ENV_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_file_unset() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "UNSET_VAR1=hello\n\
+           UNSET_VAR2=CtyunOS\n\
+           UNSET_VAR3=Rust\n\
+           UNSET_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-i",
+                "env",
+                "-u",
+                unset_filename,
+                "env",
+            ];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_file_unset_whole() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let unset_filename = test_file_1.to_str().unwrap();
+
+            let content = "UNSET_VAR1=hello\n\
+           UNSET_VAR2=CtyunOS\n\
+           UNSET_VAR3=Rust\n\
+           UNSET_VAR4=Syskit\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--ignore-environment",
+                "env",
+                "--unset",
+                unset_filename,
+                "env",
+            ];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+
+            match env::var("UNSET_VAR1") {
+                Ok(val) => {
+                    assert_eq!(val, "hello");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR2") {
+                Ok(val) => {
+                    assert_eq!(val, "CtyunOS");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR3") {
+                Ok(val) => {
+                    assert_eq!(val, "Rust");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+
+            match env::var("UNSET_VAR4") {
+                Ok(val) => {
+                    assert_eq!(val, "Syskit");
+                }
+                Err(e) => {
+                    println!("env set fail,{}", e)
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_app_debug() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-v", "arch"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_debug_whole() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--debug", "arch"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_split_string() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--split-string=''",
+                "cat",
+                file_path,
+            ];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_split_s() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-S", "", "cat", file_path];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_s_split_string() {
+            let command = ct_app();
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_get_filesystem_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let file_path = test_file_1.to_str().unwrap();
+
+            let content = "aaaa.\n\
+           bbbb.\n\
+           cccc.\n\
+           dddd.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-S",
+                "--split-string=''",
+                "cat",
+                file_path,
+            ];
+
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+        }
+    }
 }

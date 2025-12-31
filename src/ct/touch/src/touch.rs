@@ -1411,5 +1411,31 @@ mod tests {
             let result = touch_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_touch_main_time_long_modify() {
+            let filename = "test_touch_main_time_long_modify";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "modify", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_touch_main_time_long_mtime() {
+            let filename = "test_touch_main_time_long_mtime";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let _ = File::create(&file_path).unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--time", "mtime", file_name];
+            let result = touch_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
     }
 }

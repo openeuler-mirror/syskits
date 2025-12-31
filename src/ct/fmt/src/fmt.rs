@@ -19577,5 +19577,648 @@ mod tests {
                 Some(&"\u{001f}".to_string())
             );
         }
+
+                #[test]
+        fn test_ct_app_prefix_short_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " ", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ",", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_long_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}", "--exact-prefix"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " ", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ",", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_short_exact_prefix_short_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", " ", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "a", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "5", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ",", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ";", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", ":", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "|", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\t", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\u{001d}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\u{001f}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_skip_prefix_long_exact_prefix_short_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--skip-prefix", "\u{001e}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("skip-prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", " ", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "a", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "5", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ",", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ";", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ":", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_vertical() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "|", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"|".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_tab() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\t", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\t".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_group_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001d}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001d}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_unit_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001f}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001f}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_prefix_long_with_record_separator() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\u{001e}", "-x"];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"\u{001e}".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_skip_prefix_long_with_space() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                " ",
+                "--exact-skip-prefix",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&" ".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_skip_prefix_long_with_letter() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "a",
+                "--exact-skip-prefix",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_skip_prefix_long_with_digital() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "5",
+                "--exact-skip-prefix",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&"5".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_skip_prefix_long_with_comma() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                ",",
+                "--exact-skip-prefix",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&",".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_skip_prefix_long_with_semicolon() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                ";",
+                "--exact-skip-prefix",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&";".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_prefix_long_exact_skip_prefix_long_with_colon() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                ":",
+                "--exact-skip-prefix",
+            ];
+            let result = command.try_get_matches_from(cmd_args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result.unwrap().get_one::<String>("prefix"),
+                Some(&":".to_string())
+            );
+        }
+
     }
 }

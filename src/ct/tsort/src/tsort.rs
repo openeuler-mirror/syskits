@@ -201,3 +201,131 @@ impl<'input> TSortGraph<'input> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod graph_tests {
+        use super::*;
+
+        #[test]
+        fn test_is_has_node() {
+            let mut graph = TSortGraph::new();
+            graph.init_node("A");
+            assert!(graph.is_has_node("A"));
+            assert!(!graph.is_has_node("B"));
+        }
+
+        #[test]
+        fn test_is_has_edge() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "B");
+            assert!(graph.is_has_edge("A", "B"));
+            assert!(!graph.is_has_edge("B", "A"));
+        }
+
+        #[test]
+        fn test_init_node() {
+            let mut graph = TSortGraph::new();
+            graph.init_node("A");
+            assert!(graph.is_has_node("A"));
+            assert!(graph.tsort_in_edges.get("A").is_some());
+            assert!(graph.tsort_out_edges.get("A").is_some());
+        }
+
+        #[test]
+        fn test_add_edge() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "B");
+            assert!(graph.is_has_node("A"));
+            assert!(graph.is_has_node("B"));
+            assert!(graph.is_has_edge("A", "B"));
+        }
+
+        #[test]
+        fn test_tsort_exe() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "B");
+            graph.add_edge("B", "C");
+            graph.add_edge("A", "C");
+            graph.tsort_exe();
+            assert_eq!(graph.tsort_result, vec!["A", "B", "C"]);
+        }
+
+        #[test]
+        fn test_is_acyclic() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "B");
+            graph.add_edge("B", "C");
+            graph.tsort_exe();
+            assert!(graph.is_acyclic());
+
+            let mut cyclic_graph = TSortGraph::new();
+            cyclic_graph.add_edge("A", "B");
+            cyclic_graph.add_edge("B", "C");
+            cyclic_graph.add_edge("C", "A");
+            cyclic_graph.tsort_exe();
+            assert!(!cyclic_graph.is_acyclic());
+        }
+        #[test]
+        fn test_tsort_with_multiple_start_nodes() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "C");
+            graph.add_edge("B", "C");
+            graph.tsort_exe();
+            assert!(
+                graph.tsort_result == vec!["A", "B", "C"]
+                    || graph.tsort_result == vec!["B", "A", "C"]
+            );
+        }
+
+        #[test]
+        fn test_tsort_with_no_edges() {
+            let mut graph = TSortGraph::new();
+            graph.init_node("A");
+            graph.init_node("B");
+            graph.init_node("C");
+            graph.tsort_exe();
+            assert!(graph.tsort_result.contains(&"A"));
+            assert!(graph.tsort_result.contains(&"B"));
+            assert!(graph.tsort_result.contains(&"C"));
+            assert_eq!(graph.tsort_result.len(), 3);
+        }
+
+        #[test]
+        fn test_tsort_with_single_node() {
+            let mut graph = TSortGraph::new();
+            graph.init_node("A");
+            graph.tsort_exe();
+            assert_eq!(graph.tsort_result, vec!["A"]);
+        }
+
+        #[test]
+        fn test_tsort_with_duplicate_edges() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "B");
+            graph.add_edge("A", "B"); // duplicate edge
+            graph.add_edge("B", "C");
+            graph.tsort_exe();
+            assert_eq!(graph.tsort_result, vec!["A", "B", "C"]);
+        }
+
+        #[test]
+        fn test_tsort_with_self_loop() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("B", "A"); // self loop
+            graph.add_edge("A", "B");
+            graph.tsort_exe();
+            assert!(!graph.is_acyclic());
+        }
+
+        #[test]
+        fn test_add_edge_with_self_loop() {
+            let mut graph = TSortGraph::new();
+            graph.add_edge("A", "A");
+            assert!(graph.is_has_node("A"));
+            assert!(!graph.is_has_edge("A", "A")); // self loops are not added
+        }
+    }
+}

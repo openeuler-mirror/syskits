@@ -5,11 +5,12 @@ authors.workspace = true
 license.workspace = true
 description = "head ~ (ctutils) display the first lines of input"
 
-homepage = "https://www.ctyun.cn/developer"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
 repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/head"
-keywords = ["syskits", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
 
 [lib]
 path = "src/head.rs"

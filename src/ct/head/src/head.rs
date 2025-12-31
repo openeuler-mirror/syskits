@@ -149,25 +149,31 @@ impl Mode {
 fn arg_iterate<'a>(
     mut args: impl ctcore::Args + 'a,
 ) -> CTResult<Box<dyn Iterator<Item = OsString> + 'a>> {
-    // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
-                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(CtSimpleError::new(
-                        1,
-                        format!("bad argument ct_format: {}", s.quote()),
-                    )),
-                    parse::ParseError::Overflow => Err(CtSimpleError::new(
-                        1,
-                        format!(
-                            "invalid argument: {} Value too large for defined datatype",
-                            s.quote()
-                        ),
-                    )),
-                },
+                Some(Ok(options)) => {
+                    let mut result = vec![first];
+                    result.extend(options);
+                    result.extend(args);
+                    Ok(Box::new(result.into_iter()))
+                }
+                Some(Err(e)) => {
+                    match e {
+                        parse::ParseError::Syntax => Err(CtSimpleError::new(
+                            1,
+                            format!("bad argument format: {}", s.quote()),
+                        )),
+                        parse::ParseError::Overflow => Err(CtSimpleError::new(
+                            1,
+                            format!(
+                                "invalid argument: {} Value too large for defined datatype",
+                                s.quote()
+                            ),
+                        )),
+                    }
+                }
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {

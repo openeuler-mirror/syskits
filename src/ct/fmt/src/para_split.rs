@@ -1340,4 +1340,132 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod configs_next_tests {
+        use super::*;
+
+        #[test]
+        fn test_next_simple() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let mut splitter = FmtWordSplit::new(&fmt_opts, "hello world");
+            let first_word = splitter.next();
+            assert!(matches!(
+                first_word,
+                Some(FmtWordInfo {
+                    word: "hello",
+                    word_start: 0,
+                    word_nchars: 5,
+                    before_tab: None,
+                    after_tab: 0,
+                    is_sentence_start: false,
+                    is_ends_punct: false,
+                    is_new_line: true
+                })
+            ));
+
+            let second_word = splitter.next();
+            assert!(matches!(
+                second_word,
+                Some(FmtWordInfo {
+                    word: " world",
+                    word_start: 1,
+                    word_nchars: 5,
+                    before_tab: None,
+                    after_tab: 1,
+                    is_sentence_start: false,
+                    is_ends_punct: false,
+                    is_new_line: false
+                })
+            ));
+        }
+
+        #[test]
+        fn test_next_with_punctuation_and_new_sentence() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let mut splitter = FmtWordSplit::new(&fmt_opts, "hello!  world");
+            let first_word = splitter.next();
+            assert!(matches!(
+                first_word,
+                Some(FmtWordInfo {
+                    word: "hello!",
+                    is_ends_punct: true,
+                    ..
+                })
+            ));
+            let second_word = splitter.next();
+            assert!(matches!(
+                second_word,
+                Some(FmtWordInfo {
+                    word: "  world",
+                    is_sentence_start: true,
+                    ..
+                })
+            ));
+        }
+
+        #[test]
+        fn test_next_multiple_words_and_punctuation() {
+            let fmt_opts = FmtConfigs {
+                tab_width: 4,
+                ..Default::default()
+            };
+            let mut splitter = FmtWordSplit::new(&fmt_opts, "hello, world! See you.");
+            let first_word = splitter.next();
+            assert!(matches!(
+                first_word,
+                Some(FmtWordInfo {
+                    word: "hello,",
+                    is_ends_punct: false,
+                    ..
+                })
+            ));
+
+            let second_word = splitter.next();
+            assert!(matches!(
+                second_word,
+                Some(FmtWordInfo {
+                    word: " world!",
+                    is_ends_punct: true,
+                    is_sentence_start: false,
+                    ..
+                })
+            ));
+
+            let third_word = splitter.next();
+            assert!(matches!(
+                third_word,
+                Some(FmtWordInfo {
+                    word: " See",
+                    word_start: 1,
+                    word_nchars: 3,
+                    before_tab: None,
+                    after_tab: 1,
+                    is_sentence_start: false,
+                    is_ends_punct: false,
+                    is_new_line: false
+                })
+            ));
+
+            let four_word = splitter.next();
+            assert!(matches!(
+                four_word,
+                Some(FmtWordInfo {
+                    word: " you.",
+                    word_start: 1,
+                    word_nchars: 4,
+                    before_tab: None,
+                    after_tab: 1,
+                    is_sentence_start: false,
+                    is_ends_punct: true,
+                    is_new_line: false
+                })
+            ));
+        }
+    }
 }

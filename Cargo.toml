@@ -130,6 +130,7 @@ feat_common_core = [
   "expr",
   "nproc",
   "basename",
+  "hostid",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -340,7 +341,7 @@ nproc = { optional = true, package = "ct_nproc", path = "src/ct/nproc" }
 unlink = { optional = true, package = "ct_unlink", path = "src/ct/unlink" }
 uniq = { optional = true, package = "ct_uniq", path = "src/ct/uniq" }
 nice = { optional = true, package = "ct_nice", path = "src/ct/nice" }
-
+hostid = { optional = true, package = "ct_hostid", path = "src/ct/hostid" }
 [dev-dependencies]
 chrono = { workspace = true }
 conv = "0.3"

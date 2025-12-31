@@ -1,0 +1,66 @@
+{
+    "tests": [
+        {
+            "command": "hostid",
+            "description": "测试基本的hostid命令",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "hostid",
+            "description": "测试基本的hostid命令长度",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(echo \"$CMD_STDOUT\" | tr -d '\\n' | wc -c) -eq 8",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "hostid",
+            "description": "测试hostid命令的输出格式",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '^[0-9a-f]{8}$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "hostid",
+            "description": "测试hostid命令的错误处理 - 未知参数",
+            "args": [
+                "--unknown-option"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        }
+    ]
+}

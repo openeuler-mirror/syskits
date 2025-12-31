@@ -2410,5 +2410,612 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_date_main_universal() {
+            let args = vec![ctcore::ct_util_name(), "--universal"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_iso_8601_date() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=date",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_iso_8601_hours() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=hours",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_iso_8601_minutes() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=minutes",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_iso_8601_seconds() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=seconds",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_i8601_date() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "-Idate"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_i8601_hours() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "-Ihours"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_i8601_minutes() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "-Iminutes"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_i8601_seconds() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "-Iseconds"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_rfc_mail() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "--rfc-email"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_r_debug() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "-R", "--debug"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_debug() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "--debug"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_rfc_3339_date() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--rfc-3339=date",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_rfc_3339_hours() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--rfc-3339=hours",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_file_rfc_3339_minutes() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--rfc-3339=minutes",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_file_rfc_3339_seconds() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--rfc-3339=seconds",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file_rfc_3339_ns() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "-R",
+                "--rfc-3339=ns",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_file_rfc_3339_date() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "-R",
+                "--rfc-3339=date",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_file_rfc_3339_seconds() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "-R",
+                "--rfc-3339=seconds",
+            ];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_file_rfc_3339_ns() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "--rfc-3339=ns"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_date_format_a() {
+            let args = vec![ctcore::ct_util_name(), "+%a"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
     }
 }

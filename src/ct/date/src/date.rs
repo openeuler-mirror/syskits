@@ -905,5 +905,594 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_d_next_month() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "month"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_week() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "week"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_friday() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "Friday"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "2024-05-01"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_d_next_string() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "May 1 2024"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", datefile];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_f() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-f", datefile];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_iso_8601_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=date"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_iso_8601_hours() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=hours"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_iso_8601_minutes() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=minutes"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_iso_8601_seconds() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=seconds"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_i_8601_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "Idate"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_i_8601_hours() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "Ihours"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_i_8601_minutes() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "Iminutes"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_i_8601_seconds() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "Iseconds"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_rfc_mail() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--rfc-email"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_r_debug() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-R", "--debug"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_debug() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--debug"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_rfc_3339_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=date"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_rfc_3339_hours() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=hours"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_rfc_3339_minutes() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=minutes"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_rfc_3339_seconds() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=seconds"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_rfc_3339_ns() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-3339=ns"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_r_rfc_3339_date() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-3339=date"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_r_rfc_3339_seconds() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-3339=seconds"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_r_rfc_3339_ns() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=ns"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_r_rfc_mail() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-email"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_reference() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-r", datefile];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reference_whole() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--reference", datefile];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_universal() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--universal"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_iso_8601_date() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=date",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_iso_8601_hours() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=hours",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_iso_8601_minutes() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=minutes",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_iso_8601_seconds() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--file",
+                datefile,
+                "--iso-8601=seconds",
+            ];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_i8601_date() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "-Idate"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_i8601_hours() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "Ihours"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_i8601_minutes() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "Iminutes"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_i8601_seconds() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "Iseconds"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_file_rfc_mail() {
+            let temp_dir = Builder::new().prefix("test_ct_app_file").tempdir().unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_ct_app_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--file", datefile, "--rfc-email"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
     }
 }

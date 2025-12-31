@@ -427,4 +427,186 @@ mod tests {
             assert!(!symlink_path.exists()); // Symlink should be removed
         }
     }
+    #[cfg(test)]
+    mod remove_tests {
+        use super::*;
+        use std::fs;
+        use std::fs::{create_dir, create_dir_all, File};
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_remove_empty_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("empty_dir");
+            create_dir(&dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&dir_path, opts).is_ok());
+            assert!(!dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_non_empty_directory_with_ignore() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("non_empty_dir");
+            create_dir(&dir_path).unwrap();
+            File::create(dir_path.join("file.txt")).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: true,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&dir_path, opts).is_err()); // remove 外层屏蔽的报错
+            assert!(dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_non_empty_directory_without_ignore() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("non_empty_dir");
+            create_dir(&dir_path).unwrap();
+            File::create(dir_path.join("file.txt")).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&dir_path, opts).is_err());
+            assert!(dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_directory_with_parents() {
+            let dir_path = PathBuf::from("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: true,
+                is_verbose: false,
+            };
+            let result = rmdir_remove(&dir_path, opts);
+            assert!(result.is_ok());
+            assert!(!dir_path.exists());
+            assert!(!dir_path.parent().unwrap().exists()); // a/b should also be removed
+            assert!(!dir_path.parent().unwrap().parent().unwrap().exists()); // a should also be removed
+        }
+
+        #[test]
+        fn test_remove_directory_with_parents_err() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("a/b/c");
+            create_dir_all(&dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: true,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&dir_path, opts).is_err()); // 顶层目录存在文件报错，不删除
+            assert!(!dir_path.exists());
+            assert!(!dir_path.parent().unwrap().exists()); // a/b should also be removed
+            assert!(!dir_path.parent().unwrap().parent().unwrap().exists()); // a should also be removed
+        }
+
+        #[test]
+        fn test_remove_nested_non_empty_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("nested_dir");
+            create_dir_all(dir_path.join("subdir")).unwrap();
+            File::create(dir_path.join("subdir/file.txt")).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&dir_path, opts).is_err());
+            assert!(dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_symbolic_link() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("target_dir");
+            create_dir(&dir_path).unwrap();
+            let symlink_path = tmp_dir.path().join("symlink_dir");
+            symlink(&dir_path, &symlink_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&symlink_path, opts).is_err());
+            assert!(dir_path.exists()); // Original directory should still exist
+            assert!(symlink_path.exists()); // Symlink should be removed
+        }
+
+        #[test]
+        fn test_remove_directory_with_permission_denied() {
+            let tmp_dir = TempDir::new().unwrap();
+            let dir_path = tmp_dir.path().join("restricted_dir");
+            create_dir(&dir_path).unwrap();
+            File::create(dir_path.join("file.txt")).unwrap();
+            let _ = fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o000)); // Remove all permissions
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            let result = rmdir_remove(&dir_path, opts);
+            assert!(result.is_err());
+
+            // Restore permissions to clean up directory
+            let _ = fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o755));
+            assert!(dir_path.exists());
+        }
+
+        #[test]
+        fn test_remove_empty_path() {
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: false,
+                is_verbose: false,
+            };
+
+            let empty_path = Path::new("");
+            assert!(rmdir_remove(empty_path, opts).is_err());
+        }
+
+        #[test]
+        fn test_remove_parent_directory() {
+            let tmp_dir = TempDir::new().unwrap();
+            let parent_dir_path = tmp_dir.path().join("parent_dir");
+            let child_dir_path = parent_dir_path.join("child_dir");
+            create_dir_all(&child_dir_path).unwrap();
+
+            let opts = RmdirConfigs {
+                is_ignore: false,
+                is_parents: true,
+                is_verbose: false,
+            };
+
+            assert!(rmdir_remove(&child_dir_path, opts).is_err());
+            assert!(!child_dir_path.exists());
+            assert!(!parent_dir_path.exists());
+        }
+    }
 }

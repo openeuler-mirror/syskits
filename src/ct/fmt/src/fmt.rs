@@ -5125,5 +5125,1874 @@ mod tests {
             assert_eq!(configs, expected_configs);
         }
 
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "a", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("a".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "5", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("5".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ",", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(",".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ";", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(";".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", ":", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(":".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "|", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("|".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--prefix", "\t", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("	".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "\u{001d}",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\u{1d}".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "\u{001f}",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\u{1f}".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_long_exact_skip_prefix_short_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--prefix",
+                "\u{001e}",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\u{1e}".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                " ",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(" ".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "a",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("a".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "5",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("5".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                ",",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(",".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                ";",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(";".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                ":",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(":".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "|",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("|".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\t",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\t".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_group_separator(
+        ) {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001d}",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\u{1d}".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_unit_separator()
+        {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001f}",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\u{1f}".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_record_separator(
+        ) {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--skip-prefix",
+                "\u{001e}",
+                "-X",
+                file_name,
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\u{1e}".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", " ", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(" ".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "a", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("a".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "5", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("5".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ",", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(",".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ";", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(";".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", ":", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some(":".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "|", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("|".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\t", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\t".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_group_separator(
+        ) {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001d}", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\u{1d}".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_unit_separator(
+        ) {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001f}", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\u{1f}".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_record_separator(
+        ) {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-P", "\u{001e}", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: Some("\u{1e}".to_string()),
+                is_xanti_prefix: true,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_space() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", " ", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(" ".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_letter() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "a", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("a".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_digital() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "5", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("5".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_comma() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ",", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(",".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_semicolon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ";", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(";".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_colon() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", ":", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some(":".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_vertical() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "|", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("|".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_tab() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\t", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\t".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_group_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001d}", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\u{1d}".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_unit_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001f}", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\u{1f}".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_prefix_short_exact_skip_prefix_short_with_record_separator() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}", "-X", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: Some("\u{1e}".to_string()),
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 75,
+                goal: 70,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_long_0() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "0", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 0,
+                goal: 0,
+                tab_width: 8,
+            };
+
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_long_1() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "1", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 1,
+                goal: 1,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_long_10() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "10", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 10,
+                goal: 9,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_long_100() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "100", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 100,
+                goal: 93,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_long_1000() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--width", "1000", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 1000,
+                goal: 930,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_short_0() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "0", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 0,
+                goal: 0,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_short_1() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "1", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 1,
+                goal: 1,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_short_10() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "10", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 10,
+                goal: 9,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_short_100() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "100", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 100,
+                goal: 93,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_width_short_1000() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-w", "1000", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 1000,
+                goal: 930,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_long_none() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--goal", file_name];
+            let matches = command.try_get_matches_from(cmd_args);
+
+            assert_eq!(
+                matches.unwrap_err().kind(),
+                clap::error::ErrorKind::ValueValidation
+            );
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_long_0() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--goal", "0", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 3,
+                goal: 0,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_long_1() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--goal", "1", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 4,
+                goal: 1,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_long_10() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--goal", "10", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 13,
+                goal: 10,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_long_100() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--goal", "100", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap_err();
+            assert_eq!(configs.code(), 1);
+            assert_eq!(format!("{}", configs), "GOAL cannot be greater than WIDTH.");
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_long_1000() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--goal", "1000", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap_err();
+            assert_eq!(configs.code(), 1);
+            assert_eq!(format!("{}", configs), "GOAL cannot be greater than WIDTH.");
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_short_none() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-g", file_name];
+            let matches = command.try_get_matches_from(cmd_args);
+
+            assert_eq!(
+                matches.unwrap_err().kind(),
+                clap::error::ErrorKind::ValueValidation
+            );
+        }
+
+        #[test]
+        fn test_fmt_configs_with_file_goal_short_0() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let temp_dir_path = tmp_dir.path();
+            let test_file_path = temp_dir_path.join("test_fmt_file");
+            File::create(&test_file_path).unwrap();
+            let _ = fs::write(&test_file_path, b"qqqqq\nwwwwww\neeeeee\nrrrrrr\n");
+            let file_name = test_file_path.to_str().unwrap();
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "-g", "0", file_name];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+            let configs = FmtConfigs::from_matches(&matches).unwrap();
+            let expected_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: true,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 3,
+                goal: 0,
+                tab_width: 8,
+            };
+            assert_eq!(configs, expected_configs);
+        }
     }
 }

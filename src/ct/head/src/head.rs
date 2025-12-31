@@ -883,5 +883,71 @@ mod tests {
             assert_eq!(buffer, b"");
         }
     }
-       
+    mod test_read_n_lines {
+        use super::*;
+        use std::io::BufReader;
+
+        #[test]
+        fn test_read_n_lines_exact() {
+            let input = "line1\nline2\nline3\n";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 2, b'\n', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"line1\nline2\n");
+        }
+
+        #[test]
+        fn test_read_n_lines_more_than_available() {
+            let input = "line1\nline2\n";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 5, b'\n', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"line1\nline2\n");
+        }
+
+        #[test]
+        fn test_read_n_lines_zero() {
+            let input = "line1\nline2\n";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 0, b'\n', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+
+        #[test]
+        fn test_read_n_lines_empty_input() {
+            let input = "";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 5, b'\n', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+
+        #[test]
+        fn test_read_n_lines_without_final_newline() {
+            let input = "line1\nline2\nline3";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 2, b'\n', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"line1\nline2\n");
+        }
+
+        #[test]
+        fn test_read_n_lines_with_custom_separator() {
+            let input = "line1;line2;line3";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 2, b';', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"line1;line2;");
+        }
+
+        #[test]
+        fn test_read_n_lines_unicode() {
+            let input = "你好\n世界\n";
+            let mut reader = BufReader::new(input.as_bytes());
+            let mut buffer = Vec::new();
+            read_n_lines(&mut reader, 1, b'\n', Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, "你好\n".as_bytes());
+        }
+    }
 }

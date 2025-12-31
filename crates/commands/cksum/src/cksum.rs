@@ -274,7 +274,7 @@ where
                 div_ceil(sz, cksum_opts.output_bits),
                 filename.display()
             ),
-            (CKSUM_ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
+            (CKSUM_ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz} -"),
             (CKSUM_ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
             (CKSUM_ALGORITHM_OPTIONS_BLAKE2B, _) if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {

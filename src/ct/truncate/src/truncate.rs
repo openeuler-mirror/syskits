@@ -1289,4 +1289,511 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod ct_main_tests {
+        use std::ffi::OsString;
+        use std::io::Write;
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        // #[test]
+        // fn test_truncate_main_size_short_10_gb() {
+        //     let file = "test_truncate_main_size_short_10_gb";
+        //     let dir = tempdir().unwrap();
+        //     let file_path = dir.path().join(file);
+        //     let mut tmp_file = File::create(&file_path).unwrap();
+        //     writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+        //     let file_name = file_path.to_str().unwrap();
+        //     let args = vec![ctcore::ct_util_name(), "-s", "10GB", file_name];
+        //     let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+        //     assert!(result.is_ok());
+        // }
+        #[test]
+        fn test_truncate_main_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_truncate_main_io_blocks_long() {
+            let file = "test_truncate_main_io_blocks_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--io-blocks", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_truncate_main_io_blocks_short() {
+            let file = "test_truncate_main_io_blocks_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-o", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_truncate_main_no_create_long() {
+            let file = "test_truncate_main_no_create_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--no-create", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_truncate_main_no_create_short() {
+            let file = "test_truncate_main_no_create_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-c", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_truncate_main_reference_long() {
+            let file = "test_truncate_main_reference_long";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_file = "test_truncate_main_reference_long_reference_file";
+            let reference_file_path = dir.path().join(reference_file);
+            let mut tmp_reference_file = File::create(&reference_file_path).unwrap();
+            writeln!(
+                tmp_reference_file,
+                "tmp_reference_file test\nctyunos\nhello\nworld\n"
+            )
+            .unwrap();
+            let reference_file_name = reference_file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reference",
+                reference_file_name,
+                file_name,
+            ];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_reference_short() {
+            let file = "test_truncate_main_reference_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_file = "test_truncate_main_reference_short_reference_file";
+            let reference_file_path = dir.path().join(reference_file);
+            let mut tmp_reference_file = File::create(&reference_file_path).unwrap();
+            writeln!(
+                tmp_reference_file,
+                "tmp_reference_file test\nctyunos\nhello\nworld\n"
+            )
+            .unwrap();
+            let reference_file_name = reference_file_path.to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-r", reference_file_name, file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_io_blocks_long_reference_short() {
+            let file = "test_truncate_main_io_blocks_long_reference_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_file = "reference_file";
+            let reference_file_path = dir.path().join(reference_file);
+            let mut tmp_reference_file = File::create(&reference_file_path).unwrap();
+            writeln!(
+                tmp_reference_file,
+                "tmp_reference_file test\nctyunos\nhello\nworld\n"
+            )
+            .unwrap();
+            let reference_file_name = reference_file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file_name,
+                "--io-blocks",
+                file_name,
+            ];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_io_blocks_short_reference_short() {
+            let file = "test_truncate_main_io_blocks_short_reference_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_file = "reference_file";
+            let reference_file_path = dir.path().join(reference_file);
+            let mut tmp_reference_file = File::create(&reference_file_path).unwrap();
+            writeln!(
+                tmp_reference_file,
+                "tmp_reference_file test\nctyunos\nhello\nworld\n"
+            )
+            .unwrap();
+            let reference_file_name = reference_file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file_name,
+                "-o",
+                file_name,
+            ];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_no_create_long_reference_short() {
+            let file = "test_truncate_main_no_create_long_reference_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_file = "reference_file";
+            let reference_file_path = dir.path().join(reference_file);
+            let mut tmp_reference_file = File::create(&reference_file_path).unwrap();
+            writeln!(
+                tmp_reference_file,
+                "tmp_reference_file test\nctyunos\nhello\nworld\n"
+            )
+            .unwrap();
+            let reference_file_name = reference_file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file_name,
+                "--no-create",
+                file_name,
+            ];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_no_create_short_reference_short() {
+            let file = "test_truncate_main_no_create_short_reference_short";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let reference_file = "reference_file";
+            let reference_file_path = dir.path().join(reference_file);
+            let mut tmp_reference_file = File::create(&reference_file_path).unwrap();
+            writeln!(
+                tmp_reference_file,
+                "tmp_reference_file test\nctyunos\nhello\nworld\n"
+            )
+            .unwrap();
+            let reference_file_name = reference_file_path.to_str().unwrap();
+
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-r",
+                reference_file_name,
+                "-c",
+                file_name,
+            ];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_default_1000() {
+            let file = "test_truncate_main_size_long_default_1000";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "1000", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_10_kb() {
+            let file = "test_truncate_main_size_long_10_KB";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "10KB", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_10_k() {
+            let file = "test_truncate_main_size_long_10_k";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "10K", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_10_mb() {
+            let file = "test_truncate_main_size_long_10_MB";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "10MB", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_10_m() {
+            let file = "test_truncate_main_size_long_10_M";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "10M", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_10_gb() {
+            let file = "test_truncate_main_size_long_10_gb";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "10GB", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_10_g() {
+            let file = "test_truncate_main_size_long_10_g";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "10G", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_extend_by_100() {
+            let file = "test_truncate_main_size_long_extend_by_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "+100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_reduce_by_100() {
+            let file = "test_truncate_main_size_long_reduce_by_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size=-100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_at_most_100() {
+            let file = "test_truncate_main_size_long_extend_by_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "<100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_at_least_100() {
+            let file = "test_truncate_main_size_long_at_least_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", ">100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_round_down_100() {
+            let file = "test_truncate_main_size_long_round_down_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "/100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_long_round_up_100() {
+            let file = "test_truncate_main_size_long_round_up_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--size", "%100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_default_1000() {
+            let file = "test_truncate_main_size_short_default_1000";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "1000", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_10_kb() {
+            let file = "test_truncate_main_size_short_10_KB";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "10KB", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_10_k() {
+            let file = "test_truncate_main_size_short_10_k";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "10K", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_10_mb() {
+            let file = "test_truncate_main_size_short_10_MB";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "10MB", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_10_m() {
+            let file = "test_truncate_main_size_short_10_M";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "10M", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_10_gb() {
+            let file = "test_truncate_main_size_short_10_gb";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "10GB", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_10_g() {
+            let file = "test_truncate_main_size_short_10_g";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "10G", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_extend_by_100() {
+            let file = "test_truncate_main_size_short_extend_by_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s", "+100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_truncate_main_size_short_reduce_by_100() {
+            let file = "test_truncate_main_size_short_reduce_by_100";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-s=-100", file_name];
+            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+    }
 }

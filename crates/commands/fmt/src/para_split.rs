@@ -1138,6 +1138,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
+                had_error: false,
             }
         }
 

@@ -9,8 +9,8 @@
 %define debug_package %{nil}
 
 Name:           syskits
-Version:        2.1.0
-Release:        1%{?dist}
+Version:        2.1.1
+Release:        dev.1
 Summary:        CTyunOs sysKits is suit of programes to replease coreutils.
 
 License:        Mulan PSL v2

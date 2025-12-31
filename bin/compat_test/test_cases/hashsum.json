@@ -23,9 +23,7 @@
             },
             "cleanup_commands": [
                 "rm -f test_file_sha256_single"
-            ],
-            "requires_root": false,
-            "timeout": 5
+            ]
         },
         {
             "command": "sha256sum",
@@ -54,9 +52,7 @@
             },
             "cleanup_commands": [
                 "rm -f test_file_sha256_1 test_file_sha256_2"
-            ],
-            "requires_root": false,
-            "timeout": 5
+            ]
         },
         {
             "command": "sha256sum",

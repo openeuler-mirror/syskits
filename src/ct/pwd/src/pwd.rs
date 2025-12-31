@@ -675,4 +675,164 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use super::*;
+        use clap::error::ErrorKind;
+
+        // pwd 接口: pwd [OPTION]...
+        //
+        // Options:
+        //   -L, --logical   use PWD from environment, even if it contains symlinks
+        //   -P, --physical  avoid all symlinks
+        //   -h, --help      Print help
+        //   -V, --version   Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_logical_long() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--logical"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_logical_short() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-L"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_physical_long() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--physical"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_physical_short() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-P"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_logical_long_with_file() {
+            let file_name = "test_ct_app_logical_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--logical", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_logical_short_with_file() {
+            let file_name = "test_ct_app_logical_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-L", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_physical_long_with_file() {
+            let file_name = "test_ct_app_physical_long";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--physical", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_physical_short_with_file() {
+            let file_name = "test_ct_app_physical_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-P", file_name];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

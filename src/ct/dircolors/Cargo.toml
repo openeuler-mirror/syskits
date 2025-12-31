@@ -1,0 +1,23 @@
+[package]
+name = "ct_dircolors"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "dircolors ~ (ctutils) display commands to set LS_COLORS"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/dircolors"
+
+[lib]
+path = "src/dircolors.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["colors"] }
+
+[[bin]]
+name = "dircolors"
+path = "src/main.rs"

@@ -837,4 +837,456 @@ mod tests {
             assert!(error_message.contains("cannot stat"));
         }
     }
+
+    #[cfg(test)]
+    mod truncate_reference_and_size_tests {
+        use std::io::Write;
+
+        use tempfile::NamedTempFile;
+
+        use super::*;
+
+        #[test]
+        fn test_truncate_reference_and_size() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 测试相对调整大小：Extend
+            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true).unwrap();
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 19);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 19);
+
+            // 测试相对调整大小：Reduce
+            truncate_reference_and_size(&reference_file_path, "-3", &target_files, true).unwrap();
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 11);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 11);
+
+            // 测试相对调整大小：AtMost
+            truncate_reference_and_size(&reference_file_path, "<8", &target_files, true).unwrap();
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 8);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 8);
+
+            // 测试相对调整大小：AtLeast
+            truncate_reference_and_size(&reference_file_path, ">20", &target_files, true).unwrap();
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 20);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 20);
+
+            // 测试相对调整大小：RoundDown
+            truncate_reference_and_size(&reference_file_path, "/4", &target_files, true).unwrap();
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 12);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 12);
+
+            // 测试相对调整大小：RoundUp
+            truncate_reference_and_size(&reference_file_path, "%3", &target_files, true).unwrap();
+            assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 16);
+            assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 16);
+        }
+
+        #[test]
+        fn test_truncate_reference_and_size_errors() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 测试无效大小字符串
+            let result =
+                truncate_reference_and_size(&reference_file_path, "invalid", &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("Invalid number"));
+
+            // 测试绝对大小与参考文件组合
+            let result =
+                truncate_reference_and_size(&reference_file_path, "100", &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(
+                error_message.contains("you must specify a relative '--size' with '--reference'")
+            );
+
+            // 测试除以零的情况
+            let result =
+                truncate_reference_and_size(&reference_file_path, "/0", &target_files, true);
+            assert!(result.is_err());
+            let error_message = format!("{}", result.unwrap_err());
+            assert!(error_message.contains("division by zero"));
+        }
+        #[test]
+        fn test_truncate_reference_and_size_no_create() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 文件不存在的情况
+            let non_existent_file = "test_truncate_reference_and_size_no_create";
+            let target_files = vec![non_existent_file.to_string()];
+
+            // 设置 create 为 false
+            let result =
+                truncate_reference_and_size(&reference_file_path, "+5", &target_files, false);
+            assert!(result.is_ok());
+
+            // 设置 create 为 true
+            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true).unwrap();
+            assert_eq!(metadata(non_existent_file).unwrap().len(), 19);
+
+            // 清理
+            std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_reference_and_size_zero_length() {
+            // 创建一个零长度的参考文件
+            let reference_file = NamedTempFile::new().unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建目标文件并写入一些数据
+            let mut target_file = NamedTempFile::new().unwrap();
+            writeln!(target_file, "Target file").unwrap();
+            let target_file_path = target_file.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file_path.clone()];
+
+            // 使用零长度的参考文件进行调整大小
+            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file_path).unwrap().len(), 5);
+        }
+
+        #[test]
+        fn test_truncate_reference_and_size_multiple_files() {
+            // 创建参考文件并写入一些数据
+            let mut reference_file = NamedTempFile::new().unwrap();
+            writeln!(reference_file, "Hello, world!").unwrap();
+            let reference_file_path = reference_file.path().to_str().unwrap().to_string();
+
+            // 创建多个目标文件并写入一些数据
+            let mut target_file1 = NamedTempFile::new().unwrap();
+            writeln!(target_file1, "Target file 1").unwrap();
+            let target_file1_path = target_file1.path().to_str().unwrap().to_string();
+
+            let mut target_file2 = NamedTempFile::new().unwrap();
+            writeln!(target_file2, "Target file 2").unwrap();
+            let target_file2_path = target_file2.path().to_str().unwrap().to_string();
+
+            let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
+
+            // 使用参考文件和大小字符串调整多个文件的大小
+            truncate_reference_and_size(&reference_file_path, "-3", &target_files, true).unwrap();
+            assert_eq!(metadata(&target_file1_path).unwrap().len(), 11);
+            assert_eq!(metadata(&target_file2_path).unwrap().len(), 11);
+        }
+    }
+    #[cfg(test)]
+    mod truncate_file_tests {
+        use std::io::Write;
+
+        use tempfile::NamedTempFile;
+
+        use super::*;
+
+        #[test]
+        fn test_truncate_file() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            let temp_path = temp_file.path().to_str().unwrap().to_string();
+
+            // 向文件中写入一些数据
+            writeln!(temp_file, "Hello, world!").unwrap();
+
+            // 将文件截断到更小的大小
+            truncate_file(&temp_path, true, 5).unwrap();
+            let metadata = std::fs::metadata(&temp_path).unwrap();
+            assert_eq!(metadata.len(), 5);
+
+            // 扩展文件到更大的大小
+            truncate_file(&temp_path, true, 20).unwrap();
+            let metadata = std::fs::metadata(&temp_path).unwrap();
+            assert_eq!(metadata.len(), 20);
+
+            // 尝试截断一个不存在的文件，且创建标志设置为 false
+            let non_existent_file = "test_truncate_file";
+            assert!(truncate_file(non_existent_file, false, 10).is_ok());
+            assert!(!std::path::Path::new(non_existent_file).exists());
+
+            // 使用创建标志设置为 true 截断一个不存在的文件
+            assert!(truncate_file(non_existent_file, true, 10).is_ok());
+            assert!(std::path::Path::new(non_existent_file).exists());
+            let metadata = std::fs::metadata(non_existent_file).unwrap();
+            assert_eq!(metadata.len(), 10);
+
+            // Clean up
+            std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_file_fifo() {
+            // On Unix systems, we can test FIFO-specific behavior
+            #[cfg(unix)]
+            {
+                use std::process::Command;
+
+                let fifo_path = "/tmp/test_truncate_file_fifo";
+                Command::new("mkfifo").arg(fifo_path).status().unwrap();
+
+                let result = truncate_file(fifo_path, true, 10);
+                assert!(result.is_err());
+                let error_message = format!("{}", result.unwrap_err());
+                assert!(error_message.contains("No such device or address"));
+
+                std::fs::remove_file(fifo_path).unwrap();
+            }
+        }
+
+        #[test]
+        fn test_truncate_file_no_permission() {
+            #[cfg(unix)]
+            {
+                use std::fs::set_permissions;
+                use std::os::unix::fs::PermissionsExt;
+
+                let mut temp_file = NamedTempFile::new().unwrap();
+                let temp_path = temp_file.path().to_str().unwrap().to_string();
+                writeln!(temp_file, "Hello, world!").unwrap();
+
+                // Remove write permission
+                let mut permissions = std::fs::metadata(&temp_path).unwrap().permissions();
+                permissions.set_mode(0o444); // Read-only
+                set_permissions(&temp_path, permissions.clone()).unwrap();
+
+                // Attempt to truncate the file
+                let result = truncate_file(&temp_path, true, 5);
+                assert!(result.is_ok());
+
+                // Restore permissions for cleanup
+                permissions.set_mode(0o644);
+                set_permissions(&temp_path, permissions).unwrap();
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod truncate_mode_to_size_tests {
+        use crate::TruncateMode;
+
+        #[test]
+        fn test_truncate_mode_to_size() {
+            // Absolute mode
+            assert_eq!(TruncateMode::Absolute(100).to_size(50), 100);
+
+            // Extend mode
+            assert_eq!(TruncateMode::Extend(50).to_size(100), 150);
+
+            // Reduce mode
+            assert_eq!(TruncateMode::Reduce(50).to_size(100), 50);
+            assert_eq!(TruncateMode::Reduce(150).to_size(100), 0);
+
+            // AtMost mode
+            assert_eq!(TruncateMode::AtMost(75).to_size(100), 75);
+            assert_eq!(TruncateMode::AtMost(150).to_size(100), 100);
+
+            // AtLeast mode
+            assert_eq!(TruncateMode::AtLeast(150).to_size(100), 150);
+            assert_eq!(TruncateMode::AtLeast(75).to_size(100), 100);
+
+            // RoundDown mode
+            assert_eq!(TruncateMode::RoundDown(50).to_size(123), 100);
+            assert_eq!(TruncateMode::RoundDown(1).to_size(123), 123); // Edge case
+
+            // RoundUp mode
+            assert_eq!(TruncateMode::RoundUp(50).to_size(123), 146);
+            assert_eq!(TruncateMode::RoundUp(1).to_size(123), 123); // Edge case
+        }
+
+        #[test]
+        fn test_to_size() {
+            assert_eq!(TruncateMode::Extend(5).to_size(10), 15);
+            assert_eq!(TruncateMode::Reduce(5).to_size(10), 5);
+            assert_eq!(TruncateMode::Reduce(5).to_size(3), 0);
+        }
+    }
+    #[cfg(test)]
+    mod parse_mode_and_size_tests {
+        use crate::truncate_parse_mode_and_size;
+        use crate::TruncateMode;
+
+        use super::*;
+
+        #[test]
+        fn test_parse_mode_and_size() {
+            assert_eq!(
+                truncate_parse_mode_and_size("10"),
+                Ok(TruncateMode::Absolute(10))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("+10"),
+                Ok(TruncateMode::Extend(10))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("-10"),
+                Ok(TruncateMode::Reduce(10))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("<10"),
+                Ok(TruncateMode::AtMost(10))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size(">10"),
+                Ok(TruncateMode::AtLeast(10))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("/10"),
+                Ok(TruncateMode::RoundDown(10))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("%10"),
+                Ok(TruncateMode::RoundUp(10))
+            );
+        }
+        #[test]
+        fn test_truncate_parse_mode_and_size_absolute() {
+            assert_eq!(
+                truncate_parse_mode_and_size("100"),
+                Ok(TruncateMode::Absolute(100))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("0"),
+                Ok(TruncateMode::Absolute(0))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_extend() {
+            assert_eq!(
+                truncate_parse_mode_and_size("+50"),
+                Ok(TruncateMode::Extend(50))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("+0"),
+                Ok(TruncateMode::Extend(0))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_reduce() {
+            assert_eq!(
+                truncate_parse_mode_and_size("-30"),
+                Ok(TruncateMode::Reduce(30))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("-0"),
+                Ok(TruncateMode::Reduce(0))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_at_most() {
+            assert_eq!(
+                truncate_parse_mode_and_size("<200"),
+                Ok(TruncateMode::AtMost(200))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("<0"),
+                Ok(TruncateMode::AtMost(0))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_at_least() {
+            assert_eq!(
+                truncate_parse_mode_and_size(">300"),
+                Ok(TruncateMode::AtLeast(300))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size(">0"),
+                Ok(TruncateMode::AtLeast(0))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_round_down() {
+            assert_eq!(
+                truncate_parse_mode_and_size("/4"),
+                Ok(TruncateMode::RoundDown(4))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("/1"),
+                Ok(TruncateMode::RoundDown(1))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_round_up() {
+            assert_eq!(
+                truncate_parse_mode_and_size("%5"),
+                Ok(TruncateMode::RoundUp(5))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("%1"),
+                Ok(TruncateMode::RoundUp(1))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_invalid() {
+            assert_eq!(
+                truncate_parse_mode_and_size("invalid"),
+                Err(ParseSizeError::ParseFailure("'invalid'".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("+invalid"),
+                Err(ParseSizeError::ParseFailure("'invalid'".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size(""),
+                Err(ParseSizeError::ParseFailure("".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("/0"),
+                Ok(TruncateMode::RoundDown(0))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("%0"),
+                Ok(TruncateMode::RoundUp(0))
+            );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_edge_cases() {
+            // 边界条件测试
+            assert_eq!(
+                truncate_parse_mode_and_size(" "),
+                Err(ParseSizeError::ParseFailure("".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("+ "),
+                Err(ParseSizeError::ParseFailure("''".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size(" 100"),
+                Ok(TruncateMode::Absolute(100))
+            );
+        }
+    }
+
 }

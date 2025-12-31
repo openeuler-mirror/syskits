@@ -121,51 +121,54 @@ fn generate_completions<T: ctcore::Args>(
     args: impl Iterator<Item = OsString>,
     ct_util_map: &AppMap<T>,
 ) -> ! {
-    let ct_utilities: Vec<_> = std::iter::once("syskits")
+    let all_utilities: Vec<_> = std::iter::once("syskits")
         .chain(ct_util_map.keys().copied())
         .collect();
 
-    let mut ct_commander = Command::new("completion");
-    ct_commander = ct_commander.about("Prints completions to stdout");
-    ct_commander = ct_commander.arg(
-        Arg::new("utility")
-            .value_parser(clap::builder::PossibleValuesParser::new(ct_utilities))
-            .required(true),
-    );
+    let matches = Command::new("completion")
+        .about("Prints completions to stdout")
+        .arg(
+            Arg::new("utility")
+                .value_parser(clap::builder::PossibleValuesParser::new(all_utilities))
+                .required(true),
+        )
+        .arg(
+            Arg::new("shell")
+                .value_parser(clap::builder::EnumValueParser::<Shell>::new())
+                .required(true),
+        )
+        .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
 
-    let ct_args = std::iter::once(OsString::from("manpage")).chain(args);
-    let ct_matches = ct_commander.get_matches_from(ct_args);
+    let utility = matches.get_one::<String>("utility").unwrap();
+    let shell = *matches.get_one::<Shell>("shell").unwrap();
 
-    let ct_utility = match ct_matches.get_one::<String>("utility") {
-        Some(ct_utility) => ct_utility,
-        None => {
-            ct_help(ct_util_map, "manpage");
-            process::exit(1);
-        }
+    let mut command = if utility == "syskits" {
+        // gen_utils_app(util_map = if utility == "syskits" {
+        gen_utils_app(ct_util_map)
+    } else {
+        ct_util_map.get(utility).unwrap().1()
     };
+    let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
-    let ct_shell = match ct_matches.get_one::<Shell>("shell") {
-        Some(ct_shell) => *ct_shell,
-        None => {
-            eprintln!("Shell argument missing");
-            process::exit(1);
-        }
-    };
-
-    let mut ct_command = get_command(ct_util_map, ct_utility);
-
-    let ct_exe_name = match std::env::var("PROG_PREFIX") {
-        Ok(ct_prefix) => ct_prefix + ct_utility,
-        Err(_) => ct_utility.clone(),
-    };
-
-    clap_complete::generate(ct_shell, &mut ct_command, ct_exe_name, &mut io::stdout());
-
-    if let Err(e) = io::stdout().flush() {
-        eprintln!("Failed to flush stdout: {}", e);
-        process::exit(1);
-    }
+    clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());
+    io::stdout().flush().unwrap();
     process::exit(0);
+}
+/// # Panics
+/// Panics if the utility map is empty
+fn gen_utils_app<T: ctcore::Args>(util_map: &AppMap<T>) -> Command {
+    let mut command = Command::new("coreutils");
+    for (name, (_, sub_app)) in util_map {
+        // Recreate a small subcommand with only the relevant info
+        // (name & short description)
+        let about = sub_app()
+            .get_about()
+            .expect("Could not get the 'about'")
+            .to_string();
+        let sub_app = Command::new(name).about(about);
+        command = command.subcommand(sub_app);
+    }
+    command
 }
 
 fn get_command<T: Iterator<Item = OsString>>(

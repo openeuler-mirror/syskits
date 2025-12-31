@@ -2062,5 +2062,353 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_date_main_d_next_month() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next month"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_next_week() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next week"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_next_friday() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next Friday"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_d_next_date() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next", "2024-05-01"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+            println!("{}", result.err().unwrap());
+        }
+
+        #[test]
+        fn test_date_main_d_next_string() {
+            let args = vec![ctcore::ct_util_name(), "-d", "next May 1 2024"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_file() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--file", datefile];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_f() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-f", datefile];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_iso_8601_date() {
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=date"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_iso_8601_hours() {
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=hours"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_iso_8601_minutes() {
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=minutes"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_iso_8601_seconds() {
+            let args = vec![ctcore::ct_util_name(), "--iso-8601=seconds"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_i_8601_date() {
+            let args = vec![ctcore::ct_util_name(), "-Idate"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_i_8601_hours() {
+            let args = vec![ctcore::ct_util_name(), "-Ihours"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_i_8601_minutes() {
+            let args = vec![ctcore::ct_util_name(), "-Iminutes"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_i_8601_seconds() {
+            let args = vec![ctcore::ct_util_name(), "-Iseconds"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_rfc_mail() {
+            let args = vec![ctcore::ct_util_name(), "--rfc-email"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_debug() {
+            let args = vec![ctcore::ct_util_name(), "-R", "--debug"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_debug() {
+            let args = vec![ctcore::ct_util_name(), "--debug"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_rfc_3339_date() {
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=date"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_rfc_3339_hours() {
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=hours"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_rfc_3339_minutes() {
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=minutes"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_rfc_3339_seconds() {
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=seconds"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_rfc_3339_ns() {
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-3339=ns"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_rfc_3339_date() {
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-3339=date"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_rfc_3339_seconds() {
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-3339=seconds"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_rfc_3339_ns() {
+            let args = vec![ctcore::ct_util_name(), "--rfc-3339=ns"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_r_rfc_mail() {
+            let args = vec![ctcore::ct_util_name(), "-R", "--rfc-email"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_date_main_reference() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-r", datefile];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_reference_whole() {
+            let temp_dir = Builder::new()
+                .prefix("test_date_main_file")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_date_main_file.txt");
+            File::create(&test_file_1).unwrap();
+            let mut file = File::create(&test_file_1).unwrap();
+            let datefile = test_file_1.to_str().unwrap();
+
+            let content = "Thu Apr 25 11:25:00 AM CST 2024\n\
+                   Thu Apr 26 11:25:00 AM CST 2024\n\
+                   Thu Apr 27 11:25:00 AM CST 2024\n\
+                   Thu Apr 28 11:25:00 AM CST 2024\n\
+                   Thu Apr 29 11:25:00 AM CST 2024\n\
+                   Thu Apr 30 11:25:00 AM CST 2024\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "--reference", datefile];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_u() {
+            let args = vec![ctcore::ct_util_name(), "-u"];
+
+            let result = date_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
     }
 }

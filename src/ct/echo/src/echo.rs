@@ -215,3 +215,194 @@ fn echo_execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_echo_main {
+        use crate::echo_main;
+
+        use std::fs;
+        use std::fs::File;
+        use tempfile::Builder;
+
+        use std::ffi::OsString;
+        use std::io::Write;
+        #[test]
+        fn test_echo_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_echo_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_echo_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_echo_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_echo_main_n() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-n", "12345", ">", filename1];
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_echo_main_e() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-e", "12345", ">", filename1];
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_echo_main_ee() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+            let test_file_1 = sub_dir_path.join("test_file_1.txt");
+            let mut file = File::create(&test_file_1).unwrap();
+            let filename1 = test_file_1.to_str().unwrap();
+
+            let content = "Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n\
+                   Hello world Rust Cut command.\n";
+            file.write_all(content.as_bytes()).unwrap();
+
+            let args = vec![ctcore::ct_util_name(), "-E", "12345", ">", filename1];
+            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+    mod tests_ct_app {
+        use crate::ct_app;
+
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_echo_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_echo_app_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_echo_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_echo_app_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_echo_app_n() {
+            let args = vec![ctcore::ct_util_name(), "-n"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_echo_app_e() {
+            let args = vec![ctcore::ct_util_name(), "-e"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_echo_app_ee() {
+            let args = vec![ctcore::ct_util_name(), "-E"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_ok());
+        }
+    }
+}

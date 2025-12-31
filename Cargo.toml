@@ -102,6 +102,7 @@ feat_common_core = [
   "date",
   "users",
   "mkfifo",
+  "truncate",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -268,6 +269,7 @@ tsort = { optional = true, package = "ct_tsort", path = "src/ct/tsort" }
 date = { optional = true, package = "ct_date", path = "src/ct/date" }
 users = { optional = true, package = "ct_users", path = "src/ct/users" }
 mkfifo = { optional = true, package = "ct_mkfifo", path = "src/ct/mkfifo" }
+truncate = { optional = true, package = "ct_truncate", path = "src/ct/truncate" }
 
 [dev-dependencies]
 chrono = { workspace = true }

@@ -1137,4 +1137,174 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod find_kp_breakpoints_tests {
+        use super::*;
+
+        #[test]
+        fn test_empty_input() {
+            let fmt_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 50,
+                goal: 45,
+                tab_width: 4,
+            };
+            let mut output_stream = Vec::new(); // 使用 Vec<u8> 作为输出流模拟
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let words = vec![];
+            let result = fmt_find_kp_breakpoints(words.iter(), &fmt_args);
+            assert!(
+                result.is_empty(),
+                "The result should be empty for no input words"
+            );
+        }
+
+        #[test]
+        fn test_single_word_no_break() {
+            let word_info = FmtWordInfo {
+                word: "hello",
+                word_start: 0,
+                word_nchars: 5,
+                before_tab: None,
+                after_tab: 5,
+                is_sentence_start: false,
+                is_ends_punct: false,
+                is_new_line: false,
+            };
+            let fmt_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 50,
+                goal: 45,
+                tab_width: 4,
+            };
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let words = vec![word_info];
+            let result = fmt_find_kp_breakpoints(words.iter(), &fmt_args);
+            assert_eq!(result.len(), 0, "There should be exactly one break point");
+        }
+
+        #[test]
+        fn test_multiple_words() {
+            let word_info1 = FmtWordInfo {
+                word: "hello",
+                word_start: 0,
+                word_nchars: 5,
+                before_tab: None,
+                after_tab: 5,
+                is_sentence_start: true,
+                is_ends_punct: false,
+                is_new_line: false,
+            };
+            let word_info2 = FmtWordInfo {
+                word: "world",
+                word_start: 6,
+                word_nchars: 5,
+                before_tab: None,
+                after_tab: 11,
+                is_sentence_start: false,
+                is_ends_punct: true,
+                is_new_line: false,
+            };
+            let fmt_configs = FmtConfigs {
+                is_crown: false,
+                is_tagged: false,
+                is_mail: false,
+                is_split_only: false,
+                prefix_option: None,
+                is_xprefix: false,
+                anti_prefix_option: None,
+                is_xanti_prefix: false,
+                is_uniform: false,
+                is_quick: false,
+                width: 10,
+                goal: 10,
+                tab_width: 4,
+            };
+            let mut output_stream = Vec::new();
+            let fmt_args = FmtBreakArgs {
+                fmt_opts: &fmt_configs,
+                init_len: 0,
+                indent_str: "",
+                indent_len: 0,
+                is_uniform: false,
+                out_stream: &mut output_stream,
+            };
+
+            let words = vec![word_info1, word_info2];
+            let result = fmt_find_kp_breakpoints(words.iter(), &fmt_args);
+            assert_eq!(result.len(), 1, "There should be two break points");
+            assert_eq!(
+                result[0].0.word, "hello",
+                "The first word should be 'hello'"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod build_best_path_tests {
+        use super::*;
+
+        #[test]
+        fn test_fmt_build_best_path_empty() {
+            let paths: Vec<FmtLineBreak> = vec![];
+            let active_paths: Vec<usize> = vec![];
+
+            let result = fmt_build_best_path(&paths, &active_paths);
+            assert_eq!(result, vec![]);
+        }
+    }
+
+    #[cfg(test)]
+    mod compute_demerits_tests {
+        use super::*;
+
+        #[test]
+        fn test_fmt_compute_demerits() {
+            // Test case: delta_len is 0
+            let (demerits, ratio) = fmt_compute_demerits(0, 10, 5, 1.0);
+            assert_eq!(demerits, 16129);
+            assert_eq!(ratio, 0.0);
+
+            // Test case: w_len is greater than or equal to stretch
+            let (demerits, ratio) = fmt_compute_demerits(10, 10, 15, 1.0);
+            assert_eq!(demerits, 10201);
+            assert_eq!(ratio, 1.0);
+        }
+    }
+
 }

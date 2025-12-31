@@ -86,6 +86,9 @@ pub struct TestEnvConfig {
     /// 是否显示详细信息
     #[serde(default = "default_verbose")]
     pub verbose: bool,
+    /// 是否启用调试输出
+    #[serde(default = "default_debug")]
+    pub debug: bool,
     /// 报告格式
     #[serde(default = "default_report_format")]
     pub report_format: String,
@@ -145,6 +148,11 @@ fn default_show_progress() -> bool {
 
 /// 默认值：不显示详细信息
 fn default_verbose() -> bool {
+    false
+}
+
+/// 默认值：启用调试输出
+fn default_debug() -> bool {
     false
 }
 

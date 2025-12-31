@@ -370,6 +370,13 @@ fn main() -> Result<()> {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("debug")
+                .short('d')
+                .long("debug")
+                .help("Enable debug output")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("report-format")
                 .long("report-format")
                 .value_name("FORMAT")
@@ -397,6 +404,7 @@ fn main() -> Result<()> {
             .get_one::<String>("report-format")
             .map(|s| s.to_string()),
         matches.get_flag("verbose"),
+        matches.get_flag("debug"),
         Some(&config),
     );
 

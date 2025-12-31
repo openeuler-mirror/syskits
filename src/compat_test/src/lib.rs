@@ -101,6 +101,8 @@ pub struct TestConfig {
     pub commands_dir: Option<PathBuf>,
     /// 是否显示详细输出
     pub verbose: bool,
+    /// 是否启用调试输出
+    pub debug: bool,
 }
 
 impl Default for TestConfig {
@@ -118,6 +120,7 @@ impl Default for TestConfig {
             mode: config::SyskitsMode::Single,
             commands_dir: None,
             verbose: false,
+            debug: false,
         }
     }
 }
@@ -133,6 +136,7 @@ impl TestConfig {
         cmd_no_cleanup: bool,
         cmd_report_format: Option<String>,
         cmd_verbose: bool,
+        cmd_debug: bool,
         config_file: Option<&Config>,
     ) -> Self {
         // 从默认值开始
@@ -158,6 +162,7 @@ impl TestConfig {
             config.mode = cfg.syskits.mode.clone();
             config.commands_dir = cfg.syskits.commands_dir.clone();
             config.verbose = cfg.test.env.verbose;
+            config.debug = cfg.test.env.debug;
         }
 
         // 应用命令行参数（最高优先级）
@@ -181,6 +186,9 @@ impl TestConfig {
         }
         if cmd_verbose {
             config.verbose = true;
+        }
+        if cmd_debug {
+            config.debug = true;
         }
 
         config

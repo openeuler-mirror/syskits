@@ -526,3 +526,634 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod parse_timestamp_tests {
+        use chrono::{Datelike, Local, TimeZone};
+
+        use super::*;
+
+        #[test]
+        fn test_parse_timestamp_valid() {
+            // 测试格式为 %Y%m%d%H%M.%S
+            let timestamp_str = "202406150830.45";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 45)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试格式为 %Y%m%d%H%M
+            let timestamp_str = "202406150830";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试格式为 %Y%m%d%H%M.%S 并带有前缀 "20"
+            let timestamp_str = "2406150830.45";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 45)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试格式为 %Y%m%d%H%M 并带有前缀 "20"
+            let timestamp_str = "2406150830";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试格式为 %Y%m%d%H%M.%S 并带有当前年份
+            let current_year = Local::now().year();
+            let timestamp_str = "06150830.45";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(current_year, 6, 15, 8, 30, 45)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试格式为 %Y%m%d%H%M 并带有当前年份
+            let timestamp_str = "06150830";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(current_year, 6, 15, 8, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试带有闰秒的时间戳
+            let timestamp_str = "202406150830.60";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2024, 6, 15, 8, 31, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+        }
+
+        #[test]
+        fn test_parse_timestamp_invalid() {
+            // 测试无效格式的时间戳
+            let timestamp_str = "invalid timestamp";
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            // 测试无效的时间戳长度
+            let timestamp_str = "20240615083"; // 少一位
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            let timestamp_str = "240615083"; // 少一位
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            let timestamp_str = "0615083"; // 少一位
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            let timestamp_str = "20240615083012345"; // 多几位
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            // 测试无效的时间部分
+            let timestamp_str = "202406150860"; // 无效的时间
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            // 测试无效的日期部分
+            let timestamp_str = "202413150830"; // 无效的月份
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+
+            let timestamp_str = "202406320830"; // 无效的日期
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_timestamp_boundary() {
+            // 测试Unix Epoch (1970-01-01 00:00:00)
+            let timestamp_str = "197001010000";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            assert_eq!(filetime.unix_seconds(), -28800);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试未来的一个日期
+            let timestamp_str = "210001010000";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2100, 1, 1, 0, 0, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试带有纳秒部分的时间戳
+            let timestamp_str = "202406150830.123456789";
+            let filetime = parse_timestamp(timestamp_str);
+            assert!(filetime.is_err());
+            assert_eq!(
+                filetime.unwrap_err().to_string(),
+                "invalid date ct_format '202406150830.123456789'".to_string()
+            );
+
+            // 测试带有无效的纳秒部分的时间戳
+            let timestamp_str = "202406150830.1234567890"; // 超过纳秒位数
+            let result = parse_timestamp(timestamp_str);
+            assert!(result.is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod parse_date_tests {
+        use chrono::{Local, TimeZone};
+
+        use super::*;
+
+        #[test]
+        fn test_parse_date_valid() {
+            // 测试POSIX_LOCALE格式的日期
+            let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            let date_str = "Tue Jun 15 08:30:00 2022";
+            let filetime = touch_parse_date(ref_time, date_str);
+            assert!(filetime.is_err());
+            assert_eq!(
+                filetime.unwrap_err().to_string(),
+                "Unable to parse date: Tue Jun 15 08:30:00 2022".to_string()
+            );
+
+            // 测试ISO 8601格式的日期
+            let date_str = "2022-06-15";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            // 加时区
+            let expected_time = Local
+                .with_ymd_and_hms(2022, 6, 15, 0, 0, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试其他有效格式的日期
+            let date_str = "2022-06-15 08:30:00";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            // 加时区
+            let expected_time = Local
+                .with_ymd_and_hms(2022, 6, 15, 16, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            let date_str = "2022-06-15 08:30:00.123456";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            // 加时区
+            let expected_time = Local
+                .with_ymd_and_hms(2022, 6, 15, 16, 30, 0)
+                .unwrap()
+                .with_nanosecond(123456000)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 123456);
+
+            let date_str = "2022-06-15 08:30";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            // 加时区
+            let expected_time = Local
+                .with_ymd_and_hms(2022, 6, 15, 16, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            let date_str = "202206150830";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2022, 6, 15, 8, 30, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            let date_str = "@1623742200";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            assert_eq!(filetime.unix_seconds(), 1623742200);
+            assert_eq!(filetime.nanoseconds(), 0);
+        }
+
+        #[test]
+        fn test_parse_date_invalid() {
+            let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+
+            // 测试无效格式的日期
+            let date_str = "invalid date string";
+            let result = touch_parse_date(ref_time, date_str);
+            assert!(result.is_err());
+
+            let date_str = "2022-13-15"; // 无效的月份
+            let result = touch_parse_date(ref_time, date_str);
+            assert!(result.is_err());
+
+            let date_str = "2022-06-32"; // 无效的日期
+            let result = touch_parse_date(ref_time, date_str);
+            assert!(result.is_err());
+
+            let date_str = "202206150860"; // 无效的时间
+            let result = touch_parse_date(ref_time, date_str);
+            assert!(result.is_err());
+
+            let date_str = "@invalidtimestamp"; // 无效的Unix时间戳
+            let result = touch_parse_date(ref_time, date_str);
+            assert!(result.is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod stat_tests {
+        use std::fs::{create_dir, File};
+        use std::io::Write;
+        use std::os::unix::fs::symlink;
+
+        use tempfile::tempdir;
+
+        use super::*;
+
+        #[test]
+        fn test_stat_regular_file() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_file.txt");
+
+            // 创建一个文件并写入一些数据
+            {
+                let mut file = File::create(&file_path).unwrap();
+                writeln!(file, "Hello, world!").unwrap();
+            }
+
+            // 获取文件的元数据
+            let (atime, mtime) = touch_stat(&file_path, true).unwrap();
+
+            // 检查访问时间和修改时间是否合理
+            assert!(atime.unix_seconds() > 0);
+            assert!(mtime.unix_seconds() > 0);
+        }
+
+        #[test]
+        fn test_stat_symlink() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_file.txt");
+            let symlink_path = dir.path().join("test_symlink");
+
+            // 创建一个文件并写入一些数据
+            {
+                let mut file = File::create(&file_path).unwrap();
+                writeln!(file, "Hello, world!").unwrap();
+            }
+
+            // 创建符号链接
+            symlink(&file_path, &symlink_path).unwrap();
+
+            // 获取符号链接本身的元数据
+            let (atime, mtime) = touch_stat(&symlink_path, false).unwrap();
+
+            // 检查访问时间和修改时间是否合理
+            assert!(atime.unix_seconds() > 0);
+            assert!(mtime.unix_seconds() > 0);
+
+            // 获取符号链接指向的文件的元数据
+            let (atime, mtime) = touch_stat(&symlink_path, true).unwrap();
+
+            // 检查访问时间和修改时间是否合理
+            assert!(atime.unix_seconds() > 0);
+            assert!(mtime.unix_seconds() > 0);
+        }
+
+        #[test]
+        fn test_stat_nonexistent_file() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("nonexistent_file.txt");
+
+            // 尝试获取不存在的文件的元数据
+            let result = touch_stat(&file_path, true);
+
+            // 检查结果是否为错误
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_stat_directory() {
+            let dir = tempdir().unwrap();
+            let dir_path = dir.path().join("test_dir");
+
+            // 创建一个目录
+            create_dir(&dir_path).unwrap();
+
+            // 获取目录的元数据
+            let (atime, mtime) = touch_stat(&dir_path, true).unwrap();
+
+            // 检查访问时间和修改时间是否合理
+            assert!(atime.unix_seconds() > 0);
+            assert!(mtime.unix_seconds() > 0);
+        }
+
+        #[test]
+        fn test_stat_nested_symlink() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_file.txt");
+            let symlink_path1 = dir.path().join("test_symlink1");
+            let symlink_path2 = dir.path().join("test_symlink2");
+
+            // 创建一个文件并写入一些数据
+            {
+                let mut file = File::create(&file_path).unwrap();
+                writeln!(file, "Hello, world!").unwrap();
+            }
+
+            // 创建符号链接
+            symlink(&file_path, &symlink_path1).unwrap();
+            symlink(&symlink_path1, &symlink_path2).unwrap();
+
+            // 获取嵌套符号链接本身的元数据
+            let (atime, mtime) = touch_stat(&symlink_path2, false).unwrap();
+
+            // 检查访问时间和修改时间是否合理
+            assert!(atime.unix_seconds() > 0);
+            assert!(mtime.unix_seconds() > 0);
+
+            // 获取嵌套符号链接指向的文件的元数据
+            let (atime, mtime) = touch_stat(&symlink_path2, true).unwrap();
+
+            // 检查访问时间和修改时间是否合理
+            assert!(atime.unix_seconds() > 0);
+            assert!(mtime.unix_seconds() > 0);
+        }
+    }
+
+    #[cfg(test)]
+    mod filetime_to_datetime_tests {
+        use chrono::{FixedOffset, TimeZone, Utc};
+
+        use super::*;
+
+        #[test]
+        fn test_filetime_to_datetime() {
+            // 测试Unix时间戳转换
+            let filetime = FileTime::from_unix_time(1623742200, 0); // 对应于2021-06-15 08:30:00 UTC
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的DateTime是否与预期值匹配
+            assert_eq!(dt.year(), 2021);
+            assert_eq!(dt.month(), 6);
+            assert_eq!(dt.day(), 15);
+            assert_eq!(dt.hour(), 15);
+            assert_eq!(dt.minute(), 30);
+            assert_eq!(dt.second(), 0);
+            assert_eq!(dt.nanosecond(), 0);
+
+            // 测试带纳秒部分的Unix时间戳转换
+            let filetime = FileTime::from_unix_time(1623742200, 123456789);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的DateTime是否与预期值匹配
+            assert_eq!(dt.year(), 2021);
+            assert_eq!(dt.month(), 6);
+            assert_eq!(dt.day(), 15);
+            assert_eq!(dt.hour(), 15);
+            assert_eq!(dt.minute(), 30);
+            assert_eq!(dt.second(), 0);
+            assert_eq!(dt.nanosecond(), 123456789);
+
+            // 测试Unix Epoch (1970-01-01 08:00:00)
+            let filetime = FileTime::from_unix_time(0, 0);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的DateTime是否与预期值匹配
+            assert_eq!(dt.year(), 1970);
+            assert_eq!(dt.month(), 1);
+            assert_eq!(dt.day(), 1);
+            assert_eq!(dt.hour(), 8);
+            assert_eq!(dt.minute(), 0);
+            assert_eq!(dt.second(), 0);
+            assert_eq!(dt.nanosecond(), 0);
+
+            // 测试闰年日期 (2000-02-29 21:50:15)
+            let filetime = FileTime::from_unix_time(951832215, 0);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的DateTime是否与预期值匹配
+            assert_eq!(dt.year(), 2000);
+            assert_eq!(dt.month(), 2);
+            assert_eq!(dt.day(), 29);
+            assert_eq!(dt.hour(), 21);
+            assert_eq!(dt.minute(), 50);
+            assert_eq!(dt.second(), 15);
+            assert_eq!(dt.nanosecond(), 0);
+
+            // 测试2025年1月1日 7:59:59.999999999
+            let filetime = FileTime::from_unix_time(1735689599, 999999999);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的DateTime是否与预期值匹配
+            assert_eq!(dt.year(), 2025);
+            assert_eq!(dt.month(), 1);
+            assert_eq!(dt.day(), 1);
+            assert_eq!(dt.hour(), 7);
+            assert_eq!(dt.minute(), 59);
+            assert_eq!(dt.second(), 59);
+            assert_eq!(dt.nanosecond(), 999999999);
+        }
+
+        #[test]
+        fn test_timezone_conversion() {
+            // 测试不同的时区
+            let ny_tz = FixedOffset::west_opt(5 * 3600).unwrap(); // 纽约时区 (UTC-5)
+            let dt_ny = ny_tz.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt_ny);
+            let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的时间戳是否匹配
+            assert_eq!(dt_converted.timestamp(), dt_ny.timestamp());
+
+            // 测试UTC时间
+            let dt_utc = Utc.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt_utc);
+            let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的时间戳是否匹配
+            assert_eq!(dt_converted.timestamp(), dt_utc.timestamp());
+
+            // 测试亚洲东京时区 (UTC+9)
+            let tokyo_tz = FixedOffset::east_opt(9 * 3600).unwrap();
+            let dt_tokyo = tokyo_tz.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt_tokyo);
+            let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的时间戳是否匹配
+            assert_eq!(dt_converted.timestamp(), dt_tokyo.timestamp());
+        }
+    }
+
+    #[cfg(test)]
+    mod datetime_to_filetime_tests {
+        use chrono::Utc;
+        use chrono::{FixedOffset, Local, TimeZone};
+
+        use super::*;
+
+        #[test]
+        fn test_datetime_to_filetime() {
+            // 测试时间为2024-01-01 12:00:00
+            let dt = Local.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt);
+
+            assert_eq!(filetime.unix_seconds(), 1704081600);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试时间为2024-05-11 23:59:59.123456789
+            let dt = Local
+                .with_ymd_and_hms(2024, 5, 11, 23, 59, 59)
+                .unwrap()
+                .with_nanosecond(123456789)
+                .unwrap();
+            let filetime = touch_datetime_to_filetime(&dt);
+
+            assert_eq!(filetime.unix_seconds(), 1715443199);
+            assert_eq!(filetime.nanoseconds(), 123456789);
+
+            // 测试时间为1970-01-01 00:00:00 (Unix Epoch)
+            let dt = Local.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt);
+
+            assert_eq!(filetime.unix_seconds(), -28800);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试时间为2000-02-29 06:30:15 (闰年日期)
+            let dt = Local.with_ymd_and_hms(2000, 2, 29, 6, 30, 15).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt);
+
+            assert_eq!(filetime.unix_seconds(), 951777015);
+            assert_eq!(filetime.nanoseconds(), 0);
+
+            // 测试时间为2024-12-31 23:59:59.999999999
+            let dt = Local
+                .with_ymd_and_hms(2024, 12, 31, 23, 59, 59)
+                .unwrap()
+                .with_nanosecond(999999999)
+                .unwrap();
+            let filetime = touch_datetime_to_filetime(&dt);
+
+            assert_eq!(filetime.unix_seconds(), 1735660799);
+            assert_eq!(filetime.nanoseconds(), 999999999);
+        }
+
+        #[test]
+        fn test_filetime_to_datetime() {
+            // 测试Unix时间戳1704100800 (2024-01-01 12:00:00)
+            let filetime = FileTime::from_unix_time(1704100800, 0);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            assert_eq!(dt.year(), 2024);
+            assert_eq!(dt.month(), 1);
+            assert_eq!(dt.day(), 1);
+            assert_eq!(dt.hour(), 17);
+            assert_eq!(dt.minute(), 20);
+            assert_eq!(dt.second(), 0);
+            assert_eq!(dt.nanosecond(), 0);
+
+            // 测试Unix时间戳1715817599和纳秒数123456789 (2024-05-11 23:59:59.123456789)
+            let filetime = FileTime::from_unix_time(1715817599, 123456789);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            assert_eq!(dt.year(), 2024);
+            assert_eq!(dt.month(), 5);
+            assert_eq!(dt.day(), 16);
+            assert_eq!(dt.hour(), 7);
+            assert_eq!(dt.minute(), 59);
+            assert_eq!(dt.second(), 59);
+            assert_eq!(dt.nanosecond(), 123456789);
+
+            // 测试Unix时间戳0 (1970-01-01 08:00:00)
+            let filetime = FileTime::from_unix_time(0, 0);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            assert_eq!(dt.year(), 1970);
+            assert_eq!(dt.month(), 1);
+            assert_eq!(dt.day(), 1);
+            assert_eq!(dt.hour(), 8);
+            assert_eq!(dt.minute(), 0);
+            assert_eq!(dt.second(), 0);
+            assert_eq!(dt.nanosecond(), 0);
+
+            // 测试Unix时间戳951832215 (2000-02-29 21:50:15)
+            let filetime = FileTime::from_unix_time(951832215, 0);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            assert_eq!(dt.year(), 2000);
+            assert_eq!(dt.month(), 2);
+            assert_eq!(dt.day(), 29);
+            assert_eq!(dt.hour(), 21);
+            assert_eq!(dt.minute(), 50);
+            assert_eq!(dt.second(), 15);
+            assert_eq!(dt.nanosecond(), 0);
+
+            // 测试Unix时间戳1735689599和纳秒数999999999 (2025-1-1 7:59:59.999999999)
+            let filetime = FileTime::from_unix_time(1735689599, 999999999);
+            let dt = touch_filetime_to_datetime(&filetime).unwrap();
+
+            assert_eq!(dt.year(), 2025);
+            assert_eq!(dt.month(), 1);
+            assert_eq!(dt.day(), 1);
+            assert_eq!(dt.hour(), 7);
+            assert_eq!(dt.minute(), 59);
+            assert_eq!(dt.second(), 59);
+            assert_eq!(dt.nanosecond(), 999999999);
+        }
+
+        #[test]
+        fn test_timezone_conversion() {
+            // 测试不同的时区
+            let ny_tz = FixedOffset::west_opt(5 * 3600).unwrap(); // 纽约时区 (UTC-5)
+            let dt_ny = ny_tz.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt_ny);
+            let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的时间
+            assert_eq!(dt_converted.timestamp(), dt_ny.timestamp());
+
+            // 测试UTC时间
+            let dt_utc = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt_utc);
+            let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的时间
+            assert_eq!(dt_converted.timestamp(), dt_utc.timestamp());
+
+            // 测试亚洲东京时区 (UTC+9)
+            let tokyo_tz = FixedOffset::east_opt(9 * 3600).unwrap();
+            let dt_tokyo = tokyo_tz.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+            let filetime = touch_datetime_to_filetime(&dt_tokyo);
+            let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
+
+            // 验证转换后的时间
+            assert_eq!(dt_converted.timestamp(), dt_tokyo.timestamp());
+        }
+    }
+}

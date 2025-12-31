@@ -79,10 +79,10 @@ pub struct ResourceLimiter {
 }
 
 impl Default for ResourceLimiter {
-     fn default() -> Self {
-         Self::new()
-     }
- }
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ResourceLimiter {
     /// 创建新的资源限制器

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# 检查 rust 是否安装
 cargobin=`which cargo`
 if [ -z "$cargobin" ]; then
 	echo "rust not installed, install for current user with rustup.rs ..."
@@ -31,6 +32,30 @@ EOF
 	rm -rf .xrustup.sh
 fi
 
+# 安装基本依赖
 yum install -y clang libacl-devel libselinux-devel
 
-cargo build --features unix --release
+if [ "$1" = "test" ]; then
+    cargo test --workspace
+elif [ "$1" = "coverage" ]; then
+    echo "Running coverage test..."
+    
+    # 安装测试相关依赖
+    yum install -y libacl-devel libselinux-devel
+    
+    # 安装测试覆盖率插件
+    cargo install cargo-llvm-cov
+    
+    # 执行测试
+    cargo llvm-cov --no-report --all
+    
+    # 生成lcov.info
+    cargo llvm-cov report --lcov --output-path lcov.info
+    
+    # 生成hmtl报告
+    #cargo llvm-cov report --html --output-dir cover_report
+    
+    echo "Coverage test completed. Check cover_report directory for results."
+else
+    echo "no cmd param."
+fi

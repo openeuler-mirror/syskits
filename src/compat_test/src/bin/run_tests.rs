@@ -12,6 +12,7 @@
 //! 测试运行器主程序
 //! 提供命令行界面和测试执行功能
 
+use chrono::Local;
 use clap::{Arg, ArgAction, Command};
 use colored::*;
 use compat_test::config::Config;
@@ -22,7 +23,6 @@ use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use chrono::Local;
 
 /// 简化的测试用例集合
 #[derive(Debug, Serialize, Deserialize)]

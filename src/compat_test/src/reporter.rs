@@ -47,7 +47,11 @@ impl Reporter {
     }
 
     /// 为一组测试结果生成报告
-    pub fn generate_report(&self, results: &[ComparisonResult], missing_tests: &[String]) -> Result<()> {
+    pub fn generate_report(
+        &self,
+        results: &[ComparisonResult],
+        missing_tests: &[String],
+    ) -> Result<()> {
         match self.format {
             ReportFormat::Text => self.generate_text_report(results, missing_tests),
             ReportFormat::Json => self.generate_json_report(results, missing_tests),
@@ -56,7 +60,11 @@ impl Reporter {
     }
 
     /// 生成文本格式报告
-    fn generate_text_report(&self, results: &[ComparisonResult], missing_tests: &[String]) -> Result<()> {
+    fn generate_text_report(
+        &self,
+        results: &[ComparisonResult],
+        missing_tests: &[String],
+    ) -> Result<()> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
         let path = self.output_dir.join(format!("report_{}.txt", timestamp));
         let mut file = File::create(path)?;
@@ -85,11 +93,7 @@ impl Reporter {
             "├─ 失败数量: {}",
             results.iter().filter(|r| !r.passed).count()
         )?;
-        writeln!(
-            file,
-            "└─ 未找到测试文件的命令: {}",
-            missing_tests.len()
-        )?;
+        writeln!(file, "└─ 未找到测试文件的命令: {}", missing_tests.len())?;
         writeln!(file)?;
 
         // 2.1 列出未找到测试文件的命令
@@ -105,9 +109,9 @@ impl Reporter {
         }
 
         // 3. 按命令分组结果
-        let mut command_groups: std::collections::HashMap<String, Vec<&ComparisonResult>> = 
+        let mut command_groups: std::collections::HashMap<String, Vec<&ComparisonResult>> =
             std::collections::HashMap::new();
-        
+
         for result in results {
             command_groups
                 .entry(result.command.clone())
@@ -123,7 +127,11 @@ impl Reporter {
             let total = command_results.len();
             writeln!(file, "├─ 测试用例数: {}", total)?;
             writeln!(file, "├─ 通过数量: {}", passed)?;
-            writeln!(file, "└─ 成功率: {:.1}%", (passed as f64 / total as f64) * 100.0)?;
+            writeln!(
+                file,
+                "└─ 成功率: {:.1}%",
+                (passed as f64 / total as f64) * 100.0
+            )?;
             writeln!(file)?;
 
             // 5. 输出该命令的具体测试用例
@@ -163,10 +171,14 @@ impl Reporter {
     }
 
     /// 生成JSON格式报告
-    fn generate_json_report(&self, results: &[ComparisonResult], missing_tests: &[String]) -> Result<()> {
+    fn generate_json_report(
+        &self,
+        results: &[ComparisonResult],
+        missing_tests: &[String],
+    ) -> Result<()> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
         let path = self.output_dir.join(format!("report_{}.json", timestamp));
-        
+
         println!("正在生成 JSON 报告: {}", path.display());
 
         // 构建分层的报告结构
@@ -175,9 +187,9 @@ impl Reporter {
         let total_failed = results.iter().filter(|r| !r.passed).count();
 
         // 按命令分组结果
-        let mut command_groups: std::collections::HashMap<String, Vec<&ComparisonResult>> = 
+        let mut command_groups: std::collections::HashMap<String, Vec<&ComparisonResult>> =
             std::collections::HashMap::new();
-        
+
         for result in results {
             command_groups
                 .entry(result.command.clone())
@@ -220,36 +232,32 @@ impl Reporter {
             "missing_tests": missing_tests,
             "commands": command_results
         });
-        
+
         let file = File::create(&path).map_err(|e| {
-            TestError::ExecutionError(format!(
-                "无法创建报告文件 {}: {}",
-                path.display(),
-                e
-            ))
+            TestError::ExecutionError(format!("无法创建报告文件 {}: {}", path.display(), e))
         })?;
 
-        serde_json::to_writer_pretty(file, &report).map_err(|e| {
-            TestError::ExecutionError(format!(
-                "写入 JSON 报告失败: {}",
-                e
-            ))
-        })?;
+        serde_json::to_writer_pretty(file, &report)
+            .map_err(|e| TestError::ExecutionError(format!("写入 JSON 报告失败: {}", e)))?;
 
         println!("报告已成功生成");
         Ok(())
     }
 
     /// 生成HTML格式报告
-    fn generate_html_report(&self, results: &[ComparisonResult], missing_tests: &[String]) -> Result<()> {
+    fn generate_html_report(
+        &self,
+        results: &[ComparisonResult],
+        missing_tests: &[String],
+    ) -> Result<()> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
         let path = self.output_dir.join(format!("report_{}.html", timestamp));
         let mut file = File::create(path)?;
 
         // 按命令分组结果
-        let mut command_groups: std::collections::HashMap<String, Vec<&ComparisonResult>> = 
+        let mut command_groups: std::collections::HashMap<String, Vec<&ComparisonResult>> =
             std::collections::HashMap::new();
-        
+
         for result in results {
             command_groups
                 .entry(result.command.clone())
@@ -301,9 +309,12 @@ impl Reporter {
 
         // 添加未找到测试文件的命令列表
         if !missing_tests.is_empty() {
-            writeln!(file, r#"        <div class="missing">
+            writeln!(
+                file,
+                r#"        <div class="missing">
             <h3>未找到测试文件的命令</h3>
-            <ul>"#)?;
+            <ul>"#
+            )?;
             for cmd in missing_tests {
                 writeln!(file, "                <li>{}</li>", cmd)?;
             }
@@ -315,7 +326,7 @@ impl Reporter {
         for (command, command_results) in command_groups {
             let passed = command_results.iter().filter(|r| r.passed).count();
             let total = command_results.len();
-            
+
             write!(
                 file,
                 r#"    <div class="command-group">
@@ -350,17 +361,17 @@ impl Reporter {
                     index + 1,
                     result.description,
                     result.args.join(" "),
-                    if result.passed { "✓ 通过" } else { "✗ 失败" }
+                    if result.passed {
+                        "✓ 通过"
+                    } else {
+                        "✗ 失败"
+                    }
                 )?;
 
                 if !result.passed {
                     writeln!(file, "            <div class=\"diff\">")?;
                     for diff in &result.differences {
-                        writeln!(
-                            file,
-                            "                {}",
-                            html_escape::encode_text(diff)
-                        )?;
+                        writeln!(file, "                {}", html_escape::encode_text(diff))?;
                     }
                     writeln!(file, "            </div>")?;
                 }

@@ -110,6 +110,7 @@ feat_common_core = [
   "dirname",
   "printenv",
   "printf",
+  "echo",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -284,6 +285,7 @@ pwd = { optional = true, package = "ct_pwd", path = "src/ct/pwd" }
 dirname = { optional = true, package = "ct_dirname", path = "src/ct/dirname" }
 printenv = { optional = true, package = "ct_printenv", path = "src/ct/printenv" }
 printf = { optional = true, package = "ct_printf", path = "src/ct/printf" }
+echo = { optional = true, package = "ct_echo", path = "src/ct/echo" }
 
 [dev-dependencies]
 chrono = { workspace = true }

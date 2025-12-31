@@ -120,3 +120,69 @@ pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use std::io::BufRead;
+    use std::io::BufReader;
+
+    use crate::take::take_all_but;
+    use crate::take::take_lines;
+
+    #[test]
+    fn test_fewer_elements() {
+        let mut iter = take_all_but([0, 1, 2].iter(), 2);
+        assert_eq!(Some(&0), iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_same_number_of_elements() {
+        let mut iter = take_all_but([0, 1].iter(), 2);
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_more_elements() {
+        let mut iter = take_all_but([0].iter(), 2);
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_zero_elements() {
+        let mut iter = take_all_but([0, 1, 2].iter(), 0);
+        assert_eq!(Some(&0), iter.next());
+        assert_eq!(Some(&1), iter.next());
+        assert_eq!(Some(&2), iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_zero_lines() {
+        let input_reader = std::io::Cursor::new("a\nb\nc\n");
+        let output_reader = BufReader::new(take_lines(input_reader, 0, b'\n'));
+        let mut iter = output_reader.lines().map(|l| l.unwrap());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_fewer_lines() {
+        let input_reader = std::io::Cursor::new("a\nb\nc\n");
+        let output_reader = BufReader::new(take_lines(input_reader, 2, b'\n'));
+        let mut iter = output_reader.lines().map(|l| l.unwrap());
+        assert_eq!(Some(String::from("a")), iter.next());
+        assert_eq!(Some(String::from("b")), iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_more_lines() {
+        let input_reader = std::io::Cursor::new("a\nb\nc\n");
+        let output_reader = BufReader::new(take_lines(input_reader, 4, b'\n'));
+        let mut iter = output_reader.lines().map(|l| l.unwrap());
+        assert_eq!(Some(String::from("a")), iter.next());
+        assert_eq!(Some(String::from("b")), iter.next());
+        assert_eq!(Some(String::from("c")), iter.next());
+        assert_eq!(None, iter.next());
+    }
+}

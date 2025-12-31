@@ -448,3 +448,146 @@ impl<'a> NativeStr<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+    #[test]
+    fn test_new() {
+        let str = OsStr::new("test");
+        let native_str = NativeStr::new(str);
+
+        // Assert that `native_str` contains the correct native string representation
+        assert_eq!(native_str.native().as_ref(), b"test");
+    }
+
+    #[test]
+    fn test_contains() {
+        let str = OsStr::new("hello world");
+        let native_str = NativeStr::new(str);
+
+        // Assert that `native_str` contains the character 'o'
+        assert_eq!(native_str.contains(&'o'), Some(true));
+        // Assert that `native_str` does not contain the character 'z'
+        assert_eq!(native_str.contains(&'z'), Some(false));
+    }
+
+    #[test]
+    fn test_slice() {
+        let str = OsStr::new("hello world");
+        let native_str = NativeStr::new(str);
+
+        // Assert that the slice of `native_str` from index 0 to 4 is "hello"
+        assert_eq!(native_str.slice(0, 5).to_str().unwrap(), "hello");
+        // Assert that the slice of `native_str` from index 6 to 11 is "world"
+        assert_eq!(native_str.slice(6, 11).to_str().unwrap(), "world");
+    }
+
+    #[test]
+    fn test_env_convert_from_str() {
+        let s = "hello";
+        let converted: Cow<'_, NativeIntStr> = NCvt::convert(s);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(converted.len(), s.len() * 2);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(converted.len(), s.len());
+        }
+    }
+
+    #[test]
+    fn test_env_convert_from_string() {
+        let s = "world".to_string();
+        let converted: Cow<'_, NativeIntStr> = NCvt::convert(&s);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(converted.len(), s.len() * 2);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(converted.len(), s.len());
+        }
+    }
+
+    #[test]
+    fn test_env_convert_from_os_str() {
+        let s = OsString::from("hello");
+        let converted: Cow<'_, NativeIntStr> = NCvt::convert(&s);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(converted.len(), s.into_vec().len() * 2);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(converted.len(), s.into_vec().len());
+        }
+    }
+
+    #[test]
+    fn test_env_convert_from_os_string() {
+        let s = OsString::from("world");
+        let converted: Cow<'_, NativeIntStr> = NCvt::convert(s.clone());
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(converted.len(), s.into_vec().len() * 2);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(converted.len(), s.into_vec().len());
+        }
+    }
+
+    #[test]
+    fn test_env_convert_from_vec_str() {
+        let s = vec!["hello", "world"];
+        let converted: Vec<Cow<'_, NativeIntStr>> = NCvt::convert(&s);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(converted.len(), s.len());
+            for c in converted {
+                assert_eq!(c.len(), s[0].len() * 2);
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(converted.len(), s.len());
+            for c in converted {
+                assert_eq!(c.len(), s[0].len());
+            }
+        }
+    }
+
+    #[test]
+    fn test_env_convert_from_vec_string() {
+        let s = vec!["hello".to_string(), "world".to_string()];
+        let converted: Vec<Cow<'_, NativeIntStr>> = NCvt::convert(&s);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(converted.len(), s.len());
+            for c in converted {
+                assert_eq!(c.len(), s[0].len() * 2);
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(converted.len(), s.len());
+            for c in converted {
+                assert_eq!(c.len(), s[0].len());
+            }
+        }
+    }
+}

@@ -71,7 +71,7 @@ mod tests {
 
         #[test]
         fn test_unlink_main_argument_file_parsing() {
-            let regular_file_path = "test_unlink_file";
+            let regular_file_path = "test_unlink_main_argument_file_parsing";
             File::create(regular_file_path).expect("Failed to create file");
             let args = vec![ctcore::ct_util_name(), regular_file_path];
             let result = unlink_main(args.iter().map(|s| OsString::from(s)));
@@ -167,7 +167,7 @@ mod tests {
         #[test]
         fn test_ct_app_argument_file_parsing() {
             // Create a file for testing , 默认带文件
-            let regular_file_path = "test_unlink_file";
+            let regular_file_path = "test_ct_app_argument_file_parsing";
             File::create(regular_file_path).expect("Failed to create file");
 
             let command = ct_app();

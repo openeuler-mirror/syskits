@@ -216,10 +216,10 @@ macro_rules! ct_crash(
 /// ```
 #[macro_export]
 macro_rules! ct_crash_if_err {
-    ($exit_code:expr, $exp:expr) => (
+    ($exit_code:expr, $exp:expr) => {
         match $exp {
             Ok(v) => v,
             Err(f) => $crate::ct_crash!($exit_code, "{}", f),
         }
-    )
+    };
 }

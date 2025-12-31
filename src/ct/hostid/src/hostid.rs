@@ -61,3 +61,58 @@ fn hostid() {
     println!("{result:0>8x}");
 }
 
+#[cfg(test)]
+mod tests {
+    use clap::error::ErrorKind;
+
+    use super::*;
+
+    #[cfg(test)]
+    mod tests_ct_main {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_expand_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_expand_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_expand_main_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_expand_main_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_expand_main() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+}

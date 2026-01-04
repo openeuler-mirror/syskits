@@ -2602,7 +2602,7 @@ fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
                 })
             }
             Err(e) => {
-                println!("Failed to get ACLs: {}", e);
+                // println!("Failed to get ACLs: {}", e);
                 false
             }
         }

@@ -265,3 +265,47 @@ fn available_parallelism() -> usize {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_nproc_main {
+        use crate::nproc_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_nproc_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_nproc_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_nproc_main_all() {
+            let args = vec![ctcore::ct_util_name(), "--all"];
+
+            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_nproc_main_ignore() {
+            let args = vec![ctcore::ct_util_name(), "--ignore=1"];
+            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+}

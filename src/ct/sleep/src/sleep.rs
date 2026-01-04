@@ -312,4 +312,118 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_sleep_main_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_execution_help_short() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_1() {
+            let args = vec![ctcore::ct_util_name(), "1"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_0_3_0_2() {
+            let args = vec![ctcore::ct_util_name(), "0.3", "0.2"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_0_3_0_2_0_1() {
+            let args = vec![ctcore::ct_util_name(), "0.3", "0.2", "0.1"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_1_qq() {
+            let args = vec![ctcore::ct_util_name(), "1", "qq"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_0_1_0_3_s() {
+            let args = vec![ctcore::ct_util_name(), "0.1s", "0.3s"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_0() {
+            let args = vec![ctcore::ct_util_name(), "0"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_suffix_seconds_1() {
+            let args = vec![ctcore::ct_util_name(), "1s"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_sleep_main_sleep_suffix_err_1() {
+            let args = vec![ctcore::ct_util_name(), "1q"];
+            let result = sleep_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+    }
+
 }

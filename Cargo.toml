@@ -113,6 +113,7 @@ feat_common_core = [
   "echo",
   "touch",
   "nohup",
+  "readlink",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -290,6 +291,7 @@ printf = { optional = true, package = "ct_printf", path = "src/ct/printf" }
 echo = { optional = true, package = "ct_echo", path = "src/ct/echo" }
 touch = { optional = true, package = "ct_touch", path = "src/ct/touch" }
 nohup = { optional = true, package = "ct_nohup", path = "src/ct/nohup" }
+readlink = { optional = true, package = "ct_readlink", path = "src/ct/readlink" }
 
 [dev-dependencies]
 chrono = { workspace = true }

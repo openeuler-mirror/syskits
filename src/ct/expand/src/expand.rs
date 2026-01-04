@@ -817,4 +817,102 @@ mod tests {
         }
     }
 
+    mod tests_ct_app {
+        use crate::ct_app;
+
+        use crate::opt_flags::{INITIAL, NO_UTF8};
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_v() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_h() {
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+        #[test]
+        fn test_ct_app_i() {
+            let args = vec![ctcore::ct_util_name(), "-i", "file"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(INITIAL));
+        }
+
+        #[test]
+        fn test_ct_app_initial() {
+            let args = vec![ctcore::ct_util_name(), "--initial", "file"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(INITIAL));
+        }
+
+        #[test]
+        fn test_ct_app_t() {
+            let args = vec![ctcore::ct_util_name(), "-t", "4", "file"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_tabs() {
+            let args = vec![ctcore::ct_util_name(), "--tabs", "4", "file"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_u() {
+            let args = vec![ctcore::ct_util_name(), "-U", "file"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(NO_UTF8));
+        }
+
+        #[test]
+        fn test_ct_app_utf8() {
+            let args = vec![ctcore::ct_util_name(), "--no-utf8", "file"];
+            let command = ct_app();
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(NO_UTF8));
+        }
+    }
+
 }

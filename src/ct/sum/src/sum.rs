@@ -649,4 +649,118 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // sum 接口: sum [OPTION]... [FILE]...
+        //
+        // Options:
+        //   -r             use the BSD sum algorithm, use 1K blocks (default)
+        //   -s, --sysv     use System V sum algorithm, use 512 bytes blocks
+        //   -h, --help     Print help
+        //   -V, --version  Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help_short() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-h"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name()];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_bsd_sum_algorithm_short() {
+            let filename = "test_ct_app_bsd_sum_algorithm_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-r", filename];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_system_v_sum_algorithm_short() {
+            let filename = "test_ct_app_system_v_sum_algorithm_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "-s", filename];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_bsd_sum_algorithm_long() {
+            let filename = "test_ct_app_bsd_sum_algorithm_short";
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--sysv", filename];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

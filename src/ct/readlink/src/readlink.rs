@@ -923,6 +923,34 @@ mod tests {
             assert!(result.is_ok());
         }
 
+        #[test]
+        fn test_ct_app_verbose_short() {
+            let file_name = "test_ct_app_verbose_short";
+            let command = ct_app();
 
+            let help_args = vec![ctcore::ct_util_name(), "-v", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_zero_long() {
+            let file_name = "test_ct_app_zero_long";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--zero", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_zero_short() {
+            let file_name = "test_ct_app_zero_short";
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-z", file_name];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_ok());
+        }
     }
 }

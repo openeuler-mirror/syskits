@@ -588,3 +588,127 @@ pub fn is_syntax_tree_truthy(syntax_tree_str: &SyntaxTreeNumOrStr) -> bool {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::{
+        SyntaxTreeAstNode, SyntaxTreeBinOp, SyntaxTreeNumericOp, SyntaxTreeRelationOp,
+        SyntaxTreeStringOp,
+    };
+
+    impl From<&str> for SyntaxTreeAstNode {
+        fn from(value: &str) -> Self {
+            Self::Leaf {
+                value: value.into(),
+            }
+        }
+    }
+
+    fn op(
+        op_type: SyntaxTreeBinOp,
+        left: impl Into<SyntaxTreeAstNode>,
+        right: impl Into<SyntaxTreeAstNode>,
+    ) -> SyntaxTreeAstNode {
+        SyntaxTreeAstNode::BinOp {
+            op_type,
+            left: Box::new(left.into()),
+            right: Box::new(right.into()),
+        }
+    }
+
+    fn length(string: impl Into<SyntaxTreeAstNode>) -> SyntaxTreeAstNode {
+        SyntaxTreeAstNode::Length {
+            string: Box::new(string.into()),
+        }
+    }
+
+    fn substr(
+        string: impl Into<SyntaxTreeAstNode>,
+        pos: impl Into<SyntaxTreeAstNode>,
+        length: impl Into<SyntaxTreeAstNode>,
+    ) -> SyntaxTreeAstNode {
+        SyntaxTreeAstNode::Substr {
+            string: Box::new(string.into()),
+            pos: Box::new(pos.into()),
+            length: Box::new(length.into()),
+        }
+    }
+
+    #[test]
+    fn infix_operators() {
+        let cases = [
+            ("|", SyntaxTreeBinOp::String(SyntaxTreeStringOp::Or)),
+            ("&", SyntaxTreeBinOp::String(SyntaxTreeStringOp::And)),
+            ("<", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Lt)),
+            ("<=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Leq)),
+            ("=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Eq)),
+            ("!=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Neq)),
+            (">=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Geq)),
+            (">", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Gt)),
+            ("+", SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Add)),
+            ("-", SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Sub)),
+            ("*", SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Mul)),
+            ("/", SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Div)),
+            ("%", SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Mod)),
+            (":", SyntaxTreeBinOp::String(SyntaxTreeStringOp::Match)),
+        ];
+        for (string, value) in cases {
+            assert_eq!(
+                SyntaxTreeAstNode::parse(&["1", string, "2"]),
+                Ok(op(value, "1", "2"))
+            );
+        }
+    }
+
+    #[test]
+    fn other_operators() {
+        assert_eq!(
+            SyntaxTreeAstNode::parse(&["match", "1", "2"]),
+            Ok(op(
+                SyntaxTreeBinOp::String(SyntaxTreeStringOp::Match),
+                "1",
+                "2"
+            )),
+        );
+        assert_eq!(
+            SyntaxTreeAstNode::parse(&["index", "1", "2"]),
+            Ok(op(
+                SyntaxTreeBinOp::String(SyntaxTreeStringOp::Index),
+                "1",
+                "2"
+            )),
+        );
+        assert_eq!(SyntaxTreeAstNode::parse(&["length", "1"]), Ok(length("1")),);
+        assert_eq!(
+            SyntaxTreeAstNode::parse(&["substr", "1", "2", "3"]),
+            Ok(substr("1", "2", "3")),
+        );
+    }
+
+    #[test]
+    fn precedence() {
+        assert_eq!(
+            SyntaxTreeAstNode::parse(&["1", "+", "2", "*", "3"]),
+            Ok(op(
+                SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Add),
+                "1",
+                op(SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Mul), "2", "3")
+            ))
+        );
+        assert_eq!(
+            SyntaxTreeAstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
+            Ok(op(
+                SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Mul),
+                op(SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Add), "1", "2"),
+                "3"
+            ))
+        );
+        assert_eq!(
+            SyntaxTreeAstNode::parse(&["1", "*", "2", "+", "3"]),
+            Ok(op(
+                SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Add),
+                op(SyntaxTreeBinOp::Numeric(SyntaxTreeNumericOp::Mul), "1", "2"),
+                "3"
+            )),
+        );
+    }
+}

@@ -1830,4 +1830,105 @@ mod tests {
             ));
         }
     }
+
+    #[cfg(test)]
+    mod handle_preceding_options_tests {
+        use super::*;
+        #[test]
+        fn test_long_option_requiring_value() {
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+            uniq_handle_preceding_options(
+                "--long-option",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(!is_preceding_short_opt_req_value);
+        }
+
+        #[test]
+        fn test_short_option_requiring_value() {
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+            uniq_handle_preceding_options(
+                "-s",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(is_preceding_short_opt_req_value);
+        }
+
+        #[test]
+        fn test_no_value_required() {
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+            uniq_handle_preceding_options(
+                "-x",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(!is_preceding_short_opt_req_value);
+        }
+
+        #[test]
+        fn test_resetting_flags() {
+            let mut is_preceding_long_opt_req_value = true;
+            let mut is_preceding_short_opt_req_value = true;
+            uniq_handle_preceding_options(
+                "value",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(!is_preceding_short_opt_req_value);
+        }
+
+        #[test]
+        fn test_multiple_consecutive_options() {
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+            uniq_handle_preceding_options(
+                "-s",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(is_preceding_short_opt_req_value);
+            uniq_handle_preceding_options(
+                "--long-option",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(!is_preceding_short_opt_req_value);
+            uniq_handle_preceding_options(
+                "-x",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value);
+            assert!(!is_preceding_short_opt_req_value);
+        }
+
+        #[test]
+        fn test_option_followed_by_another_option() {
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+            uniq_handle_preceding_options(
+                "-x",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            uniq_handle_preceding_options(
+                "--another-option",
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+            assert!(!is_preceding_long_opt_req_value); // Ensure it does not set for "-x" which doesn't need a value
+            assert!(!is_preceding_short_opt_req_value); // Ensure it resets correctly for the next option
+        }
+    }
 }

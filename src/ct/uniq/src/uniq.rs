@@ -1680,4 +1680,131 @@ mod tests {
             ));
         }
     }
+
+    #[cfg(test)]
+    mod should_extract_obs_skip_chars_tests {
+        use super::*;
+
+        #[test]
+        fn test_plus_with_numbers() {
+            let str_slice = "+123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_plus_without_numbers() {
+            let str_slice = "+abc";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_no_plus_present() {
+            let str_slice = "abc";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_multiple_pluses() {
+            let str_slice = "++123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_spaces_after_plus() {
+            let str_slice = "+ 123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_plus_as_part_of_valid_option() {
+            let str_slice = "--option+123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_embedded_plus_signs() {
+            let str_slice = "abc+123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_plus_at_start_of_string() {
+            let str_slice = "+456";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_plus_following_special_characters() {
+            let str_slice = "!@#+789";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_trailing_characters_after_numbers() {
+            let str_slice = "+123abc";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+}
 }

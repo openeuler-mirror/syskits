@@ -92,6 +92,27 @@ feat_common_core = [
   "hostname",
   "cut",
   "pr",
+  "logname",
+  "df",
+  "numfmt",
+  "tty",
+  "env",
+  "fmt",
+  "tsort",
+  "date",
+  "users",
+  "mkfifo",
+  "truncate",
+  "mknod",
+  "rmdir",
+  "dircolors",
+  "pwd",
+  "dirname",
+  "printenv",
+  "printf",
+  "echo",
+  "touch",
+  "nohup",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -248,6 +269,27 @@ unexpand = { optional = true, package = "ct_unexpand", path = "src/ct/unexpand" 
 hostname = { optional = true, package = "ct_hostname", path = "src/ct/hostname" }
 cut = { optional = true, package = "ct_cut", path = "src/ct/cut" }
 pr = { optional = true, package = "ct_pr", path = "src/ct/pr" }
+logname = { optional = true, package = "ct_logname", path = "src/ct/logname" }
+df = { optional = true, package = "ct_df", path = "src/ct/df" }
+numfmt = { optional = true, package = "ct_numfmt", path = "src/ct/numfmt" }
+tty = { optional = true, package = "ct_tty", path = "src/ct/tty" }
+env = { optional = true, package = "ct_env", path = "src/ct/env" }
+fmt = { optional = true, package = "ct_fmt", path = "src/ct/fmt" }
+tsort = { optional = true, package = "ct_tsort", path = "src/ct/tsort" }
+date = { optional = true, package = "ct_date", path = "src/ct/date" }
+users = { optional = true, package = "ct_users", path = "src/ct/users" }
+mkfifo = { optional = true, package = "ct_mkfifo", path = "src/ct/mkfifo" }
+truncate = { optional = true, package = "ct_truncate", path = "src/ct/truncate" }
+mknod = { optional = true, package = "ct_mknod", path = "src/ct/mknod" }
+rmdir = { optional = true, package = "ct_rmdir", path = "src/ct/rmdir" }
+dircolors = { optional = true, package = "ct_dircolors", path = "src/ct/dircolors" }
+pwd = { optional = true, package = "ct_pwd", path = "src/ct/pwd" }
+dirname = { optional = true, package = "ct_dirname", path = "src/ct/dirname" }
+printenv = { optional = true, package = "ct_printenv", path = "src/ct/printenv" }
+printf = { optional = true, package = "ct_printf", path = "src/ct/printf" }
+echo = { optional = true, package = "ct_echo", path = "src/ct/echo" }
+touch = { optional = true, package = "ct_touch", path = "src/ct/touch" }
+nohup = { optional = true, package = "ct_nohup", path = "src/ct/nohup" }
 
 [dev-dependencies]
 chrono = { workspace = true }

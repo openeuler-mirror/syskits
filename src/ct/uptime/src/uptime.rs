@@ -219,4 +219,16 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod uptime_print_n_users_tests {
+        use super::*;
+
+        #[test]
+        fn test_uptime_print_n_users() {
+            assert_eq!(uptime_print_n_users(0), "");
+            assert_eq!(uptime_print_n_users(1), "1 user,  ");
+            assert_eq!(uptime_print_n_users(2), "2 users,  ");
+        }
+    }
+
 }

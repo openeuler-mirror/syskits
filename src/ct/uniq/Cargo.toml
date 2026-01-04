@@ -1,0 +1,26 @@
+[package]
+name = "ct_uniq"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "uniq ~ (ctutils) filter identical adjacent lines from input"
+
+homepage.workspace = true
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/uniq"
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/uniq.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[bin]]
+name = "uniq"
+path = "src/main.rs"

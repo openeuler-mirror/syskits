@@ -70,44 +70,45 @@ pub fn ct_app() -> Command {
         .arg(arg)
 }
 
+
 // 将`i`中的单词复制到`buf`中，中间用空格隔开。
 fn yes_args_into_buff<'a>(
-    buf: &mut Vec<u8>,
-    i: Option<impl Iterator<Item = &'a OsString>>,
+    buffer: &mut Vec<u8>,
+    iter_option: Option<impl Iterator<Item = &'a OsString>>,
 ) -> Result<(), Box<dyn Error>> {
-    if let Some(i) = i {
-        // 在 Unix系统上，OsStrs 为&[u8]...
+    // 如果没有提供参数，则直接在缓冲区中追加 "y\n" 并返回成功。
+    let Some(iter) = iter_option else {
+        buffer.extend_from_slice(b"y\n");
+        return Ok(());
+    };
+
+    // Unix 系统（包括 WASI）处理逻辑：直接将 OsString 转为字节序列并以空格分隔。
+    #[cfg(unix)]
+    {
         #[cfg(unix)]
-        {
-            #[cfg(unix)]
-            use std::os::unix::ffi::OsStrExt;
-            #[cfg(target_os = "wasi")]
-            use std::os::wasi::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStrExt;
+        #[cfg(target_os = "wasi")]
+        use std::os::wasi::ffi::OsStrExt;
 
-            let mut iter = i.map(|a| a.as_bytes());
-            if let Some(first) = iter.next() {
-                buf.extend_from_slice(first);
-                iter.fold((), |_, part| {
-                    buf.extend_from_slice(b" ");
-                    buf.extend_from_slice(part);
-                });
-            }
-        }
-
-        // 但是，在 非 unix 系统上，我们必须跳过一个字符串。
-        #[cfg(not(any(unix)))]
-        {
-            for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-                let bytes = match part {
-                    Some(part) => part.as_bytes(),
-                    None => return Err("arguments contain invalid UTF-8".into()),
-                };
-                buf.extend_from_slice(bytes);
-            }
+        for part in itertools::intersperse(iter.map(|a| a.as_bytes()), b" ") {
+            buffer.extend_from_slice(part);
         }
     }
 
-    buf.push(b'\n');
+    // Windows 系统处理逻辑：必须将 OsString 转换为 String，以处理可能的 UTF-8 编码问题。
+    #[cfg(not(unix))]
+    {
+        for part_option in itertools::intersperse(iter.map(|os_str| os_str.to_str()), Some(" ")) {
+            let b = match part_option {
+                Some(p) => p.as_bytes(),
+                None => return Err("arguments contain invalid UTF-8".into()),
+            };
+            buffer.extend_from_slice(b);
+        }
+    }
+
+    // 在参数序列末尾追加换行符。
+    buffer.push(b'\n');
 
     Ok(())
 }

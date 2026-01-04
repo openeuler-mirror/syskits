@@ -222,4 +222,62 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod bsd_sum_tests {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_bsd_sum() {
+            // 测试空输入
+            let data = b"";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 0);
+            assert_eq!(checksum, 0);
+
+            // 测试单个字节
+            let data = b"a";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 'a' as u16);
+
+            // 测试短字符串
+            let data = b"abc";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 16556);
+
+            // 测试长字符串（跨越多个块）
+            let data = vec![b'a'; 5000];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 5);
+            assert_eq!(checksum, 41146);
+
+            // 测试包含所有字节值的输入
+            let data: Vec<u8> = (0..=255).collect();
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 512);
+
+            // 测试混合数据
+            let data = b"1234567890";
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 1);
+            assert_eq!(checksum, 59623);
+
+            // 测试较大数据
+            let data = vec![b'Z'; 10000];
+            let reader = Box::new(Cursor::new(data));
+            let (blocks, checksum) = sum_bsd(reader);
+            assert_eq!(blocks, 10);
+            assert_eq!(checksum, 43443);
+        }
+    }
+
 }

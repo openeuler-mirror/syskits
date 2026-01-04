@@ -2822,4 +2822,132 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // uniq 接口: uniq [OPTION]... [INPUT [OUTPUT]]
+        //   -c, --count           prefix lines by the number of occurrences
+        //   -d, --repeated        only print duplicate lines, one for each group
+        //   -D                    print all duplicate lines
+        //       --all-repeated[=METHOD]  like -D, but allow separating groups
+        //                                  with an empty line;
+        //                                  METHOD={none(default),prepend,separate}
+        //   -f, --skip-fields=N   avoid comparing the first N fields
+        //       --group[=METHOD]  show all items, separating groups with an empty line;
+        //                           METHOD={separate(default),prepend,append,both}
+        //   -i, --ignore-case     ignore differences in case when comparing
+        //   -s, --skip-chars=N    avoid comparing the first N characters
+        //   -u, --unique          only print unique lines
+        //   -z, --zero-terminated     line delimiter is NUL, not newline
+        //   -w, --check-chars=N   compare no more than N characters in lines
+        //       --help     display this help and exit
+        //       --version  output version information and exit
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            // Assuming `command` has a method to retrieve the result name, replace it with the actual one
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+
+            // 测试用例1：有效输入
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            // Assuming `command` has a method to retrieve the result name, replace it with the actual one
+            let result = command.try_get_matches_from(args);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            // 测试用例2：验证 --help 参数是否正确处理
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            // 测试用例3：验证当提供未知参数时是否正确报错
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            // 测试用例4：验证当缺少必需的参数时是否正确报错
+            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_all_repeated() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--all-repeated", "prepend"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_group() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--group", "separate"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_check_chars() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--check-chars", "N"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_count() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--count"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+}
 }

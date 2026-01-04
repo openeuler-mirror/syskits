@@ -392,4 +392,155 @@ mod tests {
         }
     }
 
- }
+    #[cfg(test)]
+    mod open_tests {
+        use super::*;
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        use tempfile::{tempdir, NamedTempFile};
+
+        #[test]
+        fn test_open_stdin() {
+            // 模拟从标准输入读取
+            let result = sum_open("-");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_open_file() {
+            // 创建一个临时文件，并写入一些数据
+            let mut file = NamedTempFile::new().unwrap();
+            writeln!(file, "Hello, world!").unwrap();
+            let file_path = file.path().to_str().unwrap();
+
+            // 测试打开文件
+            let result = sum_open(file_path);
+            assert!(result.is_ok());
+
+            // 验证读取的内容
+            let mut reader = result.unwrap();
+            let mut content = String::new();
+            reader.read_to_string(&mut content).unwrap();
+            assert_eq!(content, "Hello, world!\n");
+        }
+
+        #[test]
+        fn test_open_directory() {
+            // 创建一个临时目录
+            let dir = tempdir().unwrap();
+            let dir_path = dir.path().to_str().unwrap();
+
+            // 测试打开目录
+            let result = sum_open(dir_path);
+            assert!(result.is_err());
+
+            // 验证错误信息
+            if let Err(error) = result {
+                assert_eq!(error.to_string(), format!("{}: Is a directory", dir_path));
+            }
+        }
+
+        #[test]
+        fn test_open_non_existent_file() {
+            // 测试打开不存在的文件
+            let result = sum_open("non_existent_file.txt");
+            assert!(result.is_err());
+
+            // 验证错误信息
+            if let Err(error) = result {
+                assert_eq!(
+                    error.to_string(),
+                    "non_existent_file.txt: No such file or directory"
+                );
+            }
+        }
+
+        #[test]
+        fn test_open_special_characters_filename() {
+            // 创建一个带有特殊字符的临时文件，并写入一些数据
+            let file = NamedTempFile::new().unwrap();
+            let special_filename = file
+                .path()
+                .with_extension("!@#$%^&*()")
+                .to_str()
+                .unwrap()
+                .to_string();
+            std::fs::rename(file.path(), &special_filename).unwrap();
+
+            // 打开这个带有特殊字符的文件
+            let result = sum_open(&special_filename);
+            assert!(result.is_ok());
+
+            // 验证读取的内容
+            let mut reader = result.unwrap();
+            let mut content = String::new();
+            reader.read_to_string(&mut content).unwrap();
+            assert!(content.is_empty()); // 因为没有写入数据，内容应该是空的
+        }
+
+        #[test]
+        fn test_open_file_with_long_name() {
+            // 创建一个非常长名字的临时文件，并写入一些数据
+            let long_filename = "a".repeat(255);
+            let file = NamedTempFile::new().unwrap();
+            let long_filepath = file.path().with_file_name(&long_filename);
+            std::fs::rename(file.path(), &long_filepath).unwrap();
+
+            // 测试打开这个长名字的文件
+            let result = sum_open(long_filepath.to_str().unwrap());
+            assert!(result.is_ok());
+
+            // 验证读取的内容
+            let mut reader = result.unwrap();
+            let mut content = String::new();
+            reader.read_to_string(&mut content).unwrap();
+            assert!(content.is_empty()); // 因为没有写入数据，内容应该是空的
+        }
+
+        #[test]
+        fn test_open_file_no_permissions() {
+            // 创建一个临时文件，并移除所有权限
+            let file = NamedTempFile::new().unwrap();
+            let file_path = file.path().to_str().unwrap();
+            std::fs::set_permissions(file_path, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+            // 尝试打开没有权限的文件
+            let result = sum_open(file_path);
+            assert!(result.is_ok());
+
+            // 验证错误信息
+            if let Err(error) = result {
+                assert!(error.to_string().contains("Permission denied"));
+            }
+        }
+
+        #[test]
+        fn test_open_symlink() {
+            // 创建一个临时文件
+            let mut file = NamedTempFile::new().unwrap();
+            writeln!(file, "Hello, symlink!").unwrap();
+            let file_path = file.path().to_str().unwrap();
+
+            // 创建一个临时目录
+            let dir = tempdir().unwrap();
+            let symlink_path = dir.path().join("symlink");
+
+            // 创建指向临时文件的符号链接
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(file_path, &symlink_path).unwrap();
+
+            #[cfg(windows)]
+            std::os::windows::fs::symlink_file(file_path, &symlink_path).unwrap();
+
+            // 测试打开符号链接
+            let result = sum_open(symlink_path.to_str().unwrap());
+            assert!(result.is_ok());
+
+            // 验证读取的内容
+            let mut reader = result.unwrap();
+            let mut content = String::new();
+            reader.read_to_string(&mut content).unwrap();
+            assert_eq!(content, "Hello, symlink!\n");
+        }
+    }
+}

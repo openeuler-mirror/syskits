@@ -1520,4 +1520,117 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod should_extract_obs_skip_fields_tests {
+        use super::*;
+
+        #[test]
+        fn test_hyphen_with_numbers() {
+            let str_slice = "-123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_hyphen_without_numbers() {
+            let str_slice = "-abc";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_multiple_hyphens() {
+            let str_slice = "--123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_hyphen_at_the_end() {
+            let str_slice = "test-";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_numbers_preceded_by_characters() {
+            let str_slice = "test123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_embedded_hyphens() {
+            let str_slice = "test-123field";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_special_characters_following_hyphen() {
+            let str_slice = "-#*123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_leading_zeros() {
+            let str_slice = "-000123";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_hyphen_followed_by_mixed_characters() {
+            let str_slice = "-12ab3";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(uniq_should_extract_obs_skip_fields(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+}
 }

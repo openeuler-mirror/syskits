@@ -1,0 +1,108 @@
+/*
+ * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
+//! sync 命令在 Linux 中用于确保系统内存中的数据被立即写入到硬盘中，防止数据丢失。
+/* synced with: sync (GNU coreutils) 8.13 */
+
+use clap::{crate_version, Arg, ArgAction, Command};
+
+use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
+mod platform;
+
+const SYNC_ABOUT: &str = ct_help_about!("sync.md");
+const SYNC_USAGE: &str = ct_help_usage!("sync.md");
+
+pub mod sync_flags {
+    pub const SYNC_FILE_SYSTEM: &str = "file-system";
+    pub const SYNC_DATA: &str = "data";
+}
+
+const SYNC_ARG_FILES: &str = "files";
+
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    sync_main(args)
+}
+
+pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
+    let arg_matches = ct_app().try_get_matches_from(args)?;
+    let is_has_data = arg_matches.get_flag(sync_flags::SYNC_DATA);
+    let is_file_system = arg_matches.get_flag(sync_flags::SYNC_FILE_SYSTEM);
+    let files: Vec<String> = arg_matches
+        .get_many::<String>(SYNC_ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if is_has_data && files.is_empty() {
+        let err_message = "--data needs at least one argument";
+        return Err(CtSimpleError::new(1, err_message));
+    }
+
+    for f in &files {
+        check_files(f)?;
+    }
+
+    if is_file_system {
+        sync_fs(files);
+    } else if is_has_data {
+        #[cfg(target_os = "linux")]
+        platform::fdatasync(files);
+    } else {
+        sync();
+    }
+    Ok(())
+}
+
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = SYNC_ABOUT;
+    let usage_description = ct_format_usage(SYNC_USAGE);
+    let args = vec![
+        Arg::new(sync_flags::SYNC_FILE_SYSTEM)
+            .short('f')
+            .long(sync_flags::SYNC_FILE_SYSTEM)
+            .conflicts_with(sync_flags::SYNC_DATA)
+            .help("sync the file systems that contain the files")
+            .action(ArgAction::SetTrue),
+        Arg::new(sync_flags::SYNC_DATA)
+            .short('d')
+            .long(sync_flags::SYNC_DATA)
+            .conflicts_with(sync_flags::SYNC_FILE_SYSTEM)
+            .help("sync only file data, no unneeded metadata (Linux only)")
+            .action(ArgAction::SetTrue),
+        Arg::new(SYNC_ARG_FILES)
+            .action(ArgAction::Append)
+            .value_hint(clap::ValueHint::AnyPath),
+    ];
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .infer_long_args(true)
+        .args(args)
+}
+
+fn sync() -> isize {
+    unsafe { platform::do_sync() }
+}
+
+fn sync_fs(files: Vec<String>) -> isize {
+    unsafe { platform::do_syncfs(files) }
+}
+
+fn check_files(f: &String) -> CTResult<()> {
+    platform::check_files(f)
+}
+

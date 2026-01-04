@@ -66,3 +66,64 @@ pub fn check_files(f: &String) -> CTResult<()> {
 pub fn fdatasync(files: Vec<String>) -> isize {
     unsafe { do_fdatasync(files) }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_check_files_directory() {
+        let dir_path = "/tmp/testdir";
+        fs::create_dir(dir_path).unwrap();
+        let result = check_files(&dir_path.to_string());
+        assert!(result.is_ok());
+        fs::remove_dir(dir_path).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_check_files_permission_denied() {
+        let file_path = "/root/testfile"; // Assuming the test is run by a non-root user
+        let result = check_files(&file_path.to_string());
+        assert!(result.is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_do_fdatasync() {
+        let file_path = "/tmp/testfile";
+        File::create(file_path).unwrap();
+        let result = unsafe { do_fdatasync(vec![file_path.to_string()]) };
+        assert_eq!(result, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_do_sync() {
+        let result = unsafe { do_sync() };
+        assert_eq!(result, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_do_syncfs() {
+        let file_path = "/tmp/testfile";
+        File::create(file_path).unwrap();
+        let result = unsafe { do_syncfs(vec![file_path.to_string()]) };
+        assert_eq!(result, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_check_files() {
+        let file_path = "/tmp/testfile";
+        File::create(file_path).unwrap();
+        let result = check_files(&file_path.to_string());
+        assert!(result.is_ok());
+
+        // Test with non-existing file
+        let result = check_files(&"/tmp/non_existing_file".to_string());
+        assert!(result.is_err());
+    }
+}

@@ -198,7 +198,83 @@ mod tests {
             )
         }
 
+       #[test]
+        fn test_ct_main_file_data_short() {
+            let args = vec![ctcore::ct_util_name(), "-d"];
+            let result = sync_main(args.iter().map(|s| OsString::from(s)));
 
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "--data needs at least one argument".to_string()
+            )
+        }
+
+        #[test]
+        fn test_ct_main_with_dir() {
+            let dir = tempdir().unwrap();
+            let dir_name = dir.path().to_str().unwrap();
+
+            let args = vec![ctcore::ct_util_name(), dir_name];
+            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_file_system_long_with_file() {
+            let filename = "test_ct_main_file_system_long_with_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b c\nc d").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--file-system", file_name];
+            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_file_system_short_with_file() {
+            let filename = "test_ct_main_file_system_short_with_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b c\nc d").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-f", file_name];
+            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_file_data_long_with_file() {
+            let filename = "test_ct_main_file_data_long_with_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b c\nc d").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "--data", file_name];
+            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_file_data_short_with_file() {
+            let filename = "test_ct_main_file_data_short_with_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "a b c\nc d").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+            let args = vec![ctcore::ct_util_name(), "-d", file_name];
+            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
     }
 
 }

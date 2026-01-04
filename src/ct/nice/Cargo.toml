@@ -1,0 +1,25 @@
+[package]
+name = "ct_nice"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "nice ~ (ctutils) run PROGRAM with modified scheduling priority"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/nice"
+
+[lib]
+path = "src/nice.rs"
+
+[dependencies]
+clap = { workspace = true }
+libc = { workspace = true }
+nix = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "nice"
+path = "src/main.rs"

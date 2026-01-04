@@ -197,8 +197,9 @@ mod tests {
             let result = users_main(args.iter().map(|s| OsString::from(s)));
 
             assert!(result.is_ok());
-
-            fs::remove_file(destination).expect("Failed to remove file");
+            if PathBuf::from(destination).exists() {
+                fs::remove_file(destination).expect("Failed to remove file");
+            }
         }
 
         #[test]

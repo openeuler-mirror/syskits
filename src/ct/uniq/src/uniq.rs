@@ -1806,5 +1806,28 @@ mod tests {
             ));
         }
 
-}
+        #[test]
+        fn test_empty_string() {
+            let str_slice = "";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+
+        #[test]
+        fn test_plus_with_floating_point_numbers() {
+            let str_slice = "+12.3";
+            let is_preceding_long_opt_req_value = false;
+            let is_preceding_short_opt_req_value = false;
+            assert!(!uniq_should_extract_obs_skip_chars(
+                str_slice,
+                &is_preceding_long_opt_req_value,
+                &is_preceding_short_opt_req_value
+            ));
+        }
+    }
 }

@@ -2387,4 +2387,70 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+
+    #[cfg(test)]
+    mod open_output_file_tests {
+        use super::*;
+        use std::io::{Read, Write};
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_open_output_file_stdout() {
+            let result = uniq_open_output_file(None);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_open_output_file_dash() {
+            let result = uniq_open_output_file(Some(OsStr::new("-")));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_open_output_file_valid_path() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_output.txt");
+            let file_path_str = file_path.to_str().unwrap();
+
+            let result = uniq_open_output_file(Some(OsStr::new(file_path_str)));
+            assert!(result.is_ok());
+
+            let mut writer = result.unwrap();
+            writeln!(writer, "Test line").unwrap();
+            drop(writer); // Ensure the writer is flushed and closed
+
+            let mut file = File::open(&file_path).unwrap();
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            assert_eq!(contents, "Test line\n");
+
+            dir.close().unwrap();
+        }
+
+        #[test]
+        fn test_open_output_file_invalid_path() {
+            let invalid_path = OsStr::new("/invalid/path/to/output.txt");
+            let file_name: Option<&OsStr> = Some(invalid_path);
+            let result = uniq_open_output_file(file_name);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_uniq_open_output_file_temp_file() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("temp_output.txt");
+            let file_name: Option<&OsStr> = Some(file_path.as_os_str());
+            let writer = uniq_open_output_file(file_name).unwrap();
+            let mut writer: Box<dyn Write> = writer;
+            let test_data = b"Hello, Temp File!";
+            writer.write_all(test_data).unwrap();
+            drop(writer);
+
+            let mut file = File::open(file_path).unwrap();
+            let mut content = String::new();
+            file.read_to_string(&mut content).unwrap();
+            assert_eq!(content, "Hello, Temp File!");
+        }
+    }
 }

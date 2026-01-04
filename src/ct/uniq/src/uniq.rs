@@ -3021,5 +3021,52 @@ mod tests {
             assert!(result.is_ok());
         }
 
-}
+        #[test]
+        fn test_ct_app_short_option_i() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-i"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_d() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_s() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-s", "N"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_f() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-f", "N"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_u() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_z() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-z"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

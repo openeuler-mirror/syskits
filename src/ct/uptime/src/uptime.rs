@@ -231,4 +231,47 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+    }
+
 }

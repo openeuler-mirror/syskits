@@ -33,4 +33,4 @@ fi
 
 yum install -y clang
 
-cargo build --all --release
+cargo build --features unix --release

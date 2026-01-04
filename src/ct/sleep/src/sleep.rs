@@ -135,3 +135,105 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(test)]
+    mod handle_second_tests {
+        use super::*;
+        use clap::Command;
+
+        #[test]
+        fn test_sleep_parse_numbers() {
+            let cmd = Command::new("test")
+                .arg(Arg::new(sleep_flags::SLEEP_NUMBER).action(ArgAction::Append));
+
+            let matches = cmd.try_get_matches_from(vec!["test", "5", "10"]).unwrap();
+            let numbers = sleep_parse_numbers(&matches).unwrap();
+
+            assert_eq!(numbers, vec!["5", "10"]);
+        }
+
+        #[test]
+        fn test_sleep_handle_second() {
+            let args = vec!["5s", "1m", "2h"];
+            let duration = sleep_handle_second(&args).unwrap();
+
+            assert_eq!(duration, Duration::from_secs(5 + 60 + 2 * 3600));
+        }
+
+        #[test]
+        fn test_sleep_handle_second_invalid_input() {
+            let args = vec!["5x", "1m"];
+            let result = sleep_handle_second(&args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_single_second() {
+            let args = vec!["5s"];
+            let duration = sleep_handle_second(&args).unwrap();
+
+            assert_eq!(duration, Duration::from_secs(5));
+        }
+
+        #[test]
+        fn test_sleep_handle_second_multiple_units() {
+            let args = vec!["1d", "2h", "30m", "45s"];
+            let duration = sleep_handle_second(&args).unwrap();
+
+            let expected_duration = Duration::from_secs(1 * 86400 + 2 * 3600 + 30 * 60 + 45);
+            assert_eq!(duration, expected_duration);
+        }
+
+        #[test]
+        fn test_sleep_handle_second_empty_input() {
+            let args = vec![""];
+            let result = sleep_handle_second(&args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_whitespace_input() {
+            let args = vec!["  "];
+            let result = sleep_handle_second(&args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_invalid_format() {
+            let args = vec!["5x", "2y"];
+            let result = sleep_handle_second(&args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_mixed_valid_invalid() {
+            let args = vec!["5s", "invalid", "10m"];
+            let result = sleep_handle_second(&args);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_large_duration() {
+            let args = vec!["1000d", "24h"];
+            let duration = sleep_handle_second(&args).unwrap();
+
+            let expected_duration = Duration::from_secs(1000 * 86400 + 24 * 3600);
+            assert_eq!(duration, expected_duration);
+        }
+
+        #[test]
+        fn test_sleep_handle_second_negative_duration() {
+            let args = vec!["-5s"];
+            let result = sleep_handle_second(&args);
+
+            assert!(result.is_err());
+        }
+    }
+}

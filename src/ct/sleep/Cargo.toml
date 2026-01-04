@@ -1,0 +1,24 @@
+[package]
+name = "ct_sleep"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "sleep ~ (ctutils) pause for DURATION"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/sleep"
+
+[lib]
+path = "src/sleep.rs"
+
+[dependencies]
+clap = { workspace = true }
+fundu = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "sleep"
+path = "src/main.rs"

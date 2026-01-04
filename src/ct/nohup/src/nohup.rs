@@ -12,7 +12,7 @@
 
 // nohup命令的作用是在Unix/Linux系统中允许一个命令在用户退出终端后继续在后台运行
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, UClapError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
@@ -106,7 +106,13 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(NohupError::CannotDetach.into());
     };
 
-    let mut args = nohup_args_parse(args_match);
+    let cstrings: Vec<CString> = args_match
+        .get_many::<String>(options::CMD)
+        .unwrap()
+        .map(|x| CString::new(x.as_bytes()).unwrap())
+        .collect();
+    let mut args: Vec<*const c_char> = cstrings.iter().map(|s| s.as_ptr()).collect();
+    args.push(std::ptr::null());
 
     let result = unsafe { execvp(args[0], args.as_mut_ptr()) };
     // 根据execvp的返回值设置退出码
@@ -133,17 +139,6 @@ pub fn ct_app() -> Command {
         )
         .trailing_var_arg(true)
         .infer_long_args(true)
-}
-
-fn nohup_args_parse(args_match: ArgMatches) -> Vec<*const c_char> {
-    let cmd_strs: Vec<CString> = args_match
-        .get_many::<String>(options::CMD)
-        .unwrap()
-        .map(|x| CString::new(x.as_bytes()).unwrap())
-        .collect();
-    let mut args: Vec<*const c_char> = cmd_strs.iter().map(|s| s.as_ptr()).collect();
-    args.push(std::ptr::null());
-    args
 }
 
 // 替换标准输入、输出和错误输出文件描述符
@@ -216,12 +211,6 @@ fn nohup_find_stdout() -> CTResult<File> {
             }
         }
     }
-}
-
-// 根据不同的操作系统，提供不同的_vprocmgr_detach_from_console函数实现
-#[cfg(target_vendor = "apple")]
-extern "C" {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
 #[cfg(any(

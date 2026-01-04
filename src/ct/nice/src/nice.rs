@@ -274,3 +274,47 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+
+    mod tests_nice_main {
+        use crate::nice_main;
+
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_nice_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            let result = nice_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_nice_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = nice_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_nice_main_n() {
+            let args = vec![ctcore::ct_util_name(), "-n", "25", "ls"];
+
+            let result = nice_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_nice_main_adjustment() {
+            let args = vec![ctcore::ct_util_name(), "--adjustment=20", "ls", "-l"];
+            let result = nice_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+
+}

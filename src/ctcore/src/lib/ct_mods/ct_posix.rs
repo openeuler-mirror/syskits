@@ -33,31 +33,26 @@ mod tests {
     use std::env;
 
     #[test]
-    fn test_posix_version_valid() {
+    fn test_posix_version() {
         // Set a valid POSIX version in the environment
         env::set_var("_POSIX2_VERSION", "200112");
         assert_eq!(ct_posix_version(), Some(200112));
         // Clean up environment variable
         env::remove_var("_POSIX2_VERSION");
-    }
 
-    #[test]
-    fn test_posix_version_invalid() {
+        // test_posix_version_invalid
         // Set an invalid POSIX version in the environment
         env::set_var("_POSIX2_VERSION", "invalid_number");
         assert_eq!(ct_posix_version(), None);
         // Clean up environment variable
         env::remove_var("_POSIX2_VERSION");
-    }
 
-    #[test]
-    fn test_posix_version_missing() {
+        // test_posix_version_missing
         // Ensure the environment variable is missing
         env::remove_var("_POSIX2_VERSION");
         assert_eq!(ct_posix_version(), None);
-    }
-    #[test]
-    fn test_base_posix_version() {
+
+        // test_base_posix_version
         // default
         assert_eq!(None, ct_posix_version());
         // set specific version

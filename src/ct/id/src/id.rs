@@ -1338,5 +1338,85 @@ mod tests {
             let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
             assert!(result.is_err());
         }
+        #[test]
+        fn test_ct_app_execution_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let args = vec![ctcore::ct_util_name(), "-H"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_long_option_user() {
+            let args = vec![ctcore::ct_util_name(), "--user"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_short_option_user() {
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_long_option_group() {
+            let args = vec![ctcore::ct_util_name(), "--group"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_short_option_group() {
+            let args = vec![ctcore::ct_util_name(), "-g"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_long_option_groups() {
+            let args = vec![ctcore::ct_util_name(), "--groups"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+        #[test]
+        fn test_ct_app_short_option_groups() {
+            let args = vec![ctcore::ct_util_name(), "-G"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
     }
 }

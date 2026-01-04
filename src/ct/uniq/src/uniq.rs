@@ -1269,6 +1269,80 @@ mod tests {
             assert_eq!(skip_fields_old, Some(111));
         }
 
-}
+        #[test]
+        fn test_interleaved_valid_and_obsolete_arguments() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("--valid"),
+                OsString::from("-2"),
+                OsString::from("file.txt"),
+            ];
+            let (processed_args, skip_fields_old, _skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("--valid"), OsString::from("file.txt")]
+            );
+            assert_eq!(skip_fields_old, Some(21)); // Assuming "-1" and "-2" are aggregated
+        }
+
+        #[test]
+        fn test_obsolete_arguments_with_special_characters() {
+            let args = vec![OsString::from("-1@"), OsString::from("file.txt")];
+            let (processed_args, skip_fields_old, _skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("-@"), OsString::from("file.txt")]
+            ); // Assuming "-1@" is removed due to malformed input
+            assert_eq!(skip_fields_old, Some(1)); // Assuming the special character invalidates the skip field
+        }
+
+        #[test]
+        fn test_complete_command_line_simulation() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("--option=value"),
+                OsString::from("-2"),
+                OsString::from("path/to/file"),
+            ];
+            let (processed_args, skip_fields_old, _skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![
+                    OsString::from("--option=value"),
+                    OsString::from("path/to/file")
+                ]
+            );
+            assert_eq!(skip_fields_old, Some(21)); // Assuming "-1" and "-2" are combined
+        }
+
+        #[test]
+        fn test_arguments_resembling_but_not_obsolete() {
+            let args = vec![OsString::from("-1234x"), OsString::from("logfile.log")];
+            let (processed_args, skip_fields_old, _skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("-x"), OsString::from("logfile.log")]
+            ); // "-1234x" should be treated as a normal argument
+            assert_eq!(skip_fields_old, Some(1234));
+        }
+
+        #[test]
+        fn test_arguments_that_only_partially_match_patterns() {
+            let args = vec![OsString::from("-123abc")];
+            let (processed_args, skip_fields_old, _skip_chars_old) =
+                uniq_handle_obsolete(args.into_iter());
+
+            assert_eq!(processed_args.len(), 1); // Assuming "-123abc" gets filtered out
+            assert_eq!(skip_fields_old, Some(123)); // Assuming "123" is extracted despite the trailing characters
+        }
+    }
 
 }

@@ -115,6 +115,7 @@ feat_common_core = [
   "nohup",
   "readlink",
   "false",
+  "sum",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -294,6 +295,7 @@ touch = { optional = true, package = "ct_touch", path = "src/ct/touch" }
 nohup = { optional = true, package = "ct_nohup", path = "src/ct/nohup" }
 readlink = { optional = true, package = "ct_readlink", path = "src/ct/readlink" }
 false = { optional = true, package = "ct_false", path = "src/ct/false" }
+sum = { optional = true, package = "ct_sum", path = "src/ct/sum" }
 
 [dev-dependencies]
 chrono = { workspace = true }

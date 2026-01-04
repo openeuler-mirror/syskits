@@ -181,3 +181,45 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(test)]
+    mod div_ceil_tests {
+        use super::*;
+
+        #[test]
+        fn test_div_ceil() {
+            // 测试 a 是 b 的倍数
+            assert_eq!(sum_div_ceil(10, 2), 5);
+            assert_eq!(sum_div_ceil(9, 3), 3);
+
+            // 测试 a 不是 b 的倍数
+            assert_eq!(sum_div_ceil(10, 3), 4);
+            assert_eq!(sum_div_ceil(9, 4), 3);
+
+            // 测试 b 是 1
+            assert_eq!(sum_div_ceil(10, 1), 10);
+            assert_eq!(sum_div_ceil(0, 1), 0);
+
+            // 测试 a 是 0
+            assert_eq!(sum_div_ceil(0, 2), 0);
+
+            // 测试 a 和 b 相等
+            assert_eq!(sum_div_ceil(5, 5), 1);
+
+            // 测试较大的数值
+            assert_eq!(sum_div_ceil(1000, 3), 334);
+            assert_eq!(sum_div_ceil(1000, 500), 2);
+
+            // 测试 b 大于 a
+            assert_eq!(sum_div_ceil(3, 10), 1);
+            assert_eq!(sum_div_ceil(0, usize::MAX), 0);
+
+            // 测试较小的数值
+            assert_eq!(sum_div_ceil(1, 2), 1);
+            assert_eq!(sum_div_ceil(2, 3), 1);
+        }
+    }
+
+}

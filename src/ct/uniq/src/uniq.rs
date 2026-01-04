@@ -1931,4 +1931,66 @@ mod tests {
             assert!(!is_preceding_short_opt_req_value); // Ensure it resets correctly for the next option
         }
     }
+
+    #[cfg(test)]
+    mod handle_extract_obs_skip_fields_tests {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_extract_numeric_value() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-10", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("10".to_string()));
+            assert_eq!(result, None); // Assuming the function returns None after successful extraction
+        }
+
+        #[test]
+        fn test_mixed_with_other_flags() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-10f", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, None);
+            assert_eq!(result, Some(OsString::from("-f")));
+        }
+
+        #[test]
+        fn test_no_numeric_value() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, None);
+            assert_eq!(result, Some(OsString::from("-")));
+        }
+
+        #[test]
+        fn test_multiple_digits() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-123", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("123".to_string()));
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_invalid_formats() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-abc", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, None);
+            assert_eq!(result, Some(OsString::from("-abc")));
+        }
+
+        #[test]
+        fn test_leading_zeros() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("-0012", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("0012".to_string())); // Assuming leading zeros are ignored
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_plus_as_part_of_larger_argument() {
+            let mut skip_fields_old = None;
+            let result = uniq_handle_extract_obs_skip_fields("--option-123", &mut skip_fields_old);
+            assert_eq!(skip_fields_old, Some("123".to_string())); // Assuming it doesn't extract numbers from non-related arguments
+            assert_eq!(result, Some(OsString::from("--option-")));
+        }
+    }
 }

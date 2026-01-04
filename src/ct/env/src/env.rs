@@ -30,13 +30,7 @@ use native_int_str::{
     NativeStr,
 };
 #[cfg(unix)]
-use nix::sys::signal::raise;
-use nix::sys::signal::sigaction;
-use nix::sys::signal::SaFlags;
-use nix::sys::signal::SigAction;
-use nix::sys::signal::SigHandler;
-use nix::sys::signal::SigSet;
-use nix::sys::signal::Signal;
+use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
 
 use std::borrow::Cow;
 use std::env;

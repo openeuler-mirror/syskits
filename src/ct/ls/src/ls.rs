@@ -15,7 +15,8 @@ use std::ffi::OsString;
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
 use std::io::{stdout, BufWriter, ErrorKind, Write};
-#[cfg(likeunix)]
+#[cfg(windows)]
+#[allow(unused_imports)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
@@ -25,7 +26,9 @@ use std::{cell::OnceCell, num::IntErrorKind};
 
 #[cfg(unix)]
 use std::collections::HashMap;
+#[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[allow(unused_imports)]
 use std::time::Duration;
 
 use std::{collections::HashSet, io::IsTerminal};
@@ -2103,13 +2106,13 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
 }
 
 fn is_hidden(file_path: &DirEntry) -> bool {
-    #[cfg(likeunix)]
+    #[cfg(windows)]
     {
         let metadata = file_path.metadata().unwrap();
         let attr = metadata.file_attributes();
         (attr & 0x2) > 0
     }
-    #[cfg(not(likeunix))]
+    #[cfg(not(windows))]
     {
         file_path
             .file_name()
@@ -2486,7 +2489,7 @@ fn display_grid_by_format_long_type<W: Write>(
             write!(out, "{more_info}")?;
         }
         #[cfg(not(unix))]
-        if config.alloc_size {
+        if config.is_alloc_size {
             let more_info =
                 display_additional_leading_info(item, &padding_collection, config, out)?;
             write!(out, "{more_info}")?;
@@ -2520,7 +2523,7 @@ fn get_block_size(md: &Metadata, config: &LsConfig) -> u64 {
     }
     #[cfg(not(unix))]
     {
-        // 无法获取 likeunix 的块大小，只能返回到文件大小
+        // 无法获取 windows 的块大小，只能返回到文件大小
         md.len()
     }
 }
@@ -3267,9 +3270,9 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
     let absolute_path_buf = fs::canonicalize(&path.p_buf).unwrap_or_default();
     let absolute_path = absolute_path_buf.to_string_lossy();
 
-    #[cfg(not(target_os = "likeunix"))]
+    #[cfg(not(target_os = "windows"))]
     let unencoded_chars = "_-.:~/";
-    #[cfg(target_os = "likeunix")]
+    #[cfg(target_os = "windows")]
     let unencoded_chars = "_-.:~/\\";
 
     // 路径的百分比编码

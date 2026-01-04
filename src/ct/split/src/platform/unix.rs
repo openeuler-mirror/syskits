@@ -172,7 +172,6 @@ pub fn paths_refer_to_same_file(path1: &str, path2: &str) -> bool {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests {
 
     use crate::ct_app;

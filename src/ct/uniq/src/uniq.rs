@@ -1344,5 +1344,180 @@ mod tests {
             assert_eq!(skip_fields_old, Some(123)); // Assuming "123" is extracted despite the trailing characters
         }
     }
+  
+    #[cfg(test)]
+    mod filter_args_tests {
+        use super::*;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_standard_argument() {
+            let os_slice = OsString::from("standard");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert_eq!(result, Some(OsString::from("standard")));
+        }
+
+        #[test]
+        fn test_argument_with_obsolete_numeric_prefix() {
+            let os_slice = OsString::from("-1");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert!(skip_fields_old.is_some());
+            assert_eq!(result, None); // Assuming "-1" gets removed entirely
+        }
+
+        #[test]
+        fn test_argument_with_mixed_prefix() {
+            let os_slice = OsString::from("-1f");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert_eq!(skip_fields_old, None);
+            assert_eq!(result, Some(OsString::from("-f"))); // "f" remains after "1" is extracted
+        }
+
+        #[test]
+        fn test_arguments_with_plus_prefix() {
+            let os_slice = OsString::from("+12");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert!(skip_chars_old.is_none());
+            assert_eq!(result, Some(OsString::from("+12"))); // Assuming "+12" gets removed entirely
+        }
+
+        #[test]
+        fn test_consecutive_obsolete_arguments() {
+            let args = vec![
+                OsString::from("-1"),
+                OsString::from("+2"),
+                OsString::from("filename"),
+            ];
+            let processed_args = args
+                .into_iter()
+                .filter_map(|arg| {
+                    let mut skip_fields_old = None;
+                    let mut skip_chars_old = None;
+                    let mut is_preceding_long_opt_req_value = false;
+                    let mut is_preceding_short_opt_req_value = false;
+
+                    uniq_filter_args(
+                        arg,
+                        &mut skip_fields_old,
+                        &mut skip_chars_old,
+                        &mut is_preceding_long_opt_req_value,
+                        &mut is_preceding_short_opt_req_value,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                processed_args,
+                vec![OsString::from("+2"), OsString::from("filename")]
+            ); // Assuming both "-1" and "+2" get removed
+        }
+
+        #[test]
+        fn test_arguments_with_hyphens_and_numbers() {
+            let os_slice = OsString::from("-123test");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert_eq!(result, Some(OsString::from("-test"))); // Assuming "-test" is treated as a single argument, not extracted
+        }
+
+        #[test]
+        fn test_end_of_argument_list() {
+            let os_slice = OsString::from("-999");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert_eq!(skip_fields_old, Some(String::from("999")));
+            assert_eq!(result, None); // Assuming "-999" gets extracted and removed
+        }
+
+        #[test]
+        fn test_large_numeric_values() {
+            let os_slice = OsString::from("-10000000000");
+            let mut skip_fields_old = None;
+            let mut skip_chars_old = None;
+            let mut is_preceding_long_opt_req_value = false;
+            let mut is_preceding_short_opt_req_value = false;
+
+            let result = uniq_filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut is_preceding_long_opt_req_value,
+                &mut is_preceding_short_opt_req_value,
+            );
+
+            assert_eq!(skip_fields_old, Some(String::from("10000000000")));
+            assert_eq!(result, None); // Assuming large numbers are handled and argument is removed
+        }
+    }
 
 }

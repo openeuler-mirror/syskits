@@ -1,0 +1,23 @@
+[package]
+name = "ct_groups"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+description = "groups ~ (ctutils) display group memberships for USERNAME"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/groups"
+
+[lib]
+path = "src/groups.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "process"] }
+
+[[bin]]
+name = "groups"
+path = "src/main.rs"

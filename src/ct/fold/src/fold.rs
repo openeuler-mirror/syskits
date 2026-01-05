@@ -649,5 +649,110 @@ mod tests {
             assert!(executable.is_ok());
             assert!(executable.unwrap().contains_id(fold_flags::FOLD_SPACES));
         }
+
+        #[test]
+        fn test_ct_app_long_option_w_short_err() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-w"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_w_long_err() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--width"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_w_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-w", "10"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(fold_flags::FOLD_WIDTH));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_w_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--width", "10"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(fold_flags::FOLD_WIDTH));
+        }
+    }
+
+    #[cfg(test)]
+    mod handle_obsolete_tests {
+        /*
+        分支 1：参数以单个连字符（-）开头并后跟一个数字。
+            测试用例 1：参数列表中包含一个过时参数（例如，"-1"）。
+            测试用例 2：参数列表中包含多个过时参数，确保只处理第一个（例如，"-1", "-2"）。
+        分支 2：参数不以单个连字符（-）开头或不后跟数字。
+            测试用例 3：参数列表中不包含过时参数（例如，"foo", "bar"）。
+            测试用例 4：参数列表中包含以连字符开头但不后跟数字的参数（例如，"-foo"）
+        */
+        use super::*;
+        #[test]
+        fn handle_obsolete_with_obsolete_parameter_removes_and_returns_value() {
+            let args = vec!["foo".to_string(), "-1".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(obsolete, Some("1".to_string()));
+        }
+
+        #[test]
+        fn handle_obsolete_with_multiple_obsolete_parameters_removes_first_and_returns_value() {
+            let args = vec![
+                "foo".to_string(),
+                "-1".to_string(),
+                "-2".to_string(),
+                "bar".to_string(),
+            ];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(
+                result,
+                vec!["foo".to_string(), "-2".to_string(), "bar".to_string()]
+            );
+            assert_eq!(obsolete, Some("1".to_string()));
+        }
+
+        #[test]
+        fn handle_obsolete_without_obsolete_parameters_returns_original_list_and_none() {
+            let args = vec!["foo".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(obsolete, None);
+        }
+
+        #[test]
+        fn handle_obsolete_with_non_numeric_parameter_returns_original_list_and_none() {
+            let args = vec!["foo".to_string(), "-foo".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(
+                result,
+                vec!["foo".to_string(), "-foo".to_string(), "bar".to_string()]
+            );
+            assert_eq!(obsolete, None);
+        }
+
+        #[test]
+        fn handle_obsolete_with_empty_args_returns_empty_list_and_none() {
+            let args: Vec<String> = vec![];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, Vec::<String>::new());
+            assert_eq!(obsolete, None);
+        }
+
+        #[test]
+        fn handle_obsolete_with_only_obsolete_parameters_removes_all_and_returns_first_value() {
+            let args = vec!["-1".to_string(), "-2".to_string(), "-3".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["-2".to_string(), "-3".to_string()]);
+            assert_eq!(obsolete, Some("1".to_string()));
+        }
     }
 }

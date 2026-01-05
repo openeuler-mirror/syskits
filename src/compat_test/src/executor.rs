@@ -64,7 +64,7 @@ impl CommandExecutor {
                 .verifications
                 .iter()
                 .map(|v| CommandResult {
-                    exit_code: v.expected_exit,
+                    exit_code: v.expected_exit.unwrap_or(0),
                     stdout: v.expected_stdout.clone().unwrap_or_default(),
                     stderr: v.expected_stderr.clone().unwrap_or_default(),
                 })
@@ -91,19 +91,31 @@ impl CommandExecutor {
     ) -> Result<(CommandResult, Vec<CommandResult>)> {
         let mut sandbox = IsolatedSandbox::new()?;
         sandbox.setup(test_case)?;
+
+        // 执行设置命令
         for cmd in &test_case.setup_commands {
             sandbox.execute_shell_command(cmd)?;
         }
+
+        // 执行主命令
         let actual = self.execute_syskits(&test_case.command, &test_case.args, &mut sandbox)?;
+
+        // 此时，CMD_EXIT_CODE, CMD_STDOUT, CMD_STDERR 环境变量已经设置
+
+        // 执行验证命令
         let mut actual_verifications = Vec::new();
         for verification in &test_case.expectation.verifications {
             let result = sandbox.execute_shell_command(&verification.command)?;
             actual_verifications.push(result);
         }
+
+        // 执行清理命令
         for cmd in &test_case.cleanup_commands {
             sandbox.execute_shell_command(cmd)?;
         }
+
         sandbox.cleanup()?;
+
         Ok((actual, actual_verifications))
     }
 
@@ -113,16 +125,25 @@ impl CommandExecutor {
     ) -> Result<(CommandResult, Vec<CommandResult>)> {
         let mut coreutils_sandbox = IsolatedSandbox::new()?;
         coreutils_sandbox.setup(test_case)?;
+
+        // 执行设置命令
         for cmd in &test_case.setup_commands {
             coreutils_sandbox.execute_shell_command(cmd)?;
         }
+        // 执行主命令
         let expected =
             self.execute_coreutils(&test_case.command, &test_case.args, &mut coreutils_sandbox)?;
+        // 执行验证命令
         let mut verification_results = Vec::new();
         for verification in &test_case.expectation.verifications {
             let result = coreutils_sandbox.execute_shell_command(&verification.command)?;
             verification_results.push(result);
         }
+        // 执行清理命令
+        for cmd in &test_case.cleanup_commands {
+            coreutils_sandbox.execute_shell_command(cmd)?;
+        }
+
         coreutils_sandbox.cleanup()?;
         Ok((expected, verification_results))
     }
@@ -159,7 +180,7 @@ impl CommandExecutor {
             SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
         };
 
-        sandbox.execute_command(&cmd, &args)
+        sandbox.execute_command(&cmd, &args, true)
     }
 
     /// 在沙箱中执行 GNU coreutils 命令
@@ -179,7 +200,7 @@ impl CommandExecutor {
         }
 
         // 沙箱中执行命令
-        sandbox.execute_command(command, args)
+        sandbox.execute_command(command, args, true)
     }
 }
 
@@ -194,7 +215,10 @@ fn compare_results(
     let mut passed = true;
 
     // 比较主命令结果
-    if !test_case.expectation.ignore_fields.ignore_stdout && expected.stdout != actual.stdout {
+    if !test_case.expectation.ignore_fields.ignore_stdout
+        && test_case.expectation.execution.stdout.is_some()
+        && expected.stdout != actual.stdout
+    {
         differences.push(format!(
             "Main command stdout differs:\nExpected:\n{}\nActual:\n{}",
             expected.stdout, actual.stdout
@@ -202,7 +226,10 @@ fn compare_results(
         passed = false;
     }
 
-    if !test_case.expectation.ignore_fields.ignore_stderr && expected.stderr != actual.stderr {
+    if !test_case.expectation.ignore_fields.ignore_stderr
+        && test_case.expectation.execution.stderr.is_some()
+        && expected.stderr != actual.stderr
+    {
         differences.push(format!(
             "Main command stderr differs:\nExpected:\n{}\nActual:\n{}",
             expected.stderr, actual.stderr
@@ -211,6 +238,7 @@ fn compare_results(
     }
 
     if !test_case.expectation.ignore_fields.ignore_exit_code
+        && test_case.expectation.execution.exit_code.is_some()
         && expected.exit_code != actual.exit_code
     {
         differences.push(format!(
@@ -227,21 +255,26 @@ fn compare_results(
             .zip(actual_verifications.iter())
             .zip(test_case.expectation.verifications.iter())
         {
-            if expected.exit_code != actual.exit_code {
+            // 只有当expected_exit不为null时才比较exit_code
+            if verification.expected_exit.is_some() && expected.exit_code != actual.exit_code {
                 differences.push(format!(
                     "Verification '{}' exit code differs: expected {}, got {}",
                     verification.command, expected.exit_code, actual.exit_code
                 ));
                 passed = false;
             }
-            if expected.stdout != actual.stdout {
+
+            // 检查verification的expected_stdout是否为null
+            if verification.expected_stdout.is_some() && expected.stdout != actual.stdout {
                 differences.push(format!(
                     "Verification '{}' stdout differs:\nExpected:\n{}\nActual:\n{}",
                     verification.command, expected.stdout, actual.stdout
                 ));
                 passed = false;
             }
-            if expected.stderr != actual.stderr {
+
+            // 检查verification的expected_stderr是否为null
+            if verification.expected_stderr.is_some() && expected.stderr != actual.stderr {
                 differences.push(format!(
                     "Verification '{}' stderr differs:\nExpected:\n{}\nActual:\n{}",
                     verification.command, expected.stderr, actual.stderr
@@ -261,3 +294,5 @@ fn compare_results(
         differences,
     })
 }
+
+

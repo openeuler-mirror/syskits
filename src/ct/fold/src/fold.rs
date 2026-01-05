@@ -1285,4 +1285,123 @@ mod tests {
             assert_eq!(last_space, None);
         }
     }
+    #[cfg(test)]
+    mod fold_file_tests {
+        /*
+        空输入：测试输入为空的情况。
+        单行输入：测试单行输入，确保它被正确格式化。
+        多行输入：测试多行输入，确保每行都被正确处理。
+        换行符处理：测试包含换行符的输入，确保它们被正确处理。
+        制表符处理：测试包含制表符的输入，确保它们被正确转换。
+        退格符处理：测试包含退格符的输入，确保它们被正确处理。
+        空格保留：测试 spaces 标志设置为 true 和 false 的情况。
+        行宽处理：测试不同宽度的输入，确保行被正确换行
+        */
+        use std::io::BufReader;
+
+        use super::*;
+
+        #[test]
+        fn fold_file_empty_input_no_output() {
+            let input = "";
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 10).unwrap();
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "");
+        }
+
+        #[test]
+        fn fold_file_single_line_input_no_wrap() {
+            let input = "This is a single line.";
+
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 22).unwrap();
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "This is a single line.");
+        }
+
+        #[test]
+        fn fold_file_multiple_lines_wrap_correctly() {
+            let input = "This is line one.\nThis is line two.\n";
+
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 17).unwrap();
+
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "This is line one.\nThis is line two.\n");
+        }
+
+        #[test]
+        fn fold_file_newline_handling_correct_output() {
+            let input = "Line one\nLine two\n";
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 10).unwrap();
+
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "Line one\nLine two\n");
+        }
+
+        #[test]
+        fn fold_file_tab_handling_correct_output() {
+            let input = "Line\twith\ttabs";
+
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 20).unwrap();
+
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "Line\twith\ttabs");
+        }
+
+        #[test]
+        fn fold_file_backspace_handling_correct_output() {
+            let input = "Line\\bBackspace";
+
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 10).unwrap();
+
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "Line\\bBack\nspace");
+        }
+
+        #[test]
+        fn fold_file_space_handling_with_spaces() {
+            let input = "Line with spaces";
+
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, true, 10).unwrap();
+
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(output_str, "Line with \nspaces");
+        }
+
+        #[test]
+        fn fold_file_line_width_handling_correct_wrap() {
+            let input = "This line is too long and should be wrapped.";
+
+            let reader = BufReader::new(input.as_bytes());
+            let mut writer = Vec::new();
+
+            fold_file(&mut writer, reader, false, 10).unwrap();
+
+            let output_str = String::from_utf8(writer).unwrap();
+            assert_eq!(
+                output_str,
+                "This line \nis too lon\ng and shou\nld be wrap\nped."
+            );
+        }
+    }
 }

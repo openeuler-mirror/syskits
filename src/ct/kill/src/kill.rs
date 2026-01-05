@@ -456,4 +456,108 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod kill_parse_signal_value_tests {
+        use super::*;
+
+        #[test]
+        fn kill_parse_signal_value_valid_signal_name_returns_signal_value() {
+            let signal_name = "HUP";
+            let result = kill_parse_signal_value(signal_name).unwrap();
+            assert_eq!(result, 1); // Assuming HUP corresponds to signal value 1
+        }
+
+        #[test]
+        fn kill_parse_signal_value_valid_signal_number_returns_signal_value() {
+            let signal_name = "15"; // Assuming 15 corresponds to SIGTERM
+            let result = kill_parse_signal_value(signal_name).unwrap();
+            assert_eq!(result, 15);
+        }
+
+        #[test]
+        fn kill_parse_signal_value_invalid_signal_name_returns_error() {
+            let signal_name = "INVALID";
+            let result = kill_parse_signal_value(signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
+        }
+
+        #[test]
+        fn kill_parse_signal_value_empty_signal_name_returns_error() {
+            let signal_name = "";
+            let result = kill_parse_signal_value(signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name ''");
+        }
+
+        #[test]
+        fn kill_parse_signal_value_non_numeric_signal_number_returns_error() {
+            let signal_name = "abc";
+            let result = kill_parse_signal_value(signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name 'abc'");
+        }
+
+        #[test]
+        fn kill_parse_signal_value_boundary_signal_number_returns_signal_value() {
+            let signal_name = "31"; // Assuming 31 corresponds to a valid signal
+            let result = kill_parse_signal_value(signal_name).unwrap();
+            assert_eq!(result, 31);
+        }
+
+        #[test]
+        fn kill_parse_signal_value_negative_signal_number_returns_error() {
+            let signal_name = "-1";
+            let result = kill_parse_signal_value(signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name '-1'");
+        }
+    }
+    #[cfg(test)]
+    mod kill_list_tests {
+        use super::*;
+        #[test]
+        fn kill_list_with_valid_signal_name_prints_signal_value() {
+            let mut output = Cursor::new(Vec::new());
+            let signal_name = Some("HUP".to_string());
+            let _result = kill_list(&mut output, signal_name.as_ref()).unwrap();
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert_eq!(output_str.trim(), "1"); // Assuming HUP corresponds to signal value 1
+        }
+
+        #[test]
+        fn kill_list_with_invalid_signal_name_returns_error() {
+            let mut output = Cursor::new(Vec::new());
+            let signal_name = Some("INVALID".to_string());
+            let result = kill_list(&mut output, signal_name.as_ref());
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
+        }
+
+        #[test]
+        fn kill_list_with_no_argument_prints_all_signals() {
+            let mut output = Cursor::new(Vec::new());
+            let _result = kill_list(&mut output, None).unwrap();
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            let signals: Vec<&str> = ALL_SIGNALS.iter().map(|&s| s).collect();
+            let expected_output = signals.join(" ");
+            assert_eq!(output_str.trim(), expected_output);
+        }
+
+        #[test]
+        fn kill_list_with_empty_string_returns_error() {
+            let mut output = Cursor::new(Vec::new());
+            let signal_name = Some("".to_string());
+            let result = kill_list(&mut output, signal_name.as_ref());
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name ''");
+        }
+    }
 }

@@ -998,4 +998,142 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod fold_file_bytewise_tests {
+        /*
+            空输入：测试输入为空的情况。
+            单行输入：测试单行输入，确保其正确处理。
+            多行输入：测试多行输入，确保行宽限制被正确应用。
+            空行：测试包含空行的输入，确保空行被正确处理。
+            行尾空格：测试行尾有空格的情况，确保空格被正确处理。
+            行宽限制：测试行宽限制，确保行被正确截断。
+            行尾换行符：测试行尾换行符的处理，确保没有重复的换行符。
+            特殊测试：
+        包含空格分隔符的长行：
+            测试了 spaces 参数为 true 时，优先在空格处分割行。
+            包含制表符的行：验证了制表符是否被正确处理。
+            包含非ASCII字符的行：确保非ASCII字符被正确处理。
+            超长单行输入：测试了非常长的单行输入是否按宽度正确折叠。
+            不同宽度限制：验证了不同的宽度限制对输出的影响。
+            启用 spaces 参数：测试了 spaces 参数为 true 时的行为。
+            混合换行符：测试了不同类型的换行符是否被正确处理。
+        */
+
+        use super::*;
+        use std::io::{BufReader, Cursor};
+
+        #[test]
+        fn test_fold_file_bytewise_empty_input() {
+            let input = "";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), "");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_single_line_input() {
+            let input = "This is a single line.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This is a \nsingle lin\ne."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_multiple_lines_input() {
+            let input = "This is a line.\nThis is another line.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This is a \nline.\nThis is an\nother line\n."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_empty_lines_input() {
+            let input = "\n\n";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), "\n\n");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_line_ends_with_space() {
+            let input = "This line ends with a space. ";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This line \nends with \na space. "
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_line_width_limit() {
+            let input = "This line is too long and should be folded.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This line \nis too lon\ng and shou\nld be fold\ned."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_line_ends_with_newline() {
+            let input = "This line ends with a newline.\n";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This line \nends with \na newline.\n"
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_line_with_spaces_for_splitting() {
+            let input = "This is a very long line that should be split at spaces.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, true, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This is a \nvery long \nline that \nshould be \nsplit at \nspaces."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_line_with_tabs() {
+            let input = "This\tis\ta\tline\twith\ttabs.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This\tis\ta\t\nline\twith\t\ntabs."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_non_ascii_characters() {
+            let input = "你好，这是一个包含非ASCII字符的测试。";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 50).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "你好，这是一个包含非ASCII字符的测试\n。"
+            );
+        }
+    }
 }

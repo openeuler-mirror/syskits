@@ -725,4 +725,149 @@ mod tests {
             assert_eq!(output.trim(), "1"); // Assuming SIGHUP corresponds to signal value 1
         }
     }
+
+    #[cfg(test)]
+    mod kill_table_tests {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn kill_table_correct_format() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_table(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查输出格式是否正确（信号名称和索引号）
+            let lines: Vec<&str> = output.trim().split('\n').collect();
+            assert!(!lines.is_empty());
+            for line in lines {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                assert!(parts.len() % 2 == 0); // 每行应有偶数个部分（索引号和信号名称）
+            }
+        }
+
+        #[test]
+        fn kill_table_proper_spacing() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_table(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查信号之间的间距是否正确（单个空格）
+            assert!(!output.trim().starts_with(' ')); // 开头不应该有空格
+        }
+
+        #[test]
+        fn kill_table_write_error_handling() {
+            // 测试写入错误的情况
+            struct ErrorWriter;
+            impl Write for ErrorWriter {
+                fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "write error",
+                    ))
+                }
+                fn flush(&mut self) -> std::io::Result<()> {
+                    Ok(())
+                }
+            }
+
+            let mut writer = ErrorWriter;
+            let result = kill_table(&mut writer);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn kill_table_contains_all_signals() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_table(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查输出是否包含所有信号
+            for signal in ALL_SIGNALS.iter() {
+                assert!(output.contains(signal));
+            }
+        }
+
+        #[test]
+        fn kill_table_correct_number_of_lines() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_table(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查输出行数是否正确
+            let lines: Vec<&str> = output.trim().split('\n').collect();
+            let expected_lines = (ALL_SIGNALS.len() + 6) / 7; // 每行7个信号
+            assert_eq!(lines.len(), expected_lines);
+        }
+
+        #[test]
+        fn kill_table_correct_signal_indices() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_table(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查信号索引是否正确
+            for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
+                let expected_output = format!("{0: >#2} {1: <#2$}", idx, signal, signal.len() + 2);
+                assert!(output.contains(&expected_output));
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod kill_handle_obsolete_tests {
+        use super::*;
+
+        #[test]
+        fn kill_handle_obsolete_with_obsolete_signal() {
+            let mut args = vec!["kill".to_string(), "-9".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(9));
+            assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_no_obsolete_signal() {
+            let mut args = vec!["kill".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, None);
+            assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_invalid_signal() {
+            let mut args = vec![
+                "kill".to_string(),
+                "-invalid".to_string(),
+                "1234".to_string(),
+            ];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, None);
+            assert_eq!(
+                args,
+                vec![
+                    "kill".to_string(),
+                    "-invalid".to_string(),
+                    "1234".to_string()
+                ]
+            );
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_multiple_signals() {
+            let mut args = vec![
+                "kill".to_string(),
+                "-9".to_string(),
+                "-15".to_string(),
+                "1234".to_string(),
+            ];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(9));
+            assert_eq!(
+                args,
+                vec!["kill".to_string(), "-15".to_string(), "1234".to_string()]
+            );
+        }
+    }
 }

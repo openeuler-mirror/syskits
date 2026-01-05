@@ -559,5 +559,140 @@ mod tests {
             let err = result.unwrap_err();
             assert_eq!(err.to_string(), "unknown signal name ''");
         }
+
+        #[test]
+        fn kill_list_with_numeric_signal_value_prints_signal_name() {
+            let mut output = Cursor::new(Vec::new());
+            let signal_value = Some("15".to_string()); // Assuming 15 corresponds to SIGTERM
+            let _result = kill_list(&mut output, signal_value.as_ref()).unwrap();
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert_eq!(output_str.trim(), "TERM"); // Assuming 15 corresponds to SIGTERM
+        }
+    }
+    #[cfg(test)]
+    mod kill_print_signals_tests {
+        use super::*;
+
+        #[test]
+        fn kill_print_signals_empty_signals_list() {
+            let mut writer = Cursor::new(Vec::new());
+            let result = kill_print_signals(&mut writer);
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+            assert!(output.ends_with('\n')); // 确保输出以换行符结束
+        }
+
+        #[test]
+        fn kill_print_signals_correct_format() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_print_signals(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查输出格式是否正确（信号之间用空格分隔）
+            let signals: Vec<&str> = output.trim().split(' ').collect();
+            assert!(!signals.is_empty());
+            assert!(signals.contains(&"HUP")); // 检查是否包含常见信号
+            assert!(signals.contains(&"TERM"));
+            assert!(signals.contains(&"KILL"));
+        }
+
+        #[test]
+        fn kill_print_signals_no_duplicate_signals() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_print_signals(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查是否有重复的信号名称
+            let signals: Vec<&str> = output.trim().split(' ').collect();
+            let unique_signals: std::collections::HashSet<&str> = signals.iter().copied().collect();
+            assert_eq!(signals.len(), unique_signals.len());
+        }
+
+        #[test]
+        fn kill_print_signals_proper_spacing() {
+            let mut writer = Cursor::new(Vec::new());
+            kill_print_signals(&mut writer).unwrap();
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+
+            // 检查信号之间的间距是否正确（单个空格）
+            assert!(!output.contains("  ")); // 不应该有连续的空格
+            assert!(!output.trim().starts_with(' ')); // 开头不应该有空格
+        }
+
+        #[test]
+        fn kill_print_signals_write_error_handling() {
+            // 测试写入错误的情况
+            struct ErrorWriter;
+            impl Write for ErrorWriter {
+                fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "write error",
+                    ))
+                }
+                fn flush(&mut self) -> std::io::Result<()> {
+                    Ok(())
+                }
+            }
+
+            let mut writer = ErrorWriter;
+            let result = kill_print_signals(&mut writer);
+            assert!(result.is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod kill_print_signal_tests {
+        use super::*;
+
+        #[test]
+        fn kill_print_signal_valid_signal_name_returns_signal_value() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_name = "HUP";
+            let result = kill_print_signal(&mut writer, signal_name);
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(output.trim(), "1"); // Assuming HUP corresponds to signal value 1
+        }
+
+        #[test]
+        fn kill_print_signal_valid_signal_number_returns_signal_name() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_number = "15"; // Assuming 15 corresponds to SIGTERM
+            let result = kill_print_signal(&mut writer, signal_number);
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(output.trim(), "TERM");
+        }
+
+        #[test]
+        fn kill_print_signal_invalid_signal_name_returns_error() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_name = "INVALID";
+            let result = kill_print_signal(&mut writer, signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
+        }
+
+        #[test]
+        fn kill_print_signal_empty_signal_name_returns_error() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_name = "";
+            let result = kill_print_signal(&mut writer, signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name ''");
+        }
+
+        #[test]
+        fn kill_print_signal_non_numeric_signal_number_returns_error() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_name = "abc";
+            let result = kill_print_signal(&mut writer, signal_name);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name 'abc'");
+        }
     }
 }

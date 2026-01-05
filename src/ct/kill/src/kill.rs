@@ -1134,5 +1134,23 @@ mod tests {
             assert!(executable.is_ok());
             assert!(executable.unwrap().contains_id(kill_flags::TABLE));
         }
+
+        #[test]
+        fn test_ct_app_long_option_s_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-s", "TERM"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(kill_flags::SIGNAL));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_s_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--signal", "TERM"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(kill_flags::SIGNAL));
+        }
     }
 }

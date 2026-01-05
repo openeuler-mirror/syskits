@@ -16,6 +16,7 @@ edition = "2024"
 name = "syskits"
 version.workspace = true
 authors.workspace = true
+license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true

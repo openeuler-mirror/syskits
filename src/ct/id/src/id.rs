@@ -1418,5 +1418,100 @@ mod tests {
             let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
         }
+        #[test]
+        fn test_ct_app_long_option_name() {
+            let args = vec![ctcore::ct_util_name(), "--name"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_short_option_name() {
+            let args = vec![ctcore::ct_util_name(), "-n"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_long_option_real() {
+            let args = vec![ctcore::ct_util_name(), "--real"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_short_option_real() {
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_long_option_zero() {
+            let args = vec![ctcore::ct_util_name(), "--zero"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_short_option_zero() {
+            let args = vec![ctcore::ct_util_name(), "-z"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_long_option_context() {
+            let args = vec![ctcore::ct_util_name(), "--context"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_short_option_context() {
+            let args = vec![ctcore::ct_util_name(), "-Z"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_id_main_default_format_root() {
+            // 测试默认格式下的 root 用户
+            let args = vec![ctcore::ct_util_name(), "root"];
+
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("uid=0")); // 检查 root 用户的 uid 是否为 0
+            assert!(output_str.contains("gid=0")); // 检查 root 用户的 gid 是否为 0
+        }
+
+        #[test]
+        fn test_id_main_default_format_nobody() {
+            // 测试默认格式下的 nobody 用户
+            let args = vec![ctcore::ct_util_name(), "nobody"];
+
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("uid=")); // 检查输出中是否包含 uid
+            assert!(output_str.contains("nobody")); // 检查输出中是否包含 nobody
+        }
     }
 }

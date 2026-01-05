@@ -354,3 +354,187 @@ fn fold_file<T: Read, W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod fold_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::fs::File;
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_ctmain_version() {
+            let mut writer = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    println!("{:?}", output);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_v() {
+            let mut writer = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    println!("{:?}", output);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_help() {
+            let mut writer = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    println!("{:?}", output);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ctmain_h() {
+            let mut writer = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "-h"];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 0);
+                }
+                Ok(output) => {
+                    println!("{:?}", output);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_long_option_b_short() {
+            let mut writer = Vec::new();
+            let temp_dir = tempdir().expect("Failed to create temporary directory");
+            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let mut temp_file =
+                File::create(&temp_file_path).expect("Failed to create temporary file");
+            temp_file
+                .write_all(b"aaaaaaaaaaaaaaaaaaaaaaaaa\n")
+                .expect("Failed to write to temporary file");
+            let binding = temp_file_path.to_string_lossy().into_owned();
+            let args = vec![ctcore::ct_util_name(), "-b", &binding];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_b_long() {
+            let mut writer = Vec::new();
+
+            let temp_dir = tempdir().expect("Failed to create temporary directory");
+            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let mut temp_file =
+                File::create(&temp_file_path).expect("Failed to create temporary file");
+            temp_file
+                .write_all(b"File 1\n")
+                .expect("Failed to write to temporary file");
+            let binding = temp_file_path.to_string_lossy().into_owned();
+
+            let args = vec![ctcore::ct_util_name(), "--bytes", &binding];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_s_short() {
+            let mut writer = Vec::new();
+
+            let temp_dir = tempdir().expect("Failed to create temporary directory");
+            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let mut temp_file =
+                File::create(&temp_file_path).expect("Failed to create temporary file");
+            temp_file
+                .write_all(b"File 1\n")
+                .expect("Failed to write to temporary file");
+            let binding = temp_file_path.to_string_lossy().into_owned();
+
+            let args = vec![ctcore::ct_util_name(), "-s", &binding];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_s_long() {
+            let mut writer = Vec::new();
+
+            let temp_dir = tempdir().expect("Failed to create temporary directory");
+            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let mut temp_file =
+                File::create(&temp_file_path).expect("Failed to create temporary file");
+            temp_file
+                .write_all(b"File 1\n")
+                .expect("Failed to write to temporary file");
+            let binding = temp_file_path.to_string_lossy().into_owned();
+
+            let args = vec![ctcore::ct_util_name(), "--spaces", &binding];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_w_short() {
+            let mut writer = Vec::new();
+
+            let temp_dir = tempdir().expect("Failed to create temporary directory");
+            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let mut temp_file =
+                File::create(&temp_file_path).expect("Failed to create temporary file");
+            temp_file
+                .write_all(b"File 1\n")
+                .expect("Failed to write to temporary file");
+            let binding = temp_file_path.to_string_lossy().into_owned();
+
+            let args = vec![ctcore::ct_util_name(), "-w", "10", &binding];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_long_option_w_long() {
+            let mut writer = Vec::new();
+
+            let temp_dir = tempdir().expect("Failed to create temporary directory");
+            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let mut temp_file =
+                File::create(&temp_file_path).expect("Failed to create temporary file");
+            temp_file
+                .write_all(b"File 1\n")
+                .expect("Failed to write to temporary file");
+            let binding = temp_file_path.to_string_lossy().into_owned();
+
+            let args = vec![ctcore::ct_util_name(), "--width", "10", &binding];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
+        }
+    }
+}

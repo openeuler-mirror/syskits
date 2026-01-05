@@ -289,3 +289,26 @@ impl TestRunner {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = TestConfig::default();
+        assert_eq!(config.syskits_path, PathBuf::from("target/debug/syskits"));
+        assert_eq!(config.test_cases_dir, PathBuf::from("test_cases"));
+        assert!(config.show_progress);
+        assert!(config.cleanup);
+        assert_eq!(config.report_format, "text");
+        assert_eq!(config.report_dir, PathBuf::from("test_reports"));
+        assert_eq!(config.default_timeout, 30);
+        assert!(config.show_diff);
+    }
+}

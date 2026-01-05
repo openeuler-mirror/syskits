@@ -1513,5 +1513,56 @@ mod tests {
             assert!(output_str.contains("uid=")); // 检查输出中是否包含 uid
             assert!(output_str.contains("nobody")); // 检查输出中是否包含 nobody
         }
+
+        #[test]
+        fn test_id_main_with_flags() {
+            // 测试带有标志的情况，如 -u, -g, -n
+            let args = vec![ctcore::ct_util_name(), "-u", "-g", "-n"];
+
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_id_main_no_such_user() {
+            // 测试不存在的用户
+            let args = vec![ctcore::ct_util_name(), "nonexistentuser"];
+
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok()); // 预期错误，因为用户不存在
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("")); // 检查错误消息是否正确
+        }
+
+        #[test]
+        fn test_id_main_with_z_flag() {
+            // 测试带有 --zero (-z) 标志的情况
+            let args = vec![ctcore::ct_util_name(), "-z", "root"];
+
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_id_main_with_r_flag() {
+            // 测试带有 --real (-r) 标志的情况
+            let args = vec![ctcore::ct_util_name(), "-r", "root"];
+
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_err());
+        }
     }
 }

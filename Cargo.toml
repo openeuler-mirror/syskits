@@ -133,6 +133,7 @@ feat_common_core = [
   "hostid",
   "rm",
   "head",
+  "id",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -346,6 +347,7 @@ nice = { optional = true, package = "ct_nice", path = "src/ct/nice" }
 hostid = { optional = true, package = "ct_hostid", path = "src/ct/hostid" }
 rm = { optional = true, package = "ct_rm", path = "src/ct/rm" }
 head = { optional = true, package = "ct_head", path = "src/ct/head" }
+id = { optional = true, package = "ct_id", path = "src/ct/id"}
 
 [dev-dependencies]
 chrono = { workspace = true }

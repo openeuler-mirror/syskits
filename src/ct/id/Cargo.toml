@@ -1,0 +1,27 @@
+[package]
+name = "ct_id"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/id"
+
+
+[lib]
+path = "src/id.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "process"] }
+selinux = { workspace = true, optional = true }
+
+[[bin]]
+name = "id"
+path = "src/main.rs"
+
+[features]
+feat_selinux = ["selinux"]

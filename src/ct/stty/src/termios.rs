@@ -58,3 +58,121 @@ impl TermiosFlag for LocalFlags {
         termios.local_flags.set(*self, val);
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_control_flags_is_in() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = ControlFlags::CREAD;
+        let group = Some(ControlFlags::CSIZE);
+
+        // Test when flag is not set
+        assert!(!flag.is_in(&termios, None));
+
+        // Test when flag is set
+        termios.control_flags.insert(flag);
+        assert!(flag.is_in(&termios, None));
+
+        // Test with group
+        termios.control_flags.remove(flag);
+        termios.control_flags.insert(ControlFlags::CS8);
+        assert!(!flag.is_in(&termios, group));
+    }
+
+    #[test]
+    fn test_input_flags_is_in() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = InputFlags::BRKINT;
+
+        // Test when flag is not set
+        assert!(!flag.is_in(&termios, None));
+
+        // Test when flag is set
+        termios.input_flags.insert(flag);
+        assert!(flag.is_in(&termios, None));
+    }
+
+    #[test]
+    fn test_output_flags_is_in() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = OutputFlags::OPOST;
+
+        // Test when flag is not set
+        assert!(!flag.is_in(&termios, None));
+
+        // Test when flag is set
+        termios.output_flags.insert(flag);
+        assert!(flag.is_in(&termios, None));
+    }
+
+    #[test]
+    fn test_local_flags_is_in() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = LocalFlags::ECHO;
+
+        // Test when flag is not set
+        assert!(!flag.is_in(&termios, None));
+
+        // Test when flag is set
+        termios.local_flags.insert(flag);
+        assert!(flag.is_in(&termios, None));
+    }
+
+    #[test]
+    fn test_control_flags_apply() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = ControlFlags::CREAD;
+
+        // Test applying flag
+        flag.apply(&mut termios, true);
+        assert!(termios.control_flags.contains(flag));
+
+        // Test removing flag
+        flag.apply(&mut termios, false);
+        assert!(!termios.control_flags.contains(flag));
+    }
+
+    #[test]
+    fn test_input_flags_apply() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = InputFlags::BRKINT;
+
+        // Test applying flag
+        flag.apply(&mut termios, true);
+        assert!(termios.input_flags.contains(flag));
+
+        // Test removing flag
+        flag.apply(&mut termios, false);
+        assert!(!termios.input_flags.contains(flag));
+    }
+
+    #[test]
+    fn test_output_flags_apply() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = OutputFlags::OPOST;
+
+        // Test applying flag
+        flag.apply(&mut termios, true);
+        assert!(termios.output_flags.contains(flag));
+
+        // Test removing flag
+        flag.apply(&mut termios, false);
+        assert!(!termios.output_flags.contains(flag));
+    }
+
+    #[test]
+    fn test_local_flags_apply() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let flag = LocalFlags::ECHO;
+
+        // Test applying flag
+        flag.apply(&mut termios, true);
+        assert!(termios.local_flags.contains(flag));
+
+        // Test removing flag
+        flag.apply(&mut termios, false);
+        assert!(!termios.local_flags.contains(flag));
+    }
+}

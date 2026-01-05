@@ -680,5 +680,413 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod id_get_delimiter_tests {
+        use super::*;
+
+        #[test]
+        fn test_id_get_delimiter_with_zero_flag() {
+            // 测试当 is_zflag 为 true 时，应该返回 NUL 字符作为分隔符
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: true,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let delimiter = id_get_delimiter(&mut state);
+            assert_eq!(delimiter, "\0");
+        }
+
+        #[test]
+        fn test_id_get_delimiter_without_zero_flag() {
+            // 测试当 is_zflag 为 false 时，应该返回空格字符作为分隔符
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let delimiter = id_get_delimiter(&mut state);
+            assert_eq!(delimiter, " ");
+        }
+    }
+
+    #[cfg(test)]
+    mod id_flags_validity_checks_tests {
+        use super::*;
+
+        #[test]
+        fn test_valid_flags_default_format() {
+            // 测试在默认格式下没有标志被设置的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let result = id_flags_validity_checks(&mut state);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), true); // 默认格式返回 true
+        }
+
+        #[test]
+        fn test_invalid_flags_name_or_real_in_default_format() {
+            // 测试在默认格式下设置了 --name 或 --real 的情况
+            let mut state = IdState {
+                is_nflag: true,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: true,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let result = id_flags_validity_checks(&mut state);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "cannot print only names or real IDs in default format"
+            );
+        }
+
+        #[test]
+        fn test_invalid_flags_zero_in_default_format() {
+            // 测试在默认格式下设置了 --zero 的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: true,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let result = id_flags_validity_checks(&mut state);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "option --zero not permitted in default format"
+            );
+        }
+
+        #[test]
+        fn test_invalid_flags_context_with_user_specified() {
+            // 测试在指定用户时设置了 --context 的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: true,
+                is_selinux_supported: true,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let result = id_flags_validity_checks(&mut state);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "cannot print security context when user specified"
+            );
+        }
+
+        #[test]
+        fn test_valid_flags_with_non_default_format() {
+            // 测试非默认格式下的有效标志组合
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: true,
+                is_gflag: false,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let result = id_flags_validity_checks(&mut state);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), false); // 非默认格式返回 false
+        }
+
+        #[test]
+        fn test_invalid_flags_name_without_printing() {
+            // 测试仅设置 --name 而不打印任何内容的情况
+            let mut state = IdState {
+                is_nflag: true,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let result = id_flags_validity_checks(&mut state);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "cannot print only names or real IDs in default format"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod id_get_state_tests {
+        use clap::ArgMatches;
+
+        use super::*;
+
+        fn create_arg_matches(args: Vec<&str>) -> ArgMatches {
+            ct_app().try_get_matches_from(args).unwrap()
+        }
+
+        #[test]
+        fn test_id_get_state_default() {
+            // 测试默认情况下的 IdState
+            let args = vec!["id"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, false);
+            assert_eq!(state.is_uflag, false);
+            assert_eq!(state.is_gflag, false);
+            assert_eq!(state.is_gsflag, false);
+            assert_eq!(state.is_rflag, false);
+            assert_eq!(state.is_zflag, false);
+            assert_eq!(state.is_cflag, false);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, false);
+            assert!(state.ids.is_none());
+        }
+
+        #[test]
+        fn test_id_get_state_with_flags_unrz() {
+            // 测试各种标志设置的 IdState
+            let args = vec!["id", "-u", "-n", "-r", "-z"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, true);
+            assert_eq!(state.is_uflag, true);
+            assert_eq!(state.is_rflag, true);
+            assert_eq!(state.is_zflag, true);
+            assert_eq!(state.is_cflag, false);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, false);
+            assert!(state.ids.is_none());
+        }
+        #[test]
+        fn test_id_get_state_with_flags_gnrz() {
+            // 测试各种标志设置的 IdState
+            let args = vec!["id", "-g", "-n", "-r", "-z"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, true);
+            assert_eq!(state.is_uflag, false);
+            assert_eq!(state.is_gflag, true);
+            assert_eq!(state.is_gsflag, false);
+            assert_eq!(state.is_rflag, true);
+            assert_eq!(state.is_zflag, true);
+            assert_eq!(state.is_cflag, false);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, false);
+            assert!(state.ids.is_none());
+        }
+        #[test]
+        fn test_id_get_state_with_flags_g_nrz() {
+            // 测试各种标志设置的 IdState
+            let args = vec!["id", "-G", "-n", "-r", "-z"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, true);
+            assert_eq!(state.is_uflag, false);
+            assert_eq!(state.is_gflag, false);
+            assert_eq!(state.is_gsflag, true);
+            assert_eq!(state.is_rflag, true);
+            assert_eq!(state.is_zflag, true);
+            assert_eq!(state.is_cflag, false);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, false);
+            assert!(state.ids.is_none());
+        }
+        #[test]
+        fn test_id_get_state_with_user() {
+            // 测试指定用户的情况
+            let args = vec!["id", "testuser"];
+            let matches = create_arg_matches(args);
+            let users = vec!["testuser".to_string()];
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, false);
+            assert_eq!(state.is_uflag, false);
+            assert_eq!(state.is_gflag, false);
+            assert_eq!(state.is_gsflag, false);
+            assert_eq!(state.is_rflag, false);
+            assert_eq!(state.is_zflag, false);
+            assert_eq!(state.is_cflag, false);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, true);
+            assert!(state.ids.is_none());
+        }
+
+        #[test]
+        fn test_id_get_state_with_selinux() {
+            // 测试启用了 SELinux 的情况（假设配置特性启用了 selinux）
+            let args = vec!["id", "-Z"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            // 注意：此测试假设 `selinux::kernel_support` 返回非 `Unsupported` 以模拟 SELinux 启用的情况
+            #[cfg(feature = "selinux")]
+            {
+                let state = id_get_state(&matches, &users);
+                assert_eq!(state.is_selinux_supported, true);
+            }
+
+            #[cfg(not(feature = "selinux"))]
+            {
+                let state = id_get_state(&matches, &users);
+                assert_eq!(state.is_selinux_supported, false);
+            }
+        }
+
+        #[test]
+        fn test_id_get_state_no_flags_user_specified() {
+            // 测试没有标志但指定用户的情况
+            let args = vec!["id", "user1"];
+            let matches = create_arg_matches(args);
+            let users = vec!["user1".to_string()];
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, false);
+            assert_eq!(state.is_uflag, false);
+            assert_eq!(state.is_gflag, false);
+            assert_eq!(state.is_gsflag, false);
+            assert_eq!(state.is_rflag, false);
+            assert_eq!(state.is_zflag, false);
+            assert_eq!(state.is_cflag, false);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, true);
+            assert!(state.ids.is_none());
+        }
+
+        #[test]
+        fn test_id_get_state_conflicting_flags() {
+            // 测试传递互斥标志的情况，这可能触发某些冲突处理逻辑
+            let args = vec!["id", "-u"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            let state = id_get_state(&matches, &users);
+
+            // clap 库应自动处理冲突，因此我们期望一个标志是启用的，另一个被忽略
+            assert!(state.is_uflag || state.is_gflag);
+            assert_eq!(state.is_selinux_supported, false);
+            assert_eq!(state.is_user_specified, false);
+        }
+
+        #[test]
+        fn test_id_get_state_selinux_conflict_with_user() {
+            // 测试传递 --context (-Z) 和指定用户的情况，这在原代码中可能导致错误
+            let args = vec!["id", "-Z", "user1"];
+            let matches = create_arg_matches(args);
+            let users = vec!["user1".to_string()];
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_cflag, true);
+            assert_eq!(state.is_user_specified, true);
+
+            #[cfg(feature = "selinux")]
+            assert!(state.is_selinux_supported);
+            #[cfg(not(feature = "selinux"))]
+            assert!(!state.is_selinux_supported);
+        }
+
+        #[test]
+        fn test_id_get_state_flag_combinations() {
+            // 测试不同标志组合
+            let args = vec!["id", "-n", "-g", "user2"];
+            let matches = create_arg_matches(args);
+            let users = vec!["user2".to_string()];
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_nflag, true);
+            assert_eq!(state.is_gflag, true);
+            assert_eq!(state.is_user_specified, true);
+            assert_eq!(state.is_selinux_supported, false);
+        }
+
+        #[test]
+        fn test_id_get_state_no_users_specified() {
+            // 测试没有指定用户时的情况
+            let args = vec!["id", "-Z"];
+            let matches = create_arg_matches(args);
+            let users = Vec::new();
+
+            let state = id_get_state(&matches, &users);
+
+            assert_eq!(state.is_gsflag, false);
+            assert_eq!(state.is_cflag, true);
+            assert_eq!(state.is_user_specified, false);
+
+            #[cfg(feature = "selinux")]
+            assert!(state.is_selinux_supported);
+            #[cfg(not(feature = "selinux"))]
+            assert!(!state.is_selinux_supported);
+        }
+    }
+
 
 }

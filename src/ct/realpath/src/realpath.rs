@@ -620,4 +620,121 @@ mod tests {
         }
     }
 
+    mod realpath_exec_tests {
+        use super::*;
+
+        fn setup_test_file() -> (tempfile::TempDir, PathBuf) {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            File::create(&test_file).unwrap();
+            (temp_dir, test_file)
+        }
+
+        #[test]
+        fn test_exec_basic() {
+            let (_temp_dir, test_file) = setup_test_file();
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![test_file],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+        }
+
+        #[test]
+        fn test_exec_quiet_mode() {
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: true,
+                relative_to: None,
+                relative_base: None,
+                files: vec![PathBuf::from("/nonexistent")],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+        }
+
+        #[test]
+        fn test_exec_multiple_files() {
+            let (temp_dir, test_file1) = setup_test_file();
+            let test_file2 = temp_dir.path().join("test2.txt");
+            File::create(&test_file2).unwrap();
+
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![test_file1, test_file2],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+        }
+
+        #[test]
+        fn test_exec_with_relative_paths() {
+            let (_temp_dir, test_file) = setup_test_file();
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: Some(test_file.parent().unwrap().to_path_buf()),
+                relative_base: None,
+                files: vec![test_file],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+            assert!(String::from_utf8_lossy(&output).ends_with('\n'));
+        }
+
+        #[test]
+        fn test_exec_with_zero_terminator() {
+            let (_temp_dir, test_file) = setup_test_file();
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![test_file],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Nul,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+            assert_eq!(output.last(), Some(&0));
+        }
+
+        #[test]
+        fn test_exec_with_missing_handling() {
+            let mut output = Vec::new();
+            let nonexistent = PathBuf::from("/nonexistent/path");
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![nonexistent],
+                can_mode: MissingHandling::Missing,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+        }
+    }
+
 }

@@ -810,5 +810,192 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod fold_tests {
+        /*
+            文件名是 "-"： 测试从标准输入读取内容。
+            文件名不是 "-"：测试从指定文件读取内容。
+            fold_flags.bytes 为 true：测试按字节进行折叠。
+            fold_flags.bytes 为 false：测试按列进行折叠。
+            文件读取错误：测试文件不存在或无法读取的情况。
+        */
+        use super::*;
+        use ctcore::ct_error::CTResult;
+        use std::io::{BufWriter, Write};
+        use tempfile::NamedTempFile;
+
+        /// 写入临时文件的辅助函数
+        fn write_temp_file(content: &str) -> NamedTempFile {
+            let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+            write!(temp_file, "{}", content).expect("Failed to write to temp file");
+            temp_file
+        }
+
+        #[test]
+        fn test_fold_single_file_bytewise_no_spaces() -> CTResult<()> {
+            // 创建一个临时文件，并写入内容
+            let content = "Hello Rust World!";
+            let temp_file = write_temp_file(content);
+
+            // 构造 FoldFlags：开启 bytes 模式，不在空格处折行，设定行宽 5
+            let fold_flags = FoldFlags {
+                bytes: true,
+                spaces: false,
+                width: 5,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            // 创建一个内存 writer
+            let mut writer = Vec::new();
+
+            // 调用 fold 函数
+            fold(&mut writer, &fold_flags)?;
+
+            // 读取输出并断言
+            let output = String::from_utf8(writer).unwrap();
+            assert_eq!(output, "Hello\n Rust\n Worl\nd!");
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_fold_single_file_bytewise_spaces() -> CTResult<()> {
+            // 在空白处断行，当 `spaces=true` 时，折叠时优先寻找空格位置
+            let content = "Hello Rust World!";
+            let temp_file = write_temp_file(content);
+
+            // 设定行宽较小，观察空格折行效果
+            let fold_flags = FoldFlags {
+                bytes: true,
+                spaces: true,
+                width: 6,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 断行逻辑示例（以 6 为上限，优先在空格处分割）：
+            // "Hello " -> (空格前就能折行)
+            // "Rust "  -> ...
+            // "World!"
+            assert_eq!(output, "Hello \nRust \nWorld!");
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_fold_single_file_columnwise_spaces() -> CTResult<()> {
+            // 不开启 bytewise，而是使用默认列宽模式
+            // （列宽模式会把制表符视为多列、退格符减少列数等，但此处仅测试普通字符+空格折行）
+            let content = "Hello Rust World!";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                spaces: true,
+                width: 6,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 在列模式下，遇到 6 列后会折行。由于 spaces=true，会在最后一次空格处断开
+            // 可能结果与 bytewise 类似，但内部对制表符等有不同处理方式
+            assert_eq!(output, "Hello \nRust \nWorld!");
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_fold_single_file_columnwise_no_spaces() -> CTResult<()> {
+            let content = "Hello Rust World!";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                spaces: false,
+                width: 6,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 不在空格处优先断行，直接按列宽截断
+            // "Hello " -> 6列
+            // "Rust W" -> 6列
+            // "orld!"
+            // 注意列宽模式下，对 \t 等可能处理不同，但此例中不存在 \t
+            assert_eq!(output, "Hello \nRust W\norld!");
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_fold_multiple_files() -> CTResult<()> {
+            let content1 = "File1 content.\nNext line in file1.";
+            let content2 = "File2 content.\nNext line in file2.";
+            let temp_file1 = write_temp_file(content1);
+            let temp_file2 = write_temp_file(content2);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                spaces: false,
+                width: 10,
+                files: vec![
+                    temp_file1.path().to_string_lossy().to_string(),
+                    temp_file2.path().to_string_lossy().to_string(),
+                ],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 简单断言一下，里面应包含来自 file1 与 file2 的折行结果
+            assert!(output.contains("File1"));
+            assert!(output.contains("File2"));
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_fold_file_not_found() {
+            // 指定一个不存在的文件路径
+            let fold_flags = FoldFlags {
+                bytes: false,
+                spaces: false,
+                width: 10,
+                files: vec!["this_file_does_not_exist.xyz".to_owned()],
+            };
+
+            let mut writer = BufWriter::new(Vec::new());
+            // fold 应该返回错误
+            let result = fold(&mut writer, &fold_flags);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn fold_files_file_not_found_returns_error() {
+            let mut output = Vec::new();
+            let fold_flags = FoldFlags {
+                files: vec!["nonexistent.txt".to_string()],
+                bytes: false,
+                spaces: true,
+                width: 80,
+            };
+
+            // 尝试读取不存在的文件
+            let result = fold(&mut output, &fold_flags);
+
+            // 验证错误
+            assert!(result.is_err());
+        }
+    }
 
 }

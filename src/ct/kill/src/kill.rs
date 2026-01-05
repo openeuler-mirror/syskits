@@ -694,5 +694,35 @@ mod tests {
             let err = result.unwrap_err();
             assert_eq!(err.to_string(), "unknown signal name 'abc'");
         }
+
+        #[test]
+        fn kill_print_signal_boundary_signal_number_returns_signal_name() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_number = "31"; // Assuming 31 corresponds to a valid signal
+            let result = kill_print_signal(&mut writer, signal_number);
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(output.trim(), "SYS");
+        }
+
+        #[test]
+        fn kill_print_signal_negative_signal_number_returns_error() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_number = "-1";
+            let result = kill_print_signal(&mut writer, signal_number);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name '-1'");
+        }
+
+        #[test]
+        fn kill_print_signal_valid_signal_with_sig_prefix_returns_signal_value() {
+            let mut writer = Cursor::new(Vec::new());
+            let signal_name = "SIGHUP";
+            let result = kill_print_signal(&mut writer, signal_name);
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer.into_inner()).unwrap();
+            assert_eq!(output.trim(), "1"); // Assuming SIGHUP corresponds to signal value 1
+        }
     }
 }

@@ -1,0 +1,435 @@
+{
+    "tests": [
+        {
+            "command": "realpath",
+            "description": "基本路径解析",
+            "setup_commands": [
+                "mkdir -p testdir",
+                "echo 'test' > testdir/file.txt"
+            ],
+            "args": [
+                "testdir/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "符号链接解析",
+            "setup_commands": [
+                "mkdir -p testdir",
+                "echo 'test' > testdir/file.txt",
+                "ln -s testdir/file.txt symlink.txt"
+            ],
+            "args": [
+                "symlink.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f symlink.txt",
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "不存在路径(-e)",
+            "args": [
+                "-e",
+                "nonexistent"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stderr": "No such file or directory"
+                }
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "强制解析不存在路径(-m)",
+            "args": [
+                "-m",
+                "nonexistent/../path"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*/path$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "逻辑解析(-L)处理相对路径",
+            "setup_commands": [
+                "mkdir -p testdir/subdir",
+                "ln -s ../subdir testdir/link",
+                "echo 'test' > testdir/subdir/file.txt"
+            ],
+            "args": [
+                "-L",
+                "testdir/link/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/subdir/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "物理解析(-P)处理符号链接",
+            "setup_commands": [
+                "mkdir -p testdir/subdir",
+                "ln -s subdir testdir/link",
+                "echo 'test' > testdir/subdir/file.txt"
+            ],
+            "args": [
+                "-P",
+                "testdir/link/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/subdir/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "静默模式(-q)处理错误",
+            "args": [
+                "-q",
+                "nonexistent"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "相对路径转换(--relative-to)",
+            "setup_commands": [
+                "mkdir -p base/testdir",
+                "echo 'test' > base/testdir/file.txt"
+            ],
+            "args": [
+                "--relative-to=base",
+                "base/testdir/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf base"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "testdir/file.txt\n"
+                }
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "相对基准目录(--relative-base)在基准目录内",
+            "setup_commands": [
+                "mkdir -p base/testdir",
+                "echo 'test' > base/testdir/file.txt"
+            ],
+            "args": [
+                "--relative-base=base",
+                "base/testdir/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf base"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^testdir/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "相对基准目录(--relative-base)在基准目录外",
+            "setup_commands": [
+                "mkdir -p base/testdir other",
+                "echo 'test' > other/file.txt"
+            ],
+            "args": [
+                "--relative-base=base",
+                "other/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf base other"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*other/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "禁用符号链接展开(-s)",
+            "setup_commands": [
+                "mkdir -p testdir",
+                "echo 'test' > testdir/file.txt",
+                "ln -s testdir/file.txt symlink.txt"
+            ],
+            "args": [
+                "-s",
+                "symlink.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f symlink.txt",
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*symlink.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "NUL终止符(-z)",
+            "setup_commands": [
+                "mkdir -p testdir",
+                "echo 'test' > testdir/file.txt"
+            ],
+            "args": [
+                "-z",
+                "testdir/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo -n \"$CMD_STDOUT\" | grep -q '^/.*testdir/file.txt'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo -n \"$CMD_STDOUT\" | grep -zq '\\x00$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "多路径输入",
+            "setup_commands": [
+                "mkdir -p testdir",
+                "echo 'test' > testdir/file1.txt",
+                "echo 'test' > testdir/file2.txt"
+            ],
+            "args": [
+                "testdir/file1.txt",
+                "testdir/file2.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/file1.txt$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/file2.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "标准输入处理",
+            "setup_commands": [
+                "mkdir -p testdir",
+                "echo 'test' > testdir/file.txt"
+            ],
+            "args": [
+                "-"
+            ],
+            "expectation": {
+                "execution": {
+                    "stdin": "testdir/file.txt",
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ]
+        },
+        {
+            "command": "realpath",
+            "description": "错误参数处理",
+            "args": [
+                "--invalid-option"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "帮助信息",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "版本信息",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "组合选项测试(-L -s)",
+            "setup_commands": [
+                "mkdir -p testdir/subdir",
+                "ln -s ../subdir testdir/link",
+                "echo 'test' > testdir/subdir/file.txt"
+            ],
+            "args": [
+                "-L",
+                "-s",
+                "testdir/link/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/link/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "realpath",
+            "description": "组合选项测试(-P -m)",
+            "setup_commands": [
+                "mkdir -p testdir"
+            ],
+            "args": [
+                "-P",
+                "-m",
+                "testdir/nonexistent/file.txt"
+            ],
+            "cleanup_commands": [
+                "rm -rf testdir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^/.*testdir/nonexistent/file.txt$'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        }
+    ]
+}

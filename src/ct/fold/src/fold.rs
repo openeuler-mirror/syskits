@@ -754,5 +754,61 @@ mod tests {
             assert_eq!(result, vec!["-2".to_string(), "-3".to_string()]);
             assert_eq!(obsolete, Some("1".to_string()));
         }
+
+        #[test]
+        fn handle_obsolete_with_obsolete_parameter_at_beginning_removes_and_returns_value() {
+            let args = vec!["-1".to_string(), "foo".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(obsolete, Some("1".to_string()));
+        }
+
+        #[test]
+        fn handle_obsolete_with_obsolete_parameter_in_middle_removes_and_returns_value() {
+            let args = vec!["foo".to_string(), "-2".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(obsolete, Some("2".to_string()));
+        }
+
+        #[test]
+        fn handle_obsolete_with_obsolete_parameter_at_end_removes_and_returns_value() {
+            let args = vec!["foo".to_string(), "bar".to_string(), "-3".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(obsolete, Some("3".to_string()));
+        }
+
+        #[test]
+        fn handle_obsolete_with_double_dash_parameter_does_not_remove() {
+            let args = vec!["foo".to_string(), "--2".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(
+                result,
+                vec!["foo".to_string(), "--2".to_string(), "bar".to_string()]
+            );
+            assert_eq!(obsolete, None);
+        }
+
+        #[test]
+        fn handle_obsolete_with_negative_number_parameter_removes_and_returns_value() {
+            let args = vec!["foo".to_string(), "-123".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(obsolete, Some("123".to_string()));
+        }
+
+        #[test]
+        fn handle_obsolete_with_leading_or_trailing_spaces_does_not_remove() {
+            let args = vec!["foo".to_string(), " -1 ".to_string(), "bar".to_string()];
+            let (result, obsolete) = handle_obsolete(&args);
+            assert_eq!(
+                result,
+                vec!["foo".to_string(), " -1 ".to_string(), "bar".to_string()]
+            );
+            assert_eq!(obsolete, None);
+        }
     }
+
+
 }

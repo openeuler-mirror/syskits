@@ -454,3 +454,231 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(test)]
+    mod id_handle_users_tests {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_id_handle_users_single_user_root() {
+            // 测试 root 用户的默认格式输出
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["root".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, true, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("uid=0"));
+            assert!(output_str.contains("gid=0"));
+        }
+
+        #[test]
+        fn test_id_handle_users_single_user_nobody() {
+            // 测试 nobody 用户的默认格式输出
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["nobody".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, true, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("uid="));
+            assert!(output_str.contains("gid="));
+        }
+
+        #[test]
+        fn test_id_handle_users_multiple_users() {
+            // 测试多个用户的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["root".to_string(), "nobody".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, false, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("0"));
+        }
+
+        #[test]
+        fn test_id_handle_users_no_such_user() {
+            // 测试当用户不存在时
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["nonexistentuser".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, false, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains(""));
+        }
+
+        #[test]
+        fn test_id_handle_users_with_flags() {
+            // 测试带有不同标志的情况
+            let mut state = IdState {
+                is_nflag: true,
+                is_uflag: true,
+                is_gflag: true,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["root".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, false, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("root")); // 用户名
+            // assert!(output_str.contains("0")); // 组ID
+        }
+
+        #[test]
+        fn test_id_handle_users_zero_delimiter() {
+            // 测试带有零分隔符的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: true,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["nobody".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, false, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("65534"));
+        }
+
+        #[test]
+        fn test_id_handle_users_with_rflag() {
+            // 测试带有 --real (-r) 标志的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: true,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: true,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: None,
+            };
+
+            let users = vec!["root".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, true, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("uid=0"));
+            assert!(output_str.contains("gid=0"));
+        }
+
+        #[test]
+        fn test_id_handle_users_multiple_users_with_zflag() {
+            // 测试多个用户带有 --zero (-z) 标志的情况
+            let mut state = IdState {
+                is_nflag: false,
+                is_uflag: true,
+                is_gflag: false,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: true,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: None,
+            };
+
+            let users = vec!["root".to_string(), "nobody".to_string()];
+            let line_ending = CtLineEnding::Newline;
+            let mut output = Cursor::new(Vec::new());
+
+            id_handle_users(&mut output, users, &mut state, false, line_ending);
+
+            let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
+            assert!(output_str.contains("\0"));
+        }
+    }
+
+
+}

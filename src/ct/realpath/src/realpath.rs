@@ -737,4 +737,80 @@ mod tests {
         }
     }
 
+    mod realpath_main_tests {
+        use super::*;
+
+        #[test]
+        fn test_main_basic() {
+            let (_temp_dir, test_file) = setup_test_file();
+            let mut output = Vec::new();
+            let args = vec![ctcore::ct_util_name(), test_file.to_str().unwrap()];
+            assert!(realpath_main(&mut output, args.iter().map(|s| OsString::from(s))).is_ok());
+        }
+
+        #[test]
+        fn test_main_invalid_args() {
+            let mut output = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "--invalid-flag"];
+            assert!(realpath_main(&mut output, args.iter().map(|s| OsString::from(s))).is_err());
+        }
+
+        #[test]
+        fn test_main_help() {
+            let mut output = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            assert!(realpath_main(&mut output, args.iter().map(|s| OsString::from(s))).is_err());
+        }
+
+        fn setup_test_file() -> (tempfile::TempDir, PathBuf) {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            File::create(&test_file).unwrap();
+            (temp_dir, test_file)
+        }
+    }
+
+    mod ct_app_tests {
+        use super::*;
+
+        #[test]
+        fn test_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                clap::error::ErrorKind::DisplayVersion
+            );
+        }
+
+        #[test]
+        fn test_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                clap::error::ErrorKind::DisplayHelp
+            );
+        }
+
+        #[test]
+        fn test_app_missing_required_args() {
+            let args = vec![ctcore::ct_util_name()];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                clap::error::ErrorKind::MissingRequiredArgument
+            );
+        }
+
+        #[test]
+        fn test_app_valid_args() {
+            let args = vec![ctcore::ct_util_name(), "test.txt"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+    }
 }

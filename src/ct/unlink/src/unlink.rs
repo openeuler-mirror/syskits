@@ -16,7 +16,7 @@ use std::fs::remove_file;
 use std::path::Path;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command, crate_version};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};

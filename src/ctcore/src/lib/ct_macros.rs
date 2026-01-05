@@ -195,7 +195,6 @@ macro_rules! ct_crash(
 );
 
 /// 解包一个 std::result::Result，遇到错误时崩溃而非引发恐慌。
-
 ///
 /// 如果结果是 Ok 变体，则返回其中包含的值。如果是 Err 变体，则使用格式化的错误信息调用 crash!。
 ///
@@ -214,6 +213,7 @@ macro_rules! ct_crash(
 /// ct_crash_if_err!(1, is_err);
 /// # }
 /// ```
+///
 #[macro_export]
 macro_rules! ct_crash_if_err {
     ($exit_code:expr, $exp:expr) => {

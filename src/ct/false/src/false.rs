@@ -10,7 +10,7 @@
  *
  */
 use clap::{Arg, ArgAction, Command};
-use ctcore::ct_error::{set_ct_exit_code, CTResult};
+use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use ctcore::ct_help_about;
 use std::{ffi::OsString, io::Write};
 

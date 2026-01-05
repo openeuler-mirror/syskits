@@ -17,7 +17,7 @@ use std::fmt;
 
 use ctcore::{
     ct_display::Quotable,
-    ct_parse_size::{parse_size_u64, ParseSizeError},
+    ct_parse_size::{ParseSizeError, parse_size_u64},
 };
 
 /// The first ten powers of 1024.
@@ -313,12 +313,12 @@ mod tests {
 
     use std::env;
 
-    use crate::blocks::blocks_to_magnitude_and_suffix;
+    use crate::blocks::BLOCKS_IEC_BASES;
+    use crate::blocks::BLOCKS_SI_BASES;
     use crate::blocks::BlockSize;
     use crate::blocks::BlocksHumanReadable;
     use crate::blocks::BlocksSuffixType;
-    use crate::blocks::BLOCKS_IEC_BASES;
-    use crate::blocks::BLOCKS_SI_BASES;
+    use crate::blocks::blocks_to_magnitude_and_suffix;
 
     #[test]
     fn test_to_magnitude_and_suffix_1k() {
@@ -588,10 +588,10 @@ mod tests {
         assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
 
         // 设置 POSIXLY_CORRECT 环境变量后，检查默认块大小是否变为 512 字节。
-        env::set_var("POSIXLY_CORRECT", "1");
+        unsafe { env::set_var("POSIXLY_CORRECT", "1") };
         assert_eq!(BlockSize::Bytes(512), BlockSize::default());
         // 清理环境变量，避免影响其他测试。
-        env::remove_var("POSIXLY_CORRECT");
+        unsafe { env::remove_var("POSIXLY_CORRECT") };
     }
     #[test]
     fn test_block_size_from_str_bytes() {

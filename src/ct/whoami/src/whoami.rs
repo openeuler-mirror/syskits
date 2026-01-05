@@ -5,7 +5,7 @@
 
 use std::ffi::OsString;
 
-use clap::{crate_version, Command};
+use clap::{Command, crate_version};
 
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};

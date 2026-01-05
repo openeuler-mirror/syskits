@@ -24,10 +24,10 @@ use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
@@ -54,8 +54,8 @@ use ctcore::{
 };
 
 use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
+    CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
+    move_dir, move_dir_with_progress,
 };
 
 use crate::error::MvError;
@@ -94,12 +94,10 @@ pub struct MvOpts {
     pub no_target_dir: bool,
 
     /// 启用详细模式，在移动操作期间提供更详细的输出。
-
     /// '-v, --verbose'
     pub verbose: bool,
 
     /// 移动文件过程中删除目录路径中的尾部斜杠。
-
     /// '--strip-trailing-slashes'
     pub strip_slashes: bool,
 
@@ -1607,7 +1605,7 @@ mod tests {
     }
     #[cfg(test)]
     mod tests_mv_fun {
-        use crate::{mv_parse_paths, MvOpts, MvOverwriteMode};
+        use crate::{MvOpts, MvOverwriteMode, mv_parse_paths};
         use ctcore::ct_backup_control::CtBackupMode;
         use ctcore::ct_update_control::CtUpdateMode;
 

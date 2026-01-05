@@ -12,7 +12,7 @@
 //! pwd命令, 在Linux和其他类Unix系统中用于显示当前工作目录的绝对路径。
 
 use clap::ArgAction;
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command, crate_version};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::env;
 use std::io;
@@ -576,11 +576,11 @@ mod tests {
 
                 // 切换到符号链接目录
                 env::set_current_dir(&symlink_path).expect("failed to change directory");
-                env::set_var("PWD", &symlink_path);
+                unsafe { env::set_var("PWD", &symlink_path) };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, symlink_path);
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 temp_dir.close().expect("failed to close temp dir");
             }
@@ -591,11 +591,11 @@ mod tests {
                 let temp_dir_path = temp_dir.path().to_path_buf();
 
                 env::set_current_dir(&temp_dir_path).expect("failed to change directory");
-                env::set_var("PWD", "/invalid/path");
+                unsafe { env::set_var("PWD", "/invalid/path") };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, temp_dir_path);
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 temp_dir.close().expect("failed to close temp dir");
             }
@@ -606,11 +606,11 @@ mod tests {
                 let temp_dir_path = temp_dir.path().to_path_buf();
 
                 env::set_current_dir(&temp_dir_path).expect("failed to change directory");
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, temp_dir_path);
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 temp_dir.close().expect("failed to close temp dir");
             }
@@ -621,11 +621,11 @@ mod tests {
                 let temp_dir_path = temp_dir.path().to_path_buf();
 
                 env::set_current_dir(&temp_dir_path).expect("failed to change directory");
-                env::set_var("PWD", "relative/path");
+                unsafe { env::set_var("PWD", "relative/path") };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, temp_dir_path);
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 temp_dir.close().expect("failed to close temp dir");
             }
@@ -636,11 +636,11 @@ mod tests {
                 let temp_dir_path = temp_dir.path().to_path_buf();
 
                 env::set_current_dir(&temp_dir_path).expect("failed to change directory");
-                env::set_var("PWD", &temp_dir_path);
+                unsafe { env::set_var("PWD", &temp_dir_path) };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, temp_dir_path);
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 temp_dir.close().expect("failed to close temp dir");
             }
@@ -651,11 +651,11 @@ mod tests {
                 let temp_dir_path = temp_dir.path().to_path_buf();
 
                 env::set_current_dir(&temp_dir_path).expect("failed to change directory");
-                env::set_var("PWD", "C:\\invalid\\path");
+                unsafe { env::set_var("PWD", "C:\\invalid\\path") };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, temp_dir_path);
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 temp_dir.close().expect("failed to close temp dir");
             }
@@ -666,7 +666,7 @@ mod tests {
                 let temp_dir_path = temp_dir.path().to_path_buf();
 
                 env::set_current_dir(&temp_dir_path).expect("failed to change directory");
-                env::remove_var("PWD");
+                unsafe { env::remove_var("PWD") };
 
                 let result = pwd_logical_path().expect("failed to get logical path");
                 assert_eq!(result, temp_dir_path);

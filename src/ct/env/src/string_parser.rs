@@ -14,8 +14,8 @@
 use std::{borrow::Cow, ffi::OsStr};
 
 use crate::native_int_str::{
-    from_native_int_representation, get_char_from_native_int, get_single_native_int_value,
-    NativeCharInt, NativeIntStr,
+    NativeCharInt, NativeIntStr, from_native_int_representation, get_char_from_native_int,
+    get_single_native_int_value,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,7 +90,6 @@ impl<'a> StringParser<'a> {
     }
 
     /// 在指定位置 peek 一个字符，返回字符或错误。
-
     pub fn peek_char_at_pointer(&self, at_pointer: usize) -> Result<char, Error> {
         let split = self.input.split_at(at_pointer).1;
         if split.is_empty() {
@@ -128,10 +127,9 @@ impl<'a> StringParser<'a> {
 
     /// 在当前位置 peek 一个 chunk，返回 chunk 或 None。
     pub fn peek_chunk(&self) -> Option<Chunk<'a>> {
-        return self
-            .get_chunk_with_length_at(self.pointer)
+        self.get_chunk_with_length_at(self.pointer)
             .ok()
-            .map(|(chunk, _)| chunk);
+            .map(|(chunk, _)| chunk)
     }
 
     /// 消费当前位置的 chunk，返回 chunk 或错误。

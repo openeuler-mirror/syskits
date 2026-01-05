@@ -14,12 +14,12 @@
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_display::Quotable;
@@ -493,7 +493,7 @@ mod tests {
     mod unexpand_tests {
         use std::fs::write;
 
-        use tempfile::{tempdir, NamedTempFile};
+        use tempfile::{NamedTempFile, tempdir};
 
         use super::*;
 

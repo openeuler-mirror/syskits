@@ -12,7 +12,7 @@
 
 //dirname命令主要用于从给定的文件或目录路径中剥离出目录部分，去掉路径末尾的文件名（或最后一个组件），仅保留上级目录的路径。
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::ct_display::ct_print_verbatim;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_line_ending::CtLineEnding;

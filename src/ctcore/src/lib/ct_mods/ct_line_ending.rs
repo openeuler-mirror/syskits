@@ -12,10 +12,8 @@
 use std::fmt::Display;
 
 /// 行尾字符，可以是\n或\0
-
-/// /// 该枚举由一些具有使用nul字符而非\n分隔行选项的工具使用。通常，这是通过-z或--zero标志指定的。
-
-/// /// 实现了[Display] trait，会将枚举变体对应的字符写入格式化器中。
+/// 该枚举由一些具有使用nul字符而非\n分隔行选项的工具使用。通常，这是通过-z或--zero标志指定的。
+/// 实现了[Display] trait，会将枚举变体对应的字符写入格式化器中。
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum CtLineEnding {

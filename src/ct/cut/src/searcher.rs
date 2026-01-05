@@ -36,7 +36,7 @@ impl<'a, 'b, M: Matcher> Searcher<'a, 'b, M> {
 // 为Searcher实现迭代器特质。
 // 此实现使得Searcher可以用作迭代器，遍历`haystack`中分隔符匹配的位置。
 // 每次迭代返回匹配序列的第一个和最后一个字节的位置。
-impl<'a, 'b, M: Matcher> Iterator for Searcher<'a, 'b, M> {
+impl<M: Matcher> Iterator for Searcher<'_, '_, M> {
     type Item = (usize, usize); // 迭代器返回元素的类型
 
     fn next(&mut self) -> Option<Self::Item> {

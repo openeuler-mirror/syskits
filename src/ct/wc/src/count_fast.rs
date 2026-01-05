@@ -23,7 +23,7 @@ use std::os::windows::fs::MetadataExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(unix)]
-use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
+use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
 use nix::sys::stat;
 

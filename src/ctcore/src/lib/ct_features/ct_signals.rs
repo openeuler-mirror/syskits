@@ -15,7 +15,7 @@
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    signal, SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE,
+    SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE, signal,
 };
 
 pub static CT_DEFAULT_SIGNAL: usize = 15;

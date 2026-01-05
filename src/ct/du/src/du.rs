@@ -11,12 +11,12 @@
  */
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use ctcore::ct_display::{ct_print_verbatim, Quotable};
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::ct_display::{Quotable, ct_print_verbatim};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_glob;
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{
     ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show, ct_show_error,
     ct_show_warning,
@@ -45,8 +45,8 @@ use std::time::{Duration, UNIX_EPOCH};
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
-    FILE_STANDARD_INFO,
+    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+    GetFileInformationByHandleEx,
 };
 
 mod opt_flags {
@@ -630,10 +630,10 @@ impl DuStatPrinter {
                         // 只有当不被阈值排除、深度不超过最大深度且（如果不是总结模式或当前是顶层深度）时，才打印统计信息。
                         if !self
                             .threshold
-                            .map_or(false, |threshold| threshold.should_exclude(size))
+                            .is_some_and(|threshold| threshold.should_exclude(size))
                             && self
                                 .max_depth
-                                .map_or(true, |max_depth| stat_info.depth <= max_depth)
+                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
                             && (!self.summarize || stat_info.depth == 0)
                         {
                             self.du_print_stat(&stat_info.stat, size)?;
@@ -721,7 +721,7 @@ impl DuStatPrinter {
  */
 pub fn du_div_ceil(val_1: u64, val_2: u64) -> u64 {
     // 加上除数减1，然后除以除数，是为了向上取整。
-    (val_1 + val_2 - 1) / val_2
+    val_1.div_ceil(val_2)
 }
 
 /**
@@ -757,7 +757,7 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
                         "cannot open '{}' for reading: No such file or directory",
                         filename
                     ),
-                ))
+                ));
             }
             Err(e) => return Err(e),
         }

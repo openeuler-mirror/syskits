@@ -11,17 +11,17 @@
 
 //! truncate 是一个 Linux 命令，用于修改文件的大小，它可以将文件的大小缩小或扩展到指定的大小。
 
-use std::fs::{metadata, OpenOptions};
+use std::fs::{OpenOptions, metadata};
 use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1127,8 +1127,8 @@ mod tests {
     }
     #[cfg(test)]
     mod parse_mode_and_size_tests {
-        use crate::truncate_parse_mode_and_size;
         use crate::TruncateMode;
+        use crate::truncate_parse_mode_and_size;
 
         use super::*;
 

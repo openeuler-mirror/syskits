@@ -17,7 +17,7 @@
 use std::io::{BufRead, Write};
 use std::str::FromStr;
 
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, parser::ValueSource};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
@@ -465,9 +465,9 @@ mod tests {
 
     // use super::*;
     use super::{
-        numfmt_handle_args, numfmt_handle_buffer, numfmt_parse_unit_size,
-        numfmt_parse_unit_size_suffix, CtRange, NumfmtConfigs, NumfmtFormatOptions,
-        NumfmtInvalidModes, NumfmtRoundMethod, NumfmtTransformOptions, NumfmtUnit,
+        CtRange, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
+        NumfmtTransformOptions, NumfmtUnit, numfmt_handle_args, numfmt_handle_buffer,
+        numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
 
     struct MockBuffer {}

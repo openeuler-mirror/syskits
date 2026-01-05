@@ -10,7 +10,7 @@
  *
  */
 
-use ctcore::ct_format::{num_format::UnsignedInt, Format, FormatError};
+use ctcore::ct_format::{Format, FormatError, num_format::UnsignedInt};
 
 use crate::csplit_error::CsplitError;
 
@@ -25,7 +25,7 @@ impl SplitName {
     /// Creates a new SplitName with the given user-defined options:
     /// - `prefix_opt` specifies a prefix for all splits.
     /// - `format_opt` specifies a custom ct_format for the suffix part of the filename, using the
-    /// `sprintf` ct_format notation.
+    ///   `sprintf` ct_format notation.
     /// - `n_digits_opt` defines the width of the split number.
     ///
     /// # Caveats

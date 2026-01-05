@@ -16,13 +16,13 @@
 // 支持的平台：非Windows的Unix平台。
 // 使用的库：clap用于命令行参数解析，libc提供Unix系统调用的接口。
 
-use clap::{crate_version, value_parser, Arg, ArgMatches, Command};
-use libc::{dev_t, mode_t};
+use clap::{Arg, ArgMatches, Command, crate_version, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use libc::{dev_t, mode_t};
 use std::ffi::CString;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 
 const MKNOD_ABOUT: &str = ct_help_about!("mknod.md");

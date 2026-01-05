@@ -114,7 +114,6 @@ pub fn ct_help_usage(ct_input: TokenStream) -> TokenStream {
 /// rust,ignore
 /// help_section!("about", "numfmt.md");
 ///
-
 #[proc_macro]
 pub fn ct_help_section(ct_input: TokenStream) -> TokenStream {
     // 将输入转换为TokenTree向量

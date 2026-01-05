@@ -577,33 +577,33 @@ mod tests {
     #[test]
     fn test_backup_mode_short_only_ignore_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        env::set_var(ENV_VERSION_CONTROL, "none");
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "none") };
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, CtBackupMode::ExistingBackup);
-        env::remove_var(ENV_VERSION_CONTROL);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup可以不带参数传入，但如果存在则读取环境变量
     #[test]
     fn test_backup_mode_long_without_args_with_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        env::set_var(ENV_VERSION_CONTROL, "none");
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "none") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, CtBackupMode::NoBackup);
-        env::remove_var(ENV_VERSION_CONTROL);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup 在遇到无效的 VERSION_CONTROL 环境变量时报错
     #[test]
     fn test_backup_mode_long_with_env_var_invalid() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        env::set_var(ENV_VERSION_CONTROL, "foobar");
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "foobar") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches);
@@ -611,14 +611,14 @@ mod tests {
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
-        env::remove_var(ENV_VERSION_CONTROL);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup对于模糊的VERSION_CONTROL环境变量报错
     #[test]
     fn test_backup_mode_long_with_env_var_ambiguous() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        env::set_var(ENV_VERSION_CONTROL, "n");
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "n") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches);
@@ -626,20 +626,20 @@ mod tests {
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("ambiguous argument 'n' for '$VERSION_CONTROL'"));
-        env::remove_var(ENV_VERSION_CONTROL);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup 接受简写的环境变量（如 si 代表 simple）
     #[test]
     fn test_backup_mode_long_with_env_var_shortened() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        env::set_var(ENV_VERSION_CONTROL, "si");
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "si") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, CtBackupMode::SimpleBackup);
-        env::remove_var(ENV_VERSION_CONTROL);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     #[test]

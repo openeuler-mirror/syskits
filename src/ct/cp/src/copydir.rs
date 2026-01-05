@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTIoError;
 use ctcore::ct_fs::{
-    canonicalize, path_ends_with_terminator, CtFileInformation, MissingHandling, ResolveMode,
+    CtFileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use ctcore::ct_show;
 use ctcore::ct_show_error;
@@ -31,8 +31,8 @@ use indicatif::ProgressBar;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    copy_attributes, copy_file, copy_link, cp_aligned_ancestors, cp_context_for, CopyResult,
-    CpError, CpOptions,
+    CopyResult, CpError, CpOptions, copy_attributes, copy_file, copy_link, cp_aligned_ancestors,
+    cp_context_for,
 };
 
 /// Ensure a Windows path starts with a `\\?`.

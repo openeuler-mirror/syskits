@@ -11,11 +11,11 @@
  */
 //! based on the command line options
 
-use crate::{OPT_BYTES, OPT_LINES, OPT_LINE_BYTES, OPT_NUMBER};
-use clap::{parser::ValueSource, ArgMatches};
+use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
+use clap::{ArgMatches, parser::ValueSource};
 use ctcore::{
     ct_display::Quotable,
-    ct_parse_size::{parse_size_u64, parse_size_u64_max, ParseSizeError},
+    ct_parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
 };
 use std::fmt;
 

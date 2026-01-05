@@ -15,7 +15,7 @@ if [ -z "$cargobin" ]; then
 		exit 127
 	fi
 	mkdir -p $HOME/.cargo
-cat > $HOME/.cargo/config <<EOF
+cat > $HOME/.cargo/config.toml <<EOF
 [source.crates-io]
 replace-with = 'rsproxy-sparse'
 [source.rsproxy]

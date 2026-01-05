@@ -15,13 +15,13 @@ use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::io::Read;
 use std::iter;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread;
 
 use ctcore::ct_error::CTResult;
 
 use crate::chunks::{self, Chunk, ChunkRecycled};
-use crate::{sort_compare_by, sort_open, SortError, SortGlobalConfigs};
+use crate::{SortError, SortGlobalConfigs, sort_compare_by, sort_open};
 
 /// 检查位于 `path` 的文件是否有序。
 ///
@@ -137,8 +137,8 @@ mod tests {
     use ctcore::ct_line_ending::CtLineEnding;
 
     use crate::{
-        SortFieldSelector, SortKeyPosition, SortKeySettings, SortMode, SortPrecomputed,
-        SORT_DEFAULT_BUF_SIZE,
+        SORT_DEFAULT_BUF_SIZE, SortFieldSelector, SortKeyPosition, SortKeySettings, SortMode,
+        SortPrecomputed,
     };
 
     use super::*;

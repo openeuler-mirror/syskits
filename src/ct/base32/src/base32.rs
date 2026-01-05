@@ -10,15 +10,15 @@
  *
  */
 
-use std::io::stdin;
 use std::io::Read;
+use std::io::stdin;
 
 use crate::base_common::opt_flags;
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 
 use ctcore::{
     ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,

@@ -14,8 +14,8 @@
 use std::io::Write;
 
 use super::{
-    spec::{CanAsterisk, Spec},
     FormatError,
+    spec::{CanAsterisk, Spec},
 };
 
 pub trait Formatter {

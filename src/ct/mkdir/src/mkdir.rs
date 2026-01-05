@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 #[cfg(not(windows))]
 use ctcore::ct_error::FromIo;
@@ -229,11 +229,7 @@ fn mkdir_create_dir(
     }
 
     if let Err(e) = std::fs::create_dir(path) {
-        if path.is_dir() {
-            Ok(())
-        } else {
-            Err(e.into())
-        }
+        if path.is_dir() { Ok(()) } else { Err(e.into()) }
     } else {
         if is_verbose {
             println!(

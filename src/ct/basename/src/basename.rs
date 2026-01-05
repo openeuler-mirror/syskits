@@ -10,18 +10,18 @@
  *
  */
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
 use ctcore::ct_help_usage;
 use ctcore::ct_line_ending::CtLineEnding;
-use std::path::is_separator;
 use std::path::PathBuf;
+use std::path::is_separator;
 
 static BASENAME_ABOUT: &str = ct_help_about!("basename.md");
 

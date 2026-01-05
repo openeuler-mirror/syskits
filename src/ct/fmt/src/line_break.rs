@@ -13,8 +13,8 @@
 use std::io::Write;
 use std::{cmp, mem};
 
-use crate::para_split::{FmtParaWords, FmtParagraph, FmtWordInfo};
 use crate::FmtConfigs;
+use crate::para_split::{FmtParaWords, FmtParagraph, FmtWordInfo};
 
 struct FmtBreakArgs<'a, W: Write + ?Sized> {
     fmt_opts: &'a FmtConfigs,
@@ -25,7 +25,7 @@ struct FmtBreakArgs<'a, W: Write + ?Sized> {
     out_stream: &'a mut W,
 }
 
-impl<'a, W: Write + ?Sized> FmtBreakArgs<'a, W> {
+impl<W: Write + ?Sized> FmtBreakArgs<'_, W> {
     fn compute_width(&self, w_info: &FmtWordInfo, pos_n: usize, is_fresh: bool) -> usize {
         match is_fresh {
             true => 0,
@@ -898,7 +898,10 @@ mod tests {
             let words = vec![word_info1, word_info2];
             fmt_break_simple(words.iter(), &mut fmt_args).unwrap();
             let output = str::from_utf8(&output_stream).unwrap();
-            assert_eq!(output, "hello\nworld\n", "Output should have words 'hello' and 'world' separated by newlines due to wrapping");
+            assert_eq!(
+                output, "hello\nworld\n",
+                "Output should have words 'hello' and 'world' separated by newlines due to wrapping"
+            );
         }
     }
 

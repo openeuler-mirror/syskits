@@ -24,7 +24,7 @@ use self_cell::self_cell;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use crate::{
-    numeric_str_cmp::NumInfo, SortError, SortGeneralF64ParseResult, SortGlobalConfigs, SortLine,
+    SortError, SortGeneralF64ParseResult, SortGlobalConfigs, SortLine, numeric_str_cmp::NumInfo,
 };
 
 self_cell!(
@@ -133,7 +133,7 @@ impl ChunkRecycled {
 ///
 /// * `sender`： 向分拣机发送行的发送方。
 /// * `recycled_chunk`： 由 `Chunk::recycle`返回的回收块。
-/// （即`buffer.len()`应等于`buffer.capacity()`)
+///   （即`buffer.len()`应等于`buffer.capacity()`)
 /// * `max_buffer_size`： 缓冲区 "可以有多大。
 /// * `carry_over`： 两次调用之间必须结转的字节数。
 /// * `file`： 当前文件。
@@ -251,19 +251,19 @@ fn chunk_parse_lines<'a>(
 ///
 /// * `file`： 开始读取的文件。
 /// * `next_files`： 当 `file` 到达 EOF 时，如果是 `Some` 则更新为 `next_files.next()`、
-/// 然后该函数继续读取。
+///   然后该函数继续读取。
 /// * `buffer`： 装满字节的缓冲区。其内容大部分会被覆盖（参见 `start_offset`.
-/// 以及 `start_offset`）。如果有必要，它将增长到 `max_buffer_size`，但始终会增长到至少读取两行。
+///   以及 `start_offset`）。如果有必要，它将增长到 `max_buffer_size`，但始终会增长到至少读取两行。
 /// * `max_buffer_size`： 最多将缓冲区增长到这个长度。如果为 "无"，缓冲区将不会增长，除非需要读取至少两行。
 /// * `start_offset`： 缓冲区起始处的字节数，这些字节是上一次读取时遗留下来的。
-/// 上一次读取时携带的、不应被覆盖的字节数。
+///   上一次读取时携带的、不应被覆盖的字节数。
 /// * `separator`： 分隔行的字节。
 ///
 /// # 返回
 ///
 /// * `buffer`中现在可以解释为行的字节数。
-/// 剩下的字节必须复制到缓冲区的起点，以便下次调用、
-/// 如果需要再次调用，则由其他返回值决定。
+///   剩下的字节必须复制到缓冲区的起点，以便下次调用、
+///   如果需要再次调用，则由其他返回值决定。
 /// * 是否再次调用此函数。
 fn chunk_read_to_buffer<T: Read>(
     file: &mut T,

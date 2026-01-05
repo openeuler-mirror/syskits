@@ -14,13 +14,13 @@
 //! collection of data rows ([`TableRow`]), one per filesystem.
 use unicode_width::UnicodeWidthStr;
 
-use crate::blocks::blocks_to_magnitude_and_suffix;
+use crate::BlockSize;
+use crate::DfOptions;
 use crate::blocks::BlocksSuffixType;
+use crate::blocks::blocks_to_magnitude_and_suffix;
 use crate::columns::Alignment;
 use crate::columns::Column;
 use crate::filesystem::Filesystem;
-use crate::BlockSize;
-use crate::DfOptions;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::FsUsage;
 

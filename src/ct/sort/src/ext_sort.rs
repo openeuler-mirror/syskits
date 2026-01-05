@@ -29,6 +29,7 @@ use itertools::Itertools;
 
 use ctcore::ct_error::CTResult;
 
+use crate::SortOutput;
 use crate::chunks::ChunkRecycled;
 use crate::chunks::{self, Chunk};
 use crate::merge::MergeClosedTmpFile;
@@ -36,10 +37,9 @@ use crate::merge::MergeWriteableCompressedTmpFile;
 use crate::merge::MergeWriteablePlainTmpFile;
 use crate::merge::MergeWriteableTmpFile;
 use crate::tmp_dir::TmpDirWrapper;
-use crate::SortOutput;
-use crate::{merge, sort_by, sort_compare_by, SortGlobalConfigs};
+use crate::{SortGlobalConfigs, merge, sort_by, sort_compare_by};
 
-use crate::{sort_print_sorted, SortLine};
+use crate::{SortLine, sort_print_sorted};
 
 const EXT_SORT_START_BUFFER_SIZE: usize = 8_000;
 
@@ -2066,9 +2066,9 @@ mod tests {
 
         use ctcore::ct_line_ending::CtLineEnding;
 
+        use crate::SortOutput;
         use crate::ext_sort::ext_sort;
         use crate::tmp_dir::TmpDirWrapper;
-        use crate::SortOutput;
         use crate::{SortGlobalConfigs, SortMode, SortPrecomputed};
 
         #[test]
@@ -3095,7 +3095,7 @@ mod tests {
         use std::io::{BufWriter, Cursor};
         use std::path::PathBuf;
 
-        use tempfile::{tempdir, NamedTempFile};
+        use tempfile::{NamedTempFile, tempdir};
 
         use crate::chunks::{ChunkContents, ChunkLineData};
         use crate::merge::MergeInput;
@@ -3421,8 +3421,8 @@ mod tests {
     mod write_lines_tests {
         use std::io::Cursor;
 
-        use crate::ext_sort::ext_sort_write_lines;
         use crate::SortLine;
+        use crate::ext_sort::ext_sort_write_lines;
 
         #[test]
         fn test_write_lines() {

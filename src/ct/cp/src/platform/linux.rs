@@ -196,7 +196,7 @@ pub(crate) fn copy_on_write(
             clone(source, dest, CloneFallback::Error)
         }
         (CpReflinkMode::Always, _) => {
-            return Err("`--reflink=always` can be used only with --sparse=auto".into())
+            return Err("`--reflink=always` can be used only with --sparse=auto".into());
         }
     };
     result.context(context)?;
@@ -205,20 +205,20 @@ pub(crate) fn copy_on_write(
 
 #[cfg(test)]
 mod tests {
-    use crate::platform::copy_on_write;
     use crate::CopyDebug;
     use crate::CpOffloadReflinkDebug;
     use crate::CpReflinkMode;
     use crate::CpSparseDebug;
     use crate::CpSparseMode;
+    use crate::platform::copy_on_write;
 
     use ctcore::ct_error::CTError;
     use std::fs;
-    use std::fs::create_dir_all;
-    use std::fs::set_permissions;
     use std::fs::File;
     use std::fs::OpenOptions;
     use std::fs::Permissions;
+    use std::fs::create_dir_all;
+    use std::fs::set_permissions;
     use tempfile::Builder;
 
     #[test]
@@ -1069,8 +1069,8 @@ mod tests {
         use std::io;
         use std::io::Read;
         use std::io::Write;
-        use tempfile::tempdir;
         use tempfile::NamedTempFile;
+        use tempfile::tempdir;
 
         #[test]
         fn test_sparse_copy() {
@@ -1265,8 +1265,8 @@ mod tests {
         use std::io;
         use std::io::Read;
         use std::io::Write;
-        use tempfile::tempdir;
         use tempfile::NamedTempFile;
+        use tempfile::tempdir;
         #[test]
         fn test_clone_success() {
             let temp_dir = tempdir().unwrap();

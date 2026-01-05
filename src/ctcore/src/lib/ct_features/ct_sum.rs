@@ -232,7 +232,7 @@ impl CtDigest for CtCRC {
 // This implementation approach is optimized for when `b` is a constant,
 // particularly a power of two.
 pub fn div_ceil(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
+    a.div_ceil(b)
 }
 
 pub struct BSD {
@@ -413,7 +413,7 @@ pub struct CtDigestWriter<'a> {
 }
 
 impl<'a> CtDigestWriter<'a> {
-    pub fn new(digest: &'a mut Box<dyn CtDigest>, binary: bool) -> CtDigestWriter {
+    pub fn new(digest: &'a mut Box<dyn CtDigest>, binary: bool) -> CtDigestWriter<'a> {
         let was_last_character_carriage_return = false;
         CtDigestWriter {
             digest,
@@ -424,7 +424,7 @@ impl<'a> CtDigestWriter<'a> {
 
     pub fn finalize(&mut self) -> bool {
         if self.was_last_character_carriage_return {
-            self.digest.hash_update(&[b'\r']);
+            self.digest.hash_update(b"\r");
             true
         } else {
             false
@@ -432,7 +432,7 @@ impl<'a> CtDigestWriter<'a> {
     }
 }
 
-impl<'a> Write for CtDigestWriter<'a> {
+impl Write for CtDigestWriter<'_> {
     #[cfg(not(windows))]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.digest.hash_update(buf);

@@ -16,15 +16,13 @@
 //! ```
 
 use std::panic;
-use std::panic::PanicInfo;
+use std::panic::PanicHookInfo;
 
 /// 判断一个恐慌是否是由管道破裂（SIGPIPE）错误导致的。
-fn ct_pipe_states(msg: &PanicInfo) -> bool {
+fn ct_pipe_states(msg: &PanicHookInfo) -> bool {
     msg.payload()
         .downcast_ref::<String>()
-        .map_or(false, |message| {
-            message.contains("BrokenPipe") || message.contains("Broken pipe")
-        })
+        .is_some_and(|message| message.contains("BrokenPipe") || message.contains("Broken pipe"))
 }
 
 /// 当由于管道破裂错误发生恐慌时，无错误地终止程序。
@@ -32,8 +30,8 @@ pub fn ct_mute_set_panic_hook() {
     // 获取当前全局恐慌钩子
     let ct_previous_hook = panic::take_hook();
 
-    // 创建一个忽略“broken pipe”恐慌的新恐慌钩子
-    let ct_current_hook = Box::new(move |info: &PanicInfo| {
+    // 创建一个忽略"broken pipe"恐慌的新恐慌钩子
+    let ct_current_hook = Box::new(move |info: &PanicHookInfo| {
         if !ct_pipe_states(info) {
             // 如果不是由管道破裂导致的恐慌，则调用原始钩子
             ct_previous_hook(info);
@@ -49,8 +47,8 @@ mod tests {
     use super::*;
     // use std::panic::catch_unwind;
     use std::panic::AssertUnwindSafe;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn test_mute_sigpipe() {
@@ -60,7 +58,7 @@ mod tests {
         // 设置自定义钩子
         ct_mute_set_panic_hook();
 
-        // 模拟带有“broken pipe”消息的恐慌
+        // 模拟带有"broken pipe"消息的恐慌
         let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
             std::panic::set_hook(Box::new(move |_| {
                 did_panic_clone.store(true, Ordering::SeqCst);

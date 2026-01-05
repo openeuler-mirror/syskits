@@ -17,23 +17,23 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use fnv::FnvHasher;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use rayon::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
 use chunks::ChunkLineData;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{
-    set_ct_exit_code, strip_errno, CTError, CTResult, CTsageError, CtSimpleError,
+    CTError, CTResult, CTsageError, CtSimpleError, set_ct_exit_code, strip_errno,
 };
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
@@ -42,7 +42,7 @@ use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use custom_str_cmp::custom_cmp_str;
 use ext_sort::ext_sort;
 use numeric_str_cmp::{
-    num_cmp_human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings,
+    NumInfo, NumInfoParseSettings, num_cmp_human_numeric_str_cmp, numeric_str_cmp,
 };
 
 use crate::tmp_dir::TmpDirWrapper;
@@ -683,7 +683,7 @@ impl<'a> SortLine<'a> {
                 || sort_settings
                     .selectors
                     .last()
-                    .map_or(true, |selector| selector != &SortFieldSelector::default()))
+                    .is_none_or(|selector| selector != &SortFieldSelector::default()))
         {
             // 使用最后的比较器，整行下划线。
             if self.line.is_empty() {
@@ -733,9 +733,9 @@ fn tokenize_default(line: &str, token_buf: &mut Vec<Field>) {
 /// 在分隔符之间分割。这些分隔符不包含在字段中。
 /// 结果将存储到 `token_buffer` 中。
 fn tokenize_with_separator(line: &str, separator: char, token_buf: &mut Vec<Field>) {
-    let separator_indices =
-        line.char_indices()
-            .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+    let separator_indices = line
+        .char_indices()
+        .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
     for sep_idx in separator_indices {
         token_buf.push(start..sep_idx);
@@ -1028,7 +1028,9 @@ impl SortFieldSelector {
                 range
             }
             Resolution::TooLow | Resolution::EndOfChar(_) => {
-                unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")
+                unreachable!(
+                    "This should only happen if the field start index is 0, but that should already have caused an error."
+                )
             }
             // 对于比较来说，重要的是这是一个空片段、
             // 为了生成准确的调试输出，我们需要在行尾匹配一个空片段。
@@ -1255,7 +1257,7 @@ fn sort_get_settings_threads(matches: &ArgMatches) -> String {
             .get_one::<String>(sort_flags::SORT_PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
-        env::set_var("RAYON_NUM_THREADS", &threads);
+        unsafe { env::set_var("RAYON_NUM_THREADS", &threads) };
         threads
     } else {
         String::new()
@@ -2357,7 +2359,7 @@ mod tests {
 
         use crate::chunks::ChunkLineData;
         use crate::numeric_str_cmp::NumInfo;
-        use crate::{sort_compare_by, SortLine, SortMode};
+        use crate::{SortLine, SortMode, sort_compare_by};
 
         use super::*;
 
@@ -3708,24 +3710,18 @@ mod tests {
                     .is_err()
             );
 
-            assert!(SortKeySettings::check_compatibility(
-                SortMode::SortGeneralNumeric,
-                false,
-                false
-            )
-            .is_ok());
-            assert!(SortKeySettings::check_compatibility(
-                SortMode::SortGeneralNumeric,
-                false,
-                true
-            )
-            .is_err());
-            assert!(SortKeySettings::check_compatibility(
-                SortMode::SortGeneralNumeric,
-                true,
-                false
-            )
-            .is_err());
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortGeneralNumeric, false, false)
+                    .is_ok()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortGeneralNumeric, false, true)
+                    .is_err()
+            );
+            assert!(
+                SortKeySettings::check_compatibility(SortMode::SortGeneralNumeric, true, false)
+                    .is_err()
+            );
             assert!(
                 SortKeySettings::check_compatibility(SortMode::SortGeneralNumeric, true, true)
                     .is_err()
@@ -9108,9 +9104,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC)
+            );
         }
 
         #[test]
@@ -9121,9 +9119,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC)
+            );
         }
 
         #[test]
@@ -9178,9 +9178,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC)
+            );
         }
 
         #[test]
@@ -9191,9 +9193,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::modes::SORT_HUMAN_NUMERIC)
+            );
         }
 
         #[test]
@@ -9248,9 +9252,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC)
+            );
         }
 
         #[test]
@@ -9261,9 +9267,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::modes::SORT_GENERAL_NUMERIC)
+            );
         }
 
         #[test]
@@ -9453,9 +9461,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::check::SORT_CHECK_SILENT));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::check::SORT_CHECK_SILENT)
+            );
         }
 
         #[test]
@@ -9466,9 +9476,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::check::SORT_CHECK_SILENT));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::check::SORT_CHECK_SILENT)
+            );
         }
 
         // check冲突output
@@ -9709,9 +9721,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::SORT_IGNORE_NONPRINTING));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::SORT_IGNORE_NONPRINTING)
+            );
         }
 
         #[test]
@@ -9722,9 +9736,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::SORT_IGNORE_NONPRINTING));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::SORT_IGNORE_NONPRINTING)
+            );
         }
 
         #[test]
@@ -9735,9 +9751,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS)
+            );
         }
 
         #[test]
@@ -9748,9 +9766,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::SORT_IGNORE_LEADING_BLANKS)
+            );
         }
 
         #[test]
@@ -10179,9 +10199,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::SORT_ZERO_TERMINATED));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::SORT_ZERO_TERMINATED)
+            );
         }
 
         #[test]
@@ -10192,9 +10214,11 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .contains_id(sort_flags::SORT_ZERO_TERMINATED));
+            assert!(
+                result
+                    .unwrap()
+                    .contains_id(sort_flags::SORT_ZERO_TERMINATED)
+            );
         }
 
         #[test]
@@ -10511,7 +10535,6 @@ mod tests {
             // SizeTooBig
             let invalid_input = ["500E", "1Y"];
             for input in &invalid_input {
-                #[cfg(not(target_pointer_width = "128"))]
                 assert!(SortGlobalConfigs::parse_byte_count(input).is_err());
             }
 

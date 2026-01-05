@@ -18,7 +18,7 @@ use ctcore::{
     ct_show_warning,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -782,9 +782,7 @@ fn chcon_root_dev_ino_check(
     chcon_device_inode: Option<ChconDeviceAndINode>,
     dir_chcon_device_inode: ChconDeviceAndINode,
 ) -> bool {
-    chcon_device_inode.map_or(false, |chcon_root_dev_ino| {
-        chcon_root_dev_ino == dir_chcon_device_inode
-    })
+    chcon_device_inode == Some(dir_chcon_device_inode)
 }
 
 fn chcon_root_dev_ino_warn(directory_name: &Path) {
@@ -830,7 +828,7 @@ enum ChconSELinuxSecurityContext<'t> {
     String(Option<CString>),
 }
 
-impl<'t> ChconSELinuxSecurityContext<'t> {
+impl ChconSELinuxSecurityContext<'_> {
     fn to_c_string(&self) -> Result<Option<Cow<CStr>>> {
         match self {
             Self::File(context) => context

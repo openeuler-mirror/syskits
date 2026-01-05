@@ -10,15 +10,15 @@
  *
  */
 
-use std::io::stdout;
 use std::io::Read;
 use std::io::Write;
+use std::io::stdout;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_encoding::wrap_print;
 use ctcore::ct_encoding::CtEncodeError;
 use ctcore::ct_encoding::Data;
 use ctcore::ct_encoding::Format;
+use ctcore::ct_encoding::wrap_print;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
@@ -30,10 +30,10 @@ use std::io::BufReader;
 use std::io::Stdin;
 use std::path::Path;
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -229,7 +229,7 @@ pub fn handle_base_input<R: Read>(
 mod test {
     use super::*;
 
-    use crate::{base_common, BASE32_ABOUT, BASE32_USAGE};
+    use crate::{BASE32_ABOUT, BASE32_USAGE, base_common};
     use ctcore::ct_encoding::Format;
     use std::ffi::OsString;
     use std::fs;
@@ -534,8 +534,7 @@ mod test {
     #[test]
     fn test_base_common_handle_input_decode_base16() {
         let filename = "base_common_decode_Base16.txt";
-        let content =
-        "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+        let content = "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
 
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
@@ -590,8 +589,7 @@ mod test {
     #[test]
     fn test_base_common_handle_input_decode_base16_wrap() {
         let filename = "base_common_decode_Base16_wrap.txt";
-        let content =
-            "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
+        let content = "546573742020746573745F626173655F636F6D6D6F6E5F68616E646C655F696E7075745F656E636F64655F626173653136";
 
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
@@ -760,8 +758,7 @@ mod test {
     fn test_base_common_handle_input_decode_base32hex() {
         let filename = "base_common_decode_Base32hex.txt";
         let expected_output = "Test test_base_common_handle_input_encode_base32hex";
-        let content =
-            "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
+        let content = "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
 
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
@@ -818,8 +815,7 @@ mod test {
     fn test_base_common_handle_input_decode_base32hex_wrap() {
         let filename = "base_common_decode_Base32hex_wrap.txt";
         let expected_output = "Test test_base_common_handle_input_encode_base32hex";
-        let content =
-            "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
+        let content = "AHIN6T10EHIN6T2VC9GN6PAVCDNMQRBFDPFMGOBECHM6ANR9DPO7AT2VCLN66RR4CLFM4OBJCKPJ4Q35F0======";
 
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
@@ -1103,8 +1099,7 @@ mod test {
         let filename = "base_common_encode_Base2Lsbf.txt";
         let content = "Test Base2Lsbf";
 
-        let expected_output =
-            "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
+        let expected_output = "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1161,8 +1156,7 @@ mod test {
         let filename = "base_common_encode_Base2Msbf.txt";
         let content = "Test Base2Msbf";
 
-        let expected_output =
-            "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
+        let expected_output = "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1219,8 +1213,7 @@ mod test {
         let filename = "base_common_encode_Base2Lsbf_wrap.txt";
         let content = "Test Base2Lsbf";
 
-        let expected_output =
-            "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
+        let expected_output = "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1277,8 +1270,7 @@ mod test {
         let filename = "base_common_encode_Base2Msbf_wrap.txt";
         let content = "Test Base2Msbf";
 
-        let expected_output =
-            "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
+        let expected_output = "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1335,8 +1327,7 @@ mod test {
         let filename = "base_common_decode_Base2Lsbf.txt";
         let expected_output = "Test Base2Lsbf";
 
-        let content =
-            "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
+        let content = "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1393,8 +1384,7 @@ mod test {
         let filename = "base_common_decode_Base2Msbf.txt";
         let expected_output = "Test Base2Msbf";
 
-        let content =
-            "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
+        let content = "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1451,8 +1441,7 @@ mod test {
         let filename = "base_common_decode_Base2Lsbf_wrap.txt";
         let expected_output = "Test Base2Lsbf";
 
-        let content =
-            "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
+        let content = "0010101010100110110011100010111000000100010000101000011011001110101001100100110000110010110011100100011001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),
@@ -1509,8 +1498,7 @@ mod test {
         let filename = "base_common_decode_Base2Msbf_wrap.txt";
         let expected_output = "Test Base2Msbf";
 
-        let content =
-            "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
+        let content = "0101010001100101011100110111010000100000010000100110000101110011011001010011001001001101011100110110001001100110";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{}' created successfully.", filename),

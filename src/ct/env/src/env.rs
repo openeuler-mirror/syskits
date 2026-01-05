@@ -19,18 +19,18 @@ pub mod variable_parser;
 
 use clap::builder::ValueParser;
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 
 use ini::Ini;
 use native_int_str::{
-    from_native_int_representation_owned, EnvConvert, NCvt, NativeIntStr, NativeIntString,
-    NativeStr,
+    EnvConvert, NCvt, NativeIntStr, NativeIntString, NativeStr,
+    from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
+use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, raise, sigaction};
 
 use std::borrow::Cow;
 use std::env;
@@ -137,7 +137,7 @@ fn env_load_config_file(options: &mut EnvOptions) -> CTResult<()> {
         // 遍历配置项，忽略INI节行（将其视为注释），并将键值对设置为环境变量
         for (_, prop) in &config {
             for (key, value) in prop.iter() {
-                env::set_var(key, value);
+                unsafe { env::set_var(key, value) };
             }
         }
     }
@@ -478,7 +478,7 @@ fn apply_removal_of_all_env_vars(options: &EnvOptions<'_>) {
 
     if options.ignore_env {
         for (ref name, _) in env::vars_os() {
-            env::remove_var(name);
+            unsafe { env::remove_var(name) };
         }
     }
 }
@@ -561,7 +561,7 @@ fn env_apply_unset_env_vars(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTEr
             ));
         }
 
-        env::remove_var(opt_name);
+        unsafe { env::remove_var(opt_name) };
     }
     Ok(())
 }
@@ -603,7 +603,7 @@ fn env_apply_specified_env_vars(options: &EnvOptions<'_>) {
             continue;
         }
         // 设置环境变量
-        env::set_var(name, val);
+        unsafe { env::set_var(name, val) };
     }
 }
 
@@ -3140,9 +3140,9 @@ mod tests {
 
     mod tests_make_options {
 
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_make_options;
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
         use std::fs;
@@ -3932,10 +3932,10 @@ mod tests {
     }
 
     mod tests_apply_change_directory {
-        use crate::env_apply_change_directory;
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_apply_change_directory;
+        use crate::env_make_options;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
@@ -4789,10 +4789,10 @@ mod tests {
     }
 
     mod tests_load_config_file {
-        use crate::env_load_config_file;
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_load_config_file;
+        use crate::env_make_options;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
@@ -5646,10 +5646,10 @@ mod tests {
     }
 
     mod tests_parse_name_value_opt {
-        use crate::env_make_options;
-        use crate::env_parse_name_value_opt;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_make_options;
+        use crate::env_parse_name_value_opt;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
@@ -6535,9 +6535,9 @@ mod tests {
     }
 
     mod tests_run_program {
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_make_options;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::OsStr;

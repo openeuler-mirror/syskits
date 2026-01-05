@@ -10,16 +10,16 @@
  *
  */
 
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_fs::CtFileInformation;
-use std::fs::metadata;
 use std::fs::File;
+use std::fs::metadata;
 use std::io::{self, IsTerminal, Read, Write};
 use thiserror::Error;
 
@@ -93,19 +93,11 @@ struct CatOutputOptions {
 
 impl CatOutputOptions {
     fn cat_tab(&self) -> &'static str {
-        if self.show_tabs {
-            "^I"
-        } else {
-            "\t"
-        }
+        if self.show_tabs { "^I" } else { "\t" }
     }
 
     fn cat_end_of_line(&self) -> &'static str {
-        if self.show_ends {
-            "$\n"
-        } else {
-            "\n"
-        }
+        if self.show_ends { "$\n" } else { "\n" }
     }
 
     /// We can write fast if we can simply copy the contents of the file to
@@ -727,10 +719,10 @@ fn cat_write_non_print_to_end<W: Write>(
             9 => cat_writer.write_all(cat_tab), // 处理制表符
             0..=8 | 10..=31 => cat_writer.write_all(&[b'^', c + 64]), // 将控制字符转义为'^'加上对应字符
             32..=126 => cat_writer.write_all(&[c]),                   // 直接写入可见字符
-            127 => cat_writer.write_all(&[b'^', b'?']),               // 特殊处理删除符
+            127 => cat_writer.write_all(b"^?"),                       // 特殊处理删除符
             128..=159 => cat_writer.write_all(&[b'M', b'-', b'^', c - 64]), // 处理128-159范围的字符
             160..=254 => cat_writer.write_all(&[b'M', b'-', c - 128]), // 处理160-254范围的字符
-            _ => cat_writer.write_all(&[b'M', b'-', b'^', b'?']), // 对于其他未知字符，使用默认转义序列
+            _ => cat_writer.write_all(b"M-^?"), // 对于其他未知字符，使用默认转义序列
         }
         .unwrap(); // 确保写入操作成功
         count += 1; // 增加处理的字节计数
@@ -756,7 +748,7 @@ mod tests {
     use clap::error::ErrorKind;
     use std::fs;
     use std::io::{self, Write};
-    use std::io::{stdout, BufWriter};
+    use std::io::{BufWriter, stdout};
 
     // Usage: target/debug/syskits cat [OPTION]... [FILE]...
     //

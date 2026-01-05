@@ -14,13 +14,13 @@ use chrono::format::StrftimeItems;
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{clock_settime, timespec, CLOCK_REALTIME};
+use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -107,7 +107,7 @@ enum DateIso8601Format {
     Ns,
 }
 
-impl<'a> From<&'a str> for DateIso8601Format {
+impl From<&str> for DateIso8601Format {
     fn from(s: &str) -> Self {
         match s {
             HOURS => Self::Hours,
@@ -130,7 +130,7 @@ enum DateRfc3339Format {
 // impl<'a> 表示这个实现适用于所有生命周期 'a 的字符串引用。
 // From<&'a str> for DateRfc3339Format 表示我们正在实现从 &'a str 转换到 DateRfc3339Format 的功能。
 // fn from(s: &str) -> Self 是 From trait 中的 from 方法，它接受一个字符串引用 s，并返回 Self，即 DateRfc3339Format 枚举。
-impl<'a> From<&'a str> for DateRfc3339Format {
+impl From<&str> for DateRfc3339Format {
     fn from(s: &str) -> Self {
         match s {
             DATE => Self::Date,
@@ -458,24 +458,6 @@ fn make_format_string(date_settings: &DateSettings) -> &str {
     }) as _ //占位符，依赖编译器推断出类型转换的目标类型
 }
 
-/// Parse a `String` into a `DateTime`.
-/// If it fails, return a tuple of the `String` along with its `ParseError`.
-/*
-函数签名：fn parse_date<S: AsRef<str> + Clone>(s: S) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)>。
-这个函数名为parse_date，它接受一个类型参数S，这个S必须实现AsRef<str>和Clone这两个trait。AsRef<str>允许S可以被转换为一个字符串引用，而Clone使得我们可以复制S的值。
-函数返回一个Result类型，其中Ok部分是解析成功的DateTime<FixedOffset>对象，Err部分是一个错误元组，包含一个错误信息字符串和一个chrono::format::ParseError。
-
-功能：此函数的目的是将输入的字符串S解析为一个日期时间（DateTime）对象，使用的是chrono库中的FixedOffset时区。FixedOffset代表固定偏移量的时区，例如UTC+8。
-
-实现：函数体内的代码s.as_ref().parse().map_err(|e| (s.as_ref().into(), e))执行以下操作：
-
-s.as_ref().parse()：尝试将S转换为的字符串引用解析为DateTime<FixedOffset>。这会使用chrono库的默认日期时间格式进行解析。
-.map_err(|e| (s.as_ref().into(), e))：这是一个错误处理操作，如果解析失败，它会捕获解析错误e，并将输入的字符串引用s.as_ref()转换为String（通过.into()），
-然后将这两者打包成一个元组(String, ParseError)，作为Result的Err部分返回。
-
-使用场景：这个函数通常会在需要从用户输入或文件中解析日期时间的场景中使用，例如读取日志文件或处理命令行参数。由于它返回了一个Result，调用者需要处理可能的解析错误。
-*/
-
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
@@ -611,7 +593,7 @@ mod tests {
         test_date_format!(test_date_format_nn, "%N"); // 纳秒数（000000000-999999999）
         test_date_format!(test_date_format_p, "%p"); // 本地化的AM或PM
         test_date_format!(test_date_format_pp, "%P"); // 与%p相同，但为小写
-                                                      // test_date_format!(test_date_format_q, "%q"); // 季度号（1-4）  //TODO 与系统命令不一致，系统命令支持该参数
+        // test_date_format!(test_date_format_q, "%q"); // 季度号（1-4）  //TODO 与系统命令不一致，系统命令支持该参数
         test_date_format!(test_date_format_r, "%r"); // 本地化的12小时制时间
         test_date_format!(test_date_format_rr, "%R"); // 24小时制的时间，格式为%H:%M
         test_date_format!(test_date_format_s, "%s"); // 自1970-01-01 00:00:00 UTC以来的秒数
@@ -3065,7 +3047,7 @@ mod tests {
         test_date_format!(test_date_format_nn, "%N"); // 纳秒数（000000000-999999999）
         test_date_format!(test_date_format_p, "%p"); // 本地化的AM或PM
         test_date_format!(test_date_format_pp, "%P"); // 与%p相同，但为小写
-                                                      // test_date_format!(test_date_format_q, "%q"); // 季度号（1-4）  //TODO 与系统命令不一致，系统命令支持该参数
+        // test_date_format!(test_date_format_q, "%q"); // 季度号（1-4）  //TODO 与系统命令不一致，系统命令支持该参数
         test_date_format!(test_date_format_r, "%r"); // 本地化的12小时制时间
         test_date_format!(test_date_format_rr, "%R"); // 24小时制的时间，格式为%H:%M
         test_date_format!(test_date_format_s, "%s"); // 自1970-01-01 00:00:00 UTC以来的秒数

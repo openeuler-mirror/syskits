@@ -35,32 +35,32 @@ mod tests {
     #[test]
     fn test_posix_version() {
         // Set a valid POSIX version in the environment
-        env::set_var("_POSIX2_VERSION", "200112");
+        unsafe { env::set_var("_POSIX2_VERSION", "200112") };
         assert_eq!(ct_posix_version(), Some(200112));
         // Clean up environment variable
-        env::remove_var("_POSIX2_VERSION");
+        unsafe { env::remove_var("_POSIX2_VERSION") };
 
         // test_posix_version_invalid
         // Set an invalid POSIX version in the environment
-        env::set_var("_POSIX2_VERSION", "invalid_number");
+        unsafe { env::set_var("_POSIX2_VERSION", "invalid_number") };
         assert_eq!(ct_posix_version(), None);
         // Clean up environment variable
-        env::remove_var("_POSIX2_VERSION");
+        unsafe { env::remove_var("_POSIX2_VERSION") };
 
         // test_posix_version_missing
         // Ensure the environment variable is missing
-        env::remove_var("_POSIX2_VERSION");
+        unsafe { env::remove_var("_POSIX2_VERSION") };
         assert_eq!(ct_posix_version(), None);
 
         // test_base_posix_version
         // default
         assert_eq!(None, ct_posix_version());
         // set specific version
-        env::set_var("_POSIX2_VERSION", OBSOLETE.to_string());
+        unsafe { env::set_var("_POSIX2_VERSION", OBSOLETE.to_string()) };
         assert_eq!(Some(OBSOLETE), ct_posix_version());
-        env::set_var("_POSIX2_VERSION", TRADITIONAL.to_string());
+        unsafe { env::set_var("_POSIX2_VERSION", TRADITIONAL.to_string()) };
         assert_eq!(Some(TRADITIONAL), ct_posix_version());
-        env::set_var("_POSIX2_VERSION", MODERN.to_string());
+        unsafe { env::set_var("_POSIX2_VERSION", MODERN.to_string()) };
         assert_eq!(Some(MODERN), ct_posix_version());
     }
 }

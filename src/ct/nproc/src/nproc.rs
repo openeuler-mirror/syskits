@@ -15,7 +15,7 @@
 use crate::opt_flags::OPT_ALL;
 
 use crate::opt_flags::OPT_IGNORE;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
@@ -90,7 +90,7 @@ fn nproc_main(args: impl ctcore::Args) -> CTResult<NprocInfo> {
             return Err(CtSimpleError::new(
                 1,
                 "Failed to get the ignore num".to_string(),
-            ))
+            ));
         }
     };
 

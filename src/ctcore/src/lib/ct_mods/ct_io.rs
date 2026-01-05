@@ -9,16 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
-/// Encapsulates differences between OSs regarding the access to
-/// file handles / descriptors.
-/// This is useful when dealing with lower level stdin/stdout access.
-///
-/// In detail:
-/// On unix like OSs, file _descriptors_ are used in this context.
-/// On windows OSs, file _handles_ are used.
-///
-/// Even though they are distinct classes, they share common functionality.
-/// Access to this common functionality is provided in `OwnedFileDescriptorOrHandle`.
+//! 封装了操作系统之间关于文件句柄/描述符访问的差异。
+//! 这在处理低级别的stdin/stdout访问时非常有用。
+//!
+//! 具体来说：
+//! 在类Unix操作系统上，使用文件描述符。
+//! 在Windows操作系统上，使用文件句柄。
+//!
+//! 尽管它们是不同的类，但它们共享共同的功能。
+//! 对这种共同功能的访问在`OwnedFileDescriptorOrHandle`中提供。
 
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, OwnedFd};

@@ -17,16 +17,16 @@ mod strategy;
 
 use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
+use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io;
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 
 use ctcore::uio_error;
@@ -79,7 +79,6 @@ pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
 /// `split -x300e -22 file` would mean `split -x -e -l 22 file` (last obsolete lines option wins)
 /// following GNU `split` behavior
 /// 分割并处理命令行参数。
-
 fn split_handle_obsolete(args: impl ctcore::Args) -> (Vec<OsString>, Option<String>) {
     // 初始化用于存储已弃用参数行的可选项，以及标记是否紧随了需要值的长或短选项。
     let mut obs_lines = None;
@@ -524,7 +523,7 @@ impl SpliceSettings {
                 // 根据分隔符值处理分隔符
                 match first.as_str() {
                     "\\0" => b'\0',
-                    s if s.as_bytes().len() == 1 => s.as_bytes()[0],
+                    s if s.len() == 1 => s.as_bytes()[0],
                     // 如果分隔符不是单个字符，则返回错误
                     s => return Err(SpliceSettingsError::MultiCharacterSeparator(s.to_string())),
                 }
@@ -781,7 +780,7 @@ impl<'a> SpliceByteChunkWriter<'a> {
     }
 }
 
-impl<'a> Write for SpliceByteChunkWriter<'a> {
+impl Write for SpliceByteChunkWriter<'_> {
     /// Implements `--bytes=SIZE`
     /**
      * 将字节切片写入当前的分块中。如果当前分块没有剩余空间，则会创建新的分块并继续写入。
@@ -909,7 +908,7 @@ impl<'a> SpliceLineChunkWriter<'a> {
     }
 }
 
-impl<'a> Write for SpliceLineChunkWriter<'a> {
+impl Write for SpliceLineChunkWriter<'_> {
     /// Implements `--lines=NUMBER`
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // 当`buf`中的行数超过当前分块剩余行数时，需要写入多个底层写入器。
@@ -1029,7 +1028,7 @@ impl<'a> SplitLineBytesChunkWriter<'a> {
     }
 }
 
-impl<'a> Write for SplitLineBytesChunkWriter<'a> {
+impl Write for SplitLineBytesChunkWriter<'_> {
     /// Write as many lines to a chunk as possible without
     /// exceeding the byte limit. If a single line has more bytes
     /// than the limit, then fill an entire single chunk with those
@@ -1288,7 +1287,9 @@ impl SplitManageOutFiles for OutFiles {
             }
 
             // 如果无法创建写入器且无其他文件描述符可关闭，则放弃并返回错误
-            ctcore::ct_show_error!("at file descriptor limit, but no file descriptor left to close. Closed {count} writers before.");
+            ctcore::ct_show_error!(
+                "at file descriptor limit, but no file descriptor left to close. Closed {count} writers before."
+            );
             return Err(maybe_writer.err().unwrap().into());
         }
     }
@@ -1346,7 +1347,7 @@ impl SplitManageOutFiles for OutFiles {
 /// * N
 /// * K/N
 /**
- * 根据指定的切分设置，将输入数据拆分为多个块。
+ *   根据指定的切分设置，将输入数据拆分为多个块。
  *
  * @param splice_settings 包含切分操作所需全部设置的结构体引用。
  * @param reader 输入数据的缓冲读取器引用。
@@ -1490,7 +1491,7 @@ where
 /// Where CHUNKS
 /// * l/N
 /// * l/K/N
-/// 根据指定的切分设置，将输入数据切分为多个块，并根据情况将这些块写入标准输出或多个文件。
+///   根据指定的切分设置，将输入数据切分为多个块，并根据情况将这些块写入标准输出或多个文件。
 ///
 /// # 参数
 /// * `splice_settings` - 包含切分操作所需各种设置的结构体引用。
@@ -1625,7 +1626,7 @@ where
 /// * r/N
 /// * r/K/N
 /**
- * 将输入数据拆分并按照指定的块数或特定块写入不同的输出目标。
+ *   将输入数据拆分并按照指定的块数或特定块写入不同的输出目标。
  *
  * 此函数主要用于根据提供的拆分设置和读取器，将数据拆分成多个部分，然后将这些部分写入不同的文件或标准输出。
  * 可以在两种模式下运行：N块模式和Kth块模式。
@@ -7957,8 +7958,8 @@ mod tests {
 
     mod tests_settings {
 
-        use crate::ct_app;
         use crate::SpliceSettings;
+        use crate::ct_app;
         use std::fs;
         use std::fs::File;
         use std::path::Path;
@@ -10184,10 +10185,10 @@ mod tests {
     }
     mod tests_setting_error {
 
-        use crate::split_should_extract_obs_lines;
         use crate::FilenameSuffixError;
         use crate::SpliceSettingsError;
         use crate::StrategyError;
+        use crate::split_should_extract_obs_lines;
 
         #[test]
         fn test_strategy_lines_does_not_require_usage() {
@@ -10388,8 +10389,8 @@ mod tests {
             assert_eq!(obs_lines, Some("100".to_string()));
         }
         #[test]
-        fn test_handle_extract_obs_lines_no_obs_lines_with_long_options_and_value_and_short_options(
-        ) {
+        fn test_handle_extract_obs_lines_no_obs_lines_with_long_options_and_value_and_short_options()
+         {
             let slice = "--extract-obs-lines=100a-x";
             let mut obs_lines = None;
             let result = splice_handle_extract_obs_lines(slice, &mut obs_lines);
@@ -10474,8 +10475,8 @@ mod tests {
             assert_eq!(obs_lines, Some("100".to_string()));
         }
         #[test]
-        fn test_handle_extract_obs_lines_with_long_options_before_and_after_and_value_and_value_and_value(
-        ) {
+        fn test_handle_extract_obs_lines_with_long_options_before_and_after_and_value_and_value_and_value()
+         {
             let slice = "--x100de=100a100a100";
             let mut obs_lines = None;
             let result = splice_handle_extract_obs_lines(slice, &mut obs_lines);

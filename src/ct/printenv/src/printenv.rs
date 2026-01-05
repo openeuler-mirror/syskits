@@ -10,7 +10,7 @@
  *
  */
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage};
 use std::env;
 
@@ -80,11 +80,7 @@ fn printenv_processing(var: Vec<String>, separator: &str, error_found: &mut bool
     }
 
     // 若存在错误，则返回错误码
-    if *error_found {
-        Err(1.into())
-    } else {
-        Ok(())
-    }
+    if *error_found { Err(1.into()) } else { Ok(()) }
 }
 
 pub fn ct_app() -> Command {

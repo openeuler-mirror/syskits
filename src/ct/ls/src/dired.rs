@@ -22,10 +22,10 @@ use ctcore::ct_error::CTResult;
 ///
 /// 关键机制：
 /// 1. **位置跟踪**：
-/// - 模块跟踪每个文件或目录条目的字节位置。
-/// -`BytePosition`： 代表具有起始和终止位置的字节范围。
-/// - `DiredOutput`： 包含 DIRED 和 SUBDIRED 输出的位置，并 /// 保持一个填充值。
-/// 保持一个填充值。
+///   - 模块跟踪每个文件或目录条目的字节位置。
+///     -`BytePosition`： 代表具有起始和终止位置的字节范围。
+///   - `DiredOutput`： 包含 DIRED 和 SUBDIRED 输出的位置，并 /// 保持一个填充值。
+///     保持一个填充值。
 ///
 /// 2. **填充**：
 /// - 处理目录名或 "总 "行时使用填充。
@@ -34,12 +34,12 @@ use ctcore::ct_error::CTResult;
 ///
 /// 3. **位置计算**：
 /// - `calculate_dired`、`calculate_subdired` 和 ///`calculate_and_update_positions` 等函数根据输出计算字节位置。
-/// `calculate_and_update_positions`（计算并更新位置）'根据输出结果计算字节位置。
-/// 长度、前一个位置和填充。
+///   `calculate_and_update_positions`（计算并更新位置）'根据输出结果计算字节位置。
+///   长度、前一个位置和填充。
 ///
 /// 4. **Output**:
 /// - 模块提供了根据计算的位置和配置打印 DIRED 输出的函数
-/// （`print_dired_output`）。
+///   （`print_dired_output`）。
 /// - 诸如 `print_positions` 这样的助手可以打印带有特定前缀的位置。
 ///
 /// 总的来说，该模块确保 DIRED 输出中的每个条目都有正确的

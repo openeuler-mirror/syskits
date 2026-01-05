@@ -14,7 +14,7 @@
 
 use std::fmt::Display;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
     ct_display::Quotable,
     ct_error::{CTError, CTResult},

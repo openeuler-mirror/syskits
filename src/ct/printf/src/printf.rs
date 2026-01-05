@@ -16,9 +16,9 @@
 use std::io::stdout;
 use std::ops::ControlFlow;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::ct_error::{CTResult, CTsageError};
-use ctcore::ct_format::{parse_spec_and_escape, FormatArgument, FormatItem};
+use ctcore::ct_format::{FormatArgument, FormatItem, parse_spec_and_escape};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 
 const PRINTF_VERSION: &str = "version";

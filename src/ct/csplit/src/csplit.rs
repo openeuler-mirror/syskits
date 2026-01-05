@@ -14,11 +14,11 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::{ct_crash_if_err, ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
@@ -92,7 +92,7 @@ impl CsplitOptions {
 /// - [`CsplitError::MatchNotFound`] if no line matched a regular expression.
 /// - [`CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
 ///   more than once.
-/// 根据指定的模式对输入进行拆分。
+///   根据指定的模式对输入进行拆分。
 ///
 /// # 参数
 /// - `options`: 拆分选项，控制拆分的行为。
@@ -227,7 +227,7 @@ struct SplitWriter<'a> {
     dev_null: bool,
 }
 
-impl<'a> Drop for SplitWriter<'a> {
+impl Drop for SplitWriter<'_> {
     fn drop(&mut self) {
         if self.options.elide_empty_files && self.size == 0 {
             let file_name = self.options.split_name.get(self.counter);
@@ -236,7 +236,7 @@ impl<'a> Drop for SplitWriter<'a> {
     }
 }
 
-impl<'a> SplitWriter<'a> {
+impl SplitWriter<'_> {
     fn new(options: &CsplitOptions) -> SplitWriter {
         SplitWriter {
             options,
@@ -371,17 +371,6 @@ impl<'a> SplitWriter<'a> {
         self.finish_split();
         result
     }
-
-    /// Read lines up to the line matching a [`Regex`]. With a non-zero offset,
-    /// the block of relevant lines can be extended (if positive), or reduced
-    /// (if negative).
-    ///
-    /// # Errors
-    ///
-    /// In addition to errors reading/writing from/to a file, the following errors may be returned:
-    /// - if no line matched, an [`CsplitError::MatchNotFound`].
-    /// - if there are not enough lines to accommodate the offset, an
-    /// [`CsplitError::LineOutOfRange`].
 
     /**
      * 根据给定的正则表达式和偏移量，在输入流中查找匹配，并据此进行分割。

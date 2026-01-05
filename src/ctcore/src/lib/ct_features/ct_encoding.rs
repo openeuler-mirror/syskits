@@ -14,7 +14,7 @@
 
 use std::io::{self, Read, Write};
 
-use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
+use data_encoding::{BASE32, BASE32HEX, BASE64, BASE64URL, Encoding, HEXUPPER};
 use data_encoding_macro::new_encoding;
 #[cfg(feature = "thiserror")]
 use thiserror::Error;
@@ -92,7 +92,7 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
         Z85 => {
             // z85 库通过使用一个不允许出现的首字符 '#' 来实现带填充的编码。
             // 我们手动检查是否有首字符 '#'，并自行返回错误。
-            if input.starts_with(&[b'#']) {
+            if input.starts_with(b"#") {
                 return Err(z85::DecodeError::InvalidByte(0, b'#').into());
             } else {
                 z85::decode(input)?

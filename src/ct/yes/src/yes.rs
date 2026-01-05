@@ -14,7 +14,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
 
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(unix)]

@@ -15,10 +15,10 @@
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_perms::{chown_base, opt_flags, CtGidUidOwnerFilter, CtIfFrom};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -64,7 +64,7 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
                     return Err(CtSimpleError::new(
                         1,
                         format!("invalid group: {}", group_info.quote()),
-                    ))
+                    ));
                 }
             }
         }
@@ -437,7 +437,7 @@ mod tests {
 
         let result = ctmain(args.iter().map(|s| OsString::from(s)));
         assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
-                               // Remove the directory hierarchy
+        // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
     #[test]
@@ -469,7 +469,7 @@ mod tests {
 
         let result = ctmain(args.iter().map(|s| OsString::from(s)));
         assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
-                               // Remove the directory hierarchy
+        // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
 }

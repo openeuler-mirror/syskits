@@ -813,3 +813,103 @@ fn parse_control_char(s: &str) -> CTResult<nix::libc::cc_t> {
         "Control character must be a single character or a valid control sequence like '^A'",
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nix::sys::termios::{ControlFlags, Termios};
+    use std::io::stdout;
+
+    #[test]
+    fn test_settings_struct() {
+        let settings = Settings {
+            name: "test",
+            flag: ControlFlags::CREAD,
+            is_show: true,
+            is_sane: false,
+            group: None,
+        };
+
+        assert_eq!(settings.name, "test");
+        assert!(settings.is_show);
+        assert!(!settings.is_sane);
+        assert!(settings.group.is_none());
+    }
+
+    #[test]
+    fn test_baud_rates() {
+        for &(text, _, _baud_rate) in BAUD_RATES {
+            assert!(!text.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_control_settings() {
+        for setting in CONTROL_SETTINGS {
+            assert!(!setting.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_input_settings() {
+        for setting in INPUT_SETTINGS {
+            assert!(!setting.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_output_settings() {
+        for setting in OUTPUT_SETTINGS {
+            assert!(!setting.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_local_settings() {
+        for setting in LOCAL_SETTINGS {
+            assert!(!setting.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_control_chars() {
+        for &(text, _) in CONTROL_CHARS {
+            assert!(!text.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_special_settings() {
+        for entry in SPECIAL_SETTINGS {
+            assert!(!entry.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_special_setting_size() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let device = Device::Stdout(stdout());
+        let size_setting = SPECIAL_SETTINGS
+            .iter()
+            .find(|s| s.name == "size")
+            .expect("size setting should exist");
+
+        assert!(!size_setting.requires_value);
+        let result = size_setting.setting.apply(&mut termios, None, &device);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_special_setting_min() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let device = Device::Stdout(stdout());
+        let min_setting = SPECIAL_SETTINGS
+            .iter()
+            .find(|s| s.name == "min")
+            .expect("min setting should exist");
+
+        assert!(min_setting.requires_value);
+        let result = min_setting.setting.apply(&mut termios, Some("1"), &device);
+        assert!(result.is_ok());
+    }
+}

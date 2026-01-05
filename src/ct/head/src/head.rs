@@ -950,4 +950,56 @@ mod tests {
             assert_eq!(buffer, "你好\n".as_bytes());
         }
     }
+    mod test_read_n_bytes {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_read_n_bytes_exact() {
+            let input = Cursor::new("Hello, World!");
+            let mut buffer = Vec::new();
+            read_n_bytes(input, 5, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_read_n_bytes_more_than_available() {
+            let input = Cursor::new("Hello");
+            let mut buffer = Vec::new();
+            read_n_bytes(input, 10, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_read_n_bytes_zero() {
+            let input = Cursor::new("Hello");
+            let mut buffer = Vec::new();
+            read_n_bytes(input, 0, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+
+        #[test]
+        fn test_read_n_bytes_empty_input() {
+            let input = Cursor::new("");
+            let mut buffer = Vec::new();
+            read_n_bytes(input, 5, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"");
+        }
+
+        #[test]
+        fn test_read_n_bytes_with_newlines() {
+            let input = Cursor::new("line1\nline2\nline3");
+            let mut buffer = Vec::new();
+            read_n_bytes(input, 7, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, b"line1\nl");
+        }
+
+        #[test]
+        fn test_read_n_bytes_unicode() {
+            let input = Cursor::new("你好，世界");
+            let mut buffer = Vec::new();
+            read_n_bytes(input, 6, Some(&mut buffer)).unwrap();
+            assert_eq!(buffer, "你好".as_bytes());
+        }
+    }
 }

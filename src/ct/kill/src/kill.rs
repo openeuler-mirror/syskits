@@ -869,5 +869,133 @@ mod tests {
                 vec!["kill".to_string(), "-15".to_string(), "1234".to_string()]
             );
         }
+
+        #[test]
+        fn kill_handle_obsolete_with_no_args() {
+            let mut args: Vec<String> = vec![];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_single_arg() {
+            let mut args = vec!["kill".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, None);
+            assert_eq!(args, vec!["kill".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_valid_signal_name() {
+            let mut args = vec!["kill".to_string(), "-HUP".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(1)); // Assuming HUP corresponds to signal value 1
+            assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_valid_signal_number() {
+            let mut args = vec!["kill".to_string(), "-15".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(15)); // Assuming 15 corresponds to SIGTERM
+            assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_mixed_valid_and_invalid_signals() {
+            let mut args = vec![
+                "kill".to_string(),
+                "-9".to_string(),
+                "-invalid".to_string(),
+                "1234".to_string(),
+            ];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(9));
+            assert_eq!(
+                args,
+                vec![
+                    "kill".to_string(),
+                    "-invalid".to_string(),
+                    "1234".to_string()
+                ]
+            );
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_signal_prefix_but_no_signal() {
+            let mut args = vec!["kill".to_string(), "-".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, None);
+            assert_eq!(
+                args,
+                vec!["kill".to_string(), "-".to_string(), "1234".to_string()]
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod kill_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::io::Cursor;
+        #[test]
+        fn kill_main_with_table_flag() {
+            let args = vec![ctcore::ct_util_name(), "--table"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("HUP")); // Assuming HUP is in the signal list
+        }
+
+        #[test]
+        fn kill_main_with_list_flag() {
+            let args = vec![ctcore::ct_util_name(), "--list"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("HUP")); // Assuming HUP is in the signal list
+        }
+
+        #[test]
+        fn kill_main_with_signal_and_pid() {
+            let args = vec![ctcore::ct_util_name(), "-s", "TERM", "1234"];
+
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.is_empty()); // No output expected for successful signal sending
+        }
+
+        #[test]
+        fn kill_main_with_invalid_signal() {
+            let args = vec![ctcore::ct_util_name(), "-s", "INVALID", "1234"];
+
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
+        }
+
+        #[test]
+        fn kill_main_with_no_args() {
+            let args = vec![ctcore::ct_util_name()];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok()); // Expecting error due to missing required arguments
+        }
+
+        #[test]
+        fn kill_main_with_obsolete_signal() {
+            let args = vec![ctcore::ct_util_name(), "-9", "1234"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.is_empty()); // No output expected for successful signal sending
+        }
     }
 }

@@ -1,0 +1,355 @@
+/*
+ * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
+//! 向一个任务发送一个信号
+
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_signals::{ALL_SIGNALS, get_ct_signal_by_name_or_value};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
+use std::convert::TryInto;
+use std::io::Error;
+use std::io::Write;
+
+const KILL_ABOUT: &str = ct_help_about!("kill.md");
+const KILL_USAGE: &str = ct_help_usage!("kill.md");
+
+pub mod kill_flags {
+    pub static KILL_PIDS_OR_SIGNALS: &str = "pids_or_signals";
+    pub static LIST: &str = "list";
+    pub static TABLE: &str = "table";
+    pub static SIGNAL: &str = "signal";
+}
+
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = KILL_ABOUT;
+    let usage_description = ct_format_usage(KILL_USAGE);
+    let args = vec![
+        Arg::new(kill_flags::LIST)
+            .short('l')
+            .long(kill_flags::LIST)
+            .help("Lists signals")
+            .conflicts_with(kill_flags::TABLE)
+            .action(ArgAction::SetTrue),
+        Arg::new(kill_flags::TABLE)
+            .short('t')
+            .short_alias('L')
+            .long(kill_flags::TABLE)
+            .help("Lists table of signals")
+            .action(ArgAction::SetTrue),
+        Arg::new(kill_flags::SIGNAL)
+            .short('s')
+            .long(kill_flags::SIGNAL)
+            .value_name("signal")
+            .help("Sends given signal instead of SIGTERM"),
+        Arg::new(kill_flags::KILL_PIDS_OR_SIGNALS)
+            .hide(true)
+            .action(ArgAction::Append),
+    ];
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .infer_long_args(true)
+        .allow_negative_numbers(true)
+        .args(&args)
+}
+
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    kill_main(&mut out, args)
+}
+
+/// 主要的kill命令处理函数，用于终止进程或发送信号
+///
+/// # 参数
+/// - `writer`: 一个可写对象，用于输出信息
+/// - `args`: 命令行参数，实现自定义Args trait
+///
+/// # 返回
+/// 返回一个结果，表示操作是否成功
+pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 收集并忽略不相关的参数
+    let mut args = args.collect_ignore();
+    // 处理过时的kill命令参数
+    let obs_signal = kill_handle_obsolete(&mut args);
+    // 尝试解析命令行参数
+    let matches = ct_app().try_get_matches_from(args)?;
+    // 获取需要终止的进程ID或信号
+    let pids_or_signals: Vec<String> = matches
+        .get_many::<String>(kill_flags::KILL_PIDS_OR_SIGNALS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if matches.get_flag(kill_flags::TABLE) {
+        // 如果是表格模式，调用kill_table函数
+        kill_table(writer)
+    } else if matches.get_flag(kill_flags::LIST) {
+        // 如果是列表模式，调用kill_list函数，并传入第一个进程ID或信号
+        kill_list(writer, pids_or_signals.first())
+    } else {
+        // 否则，执行kill命令并处理信号
+        kill_exec(obs_signal, matches, &pids_or_signals)
+    }
+}
+
+/// 发送信号以终止进程执行。
+///
+/// 本函数旨在根据用户指定的信号和进程ID，发送信号以终止相应的进程。
+/// 它首先解析用户可能提供的信号名称或编号，以及进程ID列表。然后，
+/// 它向这些进程发送指定的信号。如果操作成功，函数返回Ok(())，否则返回一个错误。
+///
+/// # 参数
+/// - `obs_signal`: 可选的信号编号，用户可以指定一个信号来终止进程。
+/// - `matches`: 命令行参数匹配对象，用于获取命令行参数。
+/// - `pids_or_signals`: 包含进程ID或信号的字符串向量，用于指定要终止的进程或解析信号。
+///
+/// # 返回值
+/// - `CTResult<()>`: 一个结果类型，表示操作成功或失败。
+fn kill_exec(
+    obs_signal: Option<usize>,
+    matches: ArgMatches,
+    pids_or_signals: &[String],
+) -> CTResult<()> {
+    // 解析并获取要发送的信号值。
+    let sig = kill_get_signal_value(obs_signal, matches)?;
+    // 解析并获取进程ID列表。
+    let pids = kill_parse_pids(pids_or_signals)?;
+    // 向指定的进程发送信号。
+    kill(sig, &pids);
+
+    Ok(())
+}
+
+/// 根据提供的参数获取信号值用于进程终止
+///
+/// 该函数首先尝试从`obs_signal`中获取信号值，如果未提供，则尝试从命令行参数匹配中获取信号值。
+/// 如果两者都未成功获取到信号值，则默认使用15（SIGTERM）作为信号值。
+///
+/// # 参数
+/// - `obs_signal`: 可选的信号值，通常从观察到的信号中获取。
+/// - `matches`: 命令行参数匹配结果，用于提取指定的信号值。
+///
+/// # 返回
+/// 返回一个`CTResult`，包含转换后的`Signal`值，如果转换失败，则包含一个错误。
+fn kill_get_signal_value(obs_signal: Option<usize>, matches: ArgMatches) -> CTResult<Signal> {
+    let sig = if let Some(signal) = obs_signal {
+        signal
+    } else if let Some(signal) = matches.get_one::<String>(kill_flags::SIGNAL) {
+        // 如果命令行参数中提供了信号值，则解析该信号值
+        kill_parse_signal_value(signal)?
+    } else {
+        // 如果没有提供信号值，则使用默认的15（SIGTERM）
+        15_usize //SIGTERM
+    };
+    // 将获取到的信号值转换为i32，并尝试将其转换为`Signal`类型，如果失败，则返回一个错误
+    let kill_signal: Signal = (sig as i32)
+        .try_into()
+        .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+
+    Ok(kill_signal)
+}
+
+/// 移除过时的信号参数并返回对应的信号值。
+///
+/// 该函数用于处理包含旧风格信号前缀的命令行参数。当参数数量超过两个时，它会检查第二个参数是否包含一个旧风格的信号。如果存在，则移除该参数并返回对应的信号值。
+///
+/// # 参数
+/// * `args`: 可变引用的字符串向量，包含命令行参数。
+///
+/// # 返回值
+/// * `Option<usize>`: 如果找到并移除了过时的信号，则返回信号值；否则返回 `None`。
+fn kill_handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
+    if args.len() > 2 {
+        // 检查参数数量是否超过两个，因为过时信号的存在至少需要两个参数
+        let slice = args[1].as_str();
+        if let Some(signal) = slice.strip_prefix('-') {
+            // 尝试移除信号前缀以判断是否为过时信号
+            let opt_signal = get_ct_signal_by_name_or_value(signal);
+            if opt_signal.is_some() {
+                // 返回前移除信号参数
+                args.remove(1);
+                return opt_signal;
+            }
+        }
+    }
+    None
+}
+
+/// 将信号列表以表格形式输出到指定的写入器中
+///
+/// # Parameters
+/// - `writer`: 一个实现了Write trait的可变引用，用于输出信号表
+///
+/// # Returns
+/// - `CTResult<()>`: 一个结果类型，用于表示操作是否成功
+///
+/// # Description
+/// 该函数遍历ALL_SIGNALS数组，计算信号名称的最大长度，并使用该长度以及索引号格式化输出信号名称
+/// 每7个信号后，输出一个换行符，以格式化表格形式输出所有信号
+fn kill_table<W: Write>(writer: &mut W) -> CTResult<()> {
+    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
+
+    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
+        // 格式化输出信号的索引号和名称，确保名称按计算的最大长度对齐
+        write!(writer, "{0: >#2} {1: <#2$}", idx, signal, name_width + 2)?;
+        // 每7个信号后输出一个换行符，格式化表格形式输出
+        if (idx + 1) % 7 == 0 {
+            writeln!(writer)?;
+        }
+    }
+    // 最后输出一个换行符，确保表格格式正确
+    writeln!(writer)?;
+
+    Ok(())
+}
+
+/// 向指定的写入器打印信号值或名称，并返回结果
+///
+/// 此函数旨在根据提供的信号名称或值，查找并打印对应的信号值或名称如果找到对应的信号，则打印并返回Ok(())，否则返回一个错误
+///
+/// # 参数
+/// - `writer`: 一个可写对象，用于输出信号值或名称
+/// - `signal_name_or_value`: 一个字符串，包含信号的名称或值，用于查找信号
+///
+/// # 返回值
+/// - `Ok(())`: 如果成功找到并打印信号值或名称
+/// - `Err(CtSimpleError)`: 如果提供的信号名称或值无效，返回一个包含错误信息的CtSimpleError
+fn kill_print_signal<W: Write>(writer: &mut W, signal_name_or_value: &str) -> CTResult<()> {
+    for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
+        if signal == signal_name_or_value || (format!("SIG{signal}")) == signal_name_or_value {
+            writeln!(writer, "{value}")?;
+            return Ok(());
+        } else if signal_name_or_value == value.to_string() {
+            writeln!(writer, "{signal}")?;
+            return Ok(());
+        }
+    }
+    let err_message = format!("unknown signal name {}", signal_name_or_value.quote());
+    Err(CtSimpleError::new(1, err_message))
+}
+
+/// 在控制台中打印所有信号的名称，每个信号之间用空格分隔
+///
+/// # 参数
+/// * `writer`: 一个实现了Write trait的对象，用于输出信号信息
+///
+/// # 返回
+/// * `CTResult<()>`: 一个结果类型，表示操作是否成功
+fn kill_print_signals<W: Write>(writer: &mut W) -> CTResult<()> {
+    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
+        if idx > 0 {
+            write!(writer, " ")?;
+        }
+        write!(writer, "{signal}")?;
+    }
+    writeln!(writer)?;
+    Ok(())
+}
+
+/// 向指定的写入器输出终止信号信息。
+///
+/// # Parameters
+/// - `writer`: 一个可写对象，用于输出终止信号信息。
+/// - `arg`: 一个可选的字符串引用，如果提供，则输出与该信号相关的详细信息；
+///   如果未提供，则输出所有可用的终止信号。
+///
+/// # Returns
+/// - `CTResult<()>`: 一个结果类型，表示操作成功或失败。
+fn kill_list<W: Write>(writer: &mut W, opt_arg: Option<&String>) -> CTResult<()> {
+    if let Some(arg) = opt_arg {
+        kill_print_signal(writer, arg)
+    } else {
+        kill_print_signals(writer)
+    }
+}
+
+/// 将信号名称解析为对应的信号值。
+///
+/// 该函数接受一个信号名称字符串，尝试将其解析为对应的信号值。
+/// 如果解析成功，则返回信号值；如果解析失败，则返回一个错误。
+///
+/// # 参数
+///
+/// * `signal_name: &str` - 信号名称字符串引用。
+///
+/// # 返回值
+///
+/// * `CTResult<usize>` - 一个结果类型，包含解析后的信号值或错误信息。
+///
+/// # 错误处理
+///
+/// 如果无法识别给定的信号名称，则返回一个包含错误信息的结果。
+fn kill_parse_signal_value(signal_name: &str) -> CTResult<usize> {
+    // 尝试通过信号名称或值获取信号的值。
+    let optional_signal_value = get_ct_signal_by_name_or_value(signal_name);
+
+    if let Some(sig) = optional_signal_value {
+        Ok(sig)
+    } else {
+        let err_message = format!("unknown signal name {}", signal_name.quote());
+        Err(CtSimpleError::new(1, err_message))
+    }
+}
+
+/// 将字符串切片转换为i32整数向量
+/// 该函数尝试将输入的字符串切片中的每个字符串解析为i32整数
+/// 如果解析失败，将返回一个包含错误信息的CTResult
+///
+/// # 参数
+/// - `pids`: 一个字符串切片的引用，每个字符串代表一个可能的整数
+///
+/// # 返回
+/// - `CTResult<Vec<i32>>`: 解析成功时，返回一个包含i32整数的向量；
+///   解析失败时，返回一个包含错误信息的CTResult
+fn kill_parse_pids(pids: &[String]) -> CTResult<Vec<i32>> {
+    // 遍历字符串切片，尝试将每个字符串解析为i32整数
+    pids.iter()
+        .map(|x| {
+            // 解析字符串为i32整数，如果失败，则构建一个自定义错误信息
+            x.parse::<i32>().map_err(|e| {
+                let err_message = format!("failed to parse argument {}: {}", x.quote(), e);
+                CtSimpleError::new(1, err_message)
+            })
+        })
+        .collect()
+}
+
+/// 向指定进程发送信号
+///
+/// # Parameters
+/// - `sig`: 需要发送的信号类型
+/// - `pids`: 接收信号的进程ID列表
+///
+/// # Remarks
+/// 此函数会尝试向每个指定的进程发送信号如果发送信号失败，会使用`ct_show!`宏记录错误
+fn kill(sig: Signal, pids: &[i32]) {
+    // 遍历进程ID列表
+    for &pid in pids {
+        // 尝试向进程发送信号
+        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
+            // 如果发送信号失败，使用`ct_show!`宏记录错误
+            ct_show!(
+                Error::from_raw_os_error(e as i32)
+                    .map_err_context(|| format!("sending signal to {pid} failed"))
+            );
+        }
+    }
+}
+

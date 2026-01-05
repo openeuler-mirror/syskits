@@ -161,6 +161,7 @@ feat_os_unix = [
   "users",
   "who",
   "kill",
+  "stty",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -354,6 +355,7 @@ id = { optional = true, package = "ct_id", path = "src/ct/id"}
 fold = { optional = true, package = "ct_fold", path = "src/ct/fold" }
 kill = { optional = true, package = "ct_kill", path = "src/ct/kill" }
 realpath = { optional = true, package = "ct_realpath", path = "src/ct/realpath"}
+stty = { optional = true, package = "ct_stty", path = "src/ct/stty"}
 
 [dev-dependencies]
 chrono = { workspace = true }

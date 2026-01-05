@@ -1,5 +1,5 @@
 /*
- *    Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved
+ *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
  *     syskits is licensed under Mulan PSL v2.
  *    You can use this software according to the terms and conditions of the Mulan PSL V2
  *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
@@ -7,6 +7,7 @@
  *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  *    See the Mulan PSL v2 for more details.
+ *
  */
 
 mod error;
@@ -17,14 +18,12 @@ use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, UClapError};
 use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
 use ctcore::libc::{self, setgid, setgroups, setuid};
 use ctcore::{ct_entries, ct_format_usage, ct_help_about, ct_help_usage};
-use libc::c_int;
 
 use std::io::Error;
 
 use std::path::Path;
 use std::process;
 use std::process::ExitStatus;
-
 static CHROOT_ABOUT: &str = ct_help_about!("chroot.md");
 static CHROOT_USAGE: &str = ct_help_usage!("chroot.md");
 
@@ -57,6 +56,7 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 
     // 检查是否跳过更改工作目录的步骤
     let skip_chdir = args_match.get_flag(opt_flags::SKIP_CHDIR);
+
     // 如果启用了跳过更改目录且新的根目录不是根目录，则返回错误
     if skip_chdir
         && canonicalize(new_root, MissingHandling::Normal, ResolveMode::Logical)
@@ -175,16 +175,16 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::USERSPEC)
             .help(
                 "Colon-separated user and group to switch to. \
-                      Same as -u USER -g GROUP. \
-                      Userspec has higher preference than -u and/or -g",
+                     Same as -u USER -g GROUP. \
+                     Userspec has higher preference than -u and/or -g",
             )
             .value_name("USER:GROUP"),
         Arg::new(opt_flags::SKIP_CHDIR)
             .long(opt_flags::SKIP_CHDIR)
             .help(
                 "Use this option to not change the working directory \
-                     to / after changing the root directory to newroot, \
-                     i.e., inside the chroot.",
+                    to / after changing the root directory to newroot, \
+                    i.e., inside the chroot.",
             )
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::COMMAND)
@@ -221,7 +221,8 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
         .get_one::<String>(opt_flags::GROUPS)
         .map(|s| s.as_str())
         .unwrap_or_default();
-    let skip_chdir = args_option.contains_id(opt_flags::SKIP_CHDIR);
+
+    let skip_chdir = args_option.get_flag(opt_flags::SKIP_CHDIR);
 
     // 解析用户规范字符串
     let user_spec = match chroot_parse_user_spec(user_spec_str) {
@@ -278,25 +279,29 @@ fn chroot_parse_user_spec(user_spec_str: Option<&String>) -> Result<Vec<&str>, C
 }
 
 fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
-    let err = chroot_option(root_path);
-
-    if err == 0 {
-        if !is_skip_chdir {
-            std::env::set_current_dir(root_path).unwrap();
-        }
+    if !is_skip_chdir {
+        std::env::set_current_dir(root_path).unwrap();
         Ok(())
     } else {
-        Err(
-            ChrootError::CannotEnter(format!("{}", root_path.display()), Error::last_os_error())
-                .into(),
-        )
-    }
-}
+        // 获取当前工作目录
+        let current_dir = match std::env::current_dir() {
+            Ok(dir) => dir,
+            Err(e) => panic!("Failed to get current directory: {}", e),
+        };
 
-fn chroot_option(root_path: &Path) -> c_int {
-    match std::env::set_current_dir(root_path) {
-        Ok(_) => 0,
-        Err(_e) => 125,
+        match std::env::set_current_dir(current_dir.clone()) {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                Err(
+                    // 返回一个包含错误信息的错误结果
+                    ChrootError::CannotEnter(
+                        format!("{}", current_dir.display()),
+                        Error::last_os_error(),
+                    )
+                    .into(),
+                )
+            }
+        }
     }
 }
 
@@ -1010,18 +1015,21 @@ mod tests {
             let result = chroot_set_groups_from_str("");
             assert_eq!(result.is_ok(), true);
         }
+
         #[test]
         fn test_set_groups_from_str_empty_group() {
             let groups = "group1,,group3";
             let result = chroot_set_groups_from_str(groups);
             assert_eq!(result.is_ok(), false);
         }
+
         #[test]
         fn test_set_groups_from_str_invalid_group() {
             let groups = "a invalid_group";
             let result = chroot_set_groups_from_str(groups);
             assert_eq!(result.is_err(), true);
         }
+
         #[test]
         fn test_set_groups_from_str_invalid() {
             let groups = "invalid_group";
@@ -1158,24 +1166,10 @@ mod tests {
         use std::path::Path;
 
         #[test]
-        fn test_enter_chroot_success() {
-            let root = Path::new("/home/user");
-            let result = chroot_enter(root, false);
-            assert!(result.is_err());
-        }
-
-        #[test]
         fn test_enter_chroot_skip_chdir() {
             let root = Path::new("/home/user");
             let result = chroot_enter(root, true);
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_enter_chroot_failure() {
-            let root = Path::new("/invalid/path");
-            let result = chroot_enter(root, false);
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
     }
 }

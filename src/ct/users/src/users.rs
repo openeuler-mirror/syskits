@@ -190,29 +190,37 @@ mod tests {
         #[test]
         fn test_users_main_argument_parsing_utmp_file() {
             let source = "/var/run/utmp";
-            let destination = "./utmp_test";
-            std::fs::copy(source, destination).unwrap();
+            let source_path = PathBuf::from(source);
+            if source_path.exists() {
+                let destination = "./users_main_utmp_test";
+                std::fs::copy(source, destination).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), destination];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+                let args = vec![ctcore::ct_util_name(), destination];
+                let result = users_main(args.iter().map(|s| OsString::from(s)));
 
-            assert!(result.is_ok());
-            if PathBuf::from(destination).exists() {
+                assert!(result.is_ok());
+
                 fs::remove_file(destination).expect("Failed to remove file");
+            } else {
+                println!("no exist {}", source);
             }
         }
 
         #[test]
         fn test_users_main_argument_parsing_wtmp_file() {
             let source = "/var/log/wtmp";
-            let destination = "./wtmp_test";
+            let source_path = PathBuf::from(source);
+            if source_path.exists() {
+                let destination = "./users_main_wtmp_test";
 
-            std::fs::copy(source, destination).unwrap();
-            let args = vec![ctcore::ct_util_name(), destination];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
-            assert!(result.is_ok());
-            if PathBuf::from(destination).exists() {
+                std::fs::copy(source, destination).unwrap();
+                let args = vec![ctcore::ct_util_name(), destination];
+                let result = users_main(args.iter().map(|s| OsString::from(s)));
+                assert!(result.is_ok());
+
                 fs::remove_file(destination).expect("Failed to remove file");
+            } else {
+                println!("no exist {}", source);
             }
         }
 
@@ -273,18 +281,6 @@ mod tests {
             let result = users_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
         }
-        // #[test]
-        // fn test_users_main_argument_parsing_wtmp_file() {
-        //     let source = "/var/log/wtmp";
-        //     let destination = "./wtmp_test";
-        //
-        //     std::fs::copy(source, destination).unwrap();
-        //     let args = vec![ctcore::ct_util_name(), destination];
-        //     let result = users_main(args.iter().map(|s| OsString::from(s)));
-        //     assert!(result.is_ok());
-        //
-        //     fs::remove_file(destination).expect("Failed to remove file");
-        // }
     }
     #[cfg(test)]
     mod ct_app_tests {
@@ -302,35 +298,45 @@ mod tests {
         #[test]
         fn test_ct_app_argument_parsing_utmp_file() {
             let source = "/var/run/utmp";
-            let destination = "./utmp_test";
-            // 复制文件
-            std::fs::copy(source, destination).unwrap();
-            let command = ct_app();
+            let source_path = PathBuf::from(source);
+            if source_path.exists() {
+                let destination = "./ct_app_utmp_test";
+                // 复制文件
+                std::fs::copy(source, destination).unwrap();
+                let command = ct_app();
 
-            // 测试正确的文件路径参数解析
-            let args = vec![ctcore::ct_util_name(), destination];
-            let executable = command.try_get_matches_from(args);
-            assert!(executable.is_ok());
+                // 测试正确的文件路径参数解析
+                let args = vec![ctcore::ct_util_name(), destination];
+                let executable = command.try_get_matches_from(args);
+                assert!(executable.is_ok());
 
-            // Clean up: remove the file after the test
-            fs::remove_file(destination).expect("Failed to remove file");
+                // Clean up: remove the file after the test
+                fs::remove_file(destination).expect("Failed to remove file");
+            } else {
+                println!("no exist {}", source);
+            }
         }
 
         #[test]
         fn test_ct_app_argument_parsing_wtmp_file() {
             let source = "/var/log/wtmp";
-            let destination = "./wtmp_test";
-            // 复制文件
-            std::fs::copy(source, destination).unwrap();
-            let command = ct_app();
+            let source_path = PathBuf::from(source);
+            if source_path.exists() {
+                let destination = "./ct_app_wtmp_test";
+                // 复制文件
+                std::fs::copy(source, destination).unwrap();
+                let command = ct_app();
 
-            // 测试正确的文件路径参数解析
-            let args = vec![ctcore::ct_util_name(), destination];
-            let executable = command.try_get_matches_from(args);
-            assert!(executable.is_ok());
+                // 测试正确的文件路径参数解析
+                let args = vec![ctcore::ct_util_name(), destination];
+                let executable = command.try_get_matches_from(args);
+                assert!(executable.is_ok());
 
-            // Clean up: remove the file after the test
-            fs::remove_file(destination).expect("Failed to remove file");
+                // Clean up: remove the file after the test
+                fs::remove_file(destination).expect("Failed to remove file");
+            } else {
+                println!("no exist {}", source);
+            }
         }
 
         #[test]

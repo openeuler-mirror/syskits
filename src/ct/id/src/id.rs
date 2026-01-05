@@ -1088,5 +1088,255 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod id_print_tests {
+        use super::*;
 
+        #[test]
+        fn test_id_print_default_case() {
+            // 默认情况下，只打印 uid、gid 和 groups
+            let ids = Ids {
+                uid: 1000,
+                gid: 1000,
+                euid: 1000,
+                egid: 1000,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![1000, 10, 20];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("uid=1000"));
+            assert!(output_str.contains("gid=1000"));
+            assert!(output_str.contains("groups=1000"));
+        }
+
+        #[test]
+        fn test_id_print_with_name_flag() {
+            // 当 `is_nflag` 为真时，打印用户名和组名而不是数字
+            let ids = Ids {
+                uid: 1000,
+                gid: 1000,
+                euid: 1000,
+                egid: 1000,
+            };
+            let id_state = IdState {
+                is_nflag: true,
+                is_uflag: true,
+                is_gflag: true,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![1000, 10, 20];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("uid=1000"));
+            assert!(output_str.contains("gid=1000"));
+            assert!(output_str.contains("groups=1000"));
+        }
+
+        #[test]
+        fn test_id_print_with_real_id_flag() {
+            // 当 `is_rflag` 为真时，打印实际的 uid 和 gid
+            let ids = Ids {
+                uid: 2000,
+                gid: 2000,
+                euid: 1000,
+                egid: 1000,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: true,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![1000, 10, 20];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("uid=2000"));
+            assert!(output_str.contains("gid=2000"));
+            assert!(output_str.contains("groups=1000"));
+        }
+
+        #[test]
+        fn test_id_print_with_selinux_support() {
+            // 当 `is_selinux_supported` 为真时，打印 SELinux 上下文
+            let ids = Ids {
+                uid: 1000,
+                gid: 1000,
+                euid: 1000,
+                egid: 1000,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: true,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![1000, 10, 20];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("uid=1000"));
+            assert!(output_str.contains("gid=1000"));
+            assert!(output_str.contains("groups=1000"));
+
+            #[cfg(feature = "selinux")]
+            assert!(output_str.contains("context=")); // 假设打印了 SELinux 上下文
+        }
+
+        #[test]
+        fn test_id_print_with_zero_flag() {
+            // 当 `is_zflag` 为真时，使用 NUL 字符分隔
+            let ids = Ids {
+                uid: 1000,
+                gid: 1000,
+                euid: 1000,
+                egid: 1000,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: true,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![1000, 10, 20];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("groups=1000"));
+        }
+
+        #[test]
+        fn test_id_print_user_specified() {
+            // 当 `is_user_specified` 为真时，使用指定用户的 ID 和组
+            let ids = Ids {
+                uid: 2000,
+                gid: 2000,
+                euid: 2000,
+                egid: 2000,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: true,
+                is_gflag: true,
+                is_gsflag: true,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: true,
+                ids: Some(ids),
+            };
+            let groups = vec![2000, 20, 30];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("uid=2000"));
+            assert!(output_str.contains("gid=2000"));
+            assert!(output_str.contains("groups=2000"));
+        }
+
+        #[test]
+        fn test_id_print_with_edge_cases() {
+            // 处理特殊情况下的打印
+            let ids = Ids {
+                uid: 65535,
+                gid: 65535,
+                euid: 65535,
+                egid: 65535,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains("uid=65535"));
+            assert!(output_str.contains("gid=65535"));
+        }
+    }
+
+    #[cfg(test)]
+    mod ct_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::io::Cursor;
+        #[test]
+        fn test_ct_app_execution_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+    }
 }

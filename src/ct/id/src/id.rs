@@ -1565,4 +1565,125 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // id  Usage: id [OPTION]... [USER]...
+        //
+        // Arguments:
+        //   [USER]...
+        //
+        // Options:
+        //   -u, --user     Display only the effective user ID as a number.
+        //   -g, --group    Display only the effective group ID as a number
+        //   -G, --groups   Display only the different group IDs as white-space separated numbers, in no particular order.
+        //   -n, --name     Display the name of the user or group ID for the -G, -g and -u options instead of the number.
+        //                  If any of the ID numbers cannot be mapped into names, the number will be displayed as usual.
+        //   -r, --real     Display the real ID for the -G, -g and -u options instead of the effective ID.
+        //   -z, --zero     delimit entries with NUL characters, not whitespace;
+        //                  not permitted in default format
+        //   -Z, --context  print only the security context of the process (not enabled)
+        //   -h, --help     Print help
+        //   -V, --version  Print version
+        //
+        // The id utility displays the user and group names and numeric IDs, of the
+        // calling process, to the standard output. If the real and effective IDs are
+        // different, both are displayed, otherwise only the real ID is displayed.
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_user() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--user"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+        #[test]
+        fn test_ct_app_short_option_user() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-u"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_group() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--group"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_group() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-g"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+    }
 }

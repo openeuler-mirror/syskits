@@ -87,33 +87,35 @@ fn parse_settings(args: &[&str]) -> Vec<String> {
 }
 
 impl SttyFlags {
-    fn new(matches: &ArgMatches) -> Self {
+    fn new(matches: &ArgMatches) -> CTResult<Self> {
         // 处理特别配置中的键值对逻辑，这里从命令行参数中获取设置项，然后解析这些设置项
         let settings = matches
             .get_many::<String>(stty_flags::STTY_SETTINGS)
             .map(|v| v.map(|s| s.as_str()).collect::<Vec<&str>>())
             .map(|args| parse_settings(&args));
 
-        Self {
+        // 根据命令行参数确定设备类型
+        let file = match matches.get_one::<String>(stty_flags::STTY_FILE) {
+            // 当指定文件时，以非阻塞模式打开文件
+            Some(f) => {
+                let fd = std::fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(O_NONBLOCK)
+                    .open(f)
+                    .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {}", e)))?;
+                Device::File(fd)
+            }
+            None => Device::Stdout(stdout()),
+        };
+
+        Ok(Self {
             // 是否显示所有设置的标志
             is_all: matches.get_flag(stty_flags::STTY_ALL),
             // 是否保存当前设置的标志
             is_save: matches.get_flag(stty_flags::STTY_SAVE),
-            // 根据命令行参数确定设备类型
-            file: match matches.get_one::<String>(stty_flags::STTY_FILE) {
-                // 当指定文件时，以非阻塞模式打开文件
-                Some(f) => {
-                    let fd = std::fs::OpenOptions::new()
-                        .read(true)
-                        .custom_flags(O_NONBLOCK)
-                        .open(f)
-                        .unwrap();
-                    Device::File(fd)
-                }
-                None => Device::Stdout(stdout()),
-            },
+            file,
             settings,
-        }
+        })
     }
 
     /// 检查配置选项是否有效
@@ -175,7 +177,7 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 
 pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app().try_get_matches_from(args)?;
-    let stty_opts = SttyFlags::new(&matches);
+    let stty_opts = SttyFlags::new(&matches)?;
     stty(&stty_opts)
 }
 

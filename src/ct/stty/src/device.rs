@@ -9,13 +9,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::fs::File;
-use std::io::Stdout;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
+#[derive(Debug)]
 pub enum Device {
-    File(File),
-    Stdout(Stdout),
+    Stdout(std::io::Stdout),
+    File(std::fs::File),
 }
 
 impl AsFd for Device {
@@ -35,3 +34,14 @@ impl AsRawFd for Device {
         }
     }
 }
+
+#[allow(dead_code)]
+impl Device {
+    pub fn try_clone(&self) -> std::io::Result<Self> {
+        match self {
+            Device::Stdout(_) => Ok(Device::Stdout(std::io::stdout())),
+            Device::File(file) => Ok(Device::File(file.try_clone()?)),
+        }
+    }
+}
+

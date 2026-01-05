@@ -121,7 +121,7 @@ mod tests {
         use std::ffi::OsString;
 
         #[test]
-        fn test_false_main_version() {
+        fn test_printenv_main_version() {
             let args = vec![ctcore::ct_util_name(), "--version"];
 
             let result = printenv_main(args.iter().map(|s| OsString::from(s)));
@@ -130,7 +130,7 @@ mod tests {
         }
 
         #[test]
-        fn test_false_main_help() {
+        fn test_printenv_main_help() {
             let args = vec![ctcore::ct_util_name(), "--help"];
             let result = printenv_main(args.iter().map(|s| OsString::from(s)));
 
@@ -138,7 +138,7 @@ mod tests {
         }
 
         #[test]
-        fn test_false_main_v() {
+        fn test_printenv_main_v() {
             let args = vec![ctcore::ct_util_name(), "-V"];
 
             let result = printenv_main(args.iter().map(|s| OsString::from(s)));
@@ -147,7 +147,7 @@ mod tests {
         }
 
         #[test]
-        fn test_false_main_h() {
+        fn test_printenv_main_h() {
             let args = vec![ctcore::ct_util_name(), "-h"];
             let result = printenv_main(args.iter().map(|s| OsString::from(s)));
 
@@ -155,7 +155,7 @@ mod tests {
         }
 
         #[test]
-        fn test_false_main() {
+        fn test_printenv_main() {
             let args = vec![ctcore::ct_util_name()];
             let result = printenv_main(args.iter().map(|s| OsString::from(s)));
 

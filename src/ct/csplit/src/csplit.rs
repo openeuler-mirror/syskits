@@ -10,7 +10,6 @@
  *
  */
 #![allow(rustdoc::private_intra_doc_links)]
-#![allow(rustdoc::private_intra_doc_links)]
 
 use std::cmp::Ordering;
 use std::io::{self, BufReader};

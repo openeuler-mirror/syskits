@@ -1,0 +1,25 @@
+[package]
+name = "ct_stty"
+
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "stty ~ (ctutils) print or change terminal characteristics"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/stty"
+
+[lib]
+path = "src/stty.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true }
+nix = { workspace = true, features = ["term", "ioctl"] }
+
+[[bin]]
+name = "stty"
+path = "src/main.rs"

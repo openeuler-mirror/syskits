@@ -1,3 +1,7 @@
+[workspace]
+members = [
+    "src/compat_test",
+]
 # syskits workspace 信息
 [workspace.package] # 共享的package配置项
 version = "2.1.1" 
@@ -154,7 +158,7 @@ feat_os_unix = [
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
 feat_os_windows = [
   "feat_common_core",  
-]
+  ]
 
 # "feat_require_selinux" == 依赖SELinux的实用工具集。
 feat_require_selinux = ["chcon"]
@@ -211,7 +215,7 @@ platform-info = "2.0.2"
 quick-error = "2.0.1"
 rand = { version = "0.8", features = ["small_rng"] }
 rand_core = "0.6"
-rayon = "1.9"
+rayon = "1.8"
 redox_syscall = "0.5"
 regex = "1.10.4"
 rstest = "0.18.2"
@@ -251,6 +255,8 @@ ctcore_procs = { version = ">=0.0.1", package = "ctcore_procs", path = "src/ctco
 ct_base32 = { version = ">=0.0.1", path = "src/ct/base32" }
 
 ct_ls = { version = ">=0.0.1", path = "src/ct/ls" }
+
+compat_test = { path = "src/compat_test" }
 
 [dependencies]
 clap = { workspace = true }

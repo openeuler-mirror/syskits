@@ -1,0 +1,126 @@
+{
+  "tests": [
+    {
+      "command": "pathchk",
+      "description": "测试基本的短文件名",
+      "args": [
+        "-p",
+        "a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "basic",
+        "short-filename"
+      ]
+    },
+    {
+      "command": "pathchk",
+      "description": "测试最大长度文件名（255字符）",
+      "args": [
+        "-p",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "boundary",
+        "max-length"
+      ]
+    },
+    {
+      "command": "pathchk",
+      "description": "测试包含特殊字符的文件名",
+      "args": [
+        "-p",
+        "special#file$name"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: 'special#file$name': 文件名包含非法字符\n"
+        },
+        "use_patterns": true
+      },
+      "timeout": 5,
+      "tags": [
+        "special-chars",
+        "error-handling"
+      ]
+    },
+    {
+      "command": "pathchk",
+      "description": "测试空文件名",
+      "args": [
+        "-p",
+        ""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: '': 文件名为空\n"
+        },
+        "use_patterns": true
+      },
+      "timeout": 5,
+      "tags": [
+        "empty-filename",
+        "error-handling"
+      ]
+    },
+    {
+      "command": "pathchk",
+      "description": "测试深层嵌套路径",
+      "args": [
+        "-p",
+        "deep/nested/path/valid_filename"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "deep-path",
+        "directory-structure"
+      ]
+    },
+    {
+      "command": "pathchk",
+      "description": "测试不存在的路径",
+      "args": [
+        "-p",
+        "non_existent_directory/file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "non-existent",
+        "validation"
+      ]
+    }
+  ]
+}

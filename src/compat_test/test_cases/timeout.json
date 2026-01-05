@@ -1,0 +1,119 @@
+{
+  "tests": [
+    {
+      "command": "timeout",
+      "description": "使用 SIGKILL 信号终止长时间运行的进程",
+      "args": [
+        "--signal",
+        "SIGKILL",
+        "3s",
+        "sleep",
+        "10"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 137,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "signal",
+        "kill"
+      ]
+    },
+    {
+      "command": "timeout",
+      "description": "使用 -k 选项在发送 SIGTERM 后延迟发送 SIGKILL",
+      "args": [
+        "-k",
+        "2s",
+        "5s",
+        "sleep",
+        "10"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 143,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "signal",
+        "kill",
+        "term"
+      ]
+    },
+    {
+      "command": "timeout",
+      "description": "使用 --preserve-status 选项保留被终止进程的退出状态",
+      "args": [
+        "--preserve-status",
+        "1s",
+        "false"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "preserve-status"
+      ]
+    },
+    {
+      "command": "timeout",
+      "description": "使用 --foreground 选项在前台运行命令",
+      "args": [
+        "--foreground",
+        "5s",
+        "bash",
+        "-c",
+        "while true; do echo hello; sleep 1; done"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 124,
+          "stdout": "hello\nhello\nhello\nhello\nhello\n",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
+        }
+      },
+      "tags": [
+        "foreground",
+        "output"
+      ]
+    },
+    {
+      "command": "timeout",
+      "description": "测试超时命令，忽略stdout输出比较",
+      "args": [
+        "--foreground",
+        "2s",
+        "bash",
+        "-c",
+        "while true; do echo test; sleep 1; done"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 124,
+          "stdout": "",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
+        }
+      },
+      "tags": [
+        "foreground",
+        "output",
+        "ignore_stdout"
+      ]
+    }
+  ]
+}

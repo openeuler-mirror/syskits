@@ -1,0 +1,52 @@
+# Syskits 兼容性测试框架配置文件
+
+[syskits]
+# syskits 二进制文件路径（单一二进制模式下）或命令目录（多命令模式下）
+syskits_path = "target/debug/syskits"
+# GNU coreutils 二进制文件路径（可选）
+coreutils_path = "/usr/bin"
+# syskits 执行模式: "single" 或 "multiple"
+mode = "single"
+# 多命令模式下的命令目录（可选，默认使用 syskits_path 的父目录）
+commands_dir = "target/debug"
+
+[test]
+# 测试用例目录
+test_cases_dir = "src/compat_test/test_cases"
+# 默认测试的命令列表
+default_commands = [
+    "chmod"     # chmod 命令测试
+]
+
+# 测试环境配置
+[test.env]
+# 是否在测试失败时显示详细差异
+show_diff = true
+# 测试超时时间（秒）
+default_timeout = 180
+# 是否在测试后清理临时文件
+cleanup = true
+# 是否显示测试进度
+show_progress = true
+# 报告格式：text, json, html
+report_format = "text"
+# 报告输出目录
+report_dir = "test_reports"
+# 是否显示详细输出
+verbose = true
+# 详细输出配置
+[test.env.detail]
+# 是否显示命令执行的完整命令行
+show_command = true
+# 是否显示测试用例的描述
+show_description = true
+# 是否显示环境变量设置
+show_env_vars = true
+# 是否显示资源限制设置
+show_resource_limits = true
+# 是否显示文件变更
+show_file_changes = true
+# 是否显示标准输出和标准错误的完整内容
+show_full_output = true
+# 是否显示测试用例的标签
+show_tags = true 

@@ -1,0 +1,43 @@
+{
+  "tests": [
+    {
+      "command": "chmod",
+      "description": "测试文件权限修改",
+      "setup_commands": [
+        "mkdir -p test_dir",
+        "cd test_dir",
+        "touch test_file",
+        "chmod 644 test_file",
+        "export TEST_VAR=test_value"
+      ],
+      "args": ["755", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "ls -l test_file",
+            "expected_exit": 0,
+            "expected_stdout": "-rwxr-xr-x"
+          },
+          {
+            "command": "test -x test_file",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo $TEST_VAR",
+            "expected_exit": 0,
+            "expected_stdout": "test_value\n"
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd ..",
+        "rm -rf test_dir"
+      ]
+    }
+  ]
+} 

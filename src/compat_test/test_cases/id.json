@@ -1,0 +1,666 @@
+{
+    "tests": [
+        {
+            "command": "id",
+            "description": "测试id命令默认输出",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"uid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"gid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"groups=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令有效用户ID选项（短选项）",
+            "args": ["-u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -v \"uid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令有效用户ID选项（长选项）",
+            "args": ["--user"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -v \"uid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "test \"$CMD_STDOUT\" = \"$(id -u)\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令有效组ID选项（短选项）",
+            "args": ["-g"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -v \"gid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令有效组ID选项（长选项）",
+            "args": ["--group"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -v \"gid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "test \"$CMD_STDOUT\" = \"$(id -g)\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令所有组ID选项（短选项）",
+            "args": ["-G"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -v \"groups=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+(\\s+[0-9]+)*$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令所有组ID选项（长选项）",
+            "args": ["--groups"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -v \"groups=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+(\\s+[0-9]+)*$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "test \"$CMD_STDOUT\" = \"$(id -G)\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令名称输出选项（用户ID）",
+            "args": ["-n", "-u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[a-zA-Z0-9_-]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令名称输出选项（组ID）",
+            "args": ["-n", "-g"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[a-zA-Z0-9_-]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令名称输出选项（所有组）",
+            "args": ["-n", "-G"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[a-zA-Z0-9_-]+(\\s+[a-zA-Z0-9_-]+)*$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令真实ID选项（用户ID）",
+            "args": ["-r", "-u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令真实ID选项（组ID）",
+            "args": ["-r", "-g"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[0-9]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令安全上下文选项",
+            "args": ["-Z"],
+            "expectation": {
+                "execution": {
+                    "exit_code": null,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令零分隔符选项（用户ID）",
+            "args": ["-z", "-u"],
+            "setup_commands": [
+                "mkdir -p /tmp/id_test"
+            ],
+            "cleanup_commands": [
+                "rm -rf /tmp/id_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令零分隔符选项（组ID）",
+            "args": ["-z", "-g"],
+            "setup_commands": [
+                "mkdir -p /tmp/id_test"
+            ],
+            "cleanup_commands": [
+                "rm -rf /tmp/id_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令零分隔符选项（所有组）",
+            "args": ["-z", "-G"],
+            "setup_commands": [
+                "mkdir -p /tmp/id_test"
+            ],
+            "cleanup_commands": [
+                "rm -rf /tmp/id_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令帮助信息",
+            "args": ["--help"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"Usage:\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -- \"--user\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -- \"--group\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -- \"--groups\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令版本信息",
+            "args": ["--version"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"id\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令无效用户",
+            "args": ["invalid_user"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q \"invalid_user\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令组合选项 -u -g",
+            "args": ["-u", "-g"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q \"conflict\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令指定有效用户root",
+            "args": ["root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"uid=0(root)\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令指定有效用户并获取用户ID",
+            "args": ["-u", "root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令指定有效用户并获取组ID",
+            "args": ["-g", "root"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令指定nobody用户",
+            "args": ["nobody"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"nobody\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令指定多个用户（不支持）",
+            "args": ["root", "nobody"],
+            "expectation": {
+                "execution": {
+                    "exit_code": null,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令在POSIXLY_CORRECT环境下的行为",
+            "args": [],
+            "setup_commands": [
+                "export POSIXLY_CORRECT=1"
+            ],
+            "cleanup_commands": [
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"uid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"gid=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q \"groups=\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令无效选项",
+            "args": ["--invalid-option"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q \"invalid\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令名称和真实ID组合（用户ID）",
+            "args": ["-r", "-n", "-u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[a-zA-Z0-9_-]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令名称和真实ID组合（组ID）",
+            "args": ["-r", "-n", "-g"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E -q \"^[a-zA-Z0-9_-]+$\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            }
+        },
+        {
+            "command": "id",
+            "description": "测试id命令零分隔符与名称组合",
+            "args": ["-z", "-n", "-u"],
+            "setup_commands": [
+                "mkdir -p /tmp/id_test"
+            ],
+            "cleanup_commands": [
+                "rm -rf /tmp/id_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                }
+            }
+        }
+    ]
+} 

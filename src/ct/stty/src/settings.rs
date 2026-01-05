@@ -912,4 +912,33 @@ mod tests {
         let result = min_setting.setting.apply(&mut termios, Some("1"), &device);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_special_setting_time() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let device = Device::Stdout(stdout());
+        let time_setting = SPECIAL_SETTINGS
+            .iter()
+            .find(|s| s.name == "time")
+            .expect("time setting should exist");
+
+        assert!(time_setting.requires_value);
+        let result = time_setting.setting.apply(&mut termios, Some("1"), &device);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_special_setting_invalid_value() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let device = Device::Stdout(stdout());
+        let min_setting = SPECIAL_SETTINGS
+            .iter()
+            .find(|s| s.name == "min")
+            .expect("min setting should exist");
+
+        let result = min_setting
+            .setting
+            .apply(&mut termios, Some("invalid"), &device);
+        assert!(result.is_err());
+    }
 }

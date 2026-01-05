@@ -895,10 +895,10 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let unset_filename = test_file_1.to_str().unwrap();
 
-            let content = "UNSET_VAR1=hello\n\
-           UNSET_VAR2=CtyunOS\n\
-           UNSET_VAR3=Rust\n\
-           UNSET_VAR4=Syskit\n";
+            let content = "Y_UNSET_VAR1=hello\n\
+           Y_UNSET_VAR2=CtyunOS\n\
+           Y_UNSET_VAR3=Rust\n\
+           Y_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
             let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
@@ -906,7 +906,7 @@ mod tests {
             let result = env_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("Y_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -915,7 +915,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("Y_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -924,7 +924,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("Y_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -933,7 +933,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("Y_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -954,7 +954,7 @@ mod tests {
             let result = env_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("Y_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -963,7 +963,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("Y_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -972,7 +972,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("Y_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -981,7 +981,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("Y_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -1004,10 +1004,10 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let unset_filename = test_file_1.to_str().unwrap();
 
-            let content = "UNSET_VAR1=hello\n\
-           UNSET_VAR2=CtyunOS\n\
-           UNSET_VAR3=Rust\n\
-           UNSET_VAR4=Syskit\n";
+            let content = "Q_UNSET_VAR1=hello\n\
+           Q_UNSET_VAR2=CtyunOS\n\
+           Q_UNSET_VAR3=Rust\n\
+           Q_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
             let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
@@ -1015,7 +1015,7 @@ mod tests {
             let result = env_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("Q_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -1024,7 +1024,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("Q_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -1033,7 +1033,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("Q_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -1042,7 +1042,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("Q_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -1063,7 +1063,7 @@ mod tests {
             let result = env_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("Q_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -1072,7 +1072,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("Q_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -1081,7 +1081,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("Q_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -1090,7 +1090,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("Q_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -1525,10 +1525,10 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let unset_filename = test_file_1.to_str().unwrap();
 
-            let content = "UNSET_VAR1=hello\n\
-           UNSET_VAR2=CtyunOS\n\
-           UNSET_VAR3=Rust\n\
-           UNSET_VAR4=Syskit\n";
+            let content = "QQ_UNSET_VAR1=hello\n\
+           QQ_UNSET_VAR2=CtyunOS\n\
+           QQ_UNSET_VAR3=Rust\n\
+           QQ_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
             let cmd = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
@@ -1540,7 +1540,7 @@ mod tests {
             let result = env_app_data.run_env(args);
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("QQ_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -1549,7 +1549,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("QQ_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -1558,7 +1558,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("QQ_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -1567,7 +1567,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("QQ_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -1592,7 +1592,7 @@ mod tests {
             let result = env_app_data.run_env(args);
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("QQ_UNSET_VAR1") {
                 Ok(val) => {
                     assert_ne!(val, "hello");
                 }
@@ -1601,7 +1601,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("QQ_UNSET_VAR2") {
                 Ok(val) => {
                     assert_ne!(val, "CtyunOS");
                 }
@@ -1610,7 +1610,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("QQ_UNSET_VAR3") {
                 Ok(val) => {
                     assert_ne!(val, "Rust");
                 }
@@ -1619,7 +1619,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("QQ_UNSET_VAR4") {
                 Ok(val) => {
                     assert_ne!(val, "Syskit");
                 }
@@ -1642,10 +1642,10 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let unset_filename = test_file_1.to_str().unwrap();
 
-            let content = "UNSET_VAR1=hello\n\
-           UNSET_VAR2=CtyunOS\n\
-           UNSET_VAR3=Rust\n\
-           UNSET_VAR4=Syskit\n";
+            let content = "YY_UNSET_VAR1=hello\n\
+           YY_UNSET_VAR2=CtyunOS\n\
+           YY_UNSET_VAR3=Rust\n\
+           YY_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
             let cmd = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
@@ -1657,7 +1657,7 @@ mod tests {
             let result = env_app_data.run_env(args);
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("YY_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -1666,7 +1666,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("YY_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -1675,7 +1675,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("YY_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -1684,7 +1684,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("YY_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -1709,7 +1709,7 @@ mod tests {
             let result = env_app_data.run_env(args);
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("YY_UNSET_VAR1") {
                 Ok(val) => {
                     assert_ne!(val, "hello");
                 }
@@ -1718,7 +1718,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("YY_UNSET_VAR2") {
                 Ok(val) => {
                     assert_ne!(val, "CtyunOS");
                 }
@@ -1727,7 +1727,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("YY_UNSET_VAR3") {
                 Ok(val) => {
                     assert_ne!(val, "Rust");
                 }
@@ -1736,7 +1736,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("YY_UNSET_VAR4") {
                 Ok(val) => {
                     assert_ne!(val, "Syskit");
                 }
@@ -7615,10 +7615,10 @@ mod tests {
             let mut file = File::create(&test_file_1).unwrap();
             let unset_filename = test_file_1.to_str().unwrap();
 
-            let content = "UNSET_VAR1=hello\n\
-           UNSET_VAR2=CtyunOS\n\
-           UNSET_VAR3=Rust\n\
-           UNSET_VAR4=Syskit\n";
+            let content = "QQQ_UNSET_VAR1=hello\n\
+           QQQ_UNSET_VAR2=CtyunOS\n\
+           QQQ_UNSET_VAR3=Rust\n\
+           QQQ_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
             let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
@@ -7626,7 +7626,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("QQQ_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -7635,7 +7635,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("QQQ_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -7644,7 +7644,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("QQQ_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -7653,7 +7653,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("QQQ_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }
@@ -7674,7 +7674,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
 
-            match env::var("UNSET_VAR1") {
+            match env::var("QQQ_UNSET_VAR1") {
                 Ok(val) => {
                     assert_eq!(val, "hello");
                 }
@@ -7683,7 +7683,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR2") {
+            match env::var("QQQ_UNSET_VAR2") {
                 Ok(val) => {
                     assert_eq!(val, "CtyunOS");
                 }
@@ -7692,7 +7692,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR3") {
+            match env::var("QQQ_UNSET_VAR3") {
                 Ok(val) => {
                     assert_eq!(val, "Rust");
                 }
@@ -7701,7 +7701,7 @@ mod tests {
                 }
             }
 
-            match env::var("UNSET_VAR4") {
+            match env::var("QQQ_UNSET_VAR4") {
                 Ok(val) => {
                     assert_eq!(val, "Syskit");
                 }

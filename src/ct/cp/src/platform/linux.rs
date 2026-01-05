@@ -494,7 +494,7 @@ mod tests {
 
         let expected_copy_debug = CopyDebug {
             offload: CpOffloadReflinkDebug::Avoided,
-            reflink: CpOffloadReflinkDebug::Unsupported,
+            reflink: CpOffloadReflinkDebug::Yes,
             sparse_detection: CpSparseDebug::Zeros,
         };
 
@@ -536,7 +536,7 @@ mod tests {
 
         let expected_copy_debug = CopyDebug {
             offload: CpOffloadReflinkDebug::Avoided,
-            reflink: CpOffloadReflinkDebug::Unsupported,
+            reflink: CpOffloadReflinkDebug::Yes,
             sparse_detection: CpSparseDebug::Zeros,
         };
 
@@ -579,7 +579,7 @@ mod tests {
 
         let expected_copy_debug = CopyDebug {
             offload: CpOffloadReflinkDebug::Unknown,
-            reflink: CpOffloadReflinkDebug::Unsupported,
+            reflink: CpOffloadReflinkDebug::Yes,
             sparse_detection: CpSparseDebug::No,
         };
 

@@ -139,3 +139,75 @@ pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn obsolete(src: &str) -> Option<Result<Vec<String>, ParseError>> {
+        let r = parse_obsolete(src);
+        match r {
+            Some(s) => match s {
+                Ok(v) => Some(Ok(v.map(|s| s.to_str().unwrap().to_owned()).collect())),
+                Err(e) => Some(Err(e)),
+            },
+            None => None,
+        }
+    }
+
+    fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
+        Some(Ok(src.iter().map(|s| s.to_string()).collect()))
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_parse_numbers_obsolete() {
+        assert_eq!(obsolete("-5"), obsolete_result(&["-n", "5"]));
+        assert_eq!(obsolete("-100"), obsolete_result(&["-n", "100"]));
+        assert_eq!(obsolete("-5m"), obsolete_result(&["-c", "5242880"]));
+        assert_eq!(obsolete("-1k"), obsolete_result(&["-c", "1024"]));
+        assert_eq!(obsolete("-2b"), obsolete_result(&["-c", "1024"]));
+        assert_eq!(obsolete("-1mmk"), obsolete_result(&["-c", "1024"]));
+        assert_eq!(obsolete("-1vz"), obsolete_result(&["-v", "-z", "-n", "1"]));
+        assert_eq!(
+            obsolete("-1vzqvq"), // spell-checker:disable-line
+            obsolete_result(&["-q", "-z", "-n", "1"])
+        );
+        assert_eq!(obsolete("-1vzc"), obsolete_result(&["-v", "-z", "-c", "1"]));
+        assert_eq!(
+            obsolete("-105kzm"),
+            obsolete_result(&["-z", "-c", "110100480"])
+        );
+    }
+
+    #[test]
+    fn test_parse_errors_obsolete() {
+        assert_eq!(obsolete("-5n"), Some(Err(ParseError::Syntax)));
+        assert_eq!(obsolete("-5c5"), Some(Err(ParseError::Syntax)));
+    }
+
+    #[test]
+    fn test_parse_obsolete_no_match() {
+        assert_eq!(obsolete("-k"), None);
+        assert_eq!(obsolete("asd"), None);
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_parse_obsolete_overflow_x64() {
+        assert_eq!(
+            obsolete("-1000000000000000m"),
+            Some(Err(ParseError::Overflow))
+        );
+        assert_eq!(
+            obsolete("-10000000000000000000000"),
+            Some(Err(ParseError::Overflow))
+        );
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "32")]
+    fn test_parse_obsolete_overflow_x32() {
+        assert_eq!(obsolete("-42949672960"), Some(Err(ParseError::Overflow)));
+        assert_eq!(obsolete("-42949672k"), Some(Err(ParseError::Overflow)));
+    }
+}

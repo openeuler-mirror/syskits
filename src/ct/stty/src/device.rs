@@ -45,3 +45,100 @@ impl Device {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::OpenOptions;
+    use std::io::stdout;
+    use std::os::unix::io::AsRawFd;
+
+    #[test]
+    fn test_device_stdout() {
+        let device = Device::Stdout(stdout());
+        assert!(device.as_fd().as_raw_fd() > 0);
+    }
+
+    #[test]
+    fn test_device_file() {
+        // 创建一个临时文件用于测试
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/test_stty")
+            .unwrap();
+        let device = Device::File(file);
+        assert!(device.as_fd().as_raw_fd() > 0);
+    }
+
+    #[test]
+    fn test_device_as_raw_fd() {
+        let stdout_device = Device::Stdout(stdout());
+        let stdout_fd = stdout_device.as_raw_fd();
+        assert!(stdout_fd > 0);
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/test_stty")
+            .unwrap();
+        let file_fd = file.as_raw_fd();
+        let file_device = Device::File(file);
+        assert_eq!(file_device.as_raw_fd(), file_fd);
+    }
+
+    #[test]
+    fn test_device_as_fd() {
+        let stdout_device = Device::Stdout(stdout());
+        let stdout_fd = stdout_device.as_fd().as_raw_fd();
+        assert!(stdout_fd > 0);
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/test_stty")
+            .unwrap();
+        let file_fd = file.as_raw_fd();
+        let file_device = Device::File(file);
+        assert_eq!(file_device.as_fd().as_raw_fd(), file_fd);
+    }
+
+    #[test]
+    fn test_device_clone_stdout() {
+        let device = Device::Stdout(stdout());
+        let cloned = device.try_clone().unwrap();
+        assert!(matches!(cloned, Device::Stdout(_)));
+    }
+
+    #[test]
+    fn test_device_clone_file() {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/test_stty")
+            .unwrap();
+        let device = Device::File(file);
+        let cloned = device.try_clone().unwrap();
+        assert!(matches!(cloned, Device::File(_)));
+    }
+
+    #[test]
+    fn test_device_debug() {
+        let stdout_device = Device::Stdout(stdout());
+        let debug_str = format!("{:?}", stdout_device);
+        assert!(debug_str.contains("Stdout"));
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/test_stty")
+            .unwrap();
+        let file_device = Device::File(file);
+        let debug_str = format!("{:?}", file_device);
+        assert!(debug_str.contains("File"));
+    }
+}

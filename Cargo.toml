@@ -134,6 +134,7 @@ feat_common_core = [
   "rm",
   "head",
   "id",
+  "fold",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -348,6 +349,7 @@ hostid = { optional = true, package = "ct_hostid", path = "src/ct/hostid" }
 rm = { optional = true, package = "ct_rm", path = "src/ct/rm" }
 head = { optional = true, package = "ct_head", path = "src/ct/head" }
 id = { optional = true, package = "ct_id", path = "src/ct/id"}
+fold = { optional = true, package = "ct_fold", path = "src/ct/fold" }
 
 [dev-dependencies]
 chrono = { workspace = true }

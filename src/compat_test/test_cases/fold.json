@@ -1,0 +1,256 @@
+{
+    "tests": [
+        {
+            "command": "fold",
+            "description": "测试默认宽度处理",
+            "args": [
+                "input.txt"
+            ],
+            "setup_commands": [
+                "echo 'This is a test file for fold command. It contains spaces and long lines to test wrapping.' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < input.txt) -le 80",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试指定宽度20列",
+            "args": [
+                "-w",
+                "20",
+                "input.txt"
+            ],
+            "setup_commands": [
+                "echo 'This is a test file for fold command. It contains spaces and long lines to test wrapping.' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < input.txt) -le 20",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试空格处换行",
+            "args": [
+                "-s",
+                "-w",
+                "15",
+                "input.txt"
+            ],
+            "setup_commands": [
+                "echo 'This is a very long line that should be split at spaces.' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < input.txt) -le 15",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "grep -q '[^ ]$' input.txt",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试按字节换行",
+            "args": [
+                "-b",
+                "-w",
+                "10",
+                "input.txt"
+            ],
+            "setup_commands": [
+                "echo 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < input.txt) -le 10",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试标准输入处理",
+            "args": [
+                "-w",
+                "30"
+            ],
+            "setup_commands": [
+                "echo 'This_is_a_long_input_line_from_stdin_with_no_spaces' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "stdin": "This_is_a_long_input_line_from_stdin_with_no_spaces",
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < input.txt) -le 30",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试混合选项(-b -s)",
+            "args": [
+                "-b",
+                "-s",
+                "-w",
+                "15",
+                "input.txt"
+            ],
+            "setup_commands": [
+                "echo 'This is a test with both byte-counting and space-breaking options.' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < input.txt) -le 15",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试多个文件输入",
+            "args": [
+                "-w",
+                "25",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo 'This is the first test file.' > file1.txt",
+                "echo 'This is the second test file with longer content.' > file2.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test $(wc -L < file1.txt) -le 25",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test $(wc -L < file2.txt) -le 25",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试无效选项处理",
+            "args": [
+                "-x",
+                "input.txt"
+            ],
+            "setup_commands": [
+                "echo 'Test file content' > input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试文件不存在",
+            "args": [
+                "-w",
+                "20",
+                "nonexistent_file.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stderr": "nonexistent_file.txt"
+                }
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试帮助信息",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "fold",
+            "description": "测试版本信息",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        }
+    ]
+}

@@ -1181,4 +1181,108 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod emit_output_tests {
+        /*
+        通用测试用例：
+            验证 output 是否正确更新，移除了已写入的部分。
+            验证 col_count 是否正确更新为 output 中剩余字符的数量。
+            验证 last_space 是否被重置为 None。
+        边界情况：
+            output 为空字符串。
+            last_space 的值大于 output 的长度。
+            output 只有一个字符
+        */
+        use super::*;
+        use std::io::Cursor;
+        #[test]
+        fn test_emit_output_last_space_is_some_writes_up_to_last_space() {
+            let mut writer = Cursor::new(Vec::new());
+            let mut output = String::from("Hello World");
+            let mut last_space = Some(5);
+            let mut col_count = 0;
+
+            emit_output(&mut writer, &mut output, &mut last_space, &mut col_count).unwrap();
+
+            assert_eq!(writer.into_inner(), b"Hello \n");
+            assert_eq!(output, "World");
+            assert_eq!(col_count, 5);
+            assert_eq!(last_space, None);
+        }
+
+        #[test]
+        fn test_emit_output_last_space_is_none_writes_whole_output() {
+            let mut writer = Cursor::new(Vec::new());
+            let mut output = String::from("Hello World");
+            let mut last_space = None;
+            let mut col_count = 0;
+
+            emit_output(&mut writer, &mut output, &mut last_space, &mut col_count).unwrap();
+
+            assert_eq!(writer.into_inner(), b"Hello World\n");
+            assert_eq!(output, "");
+            assert_eq!(col_count, 0);
+            assert_eq!(last_space, None);
+        }
+
+        #[test]
+        fn test_emit_output_output_is_empty() {
+            let mut writer = Cursor::new(Vec::new());
+            let mut output = String::from("");
+            let mut last_space = Some(5);
+            let mut col_count = 0;
+
+            emit_output(&mut writer, &mut output, &mut last_space, &mut col_count).unwrap();
+            assert_eq!(writer.into_inner(), b"\n");
+            assert_eq!(output, "");
+            assert_eq!(col_count, 0);
+            assert_eq!(last_space, None);
+        }
+
+        #[test]
+        fn test_emit_output_last_space_exceeds_output_length() {
+            let mut writer = Cursor::new(Vec::new());
+            let mut output = String::from("Hello");
+            let mut last_space = Some(10);
+            let mut col_count = 0;
+
+            emit_output(&mut writer, &mut output, &mut last_space, &mut col_count).unwrap();
+
+            assert_eq!(writer.into_inner(), b"Hello\n");
+            assert_eq!(output, "");
+            assert_eq!(col_count, 0);
+            assert_eq!(last_space, None);
+        }
+
+        #[test]
+        fn test_emit_output_output_has_one_character() {
+            let mut writer = Cursor::new(Vec::new());
+            let mut output = String::from("A");
+            let mut last_space = Some(0);
+            let mut col_count = 0;
+
+            emit_output(&mut writer, &mut output, &mut last_space, &mut col_count).unwrap();
+
+            assert_eq!(writer.into_inner(), b"A\n");
+            assert_eq!(output, "");
+            assert_eq!(col_count, 0);
+            assert_eq!(last_space, None);
+        }
+
+        #[test]
+        fn test_emit_output_last_space_is_zero() {
+            let mut writer = Cursor::new(Vec::new());
+            let mut output = String::from("Hello World");
+            let mut last_space = Some(0);
+            let mut col_count = 0;
+
+            emit_output(&mut writer, &mut output, &mut last_space, &mut col_count).unwrap();
+
+            assert_eq!(writer.into_inner(), b"H\n");
+            assert_eq!(output, "ello World");
+            assert_eq!(col_count, 10);
+            assert_eq!(last_space, None);
+        }
+    }
 }

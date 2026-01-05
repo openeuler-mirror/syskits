@@ -528,4 +528,96 @@ mod tests {
             assert_eq!(flags.files.len(), 3);
         }
     }
+
+    mod realpath_prepare_relative_options_tests {
+        use super::*;
+
+        fn setup_test_dir() -> (tempfile::TempDir, PathBuf) {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let test_dir = temp_dir.path().join("test_dir");
+            std::fs::create_dir(&test_dir).unwrap();
+            (temp_dir, test_dir)
+        }
+
+        #[test]
+        fn test_prepare_relative_options_none() {
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &None,
+                &None,
+                MissingHandling::Normal,
+                ResolveMode::Physical,
+            )
+            .unwrap();
+            assert_eq!(result, (None, None));
+        }
+
+        #[test]
+        fn test_prepare_relative_options_with_existing_dir() {
+            let (_temp_dir, test_dir) = setup_test_dir();
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &Some(test_dir.clone()),
+                &None,
+                MissingHandling::Existing,
+                ResolveMode::Physical,
+            )
+            .unwrap();
+            assert!(result.0.is_some());
+        }
+
+        #[test]
+        fn test_prepare_relative_options_with_missing_dir() {
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &Some(PathBuf::from("/nonexistent")),
+                &None,
+                MissingHandling::Missing,
+                ResolveMode::Physical,
+            )
+            .unwrap();
+            assert!(result.0.is_some());
+        }
+
+        #[test]
+        fn test_prepare_relative_options_with_invalid_dir() {
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &Some(PathBuf::from("/nonexistent")),
+                &None,
+                MissingHandling::Existing,
+                ResolveMode::Physical,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_prepare_relative_options_with_both_dirs() {
+            let (_temp_dir, test_dir) = setup_test_dir();
+            let sub_dir = test_dir.join("subdir");
+            std::fs::create_dir(&sub_dir).unwrap();
+
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &Some(sub_dir.clone()),
+                &Some(test_dir.clone()),
+                MissingHandling::Existing,
+                ResolveMode::Physical,
+            )
+            .unwrap();
+            assert!(result.0.is_some());
+            assert!(result.1.is_some());
+        }
+
+        #[test]
+        fn test_prepare_relative_options_with_non_subpath() {
+            let (_temp_dir1, dir1) = setup_test_dir();
+            let (_temp_dir2, dir2) = setup_test_dir();
+
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &Some(dir1),
+                &Some(dir2),
+                MissingHandling::Existing,
+                ResolveMode::Physical,
+            )
+            .unwrap();
+            assert_eq!(result, (None, None));
+        }
+    }
+
 }

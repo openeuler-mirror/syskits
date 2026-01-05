@@ -997,5 +997,142 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.is_empty()); // No output expected for successful signal sending
         }
+
+        #[test]
+        fn kill_main_with_multiple_pids() {
+            let args = vec![ctcore::ct_util_name(), "-s", "TERM", "1234", "5678"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.is_empty()); // No output expected for successful signal sending
+        }
+
+        #[test]
+        fn kill_main_with_invalid_pid() {
+            let args = vec![ctcore::ct_util_name(), "-s", "TERM", "invalid_pid"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("failed to parse argument 'invalid_pid'")
+            );
+        }
+
+        #[test]
+        fn kill_main_with_default_signal() {
+            let args = vec![ctcore::ct_util_name(), "1234"];
+
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.is_empty()); // No output expected for successful signal sending
+        }
+
+        #[test]
+        fn kill_main_with_help_flag() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err()); // Expecting error due to help flag
+        }
+    }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use super::*;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_l_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-l"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(kill_flags::LIST));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_l_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--list"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(kill_flags::LIST));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_t_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-t"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(kill_flags::TABLE));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_t_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--table"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(kill_flags::TABLE));
+        }
     }
 }

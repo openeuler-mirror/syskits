@@ -1125,3 +1125,138 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_other {
+    use std::ffi::OsString;
+    use std::io::Cursor;
+
+    use super::*;
+
+    fn options(args: &str) -> Result<HeadOptions, String> {
+        let combined = "head ".to_owned() + args;
+        let args = combined.split_whitespace().map(OsString::from);
+        let matches = ct_app()
+            .get_matches_from(arg_iterate(args).map_err(|_| String::from("Arg iterate failed"))?);
+        HeadOptions::get_from(&matches)
+    }
+
+    #[test]
+    fn test_args_modes() {
+        let args = options("-n -10M -vz").unwrap();
+        assert_eq!(args.line_ending, CtLineEnding::Nul);
+        assert!(args.verbose);
+        assert_eq!(args.mode, Mode::AllButLastLines(10 * 1024 * 1024));
+    }
+
+    #[test]
+    fn test_gnu_compatibility() {
+        let args = options("-n 1 -c 1 -n 5 -c kiB -vqvqv").unwrap(); // spell-checker:disable-line
+        assert!(args.mode == Mode::FirstBytes(1024));
+        assert!(args.verbose);
+        assert_eq!(options("-5").unwrap().mode, Mode::FirstLines(5));
+        assert_eq!(options("-2b").unwrap().mode, Mode::FirstBytes(1024));
+        assert_eq!(options("-5 -c 1").unwrap().mode, Mode::FirstBytes(1));
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn all_args_test() {
+        assert!(options("--silent").unwrap().quiet);
+        assert!(options("--quiet").unwrap().quiet);
+        assert!(options("-q").unwrap().quiet);
+        assert!(options("--verbose").unwrap().verbose);
+        assert!(options("-v").unwrap().verbose);
+        assert_eq!(
+            options("--zero-terminated").unwrap().line_ending,
+            CtLineEnding::Nul
+        );
+        assert_eq!(options("-z").unwrap().line_ending, CtLineEnding::Nul);
+        assert_eq!(options("--lines 15").unwrap().mode, Mode::FirstLines(15));
+        assert_eq!(options("-n 15").unwrap().mode, Mode::FirstLines(15));
+        assert_eq!(options("--bytes 15").unwrap().mode, Mode::FirstBytes(15));
+        assert_eq!(options("-c 15").unwrap().mode, Mode::FirstBytes(15));
+    }
+
+    #[test]
+    fn test_options_errors() {
+        assert!(options("-n IsThisTheRealLife?").is_err());
+        assert!(options("-c IsThisJustFantasy").is_err());
+    }
+
+    #[test]
+    fn test_options_correct_defaults() {
+        let opts = HeadOptions::default();
+
+        assert!(!opts.verbose);
+        assert!(!opts.quiet);
+        assert_eq!(opts.line_ending, CtLineEnding::Newline);
+        assert_eq!(opts.mode, Mode::FirstLines(10));
+        assert!(opts.files.is_empty());
+    }
+
+    fn arg_outputs(src: &str) -> Result<String, ()> {
+        let split = src.split_whitespace().map(OsString::from);
+        match arg_iterate(split) {
+            Ok(args) => {
+                let vec = args
+                    .map(|s| s.to_str().unwrap().to_owned())
+                    .collect::<Vec<_>>();
+                Ok(vec.join(" "))
+            }
+            Err(_) => Err(()),
+        }
+    }
+
+    #[test]
+    fn test_arg_iterate() {
+        // test that normal args remain unchanged
+        assert_eq!(
+            arg_outputs("head -n -5 -zv"),
+            Ok("head -n -5 -zv".to_owned())
+        );
+        // tests that nonsensical args are unchanged
+        assert_eq!(
+            arg_outputs("head -to_be_or_not_to_be,..."),
+            Ok("head -to_be_or_not_to_be,...".to_owned())
+        );
+        //test that the obsolete syntax is unrolled
+        assert_eq!(
+            arg_outputs("head -123qvqvqzc"), // spell-checker:disable-line
+            Ok("head -q -z -c 123".to_owned())
+        );
+        //test that bad obsoletes are an error
+        assert!(arg_outputs("head -123FooBar").is_err());
+        //test overflow
+        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_err());
+        //test that empty args remain unchanged
+        assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_arg_iterate_bad_encoding() {
+        use std::os::unix::ffi::OsStringExt;
+        let invalid = OsString::from_vec(vec![b'\x80', b'\x81']);
+        // this arises from a conversion from OsString to &str
+        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_err());
+    }
+
+    #[test]
+    fn read_early_exit() {
+        let mut empty = std::io::BufReader::new(std::io::Cursor::new(Vec::new()));
+        assert!(read_n_bytes(&mut empty, 0, None).is_ok());
+        assert!(read_n_lines(&mut empty, 0, b'\n', None).is_ok());
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end() {
+        let mut input = Cursor::new("x\ny\nz\n");
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 6);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 4);
+        assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 2);
+        assert_eq!(find_nth_line_from_end(&mut input, 3, b'\n').unwrap(), 0);
+        assert_eq!(find_nth_line_from_end(&mut input, 4, b'\n').unwrap(), 0);
+        assert_eq!(find_nth_line_from_end(&mut input, 1000, b'\n').unwrap(), 0);
+    }
+}

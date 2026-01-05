@@ -52,12 +52,23 @@ impl CommandExecutor {
 
     /// 执行测试用例
     pub fn execute_test(&self, test_case: &TestCase) -> Result<ComparisonResult> {
+        if self.config.debug {
+            eprintln!("DEBUG: 开始执行测试用例: {}", test_case.description);
+            eprintln!("DEBUG: 命令: {} {:?}", test_case.command, test_case.args);
+        }
+
         // 获取期望结果
         let (expected, expected_verifications) = if self.config.coreutils_path.is_some() {
             // 基准模式：在独立沙箱中执行 coreutils 获取基准结果
+            if self.config.debug {
+                eprintln!("DEBUG: 使用基准模式（coreutils）");
+            }
             self.get_coreutils_test_result(test_case)?
         } else {
             // 标准模式：使用测试用例中的期望结果
+            if self.config.debug {
+                eprintln!("DEBUG: 使用标准模式（预期结果）");
+            }
             let expected = test_case.expectation.execution.clone().into();
             let verification_results = test_case
                 .expectation
@@ -73,43 +84,77 @@ impl CommandExecutor {
         };
 
         // 在新的沙箱中执行 syskits 测试
+        if self.config.debug {
+            eprintln!("DEBUG: 开始执行syskits测试");
+        }
         let (actual, actual_verifications) = self.execute_syskits_test(test_case)?;
 
         // 比较结果
-        compare_results(
+        if self.config.debug {
+            eprintln!("DEBUG: 开始比较测试结果");
+        }
+        let result = compare_results(
             test_case,
             expected,
             expected_verifications,
             actual,
             actual_verifications,
-        )
+        )?;
+
+        if self.config.debug {
+            eprintln!(
+                "DEBUG: 测试结果: {}",
+                if result.passed { "通过" } else { "失败" }
+            );
+            if !result.differences.is_empty() {
+                eprintln!("DEBUG: 差异:");
+                for diff in &result.differences {
+                    eprintln!("DEBUG:   {}", diff);
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     fn execute_syskits_test(
         &self,
         test_case: &TestCase,
     ) -> Result<(CommandResult, Vec<CommandResult>)> {
-        let mut sandbox = IsolatedSandbox::new()?;
+        let mut sandbox = IsolatedSandbox::new(self.config.debug)?;
         sandbox.setup(test_case)?;
 
         // 执行设置命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行设置命令");
+        }
         for cmd in &test_case.setup_commands {
             sandbox.execute_shell_command(cmd)?;
         }
 
         // 执行主命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行主命令");
+        }
         let actual = self.execute_syskits(&test_case.command, &test_case.args, &mut sandbox)?;
 
-        // 此时，CMD_EXIT_CODE, CMD_STDOUT, CMD_STDERR 环境变量已经设置
-
         // 执行验证命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行验证命令");
+        }
         let mut actual_verifications = Vec::new();
         for verification in &test_case.expectation.verifications {
+            if self.config.debug {
+                eprintln!("DEBUG: 执行验证命令: {}", verification.command);
+            }
             let result = sandbox.execute_shell_command(&verification.command)?;
             actual_verifications.push(result);
         }
 
         // 执行清理命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行清理命令");
+        }
         for cmd in &test_case.cleanup_commands {
             sandbox.execute_shell_command(cmd)?;
         }
@@ -123,23 +168,41 @@ impl CommandExecutor {
         &self,
         test_case: &TestCase,
     ) -> Result<(CommandResult, Vec<CommandResult>)> {
-        let mut coreutils_sandbox = IsolatedSandbox::new()?;
+        let mut coreutils_sandbox = IsolatedSandbox::new(self.config.debug)?;
         coreutils_sandbox.setup(test_case)?;
 
         // 执行设置命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行coreutils设置命令");
+        }
         for cmd in &test_case.setup_commands {
             coreutils_sandbox.execute_shell_command(cmd)?;
         }
+
         // 执行主命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行coreutils主命令");
+        }
         let expected =
             self.execute_coreutils(&test_case.command, &test_case.args, &mut coreutils_sandbox)?;
+
         // 执行验证命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行coreutils验证命令");
+        }
         let mut verification_results = Vec::new();
         for verification in &test_case.expectation.verifications {
+            if self.config.debug {
+                eprintln!("DEBUG: 执行coreutils验证命令: {}", verification.command);
+            }
             let result = coreutils_sandbox.execute_shell_command(&verification.command)?;
             verification_results.push(result);
         }
+
         // 执行清理命令
+        if self.config.debug {
+            eprintln!("DEBUG: 执行coreutils清理命令");
+        }
         for cmd in &test_case.cleanup_commands {
             coreutils_sandbox.execute_shell_command(cmd)?;
         }

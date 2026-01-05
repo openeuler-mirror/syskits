@@ -123,11 +123,13 @@ pub struct IsolatedSandbox {
     umask: u32,
     /// 上一个命令的退出码
     exit_code: i32,
+    /// 是否启用调试输出
+    debug: bool,
 }
 
 impl IsolatedSandbox {
     /// 创建新的隔离沙箱
-    pub fn new() -> Result<Self> {
+    pub fn new(debug: bool) -> Result<Self> {
         let temp_dir = TempDir::new()
             .map_err(|e| TestError::ExecutionError(format!("Failed to create sandbox: {}", e)))?;
         let temp_path = temp_dir.path().to_path_buf();
@@ -139,6 +141,7 @@ impl IsolatedSandbox {
             current_dir: temp_path,
             umask: 0o022,
             exit_code: 0,
+            debug,
         })
     }
 
@@ -370,6 +373,20 @@ impl IsolatedSandbox {
         }
     }
 
+    /// 输出调试信息
+    fn debug(&self, msg: &str) {
+        if self.debug {
+            eprintln!("DEBUG: {}", msg);
+        }
+    }
+
+    /// 输出调试信息（带格式化）
+    fn debug_fmt(&self, fmt: std::fmt::Arguments<'_>) {
+        if self.debug {
+            eprintln!("DEBUG: {}", fmt);
+        }
+    }
+
     /// 执行命令
     pub fn execute_command(
         &mut self,
@@ -377,22 +394,65 @@ impl IsolatedSandbox {
         args: &[String],
         is_record_result: bool,
     ) -> Result<CommandResult> {
+        self.debug_fmt(format_args!("执行命令: {} {:?}", cmd, args));
+
         let mut command = std::process::Command::new(cmd);
         command
             .args(args)
             .current_dir(&self.current_dir)
             .envs(&self.current_env);
 
-        let output = command
-            .output()
-            .map_err(|e| TestError::ExecutionError(format!("Failed to execute command: {}", e)))?;
+        // 使用 output() 的结果，无论成功还是失败
+        let result = match command.output() {
+            Ok(output) => CommandResult::from(output),
+            Err(e) => {
+                self.debug_fmt(format_args!("命令执行失败: {}", e));
+                CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("Failed to execute command: {}", e),
+                    exit_code: 127, // 通用的命令未找到错误码
+                }
+            }
+        };
 
-        let result = CommandResult::from(output);
+        self.debug_fmt(format_args!("命令执行结果:"));
+        self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
+        self.debug_fmt(format_args!("stdout长度: {}", result.stdout.len()));
+        self.debug_fmt(format_args!("stderr长度: {}", result.stderr.len()));
+
+        // 检查输出是否包含零字节
+        if result.stdout.contains('\0') {
+            self.debug("警告: stdout包含零字节");
+            if self.debug {
+                println!("DEBUG: stdout十六进制表示:");
+                for (i, byte) in result.stdout.as_bytes().iter().enumerate().take(100) {
+                    print!("{:02x} ", byte);
+                    if (i + 1) % 16 == 0 {
+                        println!();
+                    }
+                }
+                println!("...");
+            }
+        }
 
         // 将命令执行结果保存到环境变量中，供验证阶段使用
         if is_record_result {
+            self.debug_fmt(format_args!(
+                "设置环境变量 CMD_EXIT_CODE={}",
+                result.exit_code
+            ));
             self.add_env("CMD_EXIT_CODE", &result.exit_code.to_string());
-            self.add_env("CMD_STDOUT", &result.stdout);
+
+            // 检查stdout是否包含零字节，如果包含则进行特殊处理
+            if result.stdout.contains('\0') {
+                self.debug("警告: 设置环境变量CMD_STDOUT时发现零字节");
+                // 将零字节替换为可见字符，以避免环境变量问题
+                let safe_stdout = result.stdout.replace('\0', "\\0");
+                self.add_env("CMD_STDOUT", &safe_stdout);
+            } else {
+                self.add_env("CMD_STDOUT", &result.stdout);
+            }
+
             self.add_env("CMD_STDERR", &result.stderr);
         }
 
@@ -402,6 +462,8 @@ impl IsolatedSandbox {
 
     /// 执行外部命令
     fn execute_external_command(&mut self, command: &str) -> Result<CommandResult> {
+        self.debug_fmt(format_args!("执行外部命令: {}", command));
+
         let parts: Vec<String> = command.split_whitespace().map(String::from).collect();
         if let Some((cmd, args)) = parts.split_first() {
             let mut command = std::process::Command::new(cmd);
@@ -410,15 +472,32 @@ impl IsolatedSandbox {
                 .current_dir(&self.current_dir)
                 .envs(&self.current_env);
 
-            let output = command.output().map_err(|e| {
-                TestError::ExecutionError(format!("Failed to execute command: {}", e))
-            })?;
+            // 使用 output() 的结果，无论成功还是失败
+            let result = match command.output() {
+                Ok(output) => CommandResult::from(output),
+                Err(e) => {
+                    self.debug_fmt(format_args!("命令执行失败: {}", e));
+                    CommandResult {
+                        stdout: String::new(),
+                        stderr: format!("Failed to execute command: {}", e),
+                        exit_code: 127, // 通用的命令未找到错误码
+                    }
+                }
+            };
 
-            let result = CommandResult::from(output);
+            self.debug_fmt(format_args!("外部命令执行结果:"));
+            self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
+            self.debug_fmt(format_args!("stdout: {}", result.stdout));
+            self.debug_fmt(format_args!("stderr: {}", result.stderr));
+
             self.update_status(&result);
             Ok(result)
         } else {
-            Err(TestError::ExecutionError("Empty command".to_string()))
+            Ok(CommandResult {
+                stdout: String::new(),
+                stderr: "Empty command".to_string(),
+                exit_code: 127,
+            })
         }
     }
 }

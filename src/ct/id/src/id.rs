@@ -1685,5 +1685,85 @@ mod tests {
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_long_option_groups() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--groups"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_groups() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-G"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_name() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--name"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_name() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-n"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_real() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--real"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_real() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-r"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_zero() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--zero"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_zero() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-z"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_context() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--context"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_short_option_context() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-Z"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
     }
 }

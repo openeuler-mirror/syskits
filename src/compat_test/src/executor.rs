@@ -563,4 +563,298 @@ mod tests {
         assert!(result.differences.is_empty());
     }
 
+    #[test]
+    fn test_compare_results_all_null() {
+        // 创建测试用例，所有字段都为null
+        let test_case = create_test_case(
+            None, // stdout is null
+            None, // stderr is null
+            None, // exit_code is null
+            false, false, false,
+        );
+
+        let expected = create_command_result("expected_output", "expected_error", 0);
+        let actual = create_command_result("actual_output", "actual_error", 1);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_with_verifications() {
+        // 创建带验证命令的测试用例
+        let mut test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        // 添加验证命令
+        test_case.expectation.verifications = vec![FunctionalVerification {
+            command: "test_verification".to_string(),
+            expected_exit: Some(0),
+            expected_stdout: Some("verification_output".to_string()),
+            expected_stderr: Some("verification_error".to_string()),
+        }];
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let expected_verification =
+            create_command_result("verification_output", "verification_error", 0);
+        let actual_verification =
+            create_command_result("verification_output", "verification_error", 0);
+
+        let result = compare_results(
+            &test_case,
+            expected,
+            vec![expected_verification],
+            actual,
+            vec![actual_verification],
+        )
+        .unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_verification_differs() {
+        // 创建带验证命令的测试用例，验证结果不匹配
+        let mut test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        // 添加验证命令
+        test_case.expectation.verifications = vec![FunctionalVerification {
+            command: "test_verification".to_string(),
+            expected_exit: Some(0),
+            expected_stdout: Some("expected_verification_output".to_string()),
+            expected_stderr: Some("verification_error".to_string()),
+        }];
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let expected_verification =
+            create_command_result("expected_verification_output", "verification_error", 0);
+        let actual_verification =
+            create_command_result("actual_verification_output", "verification_error", 0);
+
+        let result = compare_results(
+            &test_case,
+            expected,
+            vec![expected_verification],
+            actual,
+            vec![actual_verification],
+        )
+        .unwrap();
+
+        assert!(!result.passed);
+        assert_eq!(result.differences.len(), 1);
+        assert!(result.differences[0].contains("Verification"));
+    }
+
+    #[test]
+    fn test_compare_results_verification_null_stdout() {
+        // 创建带验证命令的测试用例，验证命令的stdout为null
+        let mut test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        // 添加验证命令，stdout为null
+        test_case.expectation.verifications = vec![FunctionalVerification {
+            command: "test_verification".to_string(),
+            expected_exit: Some(0),
+            expected_stdout: None, // stdout is null
+            expected_stderr: Some("verification_error".to_string()),
+        }];
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let expected_verification =
+            create_command_result("expected_verification_output", "verification_error", 0);
+        let actual_verification =
+            create_command_result("actual_verification_output", "verification_error", 0);
+
+        let result = compare_results(
+            &test_case,
+            expected,
+            vec![expected_verification],
+            actual,
+            vec![actual_verification],
+        )
+        .unwrap();
+
+        // 即使stdout不同，但因为expected_stdout为null，所以测试应该通过
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_verification_null_stderr() {
+        // 创建带验证命令的测试用例，验证命令的stderr为null
+        let mut test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        // 添加验证命令，stderr为null
+        test_case.expectation.verifications = vec![FunctionalVerification {
+            command: "test_verification".to_string(),
+            expected_exit: Some(0),
+            expected_stdout: Some("verification_output".to_string()),
+            expected_stderr: None, // stderr is null
+        }];
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let expected_verification =
+            create_command_result("verification_output", "expected_verification_error", 0);
+        let actual_verification =
+            create_command_result("verification_output", "actual_verification_error", 0);
+
+        let result = compare_results(
+            &test_case,
+            expected,
+            vec![expected_verification],
+            actual,
+            vec![actual_verification],
+        )
+        .unwrap();
+
+        // 即使stderr不同，但因为expected_stderr为null，所以测试应该通过
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_verification_all_null() {
+        // 创建带验证命令的测试用例，验证命令的stdout和stderr都为null
+        let mut test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        // 添加验证命令，stdout和stderr都为null
+        test_case.expectation.verifications = vec![FunctionalVerification {
+            command: "test_verification".to_string(),
+            expected_exit: Some(0),
+            expected_stdout: None, // stdout is null
+            expected_stderr: None, // stderr is null
+        }];
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let expected_verification = create_command_result(
+            "expected_verification_output",
+            "expected_verification_error",
+            0,
+        );
+        let actual_verification =
+            create_command_result("actual_verification_output", "actual_verification_error", 0);
+
+        let result = compare_results(
+            &test_case,
+            expected,
+            vec![expected_verification],
+            actual,
+            vec![actual_verification],
+        )
+        .unwrap();
+
+        // 即使stdout和stderr都不同，但因为expected_stdout和expected_stderr都为null，所以测试应该通过
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_mixed_null_and_non_null() {
+        // 创建测试用例，混合null和非null字段
+        let test_case = create_test_case(
+            Some("output".to_string()), // stdout不为null
+            None,                       // stderr为null
+            Some(0),                    // exit_code不为null
+            false,
+            false,
+            false,
+        );
+
+        let expected = create_command_result("output", "expected_error", 0);
+        let actual = create_command_result("output", "actual_error", 0);
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        // 只比较非null字段，所以测试应该通过
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
+
+    #[test]
+    fn test_compare_results_verification_null_exit_code() {
+        // 创建带验证命令的测试用例，验证命令的expected_exit为null
+        let mut test_case = create_test_case(
+            Some("output".to_string()),
+            Some("error".to_string()),
+            Some(0),
+            false,
+            false,
+            false,
+        );
+
+        // 添加验证命令，expected_exit为null
+        test_case.expectation.verifications = vec![FunctionalVerification {
+            command: "test_verification".to_string(),
+            expected_exit: None, // exit_code is null
+            expected_stdout: Some("verification_output".to_string()),
+            expected_stderr: Some("verification_error".to_string()),
+        }];
+
+        let expected = create_command_result("output", "error", 0);
+        let actual = create_command_result("output", "error", 0);
+
+        let expected_verification =
+            create_command_result("verification_output", "verification_error", 0);
+        let actual_verification =
+            create_command_result("verification_output", "verification_error", 1); // 不同的exit_code
+
+        let result = compare_results(
+            &test_case,
+            expected,
+            vec![expected_verification],
+            actual,
+            vec![actual_verification],
+        )
+        .unwrap();
+
+        // 即使exit_code不同，但因为expected_exit为null，所以测试应该通过
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
+    }
 }

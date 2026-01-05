@@ -1135,5 +1135,50 @@ mod tests {
                 "你好，这是一个包含非ASCII字符的测试\n。"
             );
         }
+
+        #[test]
+        fn test_fold_file_bytewise_very_long_single_line() {
+            let input = "This is a very very very very very very very very very very very very very very very long line.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 20).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This is a very very \nvery very very very \nvery very very very \nvery very very very \nvery long line."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_different_width_limits() {
+            let input = "This is a line.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 5).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), "This \nis a \nline.");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_spaces_enabled() {
+            let input = "This is a very long line that should be split at spaces.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, true, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This is a \nvery long \nline that \nshould be \nsplit at \nspaces."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_mixed_line_endings() {
+            let input = "Line with CRLF\r\nLine with LF\n";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "Line with \nCRLF\r\nLine with \nLF\n"
+            );
+        }
     }
 }

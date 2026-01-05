@@ -353,3 +353,107 @@ fn kill(sig: Signal, pids: &[i32]) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    #[cfg(test)]
+    mod kill_parse_pids_tests {
+        use super::*;
+        /*
+        基本测试：
+            成功解析：所有字符串都是有效的 i32 表示。
+            测试用例：pids = ["1", "2", "3"] 应返回 Ok(vec![1, 2, 3])。
+            解析失败：至少有一个字符串不是有效的 i32 表示。
+            测试用例：pids = ["1", "abc", "3"] 应返回一个 CtSimpleError，指出字符串 "abc" 解析失败。
+            空输入：输入切片为空。
+            测试用例：pids = [] 应返回 Ok(vec![])。
+        异常测试：
+            包含负数的字符串：测试包含负数的字符串是否能正确解析。
+            测试用例：pids = ["-1", "2", "-3"] 应返回 Ok(vec![-1, 2, -3])。
+            包含最大/最小 i32 值的字符串：测试边界情况，确保最大和最小 i32 值能正确解析。
+            测试用例：pids = ["2147483647", "-2147483648"] 应返回 Ok(vec![2147483647, -2147483648])。
+            包含空字符串的输入：测试空字符串是否会导致解析失败。
+            测试用例：pids = ["1", "", "3"] 应返回一个 CtSimpleError，指出字符串 "" 解析失败。
+            包含非数字字符的字符串：测试包含非数字字符的字符串是否会导致解析失败。
+            测试用例：pids = ["1", "a1b", "3"] 应返回一个 CtSimpleError，指出字符串 "a1b" 解析失败。
+            包含多个无效字符串：测试多个无效字符串是否会导致解析失败。
+            测试用例：pids = ["abc", "def", "ghi"] 应返回一个 CtSimpleError，指出字符串 "abc" 解析失败。
+        */
+        #[test]
+        fn kill_parse_pids_valid_pids_returns_parsed_integers() {
+            let pids = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+            let result = kill_parse_pids(&pids).unwrap();
+            assert_eq!(result, vec![1, 2, 3]);
+        }
+
+        #[test]
+        fn kill_parse_pids_invalid_pid_returns_error() {
+            let pids = vec!["1".to_string(), "abc".to_string(), "3".to_string()];
+            let result = kill_parse_pids(&pids);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "failed to parse argument 'abc': invalid digit found in string"
+            );
+        }
+
+        #[test]
+        fn kill_parse_pids_empty_input_returns_empty_vector() {
+            let pids: Vec<String> = vec![];
+            let result = kill_parse_pids(&pids).unwrap();
+            assert_eq!(result.len(), 0);
+        }
+
+        #[test]
+        fn kill_parse_pids_negative_pids_returns_parsed_integers() {
+            let pids = vec!["-1".to_string(), "2".to_string(), "-3".to_string()];
+            let result = kill_parse_pids(&pids).unwrap();
+            assert_eq!(result, vec![-1, 2, -3]);
+        }
+
+        #[test]
+        fn kill_parse_pids_boundary_values_returns_parsed_integers() {
+            let pids = vec!["2147483647".to_string(), "-2147483648".to_string()];
+            let result = kill_parse_pids(&pids).unwrap();
+            assert_eq!(result, vec![2147483647, -2147483648]);
+        }
+
+        #[test]
+        fn kill_parse_pids_empty_string_returns_error() {
+            let pids = vec!["1".to_string(), "".to_string(), "3".to_string()];
+            let result = kill_parse_pids(&pids);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "failed to parse argument '': cannot parse integer from empty string"
+            );
+        }
+
+        #[test]
+        fn kill_parse_pids_non_numeric_characters_returns_error() {
+            let pids = vec!["1".to_string(), "a1b".to_string(), "3".to_string()];
+            let result = kill_parse_pids(&pids);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "failed to parse argument 'a1b': invalid digit found in string"
+            );
+        }
+
+        #[test]
+        fn kill_parse_pids_multiple_invalid_pids_returns_error() {
+            let pids = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
+            let result = kill_parse_pids(&pids);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "failed to parse argument 'abc': invalid digit found in string"
+            );
+        }
+    }
+}

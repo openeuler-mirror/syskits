@@ -656,3 +656,88 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use super::*;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_all_flag() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-a"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().get_flag(stty_flags::STTY_ALL));
+        }
+
+        #[test]
+        fn test_ct_app_save_flag() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-g"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().get_flag(stty_flags::STTY_SAVE));
+        }
+
+        #[test]
+        fn test_ct_app_file_option() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-F", "/dev/tty"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert_eq!(
+                executable
+                    .unwrap()
+                    .get_one::<String>(stty_flags::STTY_FILE)
+                    .unwrap(),
+                "/dev/tty"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_multiple_settings() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "raw", "-echo", "9600", "size"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            let settings: Vec<String> = executable
+                .unwrap()
+                .get_many::<String>(stty_flags::STTY_SETTINGS)
+                .unwrap()
+                .cloned()
+                .collect();
+            assert_eq!(settings, vec!["raw", "-echo", "9600", "size"]);
+        }
+    }
+}

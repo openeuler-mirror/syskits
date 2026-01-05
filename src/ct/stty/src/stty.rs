@@ -847,4 +847,157 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
+    mod stty_print_tests {
+        use super::*;
+
+        #[test]
+        fn test_stty_print_terminal_size() {
+            let termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdout(stdout());
+            let opts = SttyFlags {
+                is_all: true,
+                is_save: false,
+                file: device,
+                settings: None,
+            };
+            assert!(stty_print_terminal_size(&termios, &opts).is_ok());
+        }
+
+        #[test]
+        fn test_stty_print_control_chars() {
+            let termios = unsafe { std::mem::zeroed::<Termios>() };
+            let opts = SttyFlags {
+                is_all: true,
+                is_save: false,
+                file: Device::Stdout(stdout()),
+                settings: None,
+            };
+            assert!(stty_print_control_chars(&termios, &opts).is_ok());
+        }
+
+        #[test]
+        fn test_stty_print_in_save_format() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            // 设置一些非零值以确保输出不为空
+            termios.input_flags = nix::sys::termios::InputFlags::BRKINT;
+            termios.output_flags = nix::sys::termios::OutputFlags::OPOST;
+            termios.control_flags = nix::sys::termios::ControlFlags::CREAD;
+            termios.local_flags = nix::sys::termios::LocalFlags::ECHO;
+
+            // 捕获输出并打印
+            stty_print_in_save_format(&termios);
+            // 由于我们无法直接捕获标准输出，我们只验证函数不会panic
+        }
+    }
+
+    #[cfg(test)]
+    mod stty_apply_tests {
+        use super::*;
+
+        #[test]
+        fn test_stty_apply_baud_rate_valid() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            for (text, _, _) in BAUD_RATES {
+                assert!(matches!(
+                    stty_apply_baud_rate_flag(&mut termios, text),
+                    ControlFlow::Break(true)
+                ));
+            }
+        }
+
+        #[test]
+        fn test_stty_apply_baud_rate_invalid() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            assert!(matches!(
+                stty_apply_baud_rate_flag(&mut termios, "invalid"),
+                ControlFlow::Continue(())
+            ));
+        }
+
+        #[test]
+        fn test_stty_apply_special_setting_size() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdout(stdout());
+            assert!(matches!(
+                stty_apply_special_setting(&mut termios, "size", &device),
+                ControlFlow::Break(true)
+            ));
+        }
+
+        #[test]
+        fn test_stty_apply_special_setting_min() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdout(stdout());
+            assert!(matches!(
+                stty_apply_special_setting(&mut termios, "min 1", &device),
+                ControlFlow::Break(true)
+            ));
+        }
+
+        #[test]
+        fn test_stty_apply_special_setting_invalid() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdout(stdout());
+            assert!(matches!(
+                stty_apply_special_setting(&mut termios, "invalid", &device),
+                ControlFlow::Continue(())
+            ));
+        }
+    }
+
+    #[cfg(test)]
+    mod stty_main_tests {
+        use super::*;
+
+        #[test]
+        fn test_stty_main_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_stty_main_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_stty_main_all_flag() {
+            let args = vec![ctcore::ct_util_name(), "-a"];
+            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_stty_main_save_flag() {
+            let args = vec![ctcore::ct_util_name(), "-g"];
+            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_stty_main_invalid_device() {
+            let args = vec![ctcore::ct_util_name(), "-F", "/nonexistent/device"];
+            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            match result {
+                Err(e) => {
+                    assert!(e.to_string().contains("No such file or directory"));
+                }
+                Ok(_) => {
+                    panic!("Expected error when opening non-existent device");
+                }
+            }
+        }
+
+        #[test]
+        fn test_stty_main_multiple_settings() {
+            let args = vec![ctcore::ct_util_name(), "9600", "-echo", "raw"];
+            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            // 由于这些设置可能需要实际的终端设备，所以我们应该期望它失败
+            assert!(result.is_err());
+        }
+    }
 }

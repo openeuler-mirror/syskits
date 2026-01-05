@@ -740,4 +740,111 @@ mod tests {
             assert_eq!(settings, vec!["raw", "-echo", "9600", "size"]);
         }
     }
+
+    #[cfg(test)]
+    mod stty_flags_tests {
+        use super::*;
+
+        #[test]
+        fn test_stty_flags_new_with_all_flag() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from(vec![ctcore::ct_util_name(), "-a"])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            assert!(flags.is_all);
+            assert!(!flags.is_save);
+            assert!(matches!(flags.file, Device::Stdout(_)));
+        }
+
+        #[test]
+        fn test_stty_flags_new_with_save_flag() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from(vec![ctcore::ct_util_name(), "-g"])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            assert!(!flags.is_all);
+            assert!(flags.is_save);
+        }
+
+        #[test]
+        fn test_stty_flags_new_with_file_option() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from(vec![ctcore::ct_util_name(), "-F", "/dev/tty"])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            assert!(matches!(flags.file, Device::File(_)));
+        }
+
+        #[test]
+        fn test_stty_flags_new_with_settings() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from(vec![ctcore::ct_util_name(), "raw", "-echo"])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            assert!(flags.settings.is_some());
+            assert_eq!(
+                flags.settings.unwrap(),
+                vec!["raw".to_string(), "-echo".to_string()]
+            );
+        }
+
+        #[test]
+        fn test_stty_flags_check_valid_combinations() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from(vec![ctcore::ct_util_name(), "-a"])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            assert!(flags.check().is_ok());
+        }
+
+        #[test]
+        fn test_stty_flags_check_invalid_combinations() {
+            let flags = SttyFlags {
+                is_all: true,
+                is_save: true,
+                file: Device::Stdout(stdout()),
+                settings: None,
+            };
+            assert!(flags.check().is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod parse_settings_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_settings_basic() {
+            let args = &["raw", "9600"];
+            let settings = parse_settings(args);
+            assert_eq!(settings, vec!["raw", "9600"]);
+        }
+
+        #[test]
+        fn test_parse_settings_with_special_settings() {
+            let args = &["min", "1", "time", "10"];
+            let settings = parse_settings(args);
+            assert_eq!(settings, vec!["min 1", "time 10"]);
+        }
+
+        #[test]
+        fn test_parse_settings_mixed() {
+            let args = &["raw", "min", "1", "9600"];
+            let settings = parse_settings(args);
+            assert_eq!(settings, vec!["raw", "min 1", "9600"]);
+        }
+
+        #[test]
+        fn test_parse_settings_empty() {
+            let args: &[&str] = &[];
+            let settings = parse_settings(args);
+            assert!(settings.is_empty());
+        }
+    }
+
 }

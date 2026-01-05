@@ -401,3 +401,131 @@ fn realpath_process_relative(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::fs::File;
+    use tempfile::Builder;
+    mod realpath_flags_tests {
+        use super::*;
+
+        fn create_test_matches(args: &[&str]) -> ArgMatches {
+            ct_app().try_get_matches_from(args).unwrap()
+        }
+
+        #[test]
+        fn test_flags_new_basic() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "test.txt"]);
+            let flags = RealpathFlags::new(matches).unwrap();
+
+            assert!(!flags.is_quiet);
+            assert_eq!(flags.line_ending, CtLineEnding::Newline);
+            assert_eq!(flags.can_mode, MissingHandling::Normal);
+            assert_eq!(flags.resolve_mode, ResolveMode::Physical);
+            assert!(flags.relative_to.is_none());
+            assert!(flags.relative_base.is_none());
+            assert_eq!(flags.files.len(), 1);
+        }
+
+        #[test]
+        fn test_flags_with_zero_option() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "-z", "test.txt"]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.line_ending, CtLineEnding::Nul);
+        }
+
+        #[test]
+        fn test_flags_with_quiet_option() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "-q", "test.txt"]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert!(flags.is_quiet);
+        }
+
+        #[test]
+        fn test_flags_with_canonicalize_existing() {
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "--canonicalize-existing",
+                "test.txt",
+            ]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.can_mode, MissingHandling::Existing);
+        }
+
+        #[test]
+        fn test_flags_with_relative_options() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let base_dir = temp_dir.path().join("base");
+            let dir = temp_dir.path().join("dir");
+
+            // 创建目录
+            std::fs::create_dir(&base_dir).unwrap();
+            std::fs::create_dir(&dir).unwrap();
+
+            // 创建一个测试文件在 base_dir 下
+            let test_file = base_dir.join("test.txt");
+            File::create(&test_file).unwrap();
+
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                &format!("--relative-to={}", base_dir.display()),
+                &format!("--relative-base={}", base_dir.display()), // 使用相同的 base_dir
+                test_file.to_str().unwrap(),
+            ]);
+
+            let flags = RealpathFlags::new(matches).unwrap();
+
+            // 验证 relative_to 和 relative_base 都被正确设置
+            assert!(flags.relative_to.is_some());
+            assert!(flags.relative_base.is_some());
+
+            // 额外验证路径是否正确
+            if let Some(relative_to) = &flags.relative_to {
+                assert_eq!(
+                    relative_to.canonicalize().unwrap(),
+                    base_dir.canonicalize().unwrap()
+                );
+            }
+            if let Some(relative_base) = &flags.relative_base {
+                assert_eq!(
+                    relative_base.canonicalize().unwrap(),
+                    base_dir.canonicalize().unwrap()
+                );
+            }
+        }
+
+        #[test]
+        fn test_flags_with_strip_option() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "--strip", "test.txt"]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.resolve_mode, ResolveMode::None);
+        }
+
+        #[test]
+        fn test_flags_with_logical_option() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "--logical", "test.txt"]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.resolve_mode, ResolveMode::Logical);
+        }
+
+        #[test]
+        fn test_flags_with_physical_option() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "--physical", "test.txt"]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.resolve_mode, ResolveMode::Physical);
+        }
+
+        #[test]
+        fn test_flags_with_multiple_files() {
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "file1.txt",
+                "file2.txt",
+                "file3.txt",
+            ]);
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.files.len(), 3);
+        }
+    }
+}

@@ -537,4 +537,117 @@ mod tests {
             assert!(result.is_ok());
         }
     }
+
+    #[cfg(test)]
+    mod ct_app_tests {
+        use clap::error::ErrorKind;
+
+        use super::*;
+
+        // fold 接口测试: fold [OPTION]... [FILE]...
+        //
+        // Options:
+        //   -b, --bytes          count using bytes rather than columns (meaning control characters such as newline are not treated specially)
+        //   -s, --spaces         break lines at word boundaries rather than a hard cut-off
+        //   -w, --width <WIDTH>  set WIDTH as the maximum line width rather than 80
+        //   -h, --help           Print help
+        //   -V, --version        Print version
+
+        #[test]
+        fn test_ct_app_execution_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--version"];
+
+            // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_other_version() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-V"];
+            let executable = command.try_get_matches_from(args);
+
+            assert!(executable.is_err());
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_execution_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "--help"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_execution_unsupport_help() {
+            let command = ct_app();
+
+            let help_args = vec![ctcore::ct_util_name(), "-H"];
+            let result = command.try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_argument() {
+            let command = ct_app();
+
+            let invalid_args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let result = command.try_get_matches_from(invalid_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_support_missing_argument() {
+            let command = ct_app();
+
+            let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let result = command.try_get_matches_from(missing_args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_long_option_b_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-b"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(fold_flags::FOLD_BYTES));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_b_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--bytes"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(fold_flags::FOLD_BYTES));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_s_short() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-s"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(fold_flags::FOLD_SPACES));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_s_long() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--spaces"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert!(executable.unwrap().contains_id(fold_flags::FOLD_SPACES));
+        }
+    }
 }

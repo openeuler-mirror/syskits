@@ -1,0 +1,228 @@
+{
+    "tests": [
+        {
+            "tstdin": "hello",
+            "command": "tr",
+            "description": "tr: 基本字符替换",
+            "args": [
+                "h",
+                "H"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "hello,world",
+            "command": "tr",
+            "description": "tr: 多字符替换",
+            "args": [
+                "h,r",
+                "H R"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello woRld",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "abcde",
+            "command": "tr",
+            "description": "tr: 参数数量不同",
+            "args": [
+                "ab",
+                "ABC"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ABced",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "abcde",
+            "command": "tr",
+            "description": "tr: 参数数量不同(第一个参数比第二个参数数量多)",
+            "args": [
+                "abc",
+                "AB"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ABBde",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "h3ll0 w0rld",
+            "command": "tr",
+            "description": "tr: 删除字符",
+            "args": [
+                "-d",
+                "0-9"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "hll wrld",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "h3ll0 w0rld",
+            "command": "tr",
+            "description": "tr: 删除不存在的字符字符",
+            "args": [
+                "-d",
+                "x"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "h3ll0 w0rld",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "aa--bb--cc--dd",
+            "command": "tr",
+            "description": "tr: 压缩重复字符",
+            "args": [
+                "-s",
+                "a-c-"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a-b-c-dd",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "abcdef",
+            "command": "tr",
+            "description": "tr: 范围替换",
+            "args": [
+                "a-f",
+                "1-6"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "123456",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        }
+    ]
+}

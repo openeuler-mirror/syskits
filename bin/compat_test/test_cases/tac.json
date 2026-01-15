@@ -1,0 +1,167 @@
+{
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 基本功能，按行倒序输出",
+      "setup_commands": [
+        "echo -e 'Hello\nWorld\nThis is a test' > test1.txt"
+      ],
+      "args": [
+        "test1.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "This is a test\nWorld\nHello\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test1.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 按行倒序输出多个文件内容",
+      "setup_commands": [
+        "echo 'File1 line1' > file2.txt",
+        "echo 'File2 line1' > file3.txt"
+      ],
+      "args": [
+        "file2.txt",
+        "file3.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "line1 File1\nline1 File2\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file2.txt file3.txt"
+      ]
+    },
+    {
+      "tstdin": "Line1\nLine2\nLine3\n",
+      "command": "tac",
+      "description": "tac: 从标准输入读取内容倒序输出",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Line3\nLine2\nLine1\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 使用自定义分隔符 -s",
+      "setup_commands": [
+        "echo -e 'a,b,c,d,e,f' > sep_test.txt"
+      ],
+      "args": [
+        "-s",
+        ",",
+        "sep_test.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "f,e,d,c,b,a\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f sep_test.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 读取不存在的文件，应返回错误",
+      "setup_commands": [],
+      "args": [
+        "nonexistent.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 使用错误的flag",
+      "setup_commands": [
+        "echo 'File1 line1' > file1.txt"
+      ],
+      "args": [
+        "--bad_flag",
+        "file1.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file1.txt"
+      ]
+    }
+  ]
+}

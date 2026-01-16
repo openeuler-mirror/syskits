@@ -1,0 +1,328 @@
+{
+    "tests": [
+        {
+            "tstdin": "        foo\n",
+            "command": "unexpand",
+            "description": "unexpand: 基本的行首空格替换",
+            "args": [
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    foo\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "       foo\n",
+            "command": "unexpand",
+            "description": "unexpand: 行首的空格不足以替换一个tab",
+            "args": [
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "       foo\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "    abcd        \n",
+            "command": "unexpand",
+            "description": "unexpand: 行中的空格默认不替换为tab",
+            "args": [
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    abcd        \n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "    abcd        \n",
+            "command": "unexpand",
+            "description": "unexpand: 使用-a选项，行中的空格也替换为tab",
+            "args": [
+                "-a"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    abcd    \n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "    abcd       ccc\n",
+            "command": "unexpand",
+            "description": "unexpand: 行中的空格不足以替换为tab",
+            "args": [
+                "-a"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    abcd       ccc\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "   abc   ccc     \n",
+            "command": "unexpand",
+            "description": "unexpand: 使用-t与-a选项",
+            "args": [
+                "-t",
+                "3",
+                "-a"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    abc     ccc       \n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "   abc   ccc     \n",
+            "command": "unexpand",
+            "description": "unexpand: 使用-t选项，指定tab宽度为3(默认会启用-a选项)",
+            "args": [
+                "-t",
+                "3"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    abc     ccc       \n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "\t        foo\n",
+            "command": "unexpand",
+            "description": "unexpand: 行首已经有tab，再加空格替换",
+            "args": [
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "            foo\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "\t        foo        \n",
+            "command": "unexpand",
+            "description": "unexpand: tab与空格混合使用",
+            "args": [
+                "-a"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "            foo        \n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "             \n",
+            "command": "unexpand",
+            "description": "unexpand: 不等距的tab",
+            "args": [
+                "-t",
+                "3,6"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "                   \n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "        foo\n",
+            "command": "unexpand",
+            "description": "unexpand: 非法tab宽度",
+            "args": [
+                "-t",
+                "0"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "        foo\n        foo\n",
+            "command": "unexpand",
+            "description": "unexpand: 多行输入",
+            "args": [
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "    foo\n   foo\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        }
+    ]
+}

@@ -1,0 +1,257 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: 无参数，列出所有已挂载文件系统(仅有中英文差异)",
+            "setup_commands": [
+            ],
+            "args": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996308 41884732   40% /\ndevtmpfs                     4096        0     4096    0% /dev\ntmpfs                     7910672        0  7910672    0% /dev/shm\ntmpfs                        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                     3164272     9232  3155040    1% /run\ntmpfs                     7910676        0  7910676    0% /tmp\n/dev/sda2                  996780   284236   643732   31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: 指定一个存在的路径(仅有中英文差异)",
+            "setup_commands": [
+            ],
+            "args": [
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996348 41884692   40% /\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: 指定多个存在的路径(仅有中英文差异)",
+            "setup_commands": [
+            ],
+            "args": [
+                "/",
+                "/root",
+                "/tmp"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996376 41884664   40% /\n/dev/mapper/ctyunos-root 71923932 26996376 41884664   40% /\ntmpfs                     7910676        0  7910676    0% /tmp\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -h",
+            "setup_commands": [
+            ],
+            "args": [
+                "-h"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "Filesystem               Size  Used Avail Use% Mounted on\n/dev/mapper/ctyunos-root  69G   26G   40G  40% /\ndevtmpfs                   4M     0    4M   0% /dev\ntmpfs                    7.6G     0  7.6G   0% /dev/shm\ntmpfs                      4M     0    4M   0% /sys/fs/cgroup\ntmpfs                    3.1G  9.1M  3.1G   1% /run\ntmpfs                    7.6G     0  7.6G   0% /tmp\n/dev/sda2                974M  278M  629M  31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -H",
+            "setup_commands": [
+            ],
+            "args": [
+                "-H"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                  大小  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root   74G   28G   43G   40% /\ndevtmpfs                  4.2M     0  4.2M    0% /dev\ntmpfs                     8.2G     0  8.2G    0% /dev/shm\ntmpfs                     4.2M     0  4.2M    0% /sys/fs/cgroup\ntmpfs                     3.3G  9.5M  3.3G    1% /run\ntmpfs                     8.2G     0  8.2G    0% /tmp\n/dev/sda2                 1.1G  292M  660M   31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -m覆盖默认单位",
+            "setup_commands": [
+            ],
+            "args": [
+                "-m"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                 1M的块  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root  70239 26364 40903   40% /\ndevtmpfs                      4     0     4    0% /dev\ntmpfs                      7726     0  7726    0% /dev/shm\ntmpfs                         4     0     4    0% /sys/fs/cgroup\ntmpfs                      3091    10  3082    1% /run\ntmpfs                      7726     0  7726    0% /tmp\n/dev/sda2                   974   278   629   31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -T(仅有中英文差距)",
+            "setup_commands": [
+            ],
+            "args": [
+                "-T"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -t，只显示指定类型(仅有中英文差距)",
+            "setup_commands": [
+            ],
+            "args": [
+                "-t",
+                "ext4"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -x，排除指定类型(仅有中英文差距)",
+            "setup_commands": [
+            ],
+            "args": [
+                "-x",
+                "ext4"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -i(仅有中英文差距)",
+            "setup_commands": [
+            ],
+            "args": [
+                "-i"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "文件系统                  Inodes  已用I   可用I 已用I% 挂载点\n/dev/mapper/ctyunos-root 4543552 783094 3760458    18% /\ndevtmpfs                 1973210    418 1972792     1% /dev\ntmpfs                    1977668      1 1977667     1% /dev/shm\ntmpfs                       1024     18    1006     2% /sys/fs/cgroup\ntmpfs                     819200    746  818454     1% /run\ntmpfs                    1048576     22 1048554     1% /tmp\n/dev/sda2                  65536    394   65142     1% /boot\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: -i加上指定路径(仅有中英文差距)",
+            "setup_commands": [
+            ],
+            "args": [
+                "-i",
+                "/", "/root", "/tmp"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "Filesystem                Inodes  IUsed   IFree IUse% Mounted on\n/dev/mapper/ctyunos-root 4543552 783098 3760454   18% /\n/dev/mapper/ctyunos-root 4543552 783098 3760454   18% /\ntmpfs                    1048576     21 1048555    1% /tmp\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: 指定路径不存在",
+            "setup_commands": [
+            ],
+            "args": [
+                "/not_exist_path"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "df",
+            "description": "df: 部分路径不存在",
+            "setup_commands": [
+            ],
+            "args": [
+                "/",
+                "/not_exist_path",
+                "/tmp"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996904 41884136   40% /\ntmpfs                     7910676        0  7910676    0% /tmp\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        }
+    ]
+}

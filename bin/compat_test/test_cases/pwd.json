@@ -4,7 +4,10 @@
             "command": "pwd",
             "description": "pwd: 显示当前工作目录",
             "args": [],
-            "setup_commands": [],
+            "setup_commands": [
+                "mkdir /test_pwd_dir",
+                "cd /test_pwd_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -19,13 +22,18 @@
                     "ignore_function": false
                 }
             },
-            "cleanup_commands": []
+            "cleanup_commands": [
+                "rm -rf /test_pwd_dir"
+            ]
         },
         {
             "command": "pwd",
             "description": "pwd: 带参数调用(无视参数)",
             "args": ["abcd"],
-            "setup_commands": [],
+            "setup_commands": [
+                "mkdir /test_pwd_dir",
+                "cd /test_pwd_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -40,14 +48,19 @@
                     "ignore_function": false
                 }
             },
-            "cleanup_commands": []
+            "cleanup_commands": [
+                "rm -rf /test_pwd_dir"
+            ]
         },
         {
             "tstdin": "hello",
             "command": "pwd",
             "description": "pwd: 使用标准输入",
             "args": [],
-            "setup_commands": [],
+            "setup_commands": [
+                "mkdir /test_pwd_dir",
+                "cd /test_pwd_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -62,7 +75,9 @@
                     "ignore_function": false
                 }
             },
-            "cleanup_commands": []
+            "cleanup_commands": [
+                "rm -rf /test_pwd_dir"
+            ]
         }
     ]
 }

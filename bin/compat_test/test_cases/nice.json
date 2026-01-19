@@ -1,0 +1,204 @@
+{
+    "tests": [
+        {
+            "command": "nice",
+            "description": "nice: 测试设置进程优先级",
+            "args": ["-n", "5", "sh", "-c", "ps o ni= -p $$"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "  5\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "nice",
+            "description": "nice: 显式指定 nice 值（负值）",
+            "args": ["-n", "-5", "sh", "-c", "ps o ni= -p $$"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " -5\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "nice",
+            "description": "nice: nice值为极大正数",
+            "args": ["-n", "100", "sh", "-c", "ps o ni= -p $$"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " 19\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "nice",
+            "description": "nice: nice值为极小负数",
+            "args": ["-n", "-100", "sh", "-c", "ps o ni= -p $$"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "-20\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "nice",
+            "description": "nice: 不执行命令",
+            "args": ["-n", "5"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "nice",
+            "description": "nice: 执行不存在的命令",
+            "args": ["-n", "5", "notexistcmd"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 127,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "nice",
+            "description": "nice: 非法的nice参数",
+            "args": ["-n", "aaa", "sh", "-c", "ps o ni= -p $$"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "nice",
+            "description": "nice: 设置优先级为小数",
+            "args": ["-n", "5.5", "sh", "-c", "ps o ni= -p $$"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": false
+        }
+    ]
+}

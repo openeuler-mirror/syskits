@@ -1,0 +1,290 @@
+{
+    "tests": [
+        {
+            "command": "tsort",
+            "description": "tsort: 简单依赖关系排序测试",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A B\nB C\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "A\nB\nC\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "tstdin": "A B\nB C\n",
+            "command": "tsort",
+            "description": "tsort: 标准输入测试",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "A\nB\nC\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 单个元素依赖测试",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 多个单独元素，无依赖测试",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A\nB\nC\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 循环依赖测试",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A B\nB C\nC A\nF G\nX F\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 重复依赖",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A B\nA B\nA B\nC A\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "C\nA\nB\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 多个文件输入测试",
+            "args": ["deps_tsort.txt", "deps_tsort2.txt"],
+            "setup_commands": [
+                "printf 'A B\nC A\n' > deps_tsort.txt",
+                "printf 'D C\nE D\n' > deps_tsort2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "C\nA\nB\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt deps_tsort2.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 空文件",
+            "args": ["missing.txt"],
+            "setup_commands": [
+                "printf 'A B\nA B\nA B\nC A\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 多条依赖链测试",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A B\nC D\nE F\nG H\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "A\nC\nE\nG\nB\nD\nF\nH\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 非ASCII字符测试",
+            "args": ["deps_tsort.txt"],
+            "setup_commands": [
+                "printf '你 我\n他 你\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "他\n你\n我\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        },
+        {
+            "command": "tsort",
+            "description": "tsort: 错误参数测试",
+            "args": ["--badOption", "deps_tsort.txt"],
+            "setup_commands": [
+                "printf 'A B\nC A\n' > deps_tsort.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f deps_tsort.txt"
+            ]
+        }
+    ]
+}

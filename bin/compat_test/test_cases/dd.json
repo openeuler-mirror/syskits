@@ -1,0 +1,401 @@
+{
+    "tests": [
+        {
+            "tstdin": "hello",
+            "command": "dd",
+            "description": "dd: 基本拷贝",
+            "args": [
+                "of=test_dd_output"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                {
+                    "command": "cat test_dd_output",
+                    "expected_exit": 0,
+                    "expected_stdout": "hello",
+                    "expected_stderr": null
+                }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 文件拷贝",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                {
+                    "command": "cat test_dd_output",
+                    "expected_exit": 0,
+                    "expected_stdout": "hello",
+                    "expected_stderr": null
+                }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 指定块大小（bs=1）",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "hello",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 指定块数（count=3, bs=1）",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1",
+                "count=3"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "hel",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 跳过块（skip=2, bs=1）",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1",
+                "skip=2"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "llo",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 仅写入部分块（seek）",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1",
+                "seek=2"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input",
+                "echo 'xx' > test_dd_output"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "xxhello",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: count=0（不复制任何块）",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1",
+                "count=0"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: skip 超过文件大小",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1",
+                "skip=1000"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 块大小超过文件本身",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=1024"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 输入文件不存在",
+            "args": [
+                "if=not_exist.txt",
+                "of=test_dd_output"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_dd_output",
+                        "expected_exit": 1,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 非法参数（bs=bad）",
+            "args": [
+                "if=test_dd_input",
+                "of=test_dd_output",
+                "bs=bad"
+            ],
+            "setup_commands": [
+                "echo hello > test_dd_input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test_dd_output",
+                        "expected_exit": 1,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_output test_dd_input"
+            ]
+        }
+    ]
+}

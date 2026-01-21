@@ -1,0 +1,623 @@
+{
+    "tests": [
+        {
+            "command": "csplit",
+            "description": "csplit: 按照行号来切分",
+            "args": [
+                "csplit_input.txt",
+                "3"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n17\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 多个行号切分",
+            "args": [
+                "csplit_input.txt",
+                "3", "6"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n6\n11\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 多个行号切分",
+            "args": [
+                "csplit_input.txt",
+                "3", "6"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n6\n11\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 按照正则切分",
+            "args": [
+                "csplit_input.txt",
+                "/^---$/"
+            ],
+            "setup_commands": [
+                "echo 'line1\nline2\n---\nline3\nline4\n---\nline5\nline6\n---\nline7\nline8\n---\nline9\nline10\n' > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12\n63\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 多次按照同一个正则切分",
+            "args": [
+                "csplit_input.txt",
+                "/^---$/",
+                "/^---$/"
+            ],
+            "setup_commands": [
+                "echo 'line1\nline2\n---\nline3\nline4\n---\nline5\nline6\n---\nline7\nline8\n---\nline9\nline10\n' > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12\n16\n50\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 正则+次数修饰",
+            "args": [
+                "csplit_input.txt",
+                "/^---$/+2"
+            ],
+            "setup_commands": [
+                "echo 'line1\nline2\n---\nline3\nline4\n---\nline5\nline6\n---\nline7\nline8\n---\nline9\nline10\n' > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "22\n56\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 行号 + 正则切分",
+            "args": [
+                "csplit_input.txt",
+                "3",
+                "/^---$/"
+            ],
+            "setup_commands": [
+                "echo 'line1\nline2\nline3\n---\nline4\nline5\n---\nline6\nline7\n' > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12\n6\n33\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 正则 + 行号切分",
+            "args": [
+                "csplit_input.txt",
+                "/^---$/",
+                "5"
+            ],
+            "setup_commands": [
+                "echo 'line1\nline2\n---\nline3\nline4\nline5\nline6\nline7\nline8\n' > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12\n10\n31\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 指定输出文件前缀（-f）",
+            "args": [
+                "-f",
+                "part_",
+                "csplit_input.txt",
+                "3"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n17\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls part_* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat part_*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt part_*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 指定输出编号位数（-n）",
+            "args": [
+                "-n",
+                "3",
+                "csplit_input.txt",
+                "3"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n17\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx??? | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat xx???",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx???"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 前缀 + 位数组合（-f + -n）",
+            "args": [
+                "-f",
+                "out_",
+                "-n",
+                "2",
+                "csplit_input.txt",
+                "3"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n17\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls out_?? | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat out_??",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt out_??"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 切分点在文件开头（行号=0）",
+            "args": [
+                "csplit_input.txt",
+                "0"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 切分点超出文件行数（行号过大）",
+            "args": [
+                "csplit_input.txt",
+                "1000"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "21\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 正则未匹配",
+            "args": [
+                "csplit_input.txt",
+                "/NOT_EXIST_PATTERN/"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "21\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 输入文件不存在",
+            "args": [
+                "not_exist.txt",
+                "3"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 1,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f xx*"
+            ]
+        },
+        {
+            "command": "csplit",
+            "description": "csplit: 非法参数",
+            "args": [
+                "--bad-flag",
+                "csplit_input.txt",
+                "3"
+            ],
+            "setup_commands": [
+                "seq 1 10 > csplit_input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "ls xx* | wc -l",
+                        "expected_exit": 1,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f csplit_input.txt xx*"
+            ]
+        }
+    ]
+}

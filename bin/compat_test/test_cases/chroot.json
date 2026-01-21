@@ -1,0 +1,217 @@
+{
+    "tests": [
+        {
+            "command": "chroot",
+            "description": "chroot: 在新根下执行不带参数的命令",
+            "args": ["./chroot_test_dir", "/bin/ls"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/ls ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libselinux.so.1 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libcap.so.2 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libpcre2-8.so.0 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "bin\nlib64\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 在新根下执行带参数的命令",
+            "args": ["./chroot_test_dir", "/bin/echo", "hello, this is from new root!"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/echo ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libselinux.so.1 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libcap.so.2 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libpcre2-8.so.0 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "hello, this is from new root!\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 基本用法（默认执行/bin/bash）",
+            "args": ["./chroot_test_dir"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/bash ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libtinfo.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libcap.so.2 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libpcre2-8.so.0 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 新的根目录不存在",
+            "args": ["./not_exist_dir"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 新根不是目录",
+            "args": ["./chroot_test_file"],
+            "setup_commands": [
+                "touch chroot_test_file"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f chroot_test_file"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 命令存在，但是缺少动态库",
+            "args": ["./chroot_test_dir", "/bin/ls"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/ls ./chroot_test_dir/bin/"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 非法参数",
+            "args": ["--badOption",
+                "./chroot_test_dir", "/bin/ls"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/ls ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libselinux.so.1 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libcap.so.2 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libpcre2-8.so.0 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        }
+    ]
+}

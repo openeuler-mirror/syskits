@@ -313,15 +313,6 @@ fn chown_parse_spec(spec_str: &str, sep: char) -> CTResult<(Option<u32>, Option<
         ));
     }
 
-    let mut gid_value = gid_value;
-
-    if uid_value.is_some() && gid_value.is_none() && spec_str.contains(sep) {
-        let uid = uid_value.unwrap();
-        if let Ok(pw) = CtPasswd::locate(uid) {
-            gid_value = Some(pw.gid);
-        }
-    }
-
     // 返回解析结果
     Ok((uid_value, gid_value))
 }

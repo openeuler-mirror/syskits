@@ -1055,23 +1055,12 @@ where
     let mut bad_format = 0;
     let mut failed_cksum = 0;
     let mut failed_open_file = 0;
-    let mut missing_file = 0;
     let binary_marker = if flags.is_binary { "*" } else { " " };
 
     for filename in files {
         let filename = Path::new(filename);
-        let mut file = match open_file(filename) {
-            Ok(f) => f,
-            Err(e) => {
-                missing_file += 1;
-                ct_show_warning!(
-                    "{}: {}",
-                    filename.display(),
-                    e
-                );
-                continue;
-            }
-        };
+        let mut file = open_file(filename)?;
+
         if flags.is_check {
             let check_result = check_hash_file(
                 &mut flags,
@@ -1092,16 +1081,6 @@ where
 
     if !flags.is_status {
         output_summary(bad_format, failed_cksum, failed_open_file)?;
-    }
-
-    if flags.is_check {
-        if bad_format > 0 || failed_cksum > 0 || failed_open_file > 0 {
-            return Err(CtSimpleError::new(1, ""));
-        }
-    }
-
-    if missing_file > 0 {
-        return Err(CtSimpleError::new(1, ""));
     }
 
     Ok(())

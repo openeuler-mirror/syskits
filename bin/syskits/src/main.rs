@@ -170,6 +170,7 @@ impl CommandHandler {
             "manpage" => self.handle_manpage(),       // 处理man页面生成
             "-h" | "--help" => self.handle_help(),    // 处理帮助请求
             "-v" | "--version" => self.handle_version(), // 处理版本请求
+            "--list" => self.handle_list(),          // 处理工具列表请求
             _ => self.handle_utility(util_str),       // 处理普通工具
         }
     }
@@ -186,6 +187,15 @@ impl CommandHandler {
     /// 处理版本请求
     fn handle_version(&self) -> ! {
         println!("{}", CT_VERSION);
+        process::exit(0);
+    }
+
+    fn handle_list(&self) -> ! {
+        let mut utils: Vec<_> = ALL_COMMANDS.to_vec();
+        utils.sort();
+        for util in utils {
+            println!("{}", util);
+        }
         process::exit(0);
     }
 

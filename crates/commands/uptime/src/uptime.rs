@@ -10,11 +10,22 @@
  */
 
 //! uptime 命令来查看系统的运行时间和平均负载情况
+//  |       功能         |  GNU Coreutils  |  Procps |syskits| 状态 |
+//  | -------------------|----------------|--------|------|------|
+//  | 基本功能(无参数)     | 支持           | 支持   | 支持 | 一致|
+//  | -s/--since 选项    | 支持           | 支持   | 支持 | 一致|
+//  | --help 选项        | 支持           | 支持   | 支持 | 一致 |
+//  | --version 选项     | 支持           | 支持   | 支持 | 一致 |
+//  | -p/--pretty 选项   | 不支持         | 支持   | 支持 | (coreutils 不支持) |
+//  | FILE 参数          | 支持           | 不支持 | 支持 | 兼容(Procps均不支持) |
+//  | 错误处理            | 支持           | 支持   | 支持 | 一致|
+//  |  输出格式            | 支持           | 支持   | 支持 | 一致 |
+// 因为系统都默认使用procps的uptime，所以实现和其对齐版本4.0.4，并实现file 参数
 
 extern crate rust_i18n;
 use chrono::{Local, TimeZone, Utc};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::Tool;
@@ -32,6 +43,7 @@ const UPTIME_SECS_PER_MIN: i64 = 60;
 
 pub mod uptime_flags {
     pub static SINCE: &str = "since";
+    pub static PRETTY: &str = "pretty";
 }
 
 fn uptime_print_uptime(up_secs: i64) -> String {
@@ -58,7 +70,45 @@ fn uptime_print_n_users(n_users: usize) -> String {
     match n_users.cmp(&1) {
         std::cmp::Ordering::Equal => "1 user,  ".to_string(),
         std::cmp::Ordering::Greater => format!("{n_users} users,  "),
-        _ => "".to_string(),
+        _ => "0 user,  ".to_string(),
+    }
+}
+
+fn uptime_print_pretty(up_secs: i64) -> String {
+    let days = up_secs / UPTIME_SECS_PER_DAY;
+    let hours = (up_secs % UPTIME_SECS_PER_DAY) / UPTIME_SECS_PER_HOUR;
+    let minutes = (up_secs % UPTIME_SECS_PER_HOUR) / UPTIME_SECS_PER_MIN;
+
+    let mut parts = Vec::new();
+
+    if days > 0 {
+        if days == 1 {
+            parts.push(format!("{} day", days));
+        } else {
+            parts.push(format!("{} days", days));
+        }
+    }
+
+    if hours > 0 {
+        if hours == 1 {
+            parts.push(format!("{} hour", hours));
+        } else {
+            parts.push(format!("{} hours", hours));
+        }
+    }
+
+    if minutes > 0 {
+        if minutes == 1 {
+            parts.push(format!("{} minute", minutes));
+        } else {
+            parts.push(format!("{} minutes", minutes));
+        }
+    }
+
+    if parts.is_empty() {
+        "up 0 minutes".to_string()
+    } else {
+        format!("up {}", parts.join(", "))
     }
 }
 
@@ -67,11 +117,15 @@ pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
-    let (boot_time, user_count) = process_utmpx();
+    // 获取 FILE 参数
+    let file_path = matches.get_one::<String>("file").map(|s| s.as_str());
+
+    let (boot_time, user_count) = process_utmpx(file_path);
     let uptime = get_uptime(boot_time);
     if uptime < 0 {
         Err(CtSimpleError::new(1, "could not retrieve system uptime"))
     } else {
+        // -s 选项优先
         if matches.get_flag(uptime_flags::SINCE) {
             let initial_date = Local
                 .timestamp_opt(Utc::now().timestamp() - uptime, 0)
@@ -80,6 +134,13 @@ pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
             return Ok(());
         }
 
+        // -p 选项
+        if matches.get_flag(uptime_flags::PRETTY) {
+            println!("{}", uptime_print_pretty(uptime));
+            return Ok(());
+        }
+
+        // 默认格式
         let time_result = uptime_print_time();
         let up_secs = uptime;
         let uptime_result = uptime_print_uptime(up_secs);
@@ -100,18 +161,32 @@ pub fn ct_app() -> Command {
     let command_version = crate_version!();
     let application_info = t!("uptime.about");
     let usage_description = t!("uptime.usage");
-    let arg = Arg::new(uptime_flags::SINCE)
-        .short('s')
-        .long(uptime_flags::SINCE)
-        .help(t!("uptime.clap.since"))
-        .action(ArgAction::SetTrue);
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
-        .arg(arg)
+        .arg(
+            Arg::new(uptime_flags::SINCE)
+                .short('s')
+                .long(uptime_flags::SINCE)
+                .help(t!("uptime.since"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(uptime_flags::PRETTY)
+                .short('p')
+                .long(uptime_flags::PRETTY)
+                .help("show uptime in pretty format")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("file")
+                .value_name("FILE")
+                .help("utmp file to read (default: /var/run/utmp)")
+                .num_args(0..=1),
+        )
 }
 
 #[derive(Default)]
@@ -259,9 +334,29 @@ mod tests {
 
         #[test]
         fn test_uptime_print_n_users() {
-            assert_eq!(uptime_print_n_users(0), "");
+            assert_eq!(uptime_print_n_users(0), "0 user,  ");
             assert_eq!(uptime_print_n_users(1), "1 user,  ");
             assert_eq!(uptime_print_n_users(2), "2 users,  ");
+        }
+    }
+
+    #[cfg(test)]
+    mod uptime_print_pretty_tests {
+        use super::*;
+
+        #[test]
+        fn test_uptime_print_pretty() {
+            assert_eq!(uptime_print_pretty(0), "up 0 minutes");
+            assert_eq!(uptime_print_pretty(60), "up 1 minute");
+            assert_eq!(uptime_print_pretty(120), "up 2 minutes");
+            assert_eq!(uptime_print_pretty(3600), "up 1 hour");
+            assert_eq!(uptime_print_pretty(3660), "up 1 hour, 1 minute");
+            assert_eq!(uptime_print_pretty(7200), "up 2 hours");
+            assert_eq!(uptime_print_pretty(7320), "up 2 hours, 2 minutes");
+            assert_eq!(uptime_print_pretty(86400), "up 1 day");
+            assert_eq!(uptime_print_pretty(90000), "up 1 day, 1 hour");
+            assert_eq!(uptime_print_pretty(90061), "up 1 day, 1 hour, 1 minute");
+            assert_eq!(uptime_print_pretty(180122), "up 2 days, 2 hours, 2 minutes");
         }
     }
 

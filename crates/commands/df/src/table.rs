@@ -22,6 +22,7 @@ use crate::columns::Column;
 use crate::filesystem::Filesystem;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::FsUsage;
+use rust_i18n::t;
 
 use std::fmt;
 use std::ops::AddAssign;
@@ -300,6 +301,12 @@ impl<'a> TableRowFormatter<'a> {
                 Column::Target => {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
                         "total".to_string()
+                    } else if self.options.direct {
+                        self.row
+                            .file
+                            .as_ref()
+                            .unwrap_or(&self.row.fs_mount)
+                            .to_string()
                     } else {
                         self.row.fs_mount.to_string()
                     }
@@ -346,39 +353,55 @@ impl TableHeader {
     ///
     /// `options` 控制返回哪些列头。
     fn get_headers(options: &DfOptions) -> Vec<String> {
+        #[cfg(test)]
+        ensure_test_locale();
         let mut headers = Vec::new(); // 初始化一个空的字符串向量来存放头部信息。
 
         // 遍历选项中的列，为每列生成相应的头部信息。
         for column in &options.columns {
             let header = match column {
                 // 根据列类型生成相应的头部字符串。
-                Column::Source => String::from("Filesystem"),
+                Column::Source => t!("df.header.filesystem").to_string(),
                 Column::Size => match options.header_mode {
-                    TableHeaderMode::HumanReadable => String::from("Size"),
+                    TableHeaderMode::HumanReadable => t!("df.header.size").to_string(),
                     TableHeaderMode::PosixPortability => {
                         // 为了POSIX兼容性，使用块大小格式化"Size"头部。
-                        format!("{}-blocks", options.block_size.as_u64())
+                        t!(
+                            "df.header.blocks_format",
+                            num = options.block_size.as_u64(),
+                            label = t!("df.header.blocks")
+                        )
                     }
-                    _ => format!("{}-blocks", options.block_size),
+                    _ => t!(
+                        "df.header.blocks_format",
+                        num = options.block_size,
+                        label = t!("df.header.blocks")
+                    ),
                 },
-                Column::Used => String::from("Used"),
+                Column::Used => t!("df.header.used").to_string(),
                 Column::Avail => match options.header_mode {
                     TableHeaderMode::HumanReadable | TableHeaderMode::Output => {
-                        String::from("Avail")
+                        t!("df.header.avail").to_string()
                     }
-                    _ => String::from("Available"),
+                    _ => t!("df.header.available").to_string(),
                 },
                 Column::Pcent => match options.header_mode {
-                    TableHeaderMode::PosixPortability => String::from("Capacity"),
-                    _ => String::from("Use%"),
+                    TableHeaderMode::PosixPortability => t!("df.header.capacity").to_string(),
+                    _ => t!("df.header.use_percent").to_string(),
                 },
-                Column::Target => String::from("Mounted on"),
-                Column::Itotal => String::from("Inodes"),
-                Column::Iused => String::from("IUsed"),
-                Column::Iavail => String::from("IFree"),
-                Column::Ipcent => String::from("IUse%"),
-                Column::File => String::from("File"),
-                Column::Fstype => String::from("Type"),
+                Column::Target => {
+                    if options.direct {
+                        t!("df.header.file").to_string()
+                    } else {
+                        t!("df.header.mounted_on").to_string()
+                    }
+                }
+                Column::Itotal => t!("df.header.inodes").to_string(),
+                Column::Iused => t!("df.header.iused").to_string(),
+                Column::Iavail => t!("df.header.ifree").to_string(),
+                Column::Ipcent => t!("df.header.iuse_percent").to_string(),
+                Column::File => t!("df.header.file").to_string(),
+                Column::Fstype => t!("df.header.type").to_string(),
             };
 
             headers.push(header); // 将生成的头部信息添加到向量中。
@@ -386,6 +409,16 @@ impl TableHeader {
 
         headers // 返回构建完成的头部信息向量。
     }
+}
+
+#[cfg(test)]
+fn ensure_test_locale() {
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        rust_i18n::set_locale("en-US");
+    });
 }
 
 /// The output table.
@@ -409,7 +442,17 @@ impl Table {
             .columns
             .iter()
             .enumerate()
-            .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
+            .map(|(i, col)| {
+                let mut min_width = Column::min_width(col);
+                if matches!(options.header_mode, TableHeaderMode::HumanReadable)
+                    && matches!(col, Column::Source)
+                {
+                    // coreutils df -h/-H uses an extra space after "Filesystem"
+                    min_width += 1;
+                }
+                let header_width = UnicodeWidthStr::width(headers[i].as_str());
+                min_width.max(header_width)
+            })
             .collect();
 
         // 以表头作为首行开始构建表格数据。
@@ -488,10 +531,16 @@ impl fmt::Display for Table {
                             // 最后一列不添加尾随空格。
                             write!(f, "{}", elem)?;
                         } else {
-                            write!(f, "{:<width$}", elem, width = self.widths[i])?;
+                            write!(
+                                f,
+                                "{}",
+                                pad_right_display_width(elem, self.widths[i])
+                            )?;
                         }
                     }
-                    Alignment::Right => write!(f, "{:>width$}", elem, width = self.widths[i])?,
+                    Alignment::Right => {
+                        write!(f, "{}", pad_left_display_width(elem, self.widths[i]))?
+                    }
                 }
 
                 // 列之间添加分隔符，除非是最后一列。
@@ -508,6 +557,30 @@ impl fmt::Display for Table {
 
         Ok(()) // 成功完成格式化输出。
     }
+}
+
+fn pad_right_display_width(s: &str, width: usize) -> String {
+    let display_width = UnicodeWidthStr::width(s);
+    if display_width >= width {
+        return s.to_string();
+    }
+    let pad = width - display_width;
+    let mut out = String::with_capacity(s.len() + pad);
+    out.push_str(s);
+    out.push_str(&" ".repeat(pad));
+    out
+}
+
+fn pad_left_display_width(s: &str, width: usize) -> String {
+    let display_width = UnicodeWidthStr::width(s);
+    if display_width >= width {
+        return s.to_string();
+    }
+    let pad = width - display_width;
+    let mut out = String::with_capacity(s.len() + pad);
+    out.push_str(&" ".repeat(pad));
+    out.push_str(s);
+    out
 }
 
 #[cfg(test)]

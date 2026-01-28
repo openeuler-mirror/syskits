@@ -186,10 +186,10 @@ impl Column {
     pub(crate) fn min_width(column: &Self) -> usize {
         // 根据列的类型决定其最小宽度
         match column {
-            // 14 = "Filesystem" 的长度加 4 个空格
+            // 14 = "Filesystem" 的长度加 4 个空格,与 coreutils 保持一致
             Self::Source => 14,
             Self::Used => 5,
-            // 最短的表头长度为 4 个字符，因此我们将其作为最小宽度
+            // 最短的表头长度为 4 个字符,因此我们将其作为最小宽度
             _ => 4,
         }
     }

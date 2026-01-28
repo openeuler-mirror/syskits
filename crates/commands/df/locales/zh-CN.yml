@@ -1,4 +1,21 @@
 df:
+  header:
+    filesystem: 文件系统
+    type: 类型
+    blocks: 块
+    size: 大小
+    used: 已用
+    available: 可用
+    avail: 可用
+    use_percent: 已用%
+    inodes: Inodes
+    iused: 已用I
+    ifree: 可用I
+    iuse_percent: 已用I%
+    mounted_on: 挂载点
+    file: 文件
+    capacity: 容量
+    blocks_format: "%{num}的%{label}"
   clap:
     df_opt_help: 打印帮助信息。
     df_opt_all: 包括虚拟文件系统

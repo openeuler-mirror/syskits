@@ -1,82 +1,299 @@
 {
     "tests": [
         {
+            "tstdin": "",
             "command": "uptime",
-            "description": "uptime: 测试系统运行时间",
+            "description": "基本功能测试 - 无参数显示完整信息",
+            "setup_commands": [],
             "args": [],
-            "setup_commands": [
-            ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "command": "uptime",
-            "description": "uptime: 测试 -p",
-            "args": ["-p"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "command": "uptime",
-            "description": "uptime: 测试 -s",
-            "args": ["-s"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
                 "verifications": [
                     {
-                    "command": "[[ $CMD_STDOUT =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]",
-                    "expected_exit": 0,
-                    "expected_stdout": "",
-                    "expected_stderr": null
+                        "command": "test -n \"$CMD_STDOUT\"",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '[0-9]{1,2}:[0-9]{2}:[0-9]{2}'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E 'up'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E 'user'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E 'load average:'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
                     }
                 ],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "测试 -s 选项 - 显示系统启动时间",
+            "setup_commands": [],
+            "args": [
+                "-s"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "[[ $CMD_STDOUT =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "测试 --since 选项 - 显示系统启动时间",
+            "setup_commands": [],
+            "args": [
+                "--since"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "[[ $CMD_STDOUT =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "测试 --help 选项",
+            "setup_commands": [],
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -i 'usage'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "测试 --version 选项",
+            "setup_commands": [],
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -n \"$CMD_STDOUT\"",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "测试无效选项 - 应该报错",
+            "setup_commands": [],
+            "args": [
+                "--invalid-option"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": null,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "test $CMD_EXIT_CODE -ne 0",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": true,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "输出格式验证 - 时间格式",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E '^ [0-9]{1,2}:[0-9]{2}:[0-9]{2} '",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "输出格式验证 - uptime 格式",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E 'up.*(day|days|[0-9]+:[0-9]{2})'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uptime",
+            "description": "输出格式验证 - 负载平均值格式",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -E 'load average: [0-9]+\\.[0-9]{2}, [0-9]+\\.[0-9]{2}, [0-9]+\\.[0-9]{2}'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

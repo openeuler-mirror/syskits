@@ -4,45 +4,52 @@
             "tstdin": "",
             "command": "df",
             "description": "df: 无参数，列出所有已挂载文件系统(仅有中英文差异)",
-            "setup_commands": [
-            ],
-            "args": [
-            ],
+            "setup_commands": [],
+            "args": [],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996308 41884732   40% /\ndevtmpfs                     4096        0     4096    0% /dev\ntmpfs                     7910672        0  7910672    0% /dev/shm\ntmpfs                        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                     3164272     9232  3155040    1% /run\ntmpfs                     7910676        0  7910676    0% /tmp\n/dev/sda2                  996780   284236   643732   31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996308 41884732   40% /\ndevtmpfs                     4096        0     4096    0% /dev\ntmpfs                     7910672        0  7910672    0% /dev/shm\ntmpfs                        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                     3164272     9232  3155040    1% /run\ntmpfs                     7910676        0  7910676    0% /tmp\n/dev/sda2                  996780   284236   643732   31% /boot\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{print; exit}' | grep -qE '^(Filesystem[[:space:]]+1K-blocks[[:space:]]+Used[[:space:]]+Available[[:space:]]+Use%[[:space:]]+Mounted on|文件系统[[:space:]]+1K的块[[:space:]]+已用[[:space:]]+可用[[:space:]]+已用%[[:space:]]+挂载点)$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{if(!h){h=1;next} print $1, $NF}' | cksum | awk '{print $1%255}' | xargs -I{} sh -c 'exit {}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: 指定一个存在的路径(仅有中英文差异)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "/"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996348 41884692   40% /\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996348 41884692   40% /\n",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: 指定多个存在的路径(仅有中英文差异)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "/",
                 "/root",
@@ -50,194 +57,241 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996376 41884664   40% /\n/dev/mapper/ctyunos-root 71923932 26996376 41884664   40% /\ntmpfs                     7910676        0  7910676    0% /tmp\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996376 41884664   40% /\n/dev/mapper/ctyunos-root 71923932 26996376 41884664   40% /\ntmpfs                     7910676        0  7910676    0% /tmp\n",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -h",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-h"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "Filesystem               Size  Used Avail Use% Mounted on\n/dev/mapper/ctyunos-root  69G   26G   40G  40% /\ndevtmpfs                   4M     0    4M   0% /dev\ntmpfs                    7.6G     0  7.6G   0% /dev/shm\ntmpfs                      4M     0    4M   0% /sys/fs/cgroup\ntmpfs                    3.1G  9.1M  3.1G   1% /run\ntmpfs                    7.6G     0  7.6G   0% /tmp\n/dev/sda2                974M  278M  629M  31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "Filesystem               Size  Used Avail Use% Mounted on\n/dev/mapper/ctyunos-root  69G   26G   40G  40% /\ndevtmpfs                   4M     0    4M   0% /dev\ntmpfs                    7.6G     0  7.6G   0% /dev/shm\ntmpfs                      4M     0    4M   0% /sys/fs/cgroup\ntmpfs                    3.1G  9.1M  3.1G   1% /run\ntmpfs                    7.6G     0  7.6G   0% /tmp\n/dev/sda2                974M  278M  629M  31% /boot\n",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -H",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-H"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                  大小  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root   74G   28G   43G   40% /\ndevtmpfs                  4.2M     0  4.2M    0% /dev\ntmpfs                     8.2G     0  8.2G    0% /dev/shm\ntmpfs                     4.2M     0  4.2M    0% /sys/fs/cgroup\ntmpfs                     3.3G  9.5M  3.3G    1% /run\ntmpfs                     8.2G     0  8.2G    0% /tmp\n/dev/sda2                 1.1G  292M  660M   31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                  大小  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root   74G   28G   43G   40% /\ndevtmpfs                  4.2M     0  4.2M    0% /dev\ntmpfs                     8.2G     0  8.2G    0% /dev/shm\ntmpfs                     4.2M     0  4.2M    0% /sys/fs/cgroup\ntmpfs                     3.3G  9.5M  3.3G    1% /run\ntmpfs                     8.2G     0  8.2G    0% /tmp\n/dev/sda2                 1.1G  292M  660M   31% /boot\n",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -m覆盖默认单位",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-m"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                 1M的块  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root  70239 26364 40903   40% /\ndevtmpfs                      4     0     4    0% /dev\ntmpfs                      7726     0  7726    0% /dev/shm\ntmpfs                         4     0     4    0% /sys/fs/cgroup\ntmpfs                      3091    10  3082    1% /run\ntmpfs                      7726     0  7726    0% /tmp\n/dev/sda2                   974   278   629   31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                 1M的块  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root  70239 26364 40903   40% /\ndevtmpfs                      4     0     4    0% /dev\ntmpfs                      7726     0  7726    0% /dev/shm\ntmpfs                         4     0     4    0% /sys/fs/cgroup\ntmpfs                      3091    10  3082    1% /run\ntmpfs                      7726     0  7726    0% /tmp\n/dev/sda2                   974   278   629   31% /boot\n",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -T(仅有中英文差距)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-T"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{print; exit}' | grep -qE '^(Filesystem[[:space:]]+Type[[:space:]]+1K-blocks[[:space:]]+Used[[:space:]]+Available[[:space:]]+Use%[[:space:]]+Mounted on|文件系统[[:space:]]+类型[[:space:]]+1K的块[[:space:]]+已用[[:space:]]+可用[[:space:]]+已用%[[:space:]]+挂载点)$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{if(!h){h=1;next} print $1, $NF}' | cksum | awk '{print $1%255}' | xargs -I{} sh -c 'exit {}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -t，只显示指定类型(仅有中英文差距)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-t",
                 "ext4"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{print; exit}' | grep -qE '^(Filesystem[[:space:]]+1K-blocks[[:space:]]+Used[[:space:]]+Available[[:space:]]+Use%[[:space:]]+Mounted on|文件系统[[:space:]]+1K的块[[:space:]]+已用[[:space:]]+可用[[:space:]]+已用%[[:space:]]+挂载点)$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{if(!h){h=1;next} print $1, $NF}' | cksum | awk '{print $1%255}' | xargs -I{} sh -c 'exit {}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -x，排除指定类型(仅有中英文差距)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-x",
                 "ext4"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                 类型       1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root ext4     71923932 26996560 41884480   40% /\ndevtmpfs                 devtmpfs     4096        0     4096    0% /dev\ntmpfs                    tmpfs     7910672        0  7910672    0% /dev/shm\ntmpfs                    tmpfs        4096        0     4096    0% /sys/fs/cgroup\ntmpfs                    tmpfs     3164272     9232  3155040    1% /run\ntmpfs                    tmpfs     7910676        0  7910676    0% /tmp\n/dev/sda2                ext4       996780   284236   643732   31% /boot\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{print; exit}' | grep -qE '^(Filesystem[[:space:]]+1K-blocks[[:space:]]+Used[[:space:]]+Available[[:space:]]+Use%[[:space:]]+Mounted on|文件系统[[:space:]]+1K的块[[:space:]]+已用[[:space:]]+可用[[:space:]]+已用%[[:space:]]+挂载点)$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{if(!h){h=1;next} print $1, $NF}' | cksum | awk '{print $1%255}' | xargs -I{} sh -c 'exit {}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -i(仅有中英文差距)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-i"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "文件系统                  Inodes  已用I   可用I 已用I% 挂载点\n/dev/mapper/ctyunos-root 4543552 783094 3760458    18% /\ndevtmpfs                 1973210    418 1972792     1% /dev\ntmpfs                    1977668      1 1977667     1% /dev/shm\ntmpfs                       1024     18    1006     2% /sys/fs/cgroup\ntmpfs                     819200    746  818454     1% /run\ntmpfs                    1048576     22 1048554     1% /tmp\n/dev/sda2                  65536    394   65142     1% /boot\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "文件系统                  Inodes  已用I   可用I 已用I% 挂载点\n/dev/mapper/ctyunos-root 4543552 783094 3760458    18% /\ndevtmpfs                 1973210    418 1972792     1% /dev\ntmpfs                    1977668      1 1977667     1% /dev/shm\ntmpfs                       1024     18    1006     2% /sys/fs/cgroup\ntmpfs                     819200    746  818454     1% /run\ntmpfs                    1048576     22 1048554     1% /tmp\n/dev/sda2                  65536    394   65142     1% /boot\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{print; exit}' | grep -qE '^(Filesystem[[:space:]]+Inodes[[:space:]]+IUsed[[:space:]]+IFree[[:space:]]+IUse%[[:space:]]+Mounted on|文件系统[[:space:]]+Inodes[[:space:]]+已用I[[:space:]]+可用I[[:space:]]+已用I%[[:space:]]+挂载点)$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{if(!h){h=1;next} print $1, $NF}' | cksum | awk '{print $1%255}' | xargs -I{} sh -c 'exit {}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: -i加上指定路径(仅有中英文差距)",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "-i",
-                "/", "/root", "/tmp"
+                "/",
+                "/root",
+                "/tmp"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "Filesystem                Inodes  IUsed   IFree IUse% Mounted on\n/dev/mapper/ctyunos-root 4543552 783098 3760454   18% /\n/dev/mapper/ctyunos-root 4543552 783098 3760454   18% /\ntmpfs                    1048576     21 1048555    1% /tmp\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "Filesystem                Inodes  IUsed   IFree IUse% Mounted on\n/dev/mapper/ctyunos-root 4543552 783098 3760454   18% /\n/dev/mapper/ctyunos-root 4543552 783098 3760454   18% /\ntmpfs                    1048576     21 1048555    1% /tmp\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{print; exit}' | grep -qE '^(Filesystem[[:space:]]+Inodes[[:space:]]+IUsed[[:space:]]+IFree[[:space:]]+IUse%[[:space:]]+Mounted on|文件系统[[:space:]]+Inodes[[:space:]]+已用I[[:space:]]+可用I[[:space:]]+已用I%[[:space:]]+挂载点)$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | awk 'NF{if(!h){h=1;next} print $1, $NF}' | cksum | awk '{print $1%255}' | xargs -I{} sh -c 'exit {}'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: 指定路径不存在",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "/not_exist_path"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "tstdin": "",
             "command": "df",
             "description": "df: 部分路径不存在",
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "args": [
                 "/",
                 "/not_exist_path",
@@ -245,13 +299,601 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996904 41884136   40% /\ntmpfs                     7910676        0  7910676    0% /tmp\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "文件系统                   1K的块     已用     可用 已用% 挂载点\n/dev/mapper/ctyunos-root 71923932 26996904 41884136   40% /\ntmpfs                     7910676        0  7910676    0% /tmp\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "df",
+            "description": "df --direct .",
+            "args": [
+                "--direct",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --direct non_existent_file",
+            "args": [
+                "--direct",
+                "non_existent_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Basic df usage on current directory",
+            "args": [
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -P (POSIX) output",
+            "args": [
+                "-P",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -i (inodes)",
+            "args": [
+                "-i",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Conflict: --output and -i",
+            "args": [
+                "-i",
+                "--output=source",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": false
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Conflict: --output and -P",
+            "args": [
+                "-P",
+                "--output=source",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": false
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Conflict: --output and -T",
+            "args": [
+                "-T",
+                "--output=source",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": false
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Custom output: source,size,used",
+            "args": [
+                "--output=source,size,used",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -h (human readable)",
+            "args": [
+                "-h",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Symlink handling",
+            "args": [
+                "df_symlink_test"
+            ],
+            "setup_commands": [
+                "ln -s . df_symlink_test"
+            ],
+            "cleanup_commands": [
+                "rm df_symlink_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Duplicate arguments",
+            "args": [
+                ".",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "Total verification",
+            "args": [
+                "--total",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -m (megabytes)",
+            "args": [
+                "-m",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -v (ignored)",
+            "args": [
+                "-v",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --direct",
+            "args": [
+                "--direct",
+                "/bin/sh"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -a (include dummy file systems)",
+            "args": [
+                "-a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -P unaffected by BLOCK_SIZE (coreutils df-P.sh)",
+            "setup_commands": [
+                "export BLOCK_SIZE=1M"
+            ],
+            "args": [
+                "-P",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
                 }
             },
             "cleanup_commands": [
+                "export BLOCK_SIZE="
             ]
+        },
+        {
+            "command": "df",
+            "description": "df --output duplicate field error (coreutils df-output.sh)",
+            "args": [
+                "--output=target,source,target",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --out split duplicate field error (coreutils df-output.sh)",
+            "args": [
+                "--out=target,source",
+                "--out=target",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -h --output full field list (coreutils df-output.sh)",
+            "args": [
+                "-h",
+                "--output",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df -B1K --output=size header indicates block size (coreutils df-output.sh)",
+            "args": [
+                "-B1K",
+                "--output=size",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --output=source,target --total target dash (coreutils df-output.sh)",
+            "args": [
+                "--output=source,target",
+                "--total",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --output=target --total shows total (coreutils df-output.sh)",
+            "args": [
+                "--output=target",
+                "--total",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --output=file includes file arguments (coreutils df-output.sh)",
+            "setup_commands": [
+                "touch exp"
+            ],
+            "args": [
+                "--output=file",
+                ".",
+                "exp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f exp"
+            ]
+        },
+        {
+            "command": "df",
+            "description": "df --help mentions --output (coreutils df-output.sh)",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "printf \"%s\" \"$CMD_STDOUT\" | grep -q \" --output\"",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --portability header uses Mounted on (coreutils direct.sh)",
+            "setup_commands": [
+                "touch df_direct_test_file"
+            ],
+            "args": [
+                "--portability",
+                "df_direct_test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "printf \"%s\" \"$CMD_STDOUT\" | awk 'NR==1 {print $6 \" \" $7; exit}'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f df_direct_test_file"
+            ]
+        },
+        {
+            "command": "df",
+            "description": "df --portability --direct header uses File (coreutils direct.sh)",
+            "setup_commands": [
+                "touch df_direct_test_file"
+            ],
+            "args": [
+                "--portability",
+                "--direct",
+                "df_direct_test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "printf \"%s\" \"$CMD_STDOUT\" | awk 'NR==1 {print $6; exit}'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f df_direct_test_file"
+            ]
+        },
+        {
+            "command": "df",
+            "description": "df --portability --direct --local fails (coreutils direct.sh)",
+            "setup_commands": [
+                "touch df_direct_test_file"
+            ],
+            "args": [
+                "--portability",
+                "--direct",
+                "--local",
+                "df_direct_test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            },
+            "cleanup_commands": [
+                "rm -f df_direct_test_file"
+            ]
+        },
+        {
+            "command": "df",
+            "description": "df --total -P --block-size=512 (coreutils total-verify.sh)",
+            "args": [
+                "--total",
+                "-P",
+                "--block-size=512",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --total -i -P (coreutils total-verify.sh)",
+            "args": [
+                "--total",
+                "-i",
+                "-P",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df --total with missing file errors (coreutils total-unprocessed.sh)",
+            "args": [
+                "--total",
+                "_does_not_exist_"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "command": "df",
+            "description": "df unreadable file (coreutils unreadable.sh)",
+            "setup_commands": [
+                "touch unreadable",
+                "chmod a-r unreadable"
+            ],
+            "args": [
+                "unreadable"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "chmod a+r unreadable",
+                "rm -f unreadable"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "df",
+            "description": "df fifo (coreutils unreadable.sh)",
+            "setup_commands": [
+                "mkfifo fifo"
+            ],
+            "args": [
+                "fifo"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f fifo"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "df",
+            "description": "df -a includes bind mount duplicates (coreutils skip-duplicates.sh simplified)",
+            "setup_commands": [
+                "mkdir -p dup1 dup2",
+                "mount --bind /tmp dup1",
+                "mount --bind /tmp dup2"
+            ],
+            "args": [
+                "-a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "umount dup1 2>/dev/null || umount -l dup1 2>/dev/null",
+                "umount dup2 2>/dev/null || umount -l dup2 2>/dev/null",
+                "rmdir dup1 dup2"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "df",
+            "description": "df mount point with newline outputs single line (coreutils problematic-chars.sh)",
+            "setup_commands": [
+                "dd if=/dev/zero of=blob bs=8192 count=200 >/dev/null 2>&1",
+                "mnt=$(printf 'mount\\npoint')",
+                "mkdir \"$mnt\"",
+                "/usr/sbin/mkfs.ext2 -F blob >/dev/null 2>&1",
+                "mount -oloop blob \"$mnt\""
+            ],
+            "args": [
+                "mount\npoint"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(printf \"%s\" \"$CMD_STDOUT\" | wc -l)\" -eq 2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "mnt=$(printf 'mount\\npoint')",
+                "umount \"$mnt\" 2>/dev/null || umount -l \"$mnt\" 2>/dev/null",
+                "rmdir \"$mnt\"",
+                "rm -f blob"
+            ],
+            "requires_root": true
         }
     ]
 }

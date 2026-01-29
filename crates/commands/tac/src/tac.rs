@@ -15,7 +15,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
@@ -287,17 +287,19 @@ fn tac_buffer<W: Write>(
 
     for i in memmem::rfind_iter(data, separator) {
         if before {
-            writer.write_all(&data[i + slen..following_line_start])?;
-            if i > 0 {
-                writer.write_all(separator.as_bytes())?;
-            }
+            // before 模式:分隔符属于后面的记录
+            // 输出:分隔符 + 内容(从分隔符之后到下一个位置)
+            writer.write_all(&data[i..following_line_start])?;
+            // 更新下一个位置为当前分隔符的开始位置
             following_line_start = i;
         } else {
+            // 默认模式:分隔符在记录之后
             writer.write_all(&data[i + slen..following_line_start])?;
             following_line_start = i + slen;
         }
     }
 
+    // 输出剩余内容(从开头到 following_line_start)
     writer.write_all(&data[0..following_line_start])?;
     Ok(())
 }
@@ -787,7 +789,7 @@ mod tests {
             let mut output = Vec::new();
             let data = b"line1\nline2\nline3";
             tac_buffer(&mut output, data, true, "\n").unwrap();
-            assert_eq!(output, b"line3\nline2\nline1");
+            assert_eq!(output, b"\nline3\nline2line1");
         }
 
         #[test]
@@ -945,7 +947,7 @@ mod tests {
                 ..Default::default()
             };
             tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
-            assert_eq!(output, b"line3\nline2\nline1");
+            assert_eq!(output, b"\nline3\nline2line1");
         }
 
         #[test]
@@ -982,7 +984,7 @@ mod tests {
                 ..Default::default()
             };
             tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
-            assert_eq!(output, b"3,2,1");
+            assert_eq!(output, b",3,21");
         }
 
         #[test]

@@ -390,13 +390,13 @@ fn unexpand_write_tabs<W: Write>(
                 break;
             }
 
-            ct_crash_if_err!(1, out.write_all(b"\t"));
+            ctcore::ct_crash_if_err!(1, out.write_all(b"\t"));
             s_col += nts;
         }
     }
 
     while col > s_col {
-        ct_crash_if_err!(1, out.write_all(b" "));
+        ctcore::ct_crash_if_err!(1, out.write_all(b" "));
         s_col += 1;
     }
 }

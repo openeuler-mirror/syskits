@@ -1,328 +1,1725 @@
 {
-    "tests": [
-        {
-            "tstdin": "        foo\n",
-            "command": "unexpand",
-            "description": "unexpand: 基本的行首空格替换",
-            "args": [
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    foo\n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
+  "tests": [
+    {
+      "tstdin": " y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a1: leading blanks length 1",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "       foo\n",
-            "command": "unexpand",
-            "description": "unexpand: 行首的空格不足以替换一个tab",
-            "args": [
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "       foo\n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "    abcd        \n",
-            "command": "unexpand",
-            "description": "unexpand: 行中的空格默认不替换为tab",
-            "args": [
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    abcd        \n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "    abcd        \n",
-            "command": "unexpand",
-            "description": "unexpand: 使用-a选项，行中的空格也替换为tab",
-            "args": [
-                "-a"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    abcd    \n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "    abcd       ccc\n",
-            "command": "unexpand",
-            "description": "unexpand: 行中的空格不足以替换为tab",
-            "args": [
-                "-a"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    abcd       ccc\n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "   abc   ccc     \n",
-            "command": "unexpand",
-            "description": "unexpand: 使用-t与-a选项",
-            "args": [
-                "-t",
-                "3",
-                "-a"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    abc     ccc       \n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "   abc   ccc     \n",
-            "command": "unexpand",
-            "description": "unexpand: 使用-t选项，指定tab宽度为3(默认会启用-a选项)",
-            "args": [
-                "-t",
-                "3"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    abc     ccc       \n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "\t        foo\n",
-            "command": "unexpand",
-            "description": "unexpand: 行首已经有tab，再加空格替换",
-            "args": [
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "            foo\n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "\t        foo        \n",
-            "command": "unexpand",
-            "description": "unexpand: tab与空格混合使用",
-            "args": [
-                "-a"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "            foo        \n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "             \n",
-            "command": "unexpand",
-            "description": "unexpand: 不等距的tab",
-            "args": [
-                "-t",
-                "3,6"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "                   \n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "        foo\n",
-            "command": "unexpand",
-            "description": "unexpand: 非法tab宽度",
-            "args": [
-                "-t",
-                "0"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "        foo\n        foo\n",
-            "command": "unexpand",
-            "description": "unexpand: 多行输入",
-            "args": [
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "    foo\n   foo\n",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
         }
-    ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "  y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a2: leading blanks length 2",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "   y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a3: leading blanks length 3",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "    y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a4: leading blanks length 4",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "     y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a5: leading blanks length 5",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "      y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a6: leading blanks length 6",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "       y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a7: leading blanks length 7",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "        y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl a8: leading blanks length 8",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-1: -a blanks length 1",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w  y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-2: -a blanks length 2",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w   y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-3: -a blanks length 3",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w    y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-4: -a blanks length 4",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w     y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-5: -a blanks length 5",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w      y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-6: -a blanks length 6",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w       y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-7: -a blanks length 7",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "w        y\n",
+      "command": "unexpand",
+      "description": "unexpand.pl aa-8: -a blanks length 8",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "      .",
+      "command": "unexpand",
+      "description": "unexpand.pl b-1: -t 2,4",
+      "args": [
+        "-t",
+        "2,4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": " \t\t .\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand infloop-1",
+      "args": [
+        "-t",
+        "1,2"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "    \t\t \n",
+      "command": "unexpand",
+      "description": "coreutils unexpand infloop-2",
+      "args": [
+        "-t",
+        "4,5"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "x \t\t \n",
+      "command": "unexpand",
+      "description": "coreutils unexpand infloop-3",
+      "args": [
+        "-t",
+        "2,3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": " \t\t   \n",
+      "command": "unexpand",
+      "description": "coreutils unexpand infloop-4",
+      "args": [
+        "-t",
+        "1,2"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "x\t\t .\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand c-1",
+      "args": [
+        "-t",
+        "1,2"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "   a  b\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand tabs-1",
+      "args": [
+        "-t",
+        "3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "   a  b\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand tabs-2",
+      "args": [
+        "-t",
+        "3",
+        "--first-only"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": " b  c   d\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-1",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a \n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-2",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a  \n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-3",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a   \n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-4",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a ",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-5",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a  ",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-6",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a   ",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-7",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": " a a  a\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-8",
+      "args": [
+        "-t",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "   a  a  a\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-9",
+      "args": [
+        "-t",
+        "2"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "0 2 4 6\t8\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-10",
+      "args": [
+        "-t",
+        "3,4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "    4\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-11",
+      "args": [
+        "-t",
+        "3,4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "01  4\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-12",
+      "args": [
+        "-t",
+        "3,4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "0   4\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand blanks-13",
+      "args": [
+        "-t",
+        "3,4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567   \t1\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand posix-1",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567  \t1\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand posix-2",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567 \t1\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand posix-3",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567\t1\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand posix-4",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567  1\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand posix-5",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567 1\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand posix-6",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand obs-ovflo",
+      "args": [
+        "-18446744073709551616"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "aa  c\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand bs1",
+      "args": [
+        "-a",
+        "-t4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "aa\b  c\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand bs2",
+      "args": [
+        "-a",
+        "-t4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "aa\b   c\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand bs3",
+      "args": [
+        "-a",
+        "-t4"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "aa\b  c\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand bs4",
+      "args": [
+        "-a",
+        "-t3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a  b  c",
+      "command": "unexpand",
+      "description": "coreutils unexpand u1",
+      "args": [
+        "-a",
+        "-3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a   b    c",
+      "command": "unexpand",
+      "description": "coreutils unexpand u2",
+      "args": [
+        "-a",
+        "-4,9"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a          b",
+      "command": "unexpand",
+      "description": "coreutils unexpand u3",
+      "args": [
+        "-a",
+        "-11"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a b   c",
+      "command": "unexpand",
+      "description": "coreutils unexpand u4",
+      "args": [
+        "-a",
+        "-2,6"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a      b",
+      "command": "unexpand",
+      "description": "coreutils unexpand u5",
+      "args": [
+        "-a",
+        "-7"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a       b",
+      "command": "unexpand",
+      "description": "coreutils unexpand u6",
+      "args": [
+        "-a",
+        "-8"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a  b     c",
+      "command": "unexpand",
+      "description": "coreutils unexpand u7",
+      "args": [
+        "-a",
+        "-3,9"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "   a   b",
+      "command": "unexpand",
+      "description": "coreutils unexpand u8",
+      "args": [
+        "-3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "x\t \t y\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand ts1",
+      "args": [
+        "-t8,9"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "x\t \t y\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand ts2",
+      "args": [
+        "-t5,8"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand mb-basic",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand mb-multi-files",
+      "args": [
+        "-a",
+        "in",
+        "in"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8",
+        "cat > in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "12345678\ne       |ascii(1)\né       |composed(1)\né       |decomposed(1)\n　      |ideo-space(2)\n－      |full-hypen(2)\n",
+      "command": "unexpand",
+      "description": "coreutils unexpand mb-width",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": " 　  ö       ü       ß",
+      "command": "unexpand",
+      "description": "coreutils unexpand mb-wide-blank",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand mb-invalid-bytes",
+      "args": [
+        "-a",
+        "in"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8",
+        "printf '12345678\n        \\xFF|\n\\xFF       |\n        \\xFFä|\nä\\xFF      |\n        ä\\xFF|\n\\xFF       ä|\näbcdef\\xFF |\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand bom-stdin-utf8",
+      "args": [
+        "in"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8",
+        "printf '\\xEF\\xBB\\xBF' > in",
+        "cat >> in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF",
+        "printf '   äöü\\t.    öüä.   \\tä xx\\n' >> in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand bom-stdin-lang-c",
+      "args": [
+        "in"
+      ],
+      "setup_commands": [
+        "export LANG=C",
+        "printf '\\xEF\\xBB\\xBF' > in",
+        "cat >> in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF",
+        "printf '   äöü\\t.    öüä.   \\tä xx\\n' >> in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand bom-stdin-lc-all-c",
+      "args": [
+        "in"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '\\xEF\\xBB\\xBF' > in",
+        "cat >> in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF",
+        "printf '   äöü\\t.    öüä.   \\tä xx\\n' >> in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand bom-multi-utf8",
+      "args": [
+        "in",
+        "in"
+      ],
+      "setup_commands": [
+        "export LC_ALL=en_US.UTF-8",
+        "printf '\\xEF\\xBB\\xBF' > in",
+        "cat >> in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF",
+        "printf '   äöü\\t.    öüä.   \\tä xx\\n' >> in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand bom-multi-lang-c",
+      "args": [
+        "in",
+        "in"
+      ],
+      "setup_commands": [
+        "export LANG=C",
+        "printf '\\xEF\\xBB\\xBF' > in",
+        "cat >> in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF",
+        "printf '   äöü\\t.    öüä.   \\tä xx\\n' >> in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "coreutils unexpand bom-multi-lc-all-c",
+      "args": [
+        "in",
+        "in"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '\\xEF\\xBB\\xBF' > in",
+        "cat >> in <<'EOF'\n1234567812345678123456781\n.       .       .       .\na       b       c       d\n.       .       .       .\nä       ö       ü       ß\n.       .       .       .\n   äöü  .    öüä.       ä xx\nEOF",
+        "printf '   äöü\\t.    öüä.   \\tä xx\\n' >> in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    }
+  ]
 }

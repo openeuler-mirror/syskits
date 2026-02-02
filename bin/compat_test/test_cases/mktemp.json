@@ -1,318 +1,846 @@
 {
-    "tests": [
-        {
-            "command": "mktemp",
-            "description": "mktemp: 测试创建临时文件",
-            "args": [],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f $CMD_STDOUT"
-            ]
+  "tests": [
+    {
+      "command": "mktemp",
+      "description": "Basic file creation with template",
+      "args": ["tmp.XXXXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 测试创建临时目录",
-            "args": ["-d"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d $CMD_STDOUT",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf $CMD_STDOUT"
-            ]
+        "verifications": [
+          {
+            "command": "test -f \"$CMD_STDOUT\" && test -r \"$CMD_STDOUT\" && test -w \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Too many templates error",
+      "args": ["-q", "a", "b"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 使用前缀和占位符创建文件",
-            "args": [
-                "compat_test.XXX"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "[[ $CMD_STDOUT == /tmp/compat_test.* ]]",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f $CMD_STDOUT"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'too many templates'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Too few X's in template",
+      "args": ["-q", "foo.XX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 创建带后缀的临时文件",
-            "args": [
-                "--suffix=.txt",
-                "compat_test.XXX"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "[[ $CMD_STDOUT == *.txt ]]",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f $CMD_STDOUT"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q \"too few X's in template\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Create file with custom template",
+      "args": ["bar.XXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 指定创建目录",
-            "args": [
-                "--tmpdir=/tmp/compat_test_dir",
-                "compat_test.XXX"
-            ],
-            "setup_commands": [
-                "mkdir -p /tmp/compat_test_dir"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "[[ $CMD_STDOUT == /tmp/compat_test_dir/* ]]",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f $CMD_STDOUT",
-                "rm -rf /tmp/compat_test_dir"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^bar\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Create file with template starting with dash",
+      "args": ["--", "-XXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 只打印名字，不创建文件",
-            "args": [
-                "-u",
-                "compat_test.XXX"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 1,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^-'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Create directory with -d flag",
+      "args": ["-d", "f.XXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 占位符不足",
-            "args": [
-                "compat_test_file"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^f\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -d \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rmdir \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Create directory with template of all X's",
+      "args": ["-d", "XXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 模板中的X少于3个的地方不替换",
-            "args": [
-                "XX_XXXX_compat_test"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "[[ $CMD_STDOUT == /tmp/XX* ]]",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f $CMD_STDOUT"
-            ]
+        "verifications": [
+          {
+            "command": "test -d \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rmdir \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Dry run with -u flag (file)",
+      "args": ["-u", "f.XXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "mktemp",
-            "description": "mktemp: 指定目录不存在",
-            "args": [
-                "--tmpdir=/tmp/compat_test_dir",
-                "compat_test.XXX"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -e $CMD_STDOUT",
-                        "expected_exit": 1,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^f\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test ! -e \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Dry run with --dry-run flag (directory)",
+      "args": ["-d", "--dry-run", "d.XXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^d\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test ! -e \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Invalid template with -t flag (contains directory separator)",
+      "args": ["-t", "a/bXXXX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'contains directory separator'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Invalid template with --tmpdir (absolute path)",
+      "args": ["--tmpdir=.", "/bXXXX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'may not be absolute'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Template with suffix after X's (file)",
+      "args": ["aXXXXb"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^a.*b$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Template with suffix after X's (directory)",
+      "args": ["-d", "aXXXXb"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^a.*b$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -d \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rmdir \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Template with suffix after X's (dry run)",
+      "args": ["-u", "aXXXXb"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^a.*b$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test ! -e \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Template with multiple X blocks (uses last block)",
+      "args": ["aXXXXaaXXXXa"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^aXXXXaa.*a$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Directory with --suffix and empty suffix",
+      "args": ["-d", "--suffix=", "aXXXXaaXXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^aXXXXaa'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -d \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rmdir \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Use --suffix option",
+      "args": ["--suffix=b", "aXXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^a.*b$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Suffix can be X character",
+      "args": ["--suffix=X", "aXXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^a.*X$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Suffix with directory separator is invalid",
+      "args": ["--suffix", "/b", "aXXXX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'contains directory separator'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Template suffix with directory separator is invalid",
+      "args": ["aXXXX/b"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'contains directory separator'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "With --suffix, template must end in X",
+      "args": ["--suffix=", "aXXXXb"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'must end in X'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Directory with --suffix, empty template must end in X",
+      "args": ["-d", "--suffix=aXXXXb", ""],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'must end in X'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Template with only XX (too few X's)",
+      "args": ["aXXb"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q \"too few X's\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Directory with --suffix=X and template aXX (too few X's total)",
+      "args": ["-d", "--suffix=X", "aXX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q \"too few X's\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Use --suffix with TMPDIR environment variable",
+      "args": ["--suffix=.txt"],
+      "setup_commands": ["export TMPDIR=/tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '\\.txt$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^/tmp/'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["unset TMPDIR"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Template with subdirectory using --tmpdir",
+      "args": ["--tmpdir=/tmp", "a/bXXXX"],
+      "setup_commands": ["mkdir -p /tmp/a"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^/tmp/a/b'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rmdir /tmp/a"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Priority: -t flag overrides -p and TMPDIR",
+      "args": ["-t", "-p", "/nonexistent", "foo.XXX"],
+      "setup_commands": ["export TMPDIR=/tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^/tmp/foo\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["unset TMPDIR"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Fail when TMPDIR points to non-existent directory",
+      "args": [],
+      "setup_commands": ["export TMPDIR=/no/such/dir"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'failed to create'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["unset TMPDIR"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Dry run succeeds even with bad TMPDIR",
+      "args": ["-u"],
+      "setup_commands": ["export TMPDIR=/no/such/dir"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^/no/such/dir/tmp\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test ! -e \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["unset TMPDIR"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Test --help flag",
+      "args": ["--help"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -i 'usage'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Test --version flag",
+      "args": ["--version"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -i 'version\\|mktemp'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Test -q (quiet) flag suppresses errors",
+      "args": ["-q", "foo.XX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
         }
-    ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Test -p flag (short form of --tmpdir)",
+      "args": ["-p", "/tmp", "test.XXXXXX"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^/tmp/test\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mktemp",
+      "description": "Default template when no template provided",
+      "args": [],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'tmp\\.'",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "File permissions should be 0600",
+      "args": ["test.XXXXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' \"$CMD_STDOUT\" | grep -q '^600$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "rm -f \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    },
+    {
+      "command": "mktemp",
+      "description": "Directory permissions should be 0700",
+      "args": ["-d", "test.XXXXXX"],
+      "setup_commands": ["cd /tmp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' \"$CMD_STDOUT\" | grep -q '^700$'",
+            "expected_exit": 0
+          },
+          {
+            "command": "rmdir \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["cd -"]
+    }
+  ]
 }

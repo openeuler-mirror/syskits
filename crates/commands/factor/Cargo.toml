@@ -29,6 +29,7 @@ ctcore = { workspace = true }
 gcd = { workspace = true }
 num-modular = { workspace = true }
 num-prime = { workspace = true }
+num-bigint = { workspace = true }
 
 [dev-dependencies]
 quickcheck = "1.0.3"

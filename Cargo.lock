@@ -967,6 +967,7 @@ dependencies = [
  "coz",
  "ctcore",
  "gcd",
+ "num-bigint",
  "num-modular 0.6.1",
  "num-prime",
  "num-traits",

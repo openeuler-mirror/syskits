@@ -14,16 +14,20 @@
 extern crate rust_i18n;
 use ctcore::Tool;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
 mod factor_algorithm;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, FromIo, set_ct_exit_code};
-use ctcore::{ct_show_error, ct_show_warning};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_show_error;
 pub use factor_algorithm::*;
+use num_bigint::BigUint;
+use num_prime::nt_funcs::factorize;
+use num_traits::{One, ToPrimitive, Zero};
 use sys_locale::get_locale;
 
 pub mod miller_rabin;
@@ -78,27 +82,162 @@ impl FactorFlags {
     }
 }
 
+#[derive(Debug)]
+enum ParsedNumber {
+    Small(u64),
+    Big(BigUint),
+}
+
+impl ParsedNumber {}
+
+fn parse_number_token(token: &str) -> Option<ParsedNumber> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let stripped = trimmed.strip_prefix('+').unwrap_or(trimmed);
+    if stripped.is_empty() || stripped.starts_with('-') {
+        return None;
+    }
+
+    if !stripped.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    let value = BigUint::parse_bytes(stripped.as_bytes(), 10)?;
+    if let Some(n) = value.to_u64() {
+        return Some(ParsedNumber::Small(n));
+    }
+
+    Some(ParsedNumber::Big(value))
+}
+
+fn format_big_factors(factors: &BTreeMap<BigUint, usize>, print_exponents: bool) -> String {
+    let mut output = String::new();
+    for (prime, exp) in factors {
+        if print_exponents && *exp > 1 {
+            output.push(' ');
+            output.push_str(&prime.to_string());
+            output.push('^');
+            output.push_str(&exp.to_string());
+        } else {
+            let prime_str = prime.to_string();
+            for _ in 0..*exp {
+                output.push(' ');
+                output.push_str(&prime_str);
+            }
+        }
+    }
+
+    output
+}
+
+fn factorize_biguint(value: &BigUint) -> BTreeMap<BigUint, usize> {
+    let mut n = value.clone();
+    let mut factors = BTreeMap::new();
+    if n.is_zero() || n.is_one() {
+        return factors;
+    }
+
+    let one = BigUint::one();
+    let two = BigUint::from(2u8);
+    let mut count = 0usize;
+    while (&n & &one).is_zero() {
+        n >>= 1;
+        count += 1;
+    }
+    if count > 0 {
+        factors.insert(two, count);
+    }
+
+    if n.is_one() {
+        return factors;
+    }
+
+    let rest = factorize(n);
+    for (prime, exp) in rest {
+        *factors.entry(prime).or_insert(0) += exp;
+    }
+
+    factors
+}
+
+fn validate_options(args: &[OsString]) -> CTResult<()> {
+    let mut options_done = false;
+    for arg in args.iter().skip(1) {
+        let arg_str = arg.to_string_lossy();
+        if options_done {
+            continue;
+        }
+
+        if arg_str == "--" {
+            options_done = true;
+            continue;
+        }
+
+        if arg_str.starts_with("--") {
+            if arg_str == "--exponents" || arg_str == "--help" {
+                continue;
+            }
+            ct_show_error!("unrecognized option '{}'", arg_str);
+            eprintln!(
+                "Try '{} --help' for more information.",
+                ctcore::ct_util_name()
+            );
+            return Err(CtSimpleError::new(1, ""));
+        }
+
+        if arg_str.starts_with('-') && arg_str != "-" {
+            if arg_str == "-h" {
+                continue;
+            }
+            let invalid = arg_str.chars().nth(1).unwrap_or('-');
+            ct_show_error!("invalid option -- '{}'", invalid);
+            eprintln!(
+                "Try '{} --help' for more information.",
+                ctcore::ct_util_name()
+            );
+            return Err(CtSimpleError::new(1, ""));
+        }
+    }
+
+    Ok(())
+}
+
 /// 处理单个数字的因式分解并输出结果
 fn factors_print_str(
     num_str: &str,
     w: &mut io::BufWriter<impl io::Write>,
     is_print_exponents: bool,
 ) -> io::Result<()> {
-    let x = match num_str.trim().parse::<u64>() {
-        Ok(x) => x,
-        Err(e) => {
-            // We return Ok() instead of Err(), because it's non-fatal and we should try the next
-            // number.
-            ct_show_warning!("{}: {}", num_str.maybe_quote(), e);
+    let display_token = num_str.trim();
+    let parsed = match parse_number_token(display_token) {
+        Some(parsed) => parsed,
+        None => {
+            ct_show_error!("{} is not a valid positive integer", display_token.quote());
             set_ct_exit_code(1);
             return Ok(());
         }
     };
 
-    if is_print_exponents {
-        writeln!(w, "{}:{:#}", x, factor(x))?;
-    } else {
-        writeln!(w, "{}:{}", x, factor(x))?;
+    match parsed {
+        ParsedNumber::Small(x) => {
+            if is_print_exponents {
+                writeln!(w, "{}:{:#}", x, factor(x))?;
+            } else {
+                writeln!(w, "{}:{}", x, factor(x))?;
+            }
+        }
+        ParsedNumber::Big(x) => {
+            let output = if x.is_zero() || x.is_one() {
+                String::new()
+            } else {
+                let factors = factorize_biguint(&x);
+                format_big_factors(&factors, is_print_exponents)
+            };
+            writeln!(w, "{}:{}", x, output)?;
+        }
     }
 
     w.flush()
@@ -167,7 +306,9 @@ pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 1. 解析命令行参数
-    let matches = ct_app().try_get_matches_from(args)?;
+    let args_vec: Vec<OsString> = args.into_iter().collect();
+    validate_options(&args_vec)?;
+    let matches = ct_app().try_get_matches_from(&args_vec)?;
 
     // 2. 创建配置对象
     let settings = FactorFlags::new(&matches);
@@ -358,7 +499,7 @@ mod tests {
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
         let output = String::from_utf8(buffer).unwrap();
-        assert_eq!(output, "0: 0\n1:\n"); // 0 的因子是 0，1 没有素因子
+        assert_eq!(output, "0:\n1:\n"); // 0 和 1 都没有素因子
     }
 
     /// 测试大数

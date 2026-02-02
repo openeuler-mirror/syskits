@@ -68,12 +68,34 @@ fn brent_pollard_rho(m: &Montgomery<u64>, x0: u64, c: u64) -> Option<u64> {
     let mut g = 1u64;
 
     // 批量 GCD 的大小
-    const BATCH_SIZE: u64 = 100;
+    // coreutils 在 Pollard Rho 中每 32 步做一次 gcd 检查（k % 32 == 1）。
+    // 这里对齐为 32，以保持与 coreutils 类似的检查频率与行为节奏。
+    const BATCH_SIZE: u64 = 32;
 
     let mut r = 1u64;
     let mut ys = x; // 初始化 ys 变量
 
+    // coreutils 没有显式迭代上限，会在 g==n 时通过更换参数递归重启。
+    // 我们也会在 find_divisor 中做多次随机重试，并在更上层失败时回退到
+    // 确定性分解（factorize64）。因此这里设置有限轮数作为“保险丝”，
+    // 防止极端情况下长时间循环。
+    //
+    // 动态上限依据位数估算：
+    // - r 每轮翻倍，总步数约为 2^max_rounds - 1。
+    // - 对 32-bit 量级，max_rounds≈16，单次尝试约 65k 步。
+    // - 对 64-bit 量级，上限逐步增大，但仍由 clamp 控制在可控范围。
+    let bit_len = 64 - n.leading_zeros();
+    let max_rounds = ((bit_len / 4) + 8).clamp(12, 28);
+    // 回溯阶段上限同样随位数线性放大，避免极端卡死，
+    // 同时配合上层重试与回退保证正确性。
+    let max_backtrack = 32 * 1024 + (bit_len as u64 * 1024);
+    let mut rounds = 0u32;
+
     while g == 1 {
+        if rounds >= max_rounds {
+            return None;
+        }
+        rounds += 1;
         x = ys;
 
         // 计算 2ʳ 步
@@ -115,6 +137,9 @@ fn brent_pollard_rho(m: &Montgomery<u64>, x0: u64, c: u64) -> Option<u64> {
         }
 
         // 增加步长
+        if r > u64::MAX / 2 {
+            return None;
+        }
         r *= 2;
 
         // 如果 g 是 n 本身，我们需要回溯找到确切的因子
@@ -124,7 +149,12 @@ fn brent_pollard_rho(m: &Montgomery<u64>, x0: u64, c: u64) -> Option<u64> {
             let mut y = ys;
             x = m.to_mod(x0);
 
+            let mut backtrack = 0u64;
             while g == 1 {
+                if backtrack >= max_backtrack {
+                    return None;
+                }
+                backtrack += 1;
                 y = f(y);
                 let diff = if m.to_u64(x) >= m.to_u64(y) {
                     m.to_u64(x) - m.to_u64(y)

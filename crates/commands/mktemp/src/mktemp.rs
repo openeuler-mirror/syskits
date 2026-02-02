@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::env;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -491,8 +491,8 @@ fn mktemp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<P
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempdir_in(dir) {
         Ok(d) => {
-            // `into_path` 消耗 TempDir 而不删除它
-            let p = d.into_path();
+            // `keep` 消耗 TempDir 而不删除它
+            let p = d.keep();
             #[cfg(not(windows))]
             fs::set_permissions(&p, fs::Permissions::from_mode(0o700))?;
             Ok(p)

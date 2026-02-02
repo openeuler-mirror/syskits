@@ -1,83 +1,520 @@
 {
-    "tests": [
-        {
-            "command": "pwd",
-            "description": "pwd: 显示当前工作目录",
-            "args": [],
-            "setup_commands": [
-                "mkdir /test_pwd_dir",
-                "cd /test_pwd_dir"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_pwd_dir"
-            ]
+  "tests": [
+    {
+      "command": "pwd",
+      "description": "Basic pwd with no options - should output current directory",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "command": "pwd",
-            "description": "pwd: 带参数调用(无视参数)",
-            "args": ["abcd"],
-            "setup_commands": [
-                "mkdir /test_pwd_dir",
-                "cd /test_pwd_dir"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_pwd_dir"
-            ]
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test -d \"$CMD_STDOUT\"",
+            "expected_exit": 1,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "Test -P flag (physical path) - should resolve symlinks",
+      "args": ["-P"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_real_$$",
+        "ln -s /tmp/test_pwd_real_$$ /tmp/test_pwd_link_$$",
+        "cd /tmp/test_pwd_link_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "tstdin": "hello",
-            "command": "pwd",
-            "description": "pwd: 使用标准输入",
-            "args": [],
-            "setup_commands": [
-                "mkdir /test_pwd_dir",
-                "cd /test_pwd_dir"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_pwd_dir"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_real_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "rm -rf /tmp/test_pwd_link_$$ /tmp/test_pwd_real_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test --physical flag (long form) - should resolve symlinks",
+      "args": ["--physical"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_phys_$$",
+        "ln -s /tmp/test_pwd_phys_$$ /tmp/test_pwd_sym_$$",
+        "cd /tmp/test_pwd_sym_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_phys_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "rm -rf /tmp/test_pwd_sym_$$ /tmp/test_pwd_phys_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test -L flag (logical path) - should preserve symlinks",
+      "args": ["-L"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_logical_$$",
+        "ln -s /tmp/test_pwd_logical_$$ /tmp/test_pwd_lsym_$$",
+        "cd /tmp/test_pwd_lsym_$$",
+        "export PWD=/tmp/test_pwd_lsym_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_lsym_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_lsym_$$ /tmp/test_pwd_logical_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test --logical flag (long form) - should preserve symlinks",
+      "args": ["--logical"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_log_$$",
+        "ln -s /tmp/test_pwd_log_$$ /tmp/test_pwd_logsym_$$",
+        "cd /tmp/test_pwd_logsym_$$",
+        "export PWD=/tmp/test_pwd_logsym_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_logsym_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_logsym_$$ /tmp/test_pwd_log_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test -L with invalid PWD (contains .) - should fall back to physical",
+      "args": ["-L"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_invalid_$$",
+        "cd /tmp/test_pwd_invalid_$$",
+        "export PWD=/tmp/test_pwd_invalid_$$/."
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -qv '\\.'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_invalid_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test -L with invalid PWD (contains ..) - should fall back to physical",
+      "args": ["-L"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_dotdot_$$",
+        "cd /tmp/test_pwd_dotdot_$$",
+        "export PWD=/tmp/../tmp/test_pwd_dotdot_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -qv '\\.\\.'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_dotdot_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test -L with relative PWD - should fall back to physical",
+      "args": ["-L"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_relative_$$",
+        "cd /tmp/test_pwd_relative_$$",
+        "export PWD=relative/path"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^/'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_relative_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test -P overrides -L",
+      "args": ["-L", "-P"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_override_$$",
+        "ln -s /tmp/test_pwd_override_$$ /tmp/test_pwd_ovrsym_$$",
+        "cd /tmp/test_pwd_ovrsym_$$",
+        "export PWD=/tmp/test_pwd_ovrsym_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_override_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_ovrsym_$$ /tmp/test_pwd_override_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test default behavior without POSIXLY_CORRECT - should be physical",
+      "args": [],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_default_$$",
+        "ln -s /tmp/test_pwd_default_$$ /tmp/test_pwd_defsym_$$",
+        "cd /tmp/test_pwd_defsym_$$",
+        "unset POSIXLY_CORRECT"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_default_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "rm -rf /tmp/test_pwd_defsym_$$ /tmp/test_pwd_default_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test default behavior with POSIXLY_CORRECT - should be logical",
+      "args": [],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_posix_$$",
+        "ln -s /tmp/test_pwd_posix_$$ /tmp/test_pwd_posixsym_$$",
+        "cd /tmp/test_pwd_posixsym_$$",
+        "export PWD=/tmp/test_pwd_posixsym_$$",
+        "export POSIXLY_CORRECT=1"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_posixsym_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "unset POSIXLY_CORRECT",
+        "rm -rf /tmp/test_pwd_posixsym_$$ /tmp/test_pwd_posix_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test --help option",
+      "args": ["--help"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -qi 'usage\\|pwd'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": true,
+          "ignore_stderr": true,
+          "ignore_function": false
         }
-    ]
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "Test --version option",
+      "args": ["--version"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -qi 'version\\|pwd'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": true,
+          "ignore_stderr": true,
+          "ignore_function": false
+        }
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "Test with non-option arguments - should ignore them",
+      "args": ["extra", "arguments"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": true,
+          "ignore_stderr": true,
+          "ignore_function": false
+        }
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "Test invalid option - should fail",
+      "args": ["--invalid-option"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test $CMD_EXIT_CODE -ne 0",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": true,
+          "ignore_stdout": true,
+          "ignore_stderr": true,
+          "ignore_function": false
+        }
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "Test output ends with newline",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test \"$(echo -n \"$CMD_STDOUT\" | tail -c 1)\" = $'\\n'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "Test nested symlinks with -P",
+      "args": ["-P"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_nested_$$",
+        "ln -s /tmp/test_pwd_nested_$$ /tmp/test_pwd_sym1_$$",
+        "ln -s /tmp/test_pwd_sym1_$$ /tmp/test_pwd_sym2_$$",
+        "cd /tmp/test_pwd_sym2_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_nested_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "rm -rf /tmp/test_pwd_sym2_$$ /tmp/test_pwd_sym1_$$ /tmp/test_pwd_nested_$$"
+      ]
+    },
+    {
+      "command": "pwd",
+      "description": "Test nested symlinks with -L",
+      "args": ["-L"],
+      "setup_commands": [
+        "mkdir -p /tmp/test_pwd_lnested_$$",
+        "ln -s /tmp/test_pwd_lnested_$$ /tmp/test_pwd_lsym1_$$",
+        "ln -s /tmp/test_pwd_lsym1_$$ /tmp/test_pwd_lsym2_$$",
+        "cd /tmp/test_pwd_lsym2_$$",
+        "export PWD=/tmp/test_pwd_lsym2_$$"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '/test_pwd_lsym2_'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "cd /",
+        "unset PWD",
+        "rm -rf /tmp/test_pwd_lsym2_$$ /tmp/test_pwd_lsym1_$$ /tmp/test_pwd_lnested_$$"
+      ]
+    }
+  ]
 }

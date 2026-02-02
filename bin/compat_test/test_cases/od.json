@@ -2,408 +2,751 @@
     "tests": [
         {
             "command": "od",
-            "description": "od: 测试单个普通文件的八进制输出",
-            "args": ["test_file_od"],
+            "description": "Default output (octal 2-byte units)",
+            "args": [
+                "input"
+            ],
             "setup_commands": [
-                "echo 'Hello World' > test_file_od"
+                "printf '0123456789abcdef' > input"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 062510 066154 020157 067527 066162 005144\n0000014\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
                 },
                 "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
+                    {
+                        "command": "od input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": [
-                "rm -f test_file_od"
-            ]
-        },
-        {
-            "tstdin": "Hello World",
-            "command": "od",
-            "description": "od: 测试标准输入",
-            "args": [],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 062510 066154 020157 067527 066162 000144\n0000013\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "od",
-            "description": "od: 空输入",
-            "args": [],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "ABC",
-            "command": "od",
-            "description": "od: 不显示偏移量",
-            "args": ["-A", "n"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": " 041101 000103\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "0123456789abcdef",
-            "command": "od",
-            "description": "od: 十进制偏移量",
-            "args": ["-A", "d"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 030460 031462 032464 033466 034470 061141 062143 063145\n0000016\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "0123456789abcdef",
-            "command": "od",
-            "description": "od: 十六进制偏移量",
-            "args": ["-A", "x"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "000000 030460 031462 032464 033466 034470 061141 062143 063145\n000010\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "A",
-            "command": "od",
-            "description": "od: 八进制输出",
-            "args": ["-t", "o1"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 101\n0000001\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "A",
-            "command": "od",
-            "description": "od: 十六进制输出",
-            "args": ["-t", "x1"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 41\n0000001\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "\\xff",
-            "command": "od",
-            "description": "od: 无符号十进制输出",
-            "args": ["-t", "u1"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000  92 120 102 102\n0000004\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "\\xff",
-            "command": "od",
-            "description": "od: 有符号十进制输出",
-            "args": ["-t", "d1"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000   92  120  102  102\n0000004\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "ABC",
-            "command": "od",
-            "description": "od: 字符输出",
-            "args": ["-t", "c"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000   A   B   C\n0000003\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "0123456789abcdef",
-            "command": "od",
-            "description": "od: 控制每行字节数",
-            "args": ["-w8"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 030460 031462 032464 033466\n0000010 034470 061141 062143 063145\n0000020\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
+                "rm -f input expected"
             ]
         },
         {
             "command": "od",
-            "description": "od: 多文件输入",
-            "args": ["test_file_od", "test_file_od2"],
+            "description": "Option -c (ASCII / escaped)",
+            "args": [
+                "-c",
+                "input"
+            ],
             "setup_commands": [
-                "echo 'Hello World' > test_file_od",
-                "echo 'Hello Rust' > test_file_od2"
+                "printf 'hello\\nworld' > input"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "0000000 062510 066154 020157 067527 066162 005144 062510 066154\n0000020 020157 072522 072163 000012\n0000027\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
                 },
                 "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
+                    {
+                        "command": "od -c input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": [
-                "rm -f test_file_od test_file_od2"
+                "rm -f input expected"
             ]
         },
         {
             "command": "od",
-            "description": "od: 单个文件不存在",
-            "args": ["missing_file_od"],
+            "description": "Option -x (Hex 2-byte units)",
+            "args": [
+                "-x",
+                "input"
+            ],
             "setup_commands": [
+                "printf '0123456789abcdef' > input"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
                 },
                 "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
+                    {
+                        "command": "od -x input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": [
+                "rm -f input expected"
             ]
         },
         {
             "command": "od",
-            "description": "od: 部分文件不存在",
-            "args": ["-t", "c", "test_file_od", "missing_file", "test_file_od2"],
+            "description": "Option -A n (No address)",
+            "args": [
+                "-An",
+                "-c",
+                "input"
+            ],
             "setup_commands": [
-                "echo 'hello rust' > test_file_od",
-                "echo 'hello rust' > test_file_od2"
+                "printf 'hello' > input"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
                 },
                 "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
+                    {
+                        "command": "od -An -c input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": [
-                "rm -f test_file_od test_file_od2"
+                "rm -f input expected"
             ]
         },
         {
             "command": "od",
-            "description": "od: 非法参数",
-            "args": ["-t", "z1", "test_file_od"],
+            "description": "Option -N (Read limit)",
+            "args": [
+                "-N3",
+                "-c",
+                "-An",
+                "input"
+            ],
             "setup_commands": [
-                "echo 'Hello World' > test_file_od"
+                "printf 'abcdefg' > input"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
                 },
                 "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
+                    {
+                        "command": "od -N3 -c -An input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": [
-                "rm -f test_file_od"
+                "rm -f input expected"
             ]
-        }
+        },
+        {
+            "command": "od",
+            "description": "Option -j (Skip bytes)",
+            "args": [
+                "-j2",
+                "-c",
+                "-An",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abcdefg' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -j2 -c -An input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "j-bug4: Skip across multiple files",
+            "args": [
+                "-c",
+                "-j3",
+                "-An",
+                "f1",
+                "f2",
+                "f3",
+                "f4"
+            ],
+            "setup_commands": [
+                "printf 'a' > f1",
+                "printf 'b' > f2",
+                "printf 'c' > f3",
+                "printf 'd' > f4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -c -j3 -An f1 f2 f3 f4 > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f f1 f2 f3 f4 expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Endianness (Big Endian -x)",
+            "args": [
+                "--endian=big",
+                "-x",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abcdefgh' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od --endian=big -x input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Endianness (Little Endian -x)",
+            "args": [
+                "--endian=little",
+                "-x",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abcdefgh' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od --endian=little -x input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Option -w (Width)",
+            "args": [
+                "-w4",
+                "-x",
+                "input"
+            ],
+            "setup_commands": [
+                "printf '0123456789abcdef' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -w4 -x input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Option -v (Output Duplicates)",
+            "args": [
+                "-v",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'aaaaaaaaaaaaaaaa\\naaaaaaaaaaaaaaaa\\n' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -v input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Invalid address radix error message",
+            "args": [
+                "-AN"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q \"invalid output address radix 'N'; it must be one character from \\[doxn\\]\"",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+      "command": "od",
+      "description": "Basic octal dump with default format",
+      "args": [],
+      "setup_commands": ["echo 'hello' > /tmp/test_od_basic.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '^0000000'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_basic.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Character format with -c flag",
+      "args": ["-c", "-An"],
+      "setup_commands": ["echo 'abc' > /tmp/test_od_char.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'a.*b.*c'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_char.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Skip bytes with -j flag",
+      "args": ["-An", "-c", "-j", "1"],
+      "setup_commands": ["echo 'abcdefg' > /tmp/test_od_skip.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'b'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'a' && exit 1 || exit 0",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_skip.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Read limited bytes with -N flag",
+      "args": ["-An", "-c", "-N", "3"],
+      "setup_commands": ["echo 'abcdefg' > /tmp/test_od_limit.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'a.*b.*c'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_limit.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Hexadecimal format with -x flag",
+      "args": ["-x", "-An"],
+      "setup_commands": ["printf '\\x42' > /tmp/test_od_hex.bin"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '42'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_hex.bin"]
+    },
+    {
+      "command": "od",
+      "description": "Octal bytes with -b flag",
+      "args": ["-b", "-An"],
+      "setup_commands": ["printf 'A' > /tmp/test_od_octal.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '101'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_octal.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Decimal format with -d flag",
+      "args": ["-d", "-An"],
+      "setup_commands": ["printf '\\x00\\x01' > /tmp/test_od_decimal.bin"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_decimal.bin"]
+    },
+    {
+      "command": "od",
+      "description": "Address radix decimal with -A d",
+      "args": ["-A", "d", "-c"],
+      "setup_commands": ["echo 'test' > /tmp/test_od_addr_dec.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -E '^[0-9]{7}'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_addr_dec.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Address radix hexadecimal with -A x",
+      "args": ["-A", "x", "-c"],
+      "setup_commands": ["echo 'test' > /tmp/test_od_addr_hex.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -E '^[0-9a-f]{6}'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_addr_hex.txt"]
+    },
+    {
+      "command": "od",
+      "description": "No address with -A n",
+      "args": ["-A", "n", "-c"],
+      "setup_commands": ["echo 'test' > /tmp/test_od_no_addr.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | head -1 | grep -v '^[0-9]'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_no_addr.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Output duplicates with -v flag",
+      "args": ["-v", "-c", "-An"],
+      "setup_commands": ["printf 'aaaa' > /tmp/test_od_dup.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_dup.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Custom format with -t option (octal 1-byte)",
+      "args": ["-t", "o1", "-An"],
+      "setup_commands": ["printf 'A' > /tmp/test_od_format.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '101'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_format.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Custom format with -t option (hex 2-byte)",
+      "args": ["-t", "x2", "-An"],
+      "setup_commands": ["printf '\\x41\\x42' > /tmp/test_od_format2.bin"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_format2.bin"]
+    },
+    {
+      "command": "od",
+      "description": "Width option with -w",
+      "args": ["-w16", "-c", "-An"],
+      "setup_commands": ["printf 'abcdefghijklmnop' > /tmp/test_od_width.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_width.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Read from stdin when no file specified",
+      "args": ["-An", "-c"],
+      "setup_commands": ["echo 'stdin test' > /tmp/test_od_stdin.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo 'test' | target/debug/syskits od -An -c | grep -q 't.*e.*s.*t'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_stdin.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Multiple files concatenation",
+      "args": ["-An", "-c"],
+      "setup_commands": [
+        "echo 'a' > /tmp/test_od_multi1.txt",
+        "echo 'b' > /tmp/test_od_multi2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "target/debug/syskits od -An -c /tmp/test_od_multi1.txt /tmp/test_od_multi2.txt | grep -q 'a'",
+            "expected_exit": 0
+          },
+          {
+            "command": "target/debug/syskits od -An -c /tmp/test_od_multi1.txt /tmp/test_od_multi2.txt | grep -q 'b'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_od_multi1.txt",
+        "rm -f /tmp/test_od_multi2.txt"
+      ]
+    },
+    {
+      "command": "od",
+      "description": "Skip and read combination -j and -N",
+      "args": ["-An", "-c", "-j", "3", "-N", "3"],
+      "setup_commands": ["echo 'abcdefg' > /tmp/test_od_skip_read.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'd.*e.*f'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'a' && exit 1 || exit 0",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'g' && exit 1 || exit 0",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_od_skip_read.txt"]
+    },
+    {
+      "command": "od",
+      "description": "Test --help flag",
+      "args": ["--help"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -i 'usage\\|用法'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "od",
+      "description": "Test --version flag",
+      "args": ["--version"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -i 'version\\|版本\\|od'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "od",
+      "description": "Error on non-existent file",
+      "args": ["/tmp/nonexistent_od_file_12345.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q -i 'no such file\\|找不到文件\\|cannot open'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    }
     ]
 }

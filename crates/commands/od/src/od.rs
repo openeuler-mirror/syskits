@@ -61,7 +61,7 @@ mod prn_format;
 
 use rust_i18n::t;
 use std::cmp;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fmt::Write;
 
 use crate::byteorder_io::ByteOrder;
@@ -240,7 +240,10 @@ impl OdSettings {
                 Some(b'n') => Ok(OdRadix::NoPrefix),
                 _ => Err(CtSimpleError::new(
                     1,
-                    "Radix must be one of [d, o, n, x]".to_string(),
+                    format!(
+                        "invalid output address radix '{}'; it must be one character from [doxn]",
+                        s
+                    ),
                 )),
             },
         }

@@ -41,6 +41,8 @@ pub mod factor_flags {
     pub const EXPONENTS: &str = "exponents";
     /// 帮助标志
     pub const HELP: &str = "help";
+    /// 版本标志
+    pub const VERSION: &str = "version";
     /// 要分解的数字参数
     pub const NUMBER: &str = "NUMBER";
 }
@@ -177,7 +179,7 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
         }
 
         if arg_str.starts_with("--") {
-            if arg_str == "--exponents" || arg_str == "--help" {
+            if arg_str == "--exponents" || arg_str == "--help" || arg_str == "--version" {
                 continue;
             }
             ct_show_error!("unrecognized option '{}'", arg_str);
@@ -189,7 +191,7 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
         }
 
         if arg_str.starts_with('-') && arg_str != "-" {
-            if arg_str == "-h" {
+            if arg_str == "-h" || arg_str == "-V" {
                 continue;
             }
             let invalid = arg_str.chars().nth(1).unwrap_or('-');
@@ -348,6 +350,11 @@ pub fn ct_app() -> Command {
             .long(factor_flags::HELP)
             .help(t!("factor.clap.help"))
             .action(ArgAction::Help),
+        Arg::new(factor_flags::VERSION)
+            .short('V')
+            .long(factor_flags::VERSION)
+            .help(t!("factor.clap.version"))
+            .action(ArgAction::Version),
     ];
 
     // 构建并配置命令行解析器

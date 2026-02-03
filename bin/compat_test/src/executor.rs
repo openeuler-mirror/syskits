@@ -16,6 +16,9 @@ use crate::config::SyskitsMode;
 use crate::sandbox::IsolatedSandbox;
 use crate::test_case::TestCase;
 use crate::{CommandResult, ComparisonResult, Result, TestConfig, TestError};
+use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 
 /// 并行测试执行器
 pub struct ParallelTestExecutor {
@@ -69,16 +72,15 @@ impl CommandExecutor {
             if self.config.debug {
                 eprintln!("DEBUG: 使用标准模式（预期结果）");
             }
-            let expected = test_case.expectation.execution.clone().into();
+            let expected = test_case
+                .expectation
+                .execution
+                .to_command_result(test_case.byte_mode)?;
             let verification_results = test_case
                 .expectation
                 .verifications
                 .iter()
-                .map(|v| CommandResult {
-                    exit_code: v.expected_exit.unwrap_or(0),
-                    stdout: v.expected_stdout.clone().unwrap_or_default(),
-                    stderr: v.expected_stderr.clone().unwrap_or_default(),
-                })
+                .map(CommandResult::from)
                 .collect();
             (expected, verification_results)
         };
@@ -144,13 +146,26 @@ impl CommandExecutor {
                 Some(self.config.default_timeout)
             }
         });
-        let actual = self.execute_syskits(
-            &test_case.tstdin,
-            &test_case.command,
-            &test_case.args,
-            &mut sandbox,
-            timeout,
-        )?;
+        let use_bytes = test_case.byte_mode;
+        let actual = if use_bytes {
+            let args_os = resolve_args_os(test_case)?;
+            let stdin_bytes = resolve_stdin_bytes(test_case)?;
+            self.execute_syskits_bytes(
+                &stdin_bytes,
+                &test_case.command,
+                &args_os,
+                &mut sandbox,
+                timeout,
+            )?
+        } else {
+            self.execute_syskits(
+                &test_case.tstdin,
+                &test_case.command,
+                &test_case.args,
+                &mut sandbox,
+                timeout,
+            )?
+        };
         // 执行验证命令
         if self.config.debug {
             eprintln!("DEBUG: 执行验证命令");
@@ -203,13 +218,26 @@ impl CommandExecutor {
                 Some(self.config.default_timeout)
             }
         });
-        let expected = self.execute_coreutils(
-            &test_case.tstdin,
-            &test_case.command,
-            &test_case.args,
-            &mut coreutils_sandbox,
-            timeout,
-        )?;
+        let use_bytes = test_case.byte_mode;
+        let expected = if use_bytes {
+            let args_os = resolve_args_os(test_case)?;
+            let stdin_bytes = resolve_stdin_bytes(test_case)?;
+            self.execute_coreutils_bytes(
+                &stdin_bytes,
+                &test_case.command,
+                &args_os,
+                &mut coreutils_sandbox,
+                timeout,
+            )?
+        } else {
+            self.execute_coreutils(
+                &test_case.tstdin,
+                &test_case.command,
+                &test_case.args,
+                &mut coreutils_sandbox,
+                timeout,
+            )?
+        };
 
         // 执行验证命令
         if self.config.debug {
@@ -273,6 +301,42 @@ impl CommandExecutor {
         sandbox.execute_command(&cmd, &args, Some(tstdin), true, timeout)
     }
 
+    /// 在沙箱中执行 syskits 命令（原始字节参数）
+    fn execute_syskits_bytes(
+        &self,
+        tstdin: &[u8],
+        command: &str,
+        args: &[OsString],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        let (cmd, args) = match self.config.mode {
+            SyskitsMode::Single => {
+                let syskits_path = if self.config.syskits_path.is_absolute() {
+                    self.config.syskits_path.clone()
+                } else {
+                    std::env::current_dir()?.join(&self.config.syskits_path)
+                };
+
+                if !syskits_path.exists() {
+                    return Err(TestError::ExecutionError(format!(
+                        "Syskits binary not found at: {}",
+                        syskits_path.display()
+                    )));
+                }
+
+                let syskits_str = syskits_path.to_str().unwrap().to_string();
+                let mut modified_args = Vec::with_capacity(args.len() + 1);
+                modified_args.push(OsString::from(command));
+                modified_args.extend_from_slice(args);
+                (syskits_str, modified_args)
+            }
+            SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
+        };
+
+        sandbox.execute_command_bytes(&cmd, &args, Some(tstdin), true, timeout, true)
+    }
+
     /// 在沙箱中执行 GNU coreutils 命令
     fn execute_coreutils(
         &self,
@@ -293,6 +357,53 @@ impl CommandExecutor {
 
         sandbox.execute_command(command, args, Some(tstdin), true, timeout)
     }
+
+    /// 在沙箱中执行 GNU coreutils 命令（原始字节参数）
+    fn execute_coreutils_bytes(
+        &self,
+        tstdin: &[u8],
+        command: &str,
+        args: &[OsString],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        if let Some(ref coreutils_path) = self.config.coreutils_path {
+            let current_path = sandbox.get_env("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
+            sandbox.add_env("PATH", &new_path);
+        }
+
+        sandbox.execute_command_bytes(command, args, Some(tstdin), true, timeout, true)
+    }
+}
+
+fn resolve_args_os(test_case: &TestCase) -> Result<Vec<OsString>> {
+    if test_case.byte_mode {
+        Ok(args_from_bytes(test_case.args_bytes()?))
+    } else {
+        Ok(args_from_strings(&test_case.args))
+    }
+}
+
+fn resolve_stdin_bytes(test_case: &TestCase) -> Result<Vec<u8>> {
+    test_case.tstdin_bytes()
+}
+
+fn args_from_strings(args: &[String]) -> Vec<OsString> {
+    args.iter().map(OsString::from).collect()
+}
+
+fn args_from_bytes(args: Vec<Vec<u8>>) -> Vec<OsString> {
+    #[cfg(unix)]
+    {
+        args.into_iter().map(OsString::from_vec).collect()
+    }
+    #[cfg(not(unix))]
+    {
+        args.into_iter()
+            .map(|bytes| OsString::from(String::from_utf8_lossy(&bytes).into_owned()))
+            .collect()
+    }
 }
 
 fn compare_results(
@@ -306,26 +417,44 @@ fn compare_results(
     let mut passed = true;
 
     // 比较主命令结果
-    if !test_case.expectation.ignore_fields.ignore_stdout
-        && test_case.expectation.execution.stdout.is_some()
-        && expected.stdout != actual.stdout
-    {
-        differences.push(format!(
-            "Main command stdout differs:\nExpected:\n{}\nActual:\n{}",
-            expected.stdout, actual.stdout
-        ));
-        passed = false;
+    if !test_case.expectation.ignore_fields.ignore_stdout {
+        if test_case.expectation.execution.stdout.is_some() {
+            if test_case.byte_mode {
+                if expected.stdout != actual.stdout {
+                    differences.push(format!(
+                        "Main command stdout hex differs:\nExpected:\n{}\nActual:\n{}",
+                        expected.stdout, actual.stdout
+                    ));
+                    passed = false;
+                }
+            } else if expected.stdout != actual.stdout {
+                differences.push(format!(
+                    "Main command stdout differs:\nExpected:\n{}\nActual:\n{}",
+                    expected.stdout, actual.stdout
+                ));
+                passed = false;
+            }
+        }
     }
 
-    if !test_case.expectation.ignore_fields.ignore_stderr
-        && test_case.expectation.execution.stderr.is_some()
-        && expected.stderr != actual.stderr
-    {
-        differences.push(format!(
-            "Main command stderr differs:\nExpected:\n{}\nActual:\n{}",
-            expected.stderr, actual.stderr
-        ));
-        passed = false;
+    if !test_case.expectation.ignore_fields.ignore_stderr {
+        if test_case.expectation.execution.stderr.is_some() {
+            if test_case.byte_mode {
+                if expected.stderr != actual.stderr {
+                    differences.push(format!(
+                        "Main command stderr hex differs:\nExpected:\n{}\nActual:\n{}",
+                        expected.stderr, actual.stderr
+                    ));
+                    passed = false;
+                }
+            } else if expected.stderr != actual.stderr {
+                differences.push(format!(
+                    "Main command stderr differs:\nExpected:\n{}\nActual:\n{}",
+                    expected.stderr, actual.stderr
+                ));
+                passed = false;
+            }
+        }
     }
 
     if !test_case.expectation.ignore_fields.ignore_exit_code
@@ -378,7 +507,7 @@ fn compare_results(
     Ok(ComparisonResult {
         command: test_case.command.clone(),
         description: test_case.description.clone(),
-        args: test_case.args.clone(),
+        args: test_case.args_display(),
         expected,
         actual,
         passed,
@@ -409,6 +538,7 @@ mod tests {
     ) -> TestCase {
         TestCase {
             tstdin: "".to_string(),
+            byte_mode: false,
             command: "test_command".to_string(),
             description: "Test case description".to_string(),
             args: vec!["arg1".to_string(), "arg2".to_string()],
@@ -1839,6 +1969,7 @@ mod tests {
     fn create_simple_test_case() -> TestCase {
         TestCase {
             tstdin: "".to_string(),
+            byte_mode: false,
             command: "echo".to_string(),
             description: "Simple echo test".to_string(),
             args: vec!["-n".to_string(), "hello".to_string()],

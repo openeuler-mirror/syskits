@@ -14,6 +14,7 @@
 use crate::CommandResult;
 use crate::Result;
 use crate::TestError;
+use hex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -178,6 +179,9 @@ pub struct TestCase {
     ///标准输入
     #[serde(default)]
     pub tstdin: String,
+    /// 是否按十六进制字节模式解析本用例
+    #[serde(default, rename = "byteMode", alias = "byte_mode")]
+    pub byte_mode: bool,
     /// 命令名称
     pub command: String,
     /// 测试描述
@@ -280,13 +284,23 @@ impl TestCaseManager {
     }
 }
 
-impl From<CommandExecution> for CommandResult {
-    fn from(execution: CommandExecution) -> Self {
-        CommandResult {
-            stdout: execution.stdout.unwrap_or_default(),
-            stderr: execution.stderr.unwrap_or_default(),
-            exit_code: execution.exit_code.unwrap_or(0),
-        }
+impl CommandExecution {
+    pub fn to_command_result(&self, byte_mode: bool) -> Result<CommandResult> {
+        let stdout = if byte_mode {
+            normalize_hex_opt("stdout", self.stdout.as_deref())?
+        } else {
+            self.stdout.clone().unwrap_or_default()
+        };
+        let stderr = if byte_mode {
+            normalize_hex_opt("stderr", self.stderr.as_deref())?
+        } else {
+            self.stderr.clone().unwrap_or_default()
+        };
+        Ok(CommandResult {
+            stdout,
+            stderr,
+            exit_code: self.exit_code.unwrap_or(0),
+        })
     }
 }
 
@@ -297,6 +311,57 @@ impl From<&FunctionalVerification> for CommandResult {
             stderr: verification.expected_stderr.clone().unwrap_or_default(),
             exit_code: verification.expected_exit.unwrap_or(0),
         }
+    }
+}
+
+fn decode_hex_field(field: &str, value: &str) -> Result<Vec<u8>> {
+    hex::decode(value).map_err(|e| {
+        TestError::TestCaseError(format!("Invalid hex in {}: {}", field, e))
+    })
+}
+
+fn normalize_hex_field(field: &str, value: &str) -> Result<String> {
+    let bytes = decode_hex_field(field, value)?;
+    Ok(hex::encode(bytes))
+}
+
+fn normalize_hex_opt(field: &str, value: Option<&str>) -> Result<String> {
+    match value {
+        Some(v) => normalize_hex_field(field, v),
+        None => Ok(String::new()),
+    }
+}
+
+impl TestCase {
+    pub fn args_bytes(&self) -> Result<Vec<Vec<u8>>> {
+        if self.byte_mode {
+            let mut decoded = Vec::with_capacity(self.args.len());
+            for hex_str in &self.args {
+                decoded.push(decode_hex_field("args", hex_str)?);
+            }
+            Ok(decoded)
+        } else {
+            Ok(self
+                .args
+                .iter()
+                .map(|arg| arg.as_bytes().to_vec())
+                .collect())
+        }
+    }
+
+    pub fn tstdin_bytes(&self) -> Result<Vec<u8>> {
+        if self.byte_mode {
+            decode_hex_field("tstdin", &self.tstdin)
+        } else {
+            Ok(self.tstdin.as_bytes().to_vec())
+        }
+    }
+
+    pub fn args_display(&self) -> Vec<String> {
+        if self.byte_mode {
+            return self.args.iter().map(|hex_str| format!("0x{}", hex_str)).collect();
+        }
+        self.args.clone()
     }
 }
 
@@ -535,7 +600,7 @@ mod tests {
             stderr: Some("error".to_string()),
         };
 
-        let result: CommandResult = execution.into();
+        let result: CommandResult = execution.to_command_result(false).unwrap();
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "output");
         assert_eq!(result.stderr, "error");
@@ -547,7 +612,7 @@ mod tests {
             stderr: None,
         };
 
-        let result: CommandResult = execution.into();
+        let result: CommandResult = execution.to_command_result(false).unwrap();
         assert_eq!(result.exit_code, 0); // 默认值为0
         assert_eq!(result.stdout, ""); // 默认值为空字符串
         assert_eq!(result.stderr, ""); // 默认值为空字符串
@@ -559,7 +624,7 @@ mod tests {
             stderr: Some("error".to_string()),
         };
 
-        let result: CommandResult = execution.into();
+        let result: CommandResult = execution.to_command_result(false).unwrap();
         assert_eq!(result.exit_code, 1);
         assert_eq!(result.stdout, "");
         assert_eq!(result.stderr, "error");
@@ -587,6 +652,7 @@ mod tests {
         // 创建测试用例
         let test_cases = vec![TestCase {
             tstdin: "".to_string(),
+            byte_mode: false,
             command: "echo".to_string(),
             description: "Test echo command".to_string(),
             args: vec!["Hello".to_string()],

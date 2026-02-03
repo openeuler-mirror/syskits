@@ -2,301 +2,521 @@
     "tests": [
         {
             "command": "seq",
-            "description": "seq: 单个合法参数",
-            "args": [
-                "6"
-            ],
-            "setup_commands": [],
+            "description": "Basic: seq with one argument (1 to N)",
+            "args": ["10"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "1\n2\n3\n4\n5\n6\n",
+                    "stdout": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 两个合法参数",
-            "args": [
-                "3",
-                "6"
-            ],
-            "setup_commands": [],
+            "description": "Basic: seq with two arguments (FIRST to LAST)",
+            "args": ["1", "3"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "3\n4\n5\n6\n",
+                    "stdout": "1\n2\n3\n",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 三个合法参数（指定步长）",
-            "args": [
-                "6",
-                "2",
-                "10"
-            ],
-            "setup_commands": [],
+            "description": "Basic: seq with three arguments (FIRST INCREMENT LAST)",
+            "args": ["1", "2", "5"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "6\n8\n10\n",
+                    "stdout": "1\n3\n5\n",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 自定义分隔符",
-            "args": [
-                "-s",
-                ",",
-                "3"
-            ],
-            "setup_commands": [],
+            "description": "Negative: seq with negative start",
+            "args": ["-10", "10", "10"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-10\n0\n10\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Negative: descending sequence",
+            "args": ["1", "-1", "0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n0\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Negative: descending to negative",
+            "args": ["1", "-1", "-1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n0\n-1\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Float: basic float sequence",
+            "args": ["0.8", "0.1", "0.9"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0.8\n0.9\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Float: sequence with precision",
+            "args": ["0.1", "0.99", "1.99"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0.10\n1.09\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Float: negative increment",
+            "args": ["0.1", "-0.1", "-0.2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '0.1'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '0.0\\|^0$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '-0.1'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Equal width: basic equal width",
+            "args": ["-w", "1", "-1", "-1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "01\n00\n-1\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Equal width: with decimal",
+            "args": ["-w", "--", "-.1", ".1", ".11"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-0.1\n00.0\n00.1\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Equal width: integer to float",
+            "args": ["-w", "1", "3.0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2\n3\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Equal width: with increment",
+            "args": ["-w", "1", ".5", "2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.0\n1.5\n2.0\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Format: basic format",
+            "args": ["-f", "%2.1f", "1.5", ".5", "2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.5\n2.0\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Format: zero padding with sign",
+            "args": ["-f", "%0+3.0f", "1", "2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "+01\n+02\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Format: with percent",
+            "args": ["-f", "%%%g%%", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "%1%\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Separator: comma separator",
+            "args": ["-s", ",", "1", "3"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": "1,2,3\n",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 格式化，以及小数步长",
-            "args": [
-                "-f",
-                "%.3f",
-                "1",
-                "0.6",
-                "3"
-            ],
-            "setup_commands": [],
+            "description": "Separator: single value",
+            "args": ["-s", ",", "1", "1"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "1.000\n1.600\n2.200\n2.800\n",
+                    "stdout": "1\n",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 数字宽度补零",
-            "args": [
-                "-w",
-                "98",
-                "101"
-            ],
-            "setup_commands": [],
+            "description": "Separator: double comma",
+            "args": ["-s", ",,", "1", "3"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "098\n099\n100\n101\n",
+                    "stdout": "1,,2,,3\n",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 步长为负数",
-            "args": [
-                "5",
-                "-1",
-                "1"
-            ],
-            "setup_commands": [],
+            "description": "Empty: negative to positive with positive increment",
+            "args": ["-1"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "5\n4\n3\n2\n1\n",
+                    "stdout": "",
                     "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
                 }
-            },
-            "cleanup_commands": []
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 无效输入",
-            "args": [
-                "asd"
-            ],
-            "setup_commands": [],
+            "description": "Empty: reverse range",
+            "args": ["1", "-1", "3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Fast path: basic fast path",
+            "args": ["4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2\n3\n4\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Fast path: with step 2",
+            "args": ["1", "2", "4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n3\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Fast path: step equals last",
+            "args": ["1", "4", "4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: zero increment",
+            "args": ["1", "0", "10"],
             "expectation": {
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": null
                 },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": []
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'zero\\|increment'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 格式化+分隔符",
-            "args": [
-                "-f",
-                "%3.2f",
-                "-s",
-                ",",
-                "1",
-                "0.5",
-                "3"
-            ],
-            "setup_commands": [],
+            "description": "Error: NaN as first argument",
+            "args": ["nan"],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "1.00,1.50,2.00,2.50,3.00\n",
-                    "stderr": ""
-                },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": []
-        },
-        {
-            "command": "seq",
-            "description": "seq: 起始比结束大，步长为正，无输出",
-            "args": [
-                "6",
-                "2"
-            ],
-            "setup_commands": [],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
+                    "exit_code": 1,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": null
                 },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": []
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'nan\\|not-a-number\\|invalid'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 起始点等于结束点",
-            "args": [
-                "2",
-                "2"
-            ],
-            "setup_commands": [],
+            "description": "Error: NaN as increment",
+            "args": ["1", "nan", "2"],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "2\n",
-                    "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
                 },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": []
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'nan\\|not-a-number\\|invalid'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
         },
         {
             "command": "seq",
-            "description": "seq: 起始点和结束点都为小数",
-            "args": [
-                "1.2",
-                "5.4"
-            ],
-            "setup_commands": [],
+            "description": "Error: NaN as last argument",
+            "args": ["1", "1", "nan"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'nan\\|not-a-number\\|invalid'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: format with no % directive",
+            "args": ["-f", "%%g", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'format\\|directive'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: format ends in %",
+            "args": ["-f", "%", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'format\\|ends'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: empty format",
+            "args": ["-f", "", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'format\\|directive'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: too many % directives",
+            "args": ["-f", "%g%g", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'format\\|many\\|directive'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: missing operand",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'missing\\|operand\\|argument'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Error: too many operands",
+            "args": ["1", "2", "3", "4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q -i 'extra\\|operand\\|many'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Help: --help flag",
+            "args": ["--help"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "1.2\n2.2\n3.2\n4.2\n5.2\n",
+                    "stdout": null,
                     "stderr": ""
                 },
-                "verifications": [],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": []
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q -i 'usage\\|用法'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "seq",
+            "description": "Version: --version flag",
+            "args": ["--version"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q 'seq'",
+                        "expected_exit": 0
+                    }
+                ]
+            }
         }
     ]
 }

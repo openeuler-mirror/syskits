@@ -409,6 +409,7 @@ dependencies = [
  "clap",
  "colored",
  "dirs",
+ "hex",
  "html-escape",
  "indicatif",
  "nix 0.28.0",

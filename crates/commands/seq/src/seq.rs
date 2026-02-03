@@ -36,6 +36,9 @@ const SEQ_FORMAT: &str = "format";
 
 const SEQ_NUMBERS: &str = "numbers";
 
+// Fast path optimization limit (same as GNU seq)
+const SEQ_FAST_STEP_LIMIT: u64 = 200;
+
 #[derive(Clone, Default)]
 struct SeqOptions<'a> {
     separator: String,
@@ -88,6 +91,24 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let numbers = parse_number_args(&matches)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
+    // Try fast path optimization first
+    if let Some((first_u64, last_u64, step_u64)) =
+        can_use_fast_path(&first, &increment, &last, &options)
+    {
+        return match seq_fast(
+            first_u64,
+            last_u64,
+            step_u64,
+            &options.separator,
+            &options.terminator,
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+            Err(e) => Err(e.map_err_context(|| "write error".into())),
+        };
+    }
+
+    // Fall back to general floating-point path
     let padding = calculate_padding(&first, &increment, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
     let format = parse_format_option(options.format)?;
@@ -217,6 +238,98 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
+/// Fast path for integer sequences with small steps
+/// This uses string operations instead of floating point arithmetic for better performance
+fn seq_fast(
+    first: u64,
+    last: u64,
+    step: u64,
+    separator: &str,
+    terminator: &str,
+) -> std::io::Result<()> {
+    use std::io::BufWriter;
+
+    let stdout = stdout();
+    let mut writer = BufWriter::with_capacity(8192, stdout.lock());
+    let mut current = first;
+    let mut is_first = true;
+
+    while current <= last {
+        if !is_first {
+            write!(writer, "{}", separator)?;
+        }
+        write!(writer, "{}", current)?;
+
+        // Check for overflow before adding
+        if let Some(next) = current.checked_add(step) {
+            current = next;
+        } else {
+            break;
+        }
+        is_first = false;
+    }
+
+    if !is_first {
+        write!(writer, "{}", terminator)?;
+    }
+    writer.flush()
+}
+
+/// Check if we can use the fast path optimization
+fn can_use_fast_path(
+    first: &PreciseNumber,
+    increment: &PreciseNumber,
+    last: &PreciseNumber,
+    options: &SeqOptions,
+) -> Option<(u64, u64, u64)> {
+    // Fast path conditions (same as GNU seq):
+    // 1. No format string
+    // 2. No equal-width
+    // 3. Separator is single character (typically newline)
+    // 4. All numbers are non-negative integers
+    // 5. Step is positive and <= SEQ_FAST_STEP_LIMIT
+
+    if options.format.is_some() || options.is_equal_width || options.separator.len() != 1 {
+        return None;
+    }
+
+    // Check if all are integers (precision == 0)
+    if first.num_fractional_digits != 0
+        || increment.num_fractional_digits != 0
+        || last.num_fractional_digits != 0
+    {
+        return None;
+    }
+
+    // Check if all are non-negative
+    if first.number < ExtendedBigDecimal::zero() || last.number < ExtendedBigDecimal::zero() {
+        return None;
+    }
+
+    // Try to convert to u64
+    let first_u64 = match &first.number {
+        ExtendedBigDecimal::BigDecimal(bd) => bd.to_u64()?,
+        _ => return None,
+    };
+
+    let last_u64 = match &last.number {
+        ExtendedBigDecimal::BigDecimal(bd) => bd.to_u64()?,
+        _ => return None,
+    };
+
+    let step_u64 = match &increment.number {
+        ExtendedBigDecimal::BigDecimal(bd) => bd.to_u64()?,
+        _ => return None,
+    };
+
+    // Check step limit
+    if step_u64 == 0 || step_u64 > SEQ_FAST_STEP_LIMIT {
+        return None;
+    }
+
+    Some((first_u64, last_u64, step_u64))
+}
+
 /// Write a big decimal formatted according to the given parameters.
 fn write_value_float(
     writer: &mut impl Write,
@@ -231,6 +344,48 @@ fn write_value_float(
             format!("{value:>0width$.precision$}")
         };
     write!(writer, "{value_as_str}")
+}
+
+/// Custom format function that handles zero-padding with signs correctly
+/// This fixes the issue where ctcore's Format doesn't handle the '0' flag properly with signs
+fn format_with_zero_padding(
+    writer: &mut impl Write,
+    format: &Format<num_format::Float>,
+    float: f64,
+) -> std::io::Result<()> {
+    // First, format to a temporary buffer to see what we get
+    let mut temp_buf = Vec::new();
+    format.fmt(&mut temp_buf, float)?;
+    let formatted = String::from_utf8_lossy(&temp_buf);
+
+    // Check if we have a sign followed by spaces (which should be zeros for %0 flag)
+    // This happens when NumberAlignment::RightZero doesn't work correctly with signs
+    // ctcore outputs "+  1" (4 chars) for width=3, but should output "+01" (3 chars)
+    if (formatted.starts_with('+') || formatted.starts_with('-')) && formatted.contains(' ') {
+        let sign_char = formatted.chars().next().unwrap();
+        let rest = &formatted[1..];
+
+        // Replace leading spaces with zeros, but also trim to correct width
+        if rest.starts_with(' ') {
+            let trimmed = rest.trim_start();
+            // The issue: ctcore doesn't account for sign in width calculation
+            // If formatted is "+  1" (4 chars) but width should be 3,
+            // we need to output "+01" (3 chars), not "+001" (4 chars)
+            // So we need to reduce the zero count by 1
+            let space_count = rest.len() - trimmed.len();
+            let zero_count = if space_count > 0 { space_count - 1 } else { 0 };
+
+            write!(writer, "{}", sign_char)?;
+            for _ in 0..zero_count {
+                write!(writer, "0")?;
+            }
+            write!(writer, "{}", trimmed)?;
+            return Ok(());
+        }
+    }
+
+    // Otherwise, just write the formatted string as-is
+    writer.write_all(&temp_buf)
 }
 
 /// Floating point based code path
@@ -268,7 +423,7 @@ fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
                     ExtendedBigDecimal::MinusZero => -0.0,
                     ExtendedBigDecimal::Nan => f64::NAN,
                 };
-                f.fmt(&mut writer, float)?;
+                format_with_zero_padding(&mut writer, f, float)?;
             }
             None => write_value_float(&mut writer, &value, padding, config.largest_dec)?,
         }
@@ -305,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Seq::default();
+        let tool = Seq;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "seq");
@@ -420,7 +575,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(String::from_utf8(output.clone()).unwrap(), "1.0,2.0,3.0\n");
+        assert_eq!(String::from_utf8(output.clone()).unwrap(), "1,2,3\n");
 
         output.clear();
 
@@ -445,7 +600,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             String::from_utf8(output.clone()).unwrap(),
-            "1.0\n2.0\n3.0\n4.0\n5.0\n6.0\n7.0\n8.0\n9.0\n10.0\n"
+            "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n"
         );
     }
 

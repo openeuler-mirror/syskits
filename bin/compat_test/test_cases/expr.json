@@ -3,653 +3,3124 @@
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 基本算术运算 (+ - * / %)，多参数运算，括号优先级，边缘值测试",
-            "setup_commands": [],
+            "description": "expr.pl:a",
             "args": [
-                "1", "+", "2"
+                "5",
+                "+",
+                "6"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "3\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "11\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 多参数运算，验证优先级 1 + 2 * 3",
-            "setup_commands": [],
+            "description": "expr.pl:b",
             "args": [
-                "1", "+", "2", "*", "3"
+                "5",
+                "-",
+                "6"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "7\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "-1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 括号调整优先级 \\( 1 + 2 \\) * 3",
-            "setup_commands": [],
+            "description": "expr.pl:c",
             "args": [
-                "\\(", "1", "+", "2", "\\)", "*", "3"
+                "5",
+                "*",
+                "6"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "9\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "30\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 算术边缘值测试 0 + -5",
-            "setup_commands": [],
+            "description": "expr.pl:d",
             "args": [
-                "0", "+", "-5"
+                "100",
+                "/",
+                "6"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "-5\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "16\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 大数运算测试 1000000 * 1000000",
-            "setup_commands": [],
+            "description": "expr.pl:e",
             "args": [
-                "1000000", "*", "1000000"
+                "100",
+                "%",
+                "6"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1000000000000\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 取模运算测试 10 % 3",
-            "setup_commands": [],
+            "description": "expr.pl:f",
             "args": [
-                "10", "%", "3"
+                "3",
+                "+",
+                "-2"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 =，相等成立",
-            "setup_commands": [],
+            "description": "expr.pl:g",
             "args": [
-                "5", "=", "5"
+                "-2",
+                "+",
+                "-2"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "-4\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 =，不相等",
-            "setup_commands": [],
+            "description": "expr.pl:opt1",
             "args": [
-                "5", "=", "3"
+                "--",
+                "-11",
+                "+",
+                "12"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 !=，不相等成立",
-            "setup_commands": [],
+            "description": "expr.pl:opt2",
             "args": [
-                "5", "!=", "3"
+                "-11",
+                "+",
+                "12"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 !=，相等",
-            "setup_commands": [],
+            "description": "expr.pl:opt3",
             "args": [
-                "5", "!=", "5"
+                "--",
+                "-1",
+                "+",
+                "2"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 <，成立",
-            "setup_commands": [],
+            "description": "expr.pl:opt4",
             "args": [
-                "3", "<", "5"
+                "-1",
+                "+",
+                "2"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 <，不成立",
-            "setup_commands": [],
+            "description": "expr.pl:opt5",
             "args": [
-                "5", "<", "3"
+                "--",
+                "2",
+                "+",
+                "2"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 <=，成立",
-            "setup_commands": [],
+            "description": "expr.pl:paren1",
             "args": [
-                "3", "<=", "3"
+                "(",
+                "100",
+                "%",
+                "6",
+                ")"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 <=，不成立",
-            "setup_commands": [],
+            "description": "expr.pl:paren2",
             "args": [
-                "5", "<=", "3"
+                "(",
+                "100",
+                "%",
+                "6",
+                ")",
+                "-",
+                "8"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "-4\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 >，成立",
-            "setup_commands": [],
+            "description": "expr.pl:paren3",
             "args": [
-                "5", ">", "3"
+                "9",
+                "/",
+                "(",
+                "100",
+                "%",
+                "6",
+                ")",
+                "-",
+                "8"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "-6\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 >，不成立",
-            "setup_commands": [],
+            "description": "expr.pl:paren4",
             "args": [
-                "3", ">", "5"
+                "9",
+                "/",
+                "(",
+                "(",
+                "100",
+                "%",
+                "6",
+                ")",
+                "-",
+                "8",
+                ")"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "-2\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 >=，成立",
-            "setup_commands": [],
+            "description": "expr.pl:paren5",
             "args": [
-                "5", ">=", "5"
+                "9",
+                "+",
+                "(",
+                "100",
+                "%",
+                "6",
+                ")"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "13\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 比较运算 >=，不成立",
-            "setup_commands": [],
+            "description": "expr.pl:0bang",
             "args": [
-                "3", ">=", "5"
+                "00",
+                "<",
+                "0!"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "0\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 布尔运算 & (and)，成立",
-            "setup_commands": [],
+            "description": "expr.pl:00",
             "args": [
-                "1", "<", "2", "&", "2", "<", "3"
+                "00"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "00\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 布尔运算 & (and)，不成立",
-            "setup_commands": [],
+            "description": "expr.pl:minus0",
             "args": [
-                "1", "<", "2", "&", "3", "<", "2"
+                "-0"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "-0\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 布尔运算 | (or)，成立",
-            "setup_commands": [],
+            "description": "expr.pl:andand",
             "args": [
-                "1", "<", "2", "|", "3", "<", "2"
+                "0",
+                "&",
+                "1",
+                "/",
+                "0"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "0\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 布尔运算 | (or)，不成立",
-            "setup_commands": [],
+            "description": "expr.pl:oror",
             "args": [
-                "5", "<", "2", "|", "3", ">", "5"
+                "1",
+                "|",
+                "1",
+                "/",
+                "0"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 布尔运算优先级测试，and 优先于 or",
-            "setup_commands": [],
+            "description": "expr.pl:orempty",
             "args": [
-                "1", "|", "0", "&", "0"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "1\n",
-                "stderr": ""
-                }
-            }
-        },
-        {
-            "tstdin": "",
-            "command": "expr",
-            "description": "expr: length 测试普通字符串",
-            "setup_commands": [],
-            "args": [
-                "length", 
-                "hello"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "5\n",
-                "stderr": ""
-                }
-            }
-        },
-        {
-            "tstdin": "",
-            "command": "expr",
-            "description": "expr: length 测试空字符串",
-            "setup_commands": [],
-            "args": [
-                "length", 
+                "",
+                "|",
                 ""
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "0\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: index 测试普通字符串",
-            "setup_commands": [],
+            "description": "expr.pl:fail-a",
             "args": [
-                "index", 
-                "hello", 
-                "l"
+                "3",
+                "+",
+                "-"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "3\n",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: non-integer argument\n"
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: index 测试第一个匹配字符的位置，字符不在字符串中",
-            "setup_commands": [],
+            "description": "expr.pl:bigcmp",
             "args": [
-                "index", 
-                "hello", 
-                "x"
+                "--",
+                "-2417851639229258349412352",
+                "<",
+                "2417851639229258349412352"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: index 测试 Unicode 字符",
-            "setup_commands": [],
+            "description": "expr.pl:anchor",
             "args": [
-                "index", 
-                "你好世界", 
-                "世"
+                "a\nb",
+                ":",
+                "a$"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "3\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "0\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: substr 测试普通字符串，截取子串",
-            "setup_commands": [],
+            "description": "expr.pl:emptysub",
             "args": [
-                "substr", 
-                "hello", 
-                "2", "3"
+                "a",
+                ":",
+                "\\(b\\)*"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "ell\n",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: substr 测试从位置超过长度",
-            "setup_commands": [],
+            "description": "expr.pl:bre1",
             "args": [
-                "substr", 
-                "hello", 
-                "10", "2"
+                "abc",
+                ":",
+                "a\\(b\\)c"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "b\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: substr 测试 Unicode 字符串",
-            "setup_commands": [],
+            "description": "expr.pl:bre2",
             "args": [
-                "substr", 
-                "你好世界", 
-                "2", "2"
+                "a(",
+                ":",
+                "a("
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "好世\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: length 测试特殊字符",
-            "setup_commands": [],
+            "description": "expr.pl:bre3",
             "args": [
-                "length", 
-                "!@# $%^"
+                "_",
+                ":",
+                "a\\("
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "7\n",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched ( or \\(\n"
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: substr 测试截取空字符串",
-            "setup_commands": [],
+            "description": "expr.pl:bre4",
             "args": [
-                "substr", 
-                "", 
-                "1", "3"
+                "_",
+                ":",
+                "a\\(b"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "\n",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched ( or \\(\n"
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 正则匹配，返回匹配长度",
-            "setup_commands": [],
+            "description": "expr.pl:bre5",
             "args": [
-                "hello123", ":", "[a-z]*"
+                "a(b",
+                ":",
+                "a(b"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "5\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 正则匹配，使用括号捕获子串",
-            "setup_commands": [],
+            "description": "expr.pl:bre6",
             "args": [
-                "hello123", ":", "\\([a-z]*\\)[0-9]*"
+                "a)",
+                ":",
+                "a)"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "hello\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 正则匹配，无匹配返回 0",
-            "setup_commands": [],
+            "description": "expr.pl:bre7",
             "args": [
-                "hello123", ":", "[0-9][0-9]*"
+                "_",
+                ":",
+                "a\\)"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched ) or \\)\n"
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 正则匹配，空字符串匹配",
-            "setup_commands": [],
+            "description": "expr.pl:bre8",
             "args": [
-                "", ":", "\\(.*\\)"
+                "_",
+                ":",
+                "\\)"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "0\n",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched ) or \\)\n"
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 空参数，属于非法用法",
-            "setup_commands": [],
+            "description": "expr.pl:bre9",
+            "args": [
+                "ab",
+                ":",
+                "a\\(\\)b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre10",
+            "args": [
+                "a^b",
+                ":",
+                "a^b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre11",
+            "args": [
+                "a\\$b",
+                ":",
+                "a\\$b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre12",
+            "args": [
+                "",
+                ":",
+                "\\($\\)\\(^\\)"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre13",
+            "args": [
+                "b",
+                ":",
+                "a*\\(^b\\$\\)c*"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "b\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre14",
+            "args": [
+                "X|",
+                ":",
+                "X\\(|\\)",
+                ":",
+                "(",
+                "X|",
+                ":",
+                "X\\(|\\)",
+                ")"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre15",
+            "args": [
+                "X*",
+                ":",
+                "X\\(*\\)",
+                ":",
+                "(",
+                "X*",
+                ":",
+                "X\\(*\\)",
+                ")"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre16",
+            "args": [
+                "abc",
+                ":",
+                "\\(\\)"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre17",
+            "args": [
+                "{1}a",
+                ":",
+                "\\(\\{1\\}a\\)"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "{1}a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre18",
+            "args": [
+                "X*",
+                ":",
+                "X\\(*\\)",
+                ":",
+                "^*"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre19",
+            "args": [
+                "{1}",
+                ":",
+                "^\\{1\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre20",
+            "args": [
+                "{",
+                ":",
+                "{"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre21",
+            "args": [
+                "abbcbd",
+                ":",
+                "a\\(b*\\)c\\1d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre22",
+            "args": [
+                "abbcbbbd",
+                ":",
+                "a\\(b*\\)c\\1d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre23",
+            "args": [
+                "abc",
+                ":",
+                "\\(.\\)\\1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre24",
+            "args": [
+                "abbccd",
+                ":",
+                "a\\(\\([bc]\\)\\2\\)*d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "cc\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre25",
+            "args": [
+                "abbcbd",
+                ":",
+                "a\\(\\([bc]\\)\\2\\)*d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre26",
+            "args": [
+                "abbbd",
+                ":",
+                "a\\(\\(b\\)*\\2\\)*d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "bbb\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre27",
+            "args": [
+                "aabcd",
+                ":",
+                "\\(a\\)\\1bcd"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre28",
+            "args": [
+                "aabcd",
+                ":",
+                "\\(a\\)\\1bc*d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre29",
+            "args": [
+                "aabd",
+                ":",
+                "\\(a\\)\\1bc*d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre30",
+            "args": [
+                "aabcccd",
+                ":",
+                "\\(a\\)\\1bc*d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre31",
+            "args": [
+                "aabcccd",
+                ":",
+                "\\(a\\)\\1bc*[ce]d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre32",
+            "args": [
+                "aabcccd",
+                ":",
+                "\\(a\\)\\1b\\(c\\)*cd\\$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre33",
+            "args": [
+                "a*b",
+                ":",
+                "a\\(*\\)b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "*\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre34",
+            "args": [
+                "ab",
+                ":",
+                "a\\(**\\)b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre35",
+            "args": [
+                "ab",
+                ":",
+                "a\\(***\\)b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre36",
+            "args": [
+                "*a",
+                ":",
+                "*a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre37",
+            "args": [
+                "a",
+                ":",
+                "**a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre38",
+            "args": [
+                "a",
+                ":",
+                "***a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre39",
+            "args": [
+                "ab",
+                ":",
+                "a\\{1\\}b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre40",
+            "args": [
+                "ab",
+                ":",
+                "a\\{1,\\}b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre41",
+            "args": [
+                "aab",
+                ":",
+                "a\\{1,2\\}b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre42",
+            "args": [
+                "_",
+                ":",
+                "a\\{1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched \\{\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre43",
+            "args": [
+                "_",
+                ":",
+                "a\\{1a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched \\{\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre44",
+            "args": [
+                "_",
+                ":",
+                "a\\{1a\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Invalid content of \\{\\}\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre45",
+            "args": [
+                "a",
+                ":",
+                "a\\{,2\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre46",
+            "args": [
+                "a",
+                ":",
+                "a\\{,\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre47",
+            "args": [
+                "_",
+                ":",
+                "a\\{1,x\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Invalid content of \\{\\}\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre48",
+            "args": [
+                "_",
+                ":",
+                "a\\{1,x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Unmatched \\{\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre49",
+            "args": [
+                "_",
+                ":",
+                "a\\{32768\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Invalid content of \\{\\}\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre50",
+            "args": [
+                "_",
+                ":",
+                "a\\{1,0\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: Invalid content of \\{\\}\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre51",
+            "args": [
+                "acabc",
+                ":",
+                ".*ab\\{0,0\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre52",
+            "args": [
+                "abcac",
+                ":",
+                "ab\\{0,1\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre53",
+            "args": [
+                "abbcac",
+                ":",
+                "ab\\{0,3\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre54",
+            "args": [
+                "abcac",
+                ":",
+                ".*ab\\{1,1\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre55",
+            "args": [
+                "abcac",
+                ":",
+                ".*ab\\{1,3\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre56",
+            "args": [
+                "abbcabc",
+                ":",
+                ".*ab\\{2,2\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre57",
+            "args": [
+                "abbcabc",
+                ":",
+                ".*ab\\{2,4\\}c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre58",
+            "args": [
+                "aa",
+                ":",
+                "a\\{1\\}\\{1\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre59",
+            "args": [
+                "aa",
+                ":",
+                "a*\\{1\\}"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre60",
+            "args": [
+                "aa",
+                ":",
+                "a\\{1\\}*"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre61",
+            "args": [
+                "acd",
+                ":",
+                "a\\(b\\)?c\\1d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bre62",
+            "args": [
+                "--",
+                "-5",
+                ":",
+                "-\\{0,1\\}[0-9]*\\$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:fail-c",
             "args": [],
             "expectation": {
                 "execution": {
-                "exit_code": 2,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: missing operand\nTry 'expr --help' for more information.\n"
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 非法表达式，单独的操作符 +",
-            "setup_commands": [],
-            "args": ["+"],
+            "description": "expr.pl:bignum-add",
+            "args": [
+                "98782897298723498732987928734",
+                "+",
+                "1"
+            ],
             "expectation": {
                 "execution": {
-                "exit_code": 2,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "98782897298723498732987928735\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         },
         {
             "tstdin": "",
             "command": "expr",
-            "description": "expr: 非法表达式，操作符缺少右操作数",
-            "setup_commands": [],
-            "args": ["1", "+"],
+            "description": "expr.pl:bignum-add2",
+            "args": [
+                "98782897298723498732987928734",
+                "+",
+                "98782897298723498732987928735"
+            ],
             "expectation": {
                 "execution": {
-                "exit_code": 2,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "197565794597446997465975857469\n",
+                    "stderr": ""
                 }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bignum-sub",
+            "args": [
+                "98782897298723498732987928735",
+                "-",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "98782897298723498732987928734\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bignum-sub2",
+            "args": [
+                "197565794597446997465975857469",
+                "-",
+                "98782897298723498732987928734"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "98782897298723498732987928735\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bignum-mul",
+            "args": [
+                "98782897298723498732987928735",
+                "*",
+                "98782897298723498732987928734"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "9758060798730154302876482828124348356960410232492450771490\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:bignum-div",
+            "args": [
+                "9758060798730154302876482828124348356960410232492450771490",
+                "/",
+                "98782897298723498732987928734"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "98782897298723498732987928735\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se0",
+            "args": [
+                "9",
+                "9"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: unexpected argument '9'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se1",
+            "args": [
+                "2",
+                "a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: unexpected argument 'a'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se2",
+            "args": [
+                "2",
+                "+"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: missing argument after '+'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se3",
+            "args": [
+                "2",
+                ":"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: missing argument after ':'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se4",
+            "args": [
+                "length"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: missing argument after 'length'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se5",
+            "args": [
+                "(",
+                "2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: expecting ')' after '2'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr.pl:se6",
+            "args": [
+                "(",
+                "2",
+                "a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "expr: syntax error: expecting ')' instead of 'a'\n"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
             }
         }
     ]
-  }
+}

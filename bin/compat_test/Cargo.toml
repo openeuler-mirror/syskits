@@ -19,7 +19,7 @@ thiserror = { workspace = true }
 chrono = { workspace = true }
 html-escape = "0.2"
 tempfile = { workspace = true }
-nix = { workspace = true, features = ["user", "resource", "process", "signal", "sched"] }
+nix = { workspace = true, features = ["user", "resource", "process", "signal", "sched", "term", "fs"] }
 clap = { workspace = true }
 toml = "0.8"
 dirs = "5.0"

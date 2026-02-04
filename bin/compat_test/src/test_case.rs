@@ -182,6 +182,9 @@ pub struct TestCase {
     /// 是否按十六进制字节模式解析本用例
     #[serde(default, rename = "byteMode", alias = "byte_mode")]
     pub byte_mode: bool,
+    /// 是否使用伪终端执行
+    #[serde(default, rename = "tty", alias = "tty_mode")]
+    pub tty: bool,
     /// 命令名称
     pub command: String,
     /// 测试描述
@@ -315,9 +318,8 @@ impl From<&FunctionalVerification> for CommandResult {
 }
 
 fn decode_hex_field(field: &str, value: &str) -> Result<Vec<u8>> {
-    hex::decode(value).map_err(|e| {
-        TestError::TestCaseError(format!("Invalid hex in {}: {}", field, e))
-    })
+    hex::decode(value)
+        .map_err(|e| TestError::TestCaseError(format!("Invalid hex in {}: {}", field, e)))
 }
 
 fn normalize_hex_field(field: &str, value: &str) -> Result<String> {
@@ -359,7 +361,11 @@ impl TestCase {
 
     pub fn args_display(&self) -> Vec<String> {
         if self.byte_mode {
-            return self.args.iter().map(|hex_str| format!("0x{}", hex_str)).collect();
+            return self
+                .args
+                .iter()
+                .map(|hex_str| format!("0x{}", hex_str))
+                .collect();
         }
         self.args.clone()
     }
@@ -653,6 +659,7 @@ mod tests {
         let test_cases = vec![TestCase {
             tstdin: "".to_string(),
             byte_mode: false,
+            tty: false,
             command: "echo".to_string(),
             description: "Test echo command".to_string(),
             args: vec!["Hello".to_string()],

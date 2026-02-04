@@ -48,6 +48,7 @@ struct SimpleTest {
     requires_root: Option<bool>,           // 是否需要root权限
     timeout: Option<u64>,                  // 超时时间（秒）
     tags: Option<Vec<String>>,             // 测试标签
+    tty: Option<bool>,                     // 是否使用伪终端
 }
 
 /// 获取工作空间根目录

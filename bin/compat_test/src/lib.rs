@@ -21,13 +21,13 @@ pub mod test_case;
 use crate::config::Config;
 use crate::executor::{CommandExecutor, ParallelTestExecutor};
 use crate::test_case::TestCaseManager;
+use hex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Output;
-use hex;
 
 /// 命令执行结果
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -725,6 +725,7 @@ mod tests {
         TestCase {
             tstdin: "".to_string(),
             byte_mode: false,
+            tty: false,
             command: command.to_string(),
             description: format!("Test for {}", command),
             args: vec![],

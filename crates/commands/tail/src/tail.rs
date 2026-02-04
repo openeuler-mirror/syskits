@@ -20,7 +20,7 @@ pub mod text;
 
 pub use args::ct_app;
 use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use chunks::TailReverseChunks;
 use clap::Command;
 use ctcore::Tool;
@@ -509,6 +509,10 @@ fn handle_bounded_lines(
             tail_backwards_thru_file(file, *count, separator);
             io::copy(file, writer)?;
         }
+        TailSignum::PlusZero => {
+            file.seek(SeekFrom::Start(0))?;
+            io::copy(file, writer)?;
+        }
         TailSignum::Positive(count) => {
             let skip_bytes = tail_forwards_thru_file(file, count - 1, separator)?;
             file.seek(SeekFrom::Start(skip_bytes as u64))?;
@@ -526,7 +530,16 @@ fn handle_bounded_bytes(
 ) -> CTResult<()> {
     match signum {
         TailSignum::Negative(count) => {
-            file.seek(SeekFrom::End(-(*count as i64)))?;
+            let file_len = file.metadata()?.len();
+            if *count >= file_len {
+                file.seek(SeekFrom::Start(0))?;
+            } else {
+                file.seek(SeekFrom::End(-(*count as i64)))?;
+            }
+            io::copy(file, writer)?;
+        }
+        TailSignum::PlusZero => {
+            file.seek(SeekFrom::Start(0))?;
             io::copy(file, writer)?;
         }
         TailSignum::Positive(count) => {

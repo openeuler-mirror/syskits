@@ -1,343 +1,464 @@
 {
-    "tests": [
-        {
-            "command": "tail",
-            "description": "tail: 基本功能，显示最后十行",
-            "args": ["tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "Line 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 显示最后五行",
-            "args": ["-n", "5", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "Line 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 行数为小数",
-            "args": ["-n", "5.22", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 从行号开始显示",
-            "args": ["-n", "+3", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "Line 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 按字节数显示",
-            "args": ["-c", "20", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "ine with emoji 😀\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 多个文件输入",
-            "args": ["tail_example.txt", "another_tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: hello\nLine2: hi\n' > another_tail_example.txt",
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "==> tail_example.txt <==\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n\n==> another_tail_example.txt <==\nLine 1: hello\nLine2: hi\n\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt another_tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 文件不存在",
-            "args": ["missing.txt"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 部分文件不存在",
-            "args": ["tail_example.txt", "missing.txt", "another_tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: hello\nLine2: hi\n' > another_tail_example.txt",
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "==> tail_example.txt <==\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n\n==> another_tail_example.txt <==\nLine 1: hello\nLine2: hi\n\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt another_tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 行数为0",
-            "args": ["-n", "0", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 行数大于文件行数",
-            "args": ["-n", "100", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 负数行",
-            "args": ["-n", "-5", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "Line 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 空文件",
-            "args": ["-n", "5", "empty_tail.txt"],
-            "setup_commands": [
-                "touch empty_tail.txt",
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt empty_tail.txt"
-            ]
-        },
-        {
-            "command": "tail",
-            "description": "tail: 字节和行组合",
-            "args": ["-c", "50", "-n", "5", "tail_example.txt"],
-            "setup_commands": [
-                "echo 'Line 1: Hello world\nLine 2: The quick brown fox\nLine 3: jumps over the lazy dog\nLine 4: 这是中文行，用于测试UTF-8\nLine 5: Another line with punctuation!\nLine 6: Short\nLine 7: \nLine 8: End of section one\nLine 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀' > tail_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "Line 9: The last few lines are here\nLine 10: Testing tail -n 0 and -n +3\nLine 11: Extra line to exceed default 10\nLine 12: The quick brown fox jumps again\nLine 13: Last line with emoji 😀\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f tail_example.txt"
-            ]
+  "tests": [
+    {
+      "command": "tail",
+      "description": "Basic: last 10 lines (default)",
+      "setup_commands": [
+        "echo -e 'line1\\nline2\\nline3\\nline4\\nline5\\nline6\\nline7\\nline8\\nline9\\nline10\\nline11\\nline12' > /tmp/test_tail_basic.txt"
+      ],
+      "args": ["/tmp/test_tail_basic.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "line3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n",
+          "stderr": ""
         }
-    ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_tail_basic.txt"]
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -c +2 (start from byte 2)",
+      "args": ["-c", "+2"],
+      "stdin": "abcd",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "bcd",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -c +8 (start from byte 8, beyond end)",
+      "args": ["-c", "+8"],
+      "stdin": "abcd",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -c 1 (last 1 byte)",
+      "args": ["-c", "1"],
+      "stdin": "abcd",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "d",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -c 9 (last 9 bytes, more than file)",
+      "args": ["-c", "9"],
+      "stdin": "abcd",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "abcd",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n 1 (last 1 line)",
+      "args": ["-n", "1"],
+      "stdin": "x\ny\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n +1 (from line 1)",
+      "args": ["-n", "+1"],
+      "stdin": "x\ny\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "x\ny\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n +2 (from line 2)",
+      "args": ["-n", "+2"],
+      "stdin": "x\ny\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -c 2 (last 2 bytes)",
+      "args": ["-c", "2"],
+      "stdin": "abcd\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "d\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -c2 (last 2 bytes, no space)",
+      "args": ["-c2"],
+      "stdin": "abcd\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "d\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n 10 (last 10 lines)",
+      "stdin": "x\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\nz",
+      "args": ["-n", "10"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\ny\ny\ny\ny\ny\ny\ny\ny\nz",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n -10 (last 10 lines, explicit minus)",
+      "stdin": "x\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\nz",
+      "args": ["-n", "-10"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\ny\ny\ny\ny\ny\ny\ny\ny\nz",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n +10 (from line 10)",
+      "stdin": "x\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\nz",
+      "args": ["-n", "+10"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\ny\nz",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n +0 (from beginning, synonym for +1)",
+      "stdin": "y\ny\ny\ny\ny\n",
+      "args": ["-n", "+0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\ny\ny\ny\ny\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n -0 (last 0 lines, empty output)",
+      "stdin": "y\ny\ny\ny\ny\n",
+      "args": ["-n", "-0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Modern: -n -1 (last 1 line)",
+      "stdin": "y\ny\ny\ny\ny\n",
+      "args": ["-n", "-1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Error: invalid number of bytes",
+      "args": ["-c99999999999999999999"],
+      "stdin": "",
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q \"invalid\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Multiple files: basic",
+      "setup_commands": [
+        "echo -e 'file1line1\\nfile1line2\\nfile1line3' > /tmp/test_tail_file1.txt",
+        "echo -e 'file2line1\\nfile2line2\\nfile2line3' > /tmp/test_tail_file2.txt"
+      ],
+      "args": ["-n", "2", "/tmp/test_tail_file1.txt", "/tmp/test_tail_file2.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"file1line2\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"file2line2\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"==> /tmp/test_tail_file1.txt <==\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_tail_file1.txt /tmp/test_tail_file2.txt"
+      ]
+    },
+    {
+      "command": "tail",
+      "description": "Option: -q/--quiet (suppress headers)",
+      "setup_commands": [
+        "echo -e 'file1line1\\nfile1line2\\nfile1line3' > /tmp/test_tail_quiet1.txt",
+        "echo -e 'file2line1\\nfile2line2\\nfile2line3' > /tmp/test_tail_quiet2.txt"
+      ],
+      "args": ["-q", "-n", "2", "/tmp/test_tail_quiet1.txt", "/tmp/test_tail_quiet2.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"file1line2\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"file2line2\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"==>\"; test $? -eq 1",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_tail_quiet1.txt /tmp/test_tail_quiet2.txt"
+      ]
+    },
+    {
+      "command": "tail",
+      "description": "Option: -v/--verbose (always show headers)",
+      "setup_commands": [
+        "echo -e 'line1\\nline2\\nline3' > /tmp/test_tail_verbose.txt"
+      ],
+      "args": ["-v", "-n", "2", "/tmp/test_tail_verbose.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"==> /tmp/test_tail_verbose.txt <==\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"line2\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f /tmp/test_tail_verbose.txt"]
+    },
+    {
+      "command": "tail",
+      "description": "Option: -z/--zero-terminated (NUL delimiter)",
+      "args": ["-z", "-n", "2"],
+      "stdin": "line1\u0000line2\u0000line3\u0000",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "line2\u0000line3\u0000",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Stdin: read from stdin with -",
+      "args": ["-n", "2", "-"],
+      "stdin": "line1\nline2\nline3\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "line2\nline3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Help: --help flag",
+      "args": ["--help"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q \"tail\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -i \"usage\\|用法\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Version: --version flag",
+      "args": ["--version"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -E \"[0-9]+\\.[0-9]+\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Advanced: --pid without -f (should warn)",
+      "args": ["--pid=1", "/etc/hosts"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q \"PID ignored\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Advanced: --retry without -f (should warn)",
+      "args": ["--retry", "/etc/hosts"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q \"retry ignored\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Advanced: --sleep-interval option",
+      "args": ["-s", "0.5", "-n", "2", "/etc/hosts"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "tail",
+      "description": "Advanced: --max-unchanged-stats option",
+      "args": ["--max-unchanged-stats=10", "-n", "2", "/etc/hosts"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    }
+  ]
 }

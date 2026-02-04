@@ -1,5 +1,7 @@
 mknod:
   clap:
+    help: display this help and exit
+    version: output version information and exit
     mode: set file permission bits to MODE, not a=rw - umask
     name: name of the new file
     type: type of the new file (b, c, u or p)

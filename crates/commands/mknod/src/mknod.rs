@@ -18,7 +18,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::ArgAction;
 use clap::builder::ValueParser;
 use ctcore::Tool;
@@ -26,9 +26,11 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
+use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use selinux::{self, SecurityContext};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use sys_locale::get_locale;
 
 // 常量：用于设置文件模式的权限位。
@@ -101,23 +103,88 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     }
 }
 
-fn set_security_context(context: Option<&OsString>) -> Result<(), String> {
+fn set_security_context(
+    context: Option<&OsString>,
+    file_path: &str,
+    file_mode: mode_t,
+) -> Result<(), String> {
+    // 首先检查SELinux是否启用
+    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        // SELinux未启用，如果用户明确指定了上下文，发出警告
+        if context.is_some() {
+            eprintln!("mknod: warning: ignoring --context; it requires an SELinux-enabled kernel");
+        }
+        return Ok(());
+    }
+
     match context {
         Some(ctx) => {
             let c_context = os_str_to_c_string(ctx);
             // 如果提供了具体的上下文，使用它
             SecurityContext::from_c_str(&c_context, false)
                 .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("Failed to set security context: {}", e))
+                .map_err(|e| format!("failed to set default file creation context: {}", e))
         }
         None => {
-            // 使用空字符串来触发默认安全上下文
-            let empty_ctx = CString::new("").unwrap();
-            SecurityContext::from_c_str(&empty_ctx, false)
+            // 使用selabel_lookup获取基于路径的默认上下文（与GNU的defaultcon()函数等价）
+            //
+            // GNU实现流程：
+            //   1. 使用selabel_lookup(handle, &scon, path, mode)查询策略数据库
+            //   2. 使用computecon()结合进程上下文和文件策略
+            //   3. 提取类型字段并设置最终上下文
+            //
+            // 当前实现（使用selinux 0.6 crate）：
+            //   1. 创建Labeler用于文件上下文查询
+            //   2. 使用look_up_by_path()获取路径的默认上下文（等价于selabel_lookup）
+            //   3. 设置为新文件系统对象的创建上下文
+
+            // 创建文件上下文标签器（等价于GNU的selabel_open）
+            let labeler = Labeler::<FileBackEnd>::restorecon_default(false).map_err(|e| {
+                // 如果无法创建labeler，发出警告但继续（与GNU行为一致）
+                eprintln!("mknod: warning: cannot create SELinux labeler: {}", e);
+                String::new()
+            })?;
+
+            // 将mode_t转换为FileAccessMode
+            let file_access_mode = mode_to_file_access_mode(file_mode);
+
+            // 查询路径的默认SELinux上下文（等价于GNU的selabel_lookup）
+            let path = Path::new(file_path);
+            let default_context = labeler
+                .look_up_by_path(path, Some(file_access_mode))
+                .map_err(|e| {
+                    // 如果查询失败，发出警告但继续（与GNU行为一致）
+                    // GNU会在ENOENT时映射为ENODATA
+                    eprintln!(
+                        "mknod: warning: cannot look up default SELinux context for {}: {}",
+                        file_path, e
+                    );
+                    String::new()
+                })?;
+
+            // 设置为新文件系统对象的创建上下文（等价于GNU的setfscreatecon）
+            default_context
                 .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("Failed to set default security context: {}", e))
+                .map_err(|e| {
+                    // 如果设置失败，发出警告但继续（与GNU行为一致）
+                    eprintln!(
+                        "mknod: warning: cannot set default file creation context: {}",
+                        e
+                    );
+                    String::new()
+                })?;
+
+            Ok(())
         }
     }
+}
+
+// 将mode_t转换为selinux::FileAccessMode
+// FileAccessMode是一个包装mode_t的结构体，直接传递mode即可
+fn mode_to_file_access_mode(mode: mode_t) -> selinux::FileAccessMode {
+    // FileAccessMode::new()接受mode_t并返回Option<FileAccessMode>
+    // 如果mode为0则返回None，但在mknod中mode总是非零的（包含文件类型位）
+    selinux::FileAccessMode::new(mode).expect("mode should be non-zero in mknod context")
 }
 
 pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
@@ -148,17 +215,19 @@ fn mknod_processing(
     file_name: &str,
     file_type: &MknodFileType,
 ) -> CTResult<()> {
-    // 处理安全上下文
-    if args_match.contains_id("context") {
+    // 处理安全上下文（仅当用户明确指定-Z或--context时）
+    // 注意：只有当用户实际提供了这些标志时才设置SELinux上下文
+    let has_z_flag = args_match.get_flag("ctx");
+    let has_context_flag =
+        args_match.value_source("context") == Some(clap::parser::ValueSource::CommandLine);
+
+    if has_z_flag || has_context_flag {
         let context = args_match.get_one::<OsString>("context");
-
-        set_security_context(context).map_err(|e| CtSimpleError::new(1, e))?;
-    } else if args_match.contains_id("ctx") {
-        //使用默认安全上下文
-        set_security_context(None).map_err(|e| CtSimpleError::new(1, e))?;
+        set_security_context(context, file_name, mode).map_err(|e| CtSimpleError::new(1, e))?;
     }
+    // 如果既没有-Z也没有--context，则不设置SELinux上下文
 
-    if *file_type == MknodFileType::Fifo {
+    let result = if *file_type == MknodFileType::Fifo {
         // FIFO文件不需要主、次设备号
         if args_match.contains_id("major") || args_match.contains_id("minor") {
             Err(CTsageError::new(
@@ -168,7 +237,14 @@ fn mknod_processing(
         } else {
             let exit_code = _mknod(file_name, S_IFIFO | mode, 0);
             set_ct_exit_code(exit_code);
-            Ok(())
+            if exit_code == 0 {
+                Ok(())
+            } else {
+                Err(CtSimpleError::new(
+                    1,
+                    format!("failed to create FIFO: {}", file_name),
+                ))
+            }
         }
     } else {
         // 对于块设备和字符设备，需要主、次设备号
@@ -181,6 +257,19 @@ fn mknod_processing(
                 "Special files require major and minor device numbers.",
             )),
             (Some(&major), Some(&minor)) => {
+                // 检查设备号是否有效（NODEV检查）
+                #[cfg(target_os = "linux")]
+                {
+                    const NODEV: dev_t = !0;
+                    let dev = make_dev(major, minor);
+                    if dev == NODEV {
+                        return Err(CtSimpleError::new(
+                            1,
+                            format!("invalid device {} {}", major, minor),
+                        ));
+                    }
+                }
+
                 let dev = make_dev(major, minor);
                 let exit_code = match file_type {
                     MknodFileType::Block => _mknod(file_name, S_IFBLK | mode, dev),
@@ -188,10 +277,34 @@ fn mknod_processing(
                     _ => unreachable!("file_type was validated to be only block or character"),
                 };
                 set_ct_exit_code(exit_code);
-                Ok(())
+                if exit_code == 0 {
+                    Ok(())
+                } else {
+                    Err(CtSimpleError::new(
+                        1,
+                        format!("failed to create device: {}", file_name),
+                    ))
+                }
+            }
+        }
+    };
+
+    // 如果文件创建成功且用户指定了模式，使用chmod确保权限正确设置
+    // 这与GNU的lchmod()调用等价（对于非符号链接文件）
+    if result.is_ok() && args_match.contains_id("mode") {
+        unsafe {
+            let c_path = CString::new(file_name).expect("Failed to convert path to CString");
+            if libc::chmod(c_path.as_ptr(), mode) != 0 {
+                let err = std::io::Error::last_os_error();
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("cannot set permissions of {}: {}", file_name.quote(), err),
+                ));
             }
         }
     }
+
+    result
 }
 
 // 构建命令行解析器。
@@ -220,14 +333,16 @@ pub fn ct_app() -> Command {
             .help(t!("mknod.clap.mode")),
         Arg::new("ctx")
             .short('Z')
-            .num_args(0)
+            .action(ArgAction::SetTrue)
             .help("set the default SELinux security context"),
         Arg::new("context")
             .long("context")
             .value_name("CTX")
             .help("if CTX is specified then set the SELinux security context to CTX")
             .value_parser(ValueParser::os_string())
-            .num_args(0..=1),
+            .num_args(0..=1)
+            .require_equals(true)
+            .default_missing_value(""),
         Arg::new("name")
             .value_name("NAME")
             .help(t!("mknod.clap.name"))

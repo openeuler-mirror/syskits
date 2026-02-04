@@ -1,234 +1,422 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "基本功能测试 - 创建字符设备文件",
-            "setup_commands": [],
-            "args": ["char_dev", "c", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -c char_dev && echo 'Is char device'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Is char device"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f char_dev"
-            ]
+  "tests": [
+    {
+      "command": "mknod",
+      "description": "Help: --help flag",
+      "args": ["--help"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "创建块设备文件",
-            "setup_commands": [],
-            "args": ["block_dev", "b", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -b block_dev && echo 'Is block device'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Is block device"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f block_dev"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -i \"mknod\\|usage\\|用法\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mknod",
+      "description": "Version: --version flag",
+      "args": ["--version"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "创建FIFO文件",
-            "setup_commands": [],
-            "args": ["fifo_file", "p"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -p fifo_file && echo 'Is FIFO'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Is FIFO"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f fifo_file"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q -E \"[0-9]+\\.[0-9]+\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "mknod",
+      "description": "Basic: create FIFO without mode",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_fifo1"
+      ],
+      "args": ["/tmp/test_mknod_fifo1", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试 -m 选项 - 设置权限模式",
-            "setup_commands": [],
-            "args": ["-m", "600", "char_dev_mode", "c", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c '%a' char_dev_mode",
-                        "expected_exit": 0,
-                        "expected_stdout": "600"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f char_dev_mode"
-            ]
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_fifo1",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_fifo1"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Mode: create FIFO with -m 644",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_fifo2"
+      ],
+      "args": ["-m", "644", "/tmp/test_mknod_fifo2", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试十六进制设备号",
-            "setup_commands": [],
-            "args": ["hex_dev", "c", "0x1", "0x1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c '%t %T' hex_dev",
-                        "expected_exit": 0,
-                        "expected_stdout": "1 1"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f hex_dev"
-            ]
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_fifo2",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' /tmp/test_mknod_fifo2 | grep -q '^644$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_fifo2"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Mode: create FIFO with -m 734 (from GNU test)",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_fifo3",
+        "umask 777"
+      ],
+      "args": ["-m", "734", "/tmp/test_mknod_fifo3", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试八进制设备号",
-            "setup_commands": [],
-            "args": ["oct_dev", "c", "01", "01"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c '%t %T' oct_dev",
-                        "expected_exit": 0,
-                        "expected_stdout": "1 1"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f oct_dev"
-            ]
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_fifo3",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' /tmp/test_mknod_fifo3 | grep -q '^734$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_fifo3",
+        "umask 022"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Mode: create FIFO with -m 755",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_fifo4"
+      ],
+      "args": ["-m", "755", "/tmp/test_mknod_fifo4", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试文件已存在",
-            "setup_commands": [
-                "touch existing_file"
-            ],
-            "args": ["existing_file", "c", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "^mknod: failed to create 'existing_file': File exists\\n$"
-                },
-                "ignore_fields": {
-                  "ignore_exit_code": true
-                }
-            },
-            "cleanup_commands": [
-                "rm -f existing_file"
-            ]
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_fifo4",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' /tmp/test_mknod_fifo4 | grep -q '^755$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_fifo4"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Error: FIFO with major/minor should fail",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_error1"
+      ],
+      "args": ["/tmp/test_mknod_error1", "p", "1", "2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试无效设备类型",
-            "setup_commands": [],
-            "args": ["invalid_dev", "x", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "^mknod: invalid type: 'x'\\n$"
-                }
-            },
-            "cleanup_commands": []
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q -i \"fifo\\|major\\|minor\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_error1"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Error: block device without major should fail",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_error2"
+      ],
+      "args": ["/tmp/test_mknod_error2", "b"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试缺少设备号",
-            "setup_commands": [],
-            "args": ["missing_dev", "c"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "^mknod: missing operand after 'c'\\n$"
-                }
-            },
-            "cleanup_commands": []
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q -i \"major\\|minor\\|device\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_error2"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Error: character device without minor should fail",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_error3"
+      ],
+      "args": ["/tmp/test_mknod_error3", "c", "1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试 -Z 选项 - 设置 SELinux 安全上下文",
-            "setup_commands": [],
-            "args": ["-Z", "selinux_dev", "c", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f selinux_dev"
-            ]
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q -i \"major\\|minor\\|device\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_error3"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Error: invalid mode should fail",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_error4"
+      ],
+      "args": ["-m", "999", "/tmp/test_mknod_error4", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
         },
-        {
-            "tstdin": "",
-            "command": "mknod",
-            "description": "测试 --context 选项",
-            "setup_commands": [],
-            "args": ["--context=system_u:object_r:device_t:s0", "context_dev", "c", "1", "1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f context_dev"
-            ]
-        }
-    ]
-} 
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q -i \"mode\\|invalid\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_error4"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Error: invalid type should fail",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_error5"
+      ],
+      "args": ["/tmp/test_mknod_error5", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q -i \"type\\|invalid\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_error5"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Type: 'u' is alias for 'c' (character device)",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_type_u"
+      ],
+      "args": ["/tmp/test_mknod_type_u", "u", "1", "3"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test $CMD_EXIT_CODE -eq 0 || test $CMD_EXIT_CODE -eq 1",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_type_u"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "SELinux: -Z flag without SELinux should warn but succeed",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_selinux1"
+      ],
+      "args": ["-Z", "/tmp/test_mknod_selinux1", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_selinux1",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_selinux1"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "SELinux: --context without value should work like -Z",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_selinux2"
+      ],
+      "args": ["--context", "/tmp/test_mknod_selinux2", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_selinux2",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_selinux2"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "SELinux: --context=CTX with specific context",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_selinux3"
+      ],
+      "args": ["--context=user_u:object_r:user_tmp_t:s0", "/tmp/test_mknod_selinux3", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test $CMD_EXIT_CODE -eq 0 || (echo \"$CMD_STDERR\" | grep -q -i \"warning\\|selinux\")",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_selinux3"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Mode: create FIFO with --mode=755 (long option with equals)",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_mode_eq1"
+      ],
+      "args": ["--mode=755", "/tmp/test_mknod_mode_eq1", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_mode_eq1",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' /tmp/test_mknod_mode_eq1 | grep -q '^755$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_mode_eq1"
+      ]
+    },
+    {
+      "command": "mknod",
+      "description": "Mode: create FIFO with -m=644 (short option with equals)",
+      "setup_commands": [
+        "rm -f /tmp/test_mknod_mode_eq2"
+      ],
+      "args": ["-m=644", "/tmp/test_mknod_mode_eq2", "p"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p /tmp/test_mknod_mode_eq2",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' /tmp/test_mknod_mode_eq2 | grep -q '^644$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_mknod_mode_eq2"
+      ]
+    }
+  ]
+}

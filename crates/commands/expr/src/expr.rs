@@ -25,7 +25,10 @@ use sys_locale::get_locale;
 
 use crate::syntax_tree::is_syntax_tree_truthy;
 use ctcore::Tool;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 
 mod syntax_tree;
 // 定义命令行选项常量
@@ -41,13 +44,15 @@ pub type ExprResult<T> = Result<T, ExprError>;
 // 表达式错误类型
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExprError {
-    UnexpectedArgument(String),        // 意外的参数
-    MissingArgument(String),           // 缺失的参数
-    NonIntegerArgument,                // 非整数参数
-    MissingOperand,                    // 缺失操作数
-    DivisionByZero,                    // 除以零
-    InvalidRegexExpression,            // 无效的正则表达式
-    ExpectedClosingBraceAfter(String), // 期望在...之后看到闭合括号
+    UnexpectedArgument(String),            // 意外的参数
+    MissingArgument(String),               // 缺失的参数
+    NonIntegerArgument,                    // 非整数参数
+    MissingOperand,                        // 缺失操作数
+    DivisionByZero,                        // 除以零
+    RegexError(String),                    // 正则表达式错误
+    ExpectedClosingBraceAfter(String),     // 期望在...之后看到闭合括号
+    ExpectedClosingBraceInsteadOf(String), // 期望闭合括号，但遇到其他参数
+    UnexpectedClosingBrace,                // 意外的右括号
 }
 
 // 实现 ExprError 的显示格式化
@@ -64,10 +69,14 @@ impl Display for ExprError {
             Self::NonIntegerArgument => write!(f, "non-integer argument"),
             Self::MissingOperand => write!(f, "missing operand"),
             Self::DivisionByZero => write!(f, "division by zero"),
-            Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
+            Self::RegexError(s) => write!(f, "{s}"),
             Self::ExpectedClosingBraceAfter(s) => {
-                write!(f, "expected ')' after {}", s.quote())
+                write!(f, "syntax error: expecting ')' after {}", s.quote())
             }
+            Self::ExpectedClosingBraceInsteadOf(s) => {
+                write!(f, "syntax error: expecting ')' instead of {}", s.quote())
+            }
+            Self::UnexpectedClosingBrace => write!(f, "syntax error: unexpected ')'"),
         }
     }
 }
@@ -122,27 +131,49 @@ pub fn ct_app() -> Command {
 pub fn expr_main(args: impl ctcore::Args) -> CTResult<String> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 解析命令行参数
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let mut args: Vec<OsString> = args.into_iter().collect();
+    let mut operands: Vec<OsString> = if args.len() > 1 {
+        args.drain(1..).collect()
+    } else {
+        Vec::new()
+    };
 
-    // 提取并处理表达式参数
-    let token_strings: Vec<&str> = args_match
-        .get_many::<String>(opt_flags::EXPRESSION)
-        .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
-        .unwrap_or_default();
+    if let Some(first) = operands.first() {
+        if first == OsStr::new("--help") || first == OsStr::new("--version") {
+            let help_args = vec![OsString::from(ctcore::ct_util_name()), first.clone()];
+            ct_app().try_get_matches_from(help_args)?;
+        }
+    }
 
-    // 解析、计算并输出表达式结果
-    let result: String = SyntaxTreeAstNode::parse(&token_strings)?
-        .eval()?
-        .eval_as_string();
+    if matches!(operands.first(), Some(arg) if arg == OsStr::new("--")) {
+        operands.remove(0);
+    }
 
-    println!("{result}");
+    #[cfg(unix)]
+    fn os_to_bytes(arg: OsString) -> Vec<u8> {
+        arg.into_vec()
+    }
+
+    #[cfg(not(unix))]
+    fn os_to_bytes(arg: OsString) -> Vec<u8> {
+        arg.into_string().unwrap_or_default().into_bytes()
+    }
+
+    let token_bytes: Vec<Vec<u8>> = operands.into_iter().map(os_to_bytes).collect();
+
+    let result = SyntaxTreeAstNode::parse_bytes(&token_bytes)?.eval()?;
+    let output_bytes = result.clone().eval_as_bytes();
+
+    let mut stdout = std::io::stdout();
+    stdout.write_all(&output_bytes)?;
+    stdout.write_all(b"\n")?;
 
     // 如果结果为假，则返回错误
-    if !is_syntax_tree_truthy(&result.clone().into()) {
+    if !is_syntax_tree_truthy(&result) {
         return Err(1.into());
     }
-    Ok(result)
+
+    Ok(String::from_utf8_lossy(&output_bytes).into_owned())
 }
 
 #[derive(Default)]

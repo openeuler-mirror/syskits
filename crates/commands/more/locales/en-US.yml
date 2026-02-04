@@ -2,7 +2,10 @@ more:
   clap:
     more_print_over: Do not scroll, display text and clean line ends
     more_silent: Display help instead of ringing bell
+    more_logical: Count logical rather than screen lines
+    more_no_pause: Suppress pause after form feed
     more_clean_print: Do not scroll, clean screen and display text
+    more_exit_on_eof: Exit on end-of-file
     more_squeeze: Squeeze multiple blank lines into one
     more_pattern: Display file beginning from pattern match
     more_files: Path to the files to be read

@@ -956,6 +956,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
+ "onig_sys",
  "rust-i18n",
  "sys-locale",
 ]
@@ -2987,6 +2988,7 @@ version = "69.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7f86c6eef3d6df15f23bcfb6af487cbd2fed4e5581d58d5bf1f5f8b7f6727dc"
 dependencies = [
+ "bindgen 0.71.1",
  "cc",
  "pkg-config",
 ]

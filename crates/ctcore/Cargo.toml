@@ -111,7 +111,7 @@ process = ["libc"]
 quoting-style = []
 ranges = []
 ringbuffer = []
-signals = []
+signals = ["libc"]
 sum = [
     "digest",
     "hex",

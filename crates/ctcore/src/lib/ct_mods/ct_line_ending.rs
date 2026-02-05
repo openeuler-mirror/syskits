@@ -63,13 +63,13 @@ mod tests {
     #[test]
     fn test_display_newline() {
         let newline = CtLineEnding::Newline;
-        assert_eq!(format!("{}", newline), "\n");
+        assert_eq!(format!("{newline}"), "\n");
     }
 
     #[test]
     fn test_display_nul() {
         let nul = CtLineEnding::Nul;
-        assert_eq!(format!("{}", nul), "\0");
+        assert_eq!(format!("{nul}"), "\0");
     }
 
     #[test]
@@ -96,7 +96,7 @@ mod tests {
     fn test_display_formats_correctly_newline() {
         let newline = CtLineEnding::Newline;
         let mut output = String::new();
-        write!(output, "{}", newline).expect("Failed to write to string");
+        write!(output, "{newline}").expect("Failed to write to string");
         assert_eq!(output, "\n");
     }
 
@@ -104,7 +104,7 @@ mod tests {
     fn test_display_formats_correctly_nul() {
         let nul = CtLineEnding::Nul;
         let mut output = String::new();
-        write!(output, "{}", nul).expect("Failed to write to string");
+        write!(output, "{nul}").expect("Failed to write to string");
         assert_eq!(output, "\0");
     }
 

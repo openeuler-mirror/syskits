@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_parse_specifier_with_l_flag() {
         let mut input: &[u8] = b"l";
-        let rest: &[u8] = &[b'l'];
+        let rest: &[u8] = b"l";
         let _expected = Spec::Char {
             width: None,
             align_left: true,
@@ -727,14 +727,14 @@ mod tests {
             width: None,
             align_left: true,
         };
-        let rest: &[u8] = &[b'2', b'.', b'3', b'L'];
+        let rest: &[u8] = b"2.3L";
         assert_eq!(Spec::parse(&mut input), Err(rest));
     }
 
     #[test]
     fn test_parse_specifier_with_h_flag2() {
         let mut input: &[u8] = b"H";
-        let rest: &[u8] = &[b'H'];
+        let rest: &[u8] = b"H";
         let _expected = Spec::Char {
             width: None,
             align_left: false,
@@ -798,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_eat_number_no_digits() {
-        let mut rest: &[u8] = &[b'h', b'i', b'j']; // "hij"
+        let mut rest: &[u8] = b"hij"; // "hij"
         let mut index = 0;
         assert_eq!(eat_number(&mut rest, &mut index), None);
         assert_eq!(index, 0);
@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn test_eat_number_single_digit() {
-        let mut rest: &[u8] = &[b'0']; // "0"
+        let mut rest: &[u8] = b"0"; // "0"
         let mut index = 0;
         assert_eq!(eat_number(&mut rest, &mut index), None);
         assert_eq!(index, 0);
@@ -815,7 +815,7 @@ mod tests {
     #[test]
     fn test_eat_number_multiple_digits() {
         // "345"
-        let mut rest: &[u8] = &[b'3', b'4', b'5'];
+        let mut rest: &[u8] = b"345";
         let mut index = 0;
         assert_eq!(eat_number(&mut rest, &mut index), None);
         assert_eq!(index, 0);
@@ -824,7 +824,7 @@ mod tests {
     #[test]
     fn test_eat_number_multiple_digits2() {
         // "3x5"
-        let mut rest: &[u8] = &[b'3', b'q', b'5'];
+        let mut rest: &[u8] = b"3q5";
         let mut index = 0;
         assert_eq!(eat_number(&mut rest, &mut index), Some(3));
         assert_eq!(index, 1);
@@ -833,7 +833,7 @@ mod tests {
     #[test]
     fn test_eat_number_mixed_digits_and_non_digits() {
         // "2345hij"
-        let mut rest: &[u8] = &[b'2', b'3', b'4', b'5', b'h', b'i', b'j'];
+        let mut rest: &[u8] = b"2345hij";
         let mut index = 0;
         assert_eq!(eat_number(&mut rest, &mut index), Some(2345));
         assert_eq!(index, 4);
@@ -842,7 +842,7 @@ mod tests {
     #[test]
     fn test_eat_number_non_digit_followed_by_digits() {
         // "hij012"
-        let mut rest: &[u8] = &[b'h', b'i', b'j', b'0', b'1', b'2'];
+        let mut rest: &[u8] = b"hij012";
         let mut index = 0;
         assert_eq!(eat_number(&mut rest, &mut index), None);
         assert_eq!(index, 0);
@@ -942,7 +942,7 @@ mod tests {
         let left = true;
         let expected = b"Hello, world!       ";
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, expected);
     }
 
@@ -954,7 +954,7 @@ mod tests {
         let left = false;
         let expected = b"       Hello, world!";
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, expected);
     }
 
@@ -966,7 +966,7 @@ mod tests {
         let left = true;
         let expected = b"Hello, world!";
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, expected);
     }
 
@@ -987,7 +987,7 @@ mod tests {
         let width = 20;
         let left = true;
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, b"                    ");
     }
     #[test]
@@ -997,7 +997,7 @@ mod tests {
         let width = 20;
         let left = false;
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, b"                    ");
     }
 
@@ -1008,7 +1008,7 @@ mod tests {
         let width = 0;
         let left = true;
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, b"Hello, world!");
     }
 
@@ -1019,7 +1019,7 @@ mod tests {
         let width = 0;
         let left = true;
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, b"Hello, world!");
     }
 
@@ -1030,7 +1030,7 @@ mod tests {
         let width = 0;
         let left = false;
         let result = write_padded(&mut writer, text, width, left);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(writer, b"Hello, world!");
     }
 }

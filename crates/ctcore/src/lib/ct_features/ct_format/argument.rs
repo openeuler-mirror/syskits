@@ -160,8 +160,7 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(test)]
-    mod tests {
+    mod argument_tests {
         use super::*;
 
         struct MockArgumentIter<'a> {
@@ -240,15 +239,15 @@ mod tests {
         #[test]
         fn test_argument_iter_get_f64() {
             let args = vec![
-                FormatArgument::Float(3.14),
-                FormatArgument::Unparsed("2.718".to_string()),
+                FormatArgument::Float(std::f64::consts::PI),
+                FormatArgument::Unparsed(std::f64::consts::E.to_string()),
                 FormatArgument::SignedInt(-42),
                 FormatArgument::String("1.618".to_string()),
             ];
             let mut iter = MockArgumentIter::new(&args);
 
-            assert_eq!(iter.get_f64(), 3.14);
-            assert_eq!(iter.get_f64(), 2.718); //对于 Unparsed 类型，应将字符串解析为 u64
+            assert_eq!(iter.get_f64(), std::f64::consts::PI);
+            assert_eq!(iter.get_f64(), std::f64::consts::E); //对于 Unparsed 类型，应将字符串解析为 u64
             assert_eq!(iter.get_f64(), 0.0); // 对于 SignedInt 类型，应默认返回 0。
             assert_eq!(iter.get_f64(), 0.0); // 对于 String 类型，应默认返回 0。
         }

@@ -295,7 +295,7 @@ mod test {
 
         let result = decode(Format::Base32, (&input).as_ref());
 
-        println!("{:?}", result);
+        println!("{result:?}");
         assert_eq!(result.unwrap(), expected);
     }
 

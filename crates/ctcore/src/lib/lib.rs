@@ -168,7 +168,7 @@ pub fn ct_format_usage(s: &str) -> String {
                 line.to_string()
             } else {
                 // 后续行添加7个空格的缩进
-                format!("       {}", line)
+                format!("       {line}")
             }
         })
         .collect::<Vec<_>>() // 将处理过的行收集回Vec

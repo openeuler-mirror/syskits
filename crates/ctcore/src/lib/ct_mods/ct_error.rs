@@ -446,8 +446,8 @@ impl Display for CTIoError {
         };
 
         match &self.context {
-            Some(ctx) => write!(f, "{}: {}", ctx, message),
-            None => write!(f, "{}", message),
+            Some(ctx) => write!(f, "{ctx}: {message}"),
+            None => write!(f, "{message}"),
         }
     }
 }
@@ -787,27 +787,27 @@ mod tests {
     fn test_usimple_error() {
         let err = CtSimpleError::new(2, "Test error");
         assert_eq!(err.code(), 2);
-        assert_eq!(format!("{}", err), "Test error");
+        assert_eq!(format!("{err}"), "Test error");
     }
 
     #[test]
     fn test_uusage_error_usage_flag() {
         let err = CTsageError::new(1, "Usage needed");
         assert!(err.usage());
-        assert_eq!(format!("{}", err), "Usage needed");
+        assert_eq!(format!("{err}"), "Usage needed");
     }
 
     #[test]
     fn test_uio_error_message() {
         let err = CTIoError::new(std::io::ErrorKind::NotFound, "File not found");
-        assert_eq!(format!("{}", err), "File not found: entity not found");
+        assert_eq!(format!("{err}"), "File not found: entity not found");
     }
 
     #[test]
     fn test_exit_code() {
         let err = ExitCode::new(3);
         assert_eq!(err.code(), 3);
-        assert_eq!(format!("{}", err), "");
+        assert_eq!(format!("{err}"), "");
     }
 
     #[test]
@@ -820,7 +820,7 @@ mod tests {
     fn test_from_io_error_conversion() {
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
         let custom_err: Box<dyn CTError> = Box::new(CTIoError::from(io_err));
-        assert_eq!(format!("{}", custom_err), "Access denied");
+        assert_eq!(format!("{custom_err}"), "Access denied");
     }
 
     #[test]

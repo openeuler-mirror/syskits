@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn test_println_verbatim_with_long_path() {
         // 生成一个非常长的路径字符串
-        let long_path_str = std::iter::repeat("a").take(10000).collect::<String>();
+        let long_path_str = "a".repeat(10000);
         let path = Path::new(&long_path_str);
         // 验证长路径不会导致错误
         assert!(ct_println_verbatim(path).is_ok());

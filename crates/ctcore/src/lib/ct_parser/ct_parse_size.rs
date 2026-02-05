@@ -380,7 +380,7 @@ impl fmt::Display for ParseSizeError {
             Self::ParseFailure(s) => ("Parse Failure", s),
             Self::SizeTooBig(s) => ("Size Too Big", s),
         };
-        write!(f, "{}", message)
+        write!(f, "{message}")
     }
 }
 
@@ -549,7 +549,7 @@ mod tests {
         let result_strings = ["'5mib'", "'1eb'", "'1H'"];
         for (i, test_string) in test_strings.iter().enumerate() {
             assert_eq!(
-                parse_size_u64(&test_string).unwrap_err(),
+                parse_size_u64(test_string).unwrap_err(),
                 ParseSizeError::InvalidSuffix(result_strings[i].to_string())
             );
         }
@@ -561,7 +561,7 @@ mod tests {
         let result_strings = ["'x'", "''", "'abc'"];
         for (i, test_string) in test_strings.iter().enumerate() {
             assert_eq!(
-                parse_size_u64(&test_string).unwrap_err(),
+                parse_size_u64(test_string).unwrap_err(),
                 ParseSizeError::ParseFailure(result_strings[i].to_string())
             );
         }

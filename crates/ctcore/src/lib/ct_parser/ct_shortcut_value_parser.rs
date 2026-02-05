@@ -118,8 +118,7 @@ mod tests {
 
     use super::CtShortcutValueParser;
 
-    #[cfg(test)]
-    mod tests {
+    mod parser_tests {
         use super::*;
         use clap::{Arg, Command, builder::PossibleValue};
 

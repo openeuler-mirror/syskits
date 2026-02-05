@@ -117,7 +117,7 @@ mod tests {
         let mut options_builder = OpenOptions::new();
         let options = options_builder.create(true).write(true).read(true);
 
-        let handle = CtOwnedFileDescriptorOrHandle::open_file(&options, &file_path)?;
+        let handle = CtOwnedFileDescriptorOrHandle::open_file(options, &file_path)?;
         let mut file = handle.into_file();
         write!(file, "Hello, world!")?;
         file.sync_all()?;
@@ -165,7 +165,7 @@ mod tests {
         let mut binding = OpenOptions::new();
         let options = binding.read(true); // Not creating the file
 
-        assert!(CtOwnedFileDescriptorOrHandle::open_file(&options, &file_path).is_err());
+        assert!(CtOwnedFileDescriptorOrHandle::open_file(options, &file_path).is_err());
     }
 
     #[test]

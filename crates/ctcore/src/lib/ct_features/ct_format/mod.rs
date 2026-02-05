@@ -261,7 +261,9 @@ fn printf_writer<'a>(
 ) -> Result<(), FormatError> {
     let mut args = args.into_iter();
     for item in parse_spec_only(format_string.as_ref()) {
-        item?.write(&mut writer, &mut args)?;
+        if let ControlFlow::Break(()) = item?.write(&mut writer, &mut args)? {
+            break;
+        }
     }
     Ok(())
 }
@@ -373,7 +375,7 @@ mod tests {
         }
 
         fn fmt(&self, mut w: impl Write, f: Self::Input) -> io::Result<()> {
-            write!(w, "{}", f)
+            write!(w, "{f}")
         }
     }
 
@@ -381,7 +383,7 @@ mod tests {
     fn test_spec_error_display() {
         let error = FormatError::SpecError(vec![b'a']);
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "%a: invalid conversion specification");
     }
 
@@ -389,7 +391,7 @@ mod tests {
     fn test_too_many_specs_display() {
         let error = FormatError::TooManySpecs(vec![b'f', b'o', b'o']);
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "format 'foo' has too many % directives");
     }
 
@@ -397,7 +399,7 @@ mod tests {
     fn test_need_at_least_one_spec_display() {
         let error = FormatError::NeedAtLeastOneSpec(vec![b'b', b'a', b'r']);
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "format 'bar' has no % directive");
     }
 
@@ -405,15 +407,15 @@ mod tests {
     fn test_wrong_spec_type_display() {
         let error = FormatError::WrongSpecType;
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "wrong % directive type was given");
     }
 
     #[test]
     fn test_io_error_display() {
-        let error = FormatError::IoError(io::Error::new(io::ErrorKind::Other, "test"));
+        let error = FormatError::IoError(io::Error::other("test"));
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "io error");
     }
 
@@ -421,7 +423,7 @@ mod tests {
     fn test_no_more_arguments_display() {
         let error = FormatError::NoMoreArguments;
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "no more arguments");
     }
 
@@ -429,7 +431,7 @@ mod tests {
     fn test_invalid_argument_display() {
         let error = FormatError::InvalidArgument(FormatArgument::String("example".into()));
         let mut output = String::new();
-        write!(output, "{}", error).unwrap();
+        write!(output, "{error}").unwrap();
         assert_eq!(output, "invalid argument");
     }
 
@@ -524,7 +526,7 @@ mod tests {
         struct FailingWriter;
         impl Write for FailingWriter {
             fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-                Err(io::Error::new(io::ErrorKind::Other, "失败的写入"))
+                Err(io::Error::other("失败的写入"))
             }
 
             fn flush(&mut self) -> io::Result<()> {

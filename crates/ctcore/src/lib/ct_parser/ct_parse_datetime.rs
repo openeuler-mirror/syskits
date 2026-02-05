@@ -78,7 +78,7 @@ pub fn parse_datetime_gnu_compat(
     match parse_datetime::parse_datetime_at_date(reference_time, input) {
         Ok(dt) => Ok(dt.with_timezone(&Local)),
         Err(_) => Err(ParseDateTimeError {
-            message: format!("Unable to parse date: {}", input),
+            message: format!("Unable to parse date: {input}"),
         }),
     }
 }

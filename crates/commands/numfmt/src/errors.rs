@@ -85,13 +85,13 @@ mod tests {
         use super::*;
         #[test]
         fn test_numfmt_error_display() {
-            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "IO error");
+            let io_error = std::io::Error::other("IO error");
             let illegal_argument = NumfmtError::NumfmtIllegalArgument("Invalid input".to_string());
             let formatting_error = NumfmtError::NumfmtFormattingError("Invalid format".to_string());
 
-            let io_error_str = format!("{}", io_error);
-            let illegal_argument_str = format!("{}", illegal_argument);
-            let formatting_error_str = format!("{}", formatting_error);
+            let io_error_str = format!("{io_error}");
+            let illegal_argument_str = format!("{illegal_argument}");
+            let formatting_error_str = format!("{formatting_error}");
 
             assert_eq!("IO error", io_error_str);
             assert_eq!("Invalid input", illegal_argument_str);
@@ -119,8 +119,8 @@ mod tests {
             let complex_arg =
                 NumfmtError::NumfmtIllegalArgument("Complex illegal argument string!".to_string());
 
-            let empty_arg_str = format!("{}", empty_arg);
-            let complex_arg_str = format!("{}", complex_arg);
+            let empty_arg_str = format!("{empty_arg}");
+            let complex_arg_str = format!("{complex_arg}");
 
             assert_eq!("", empty_arg_str);
             assert_eq!("Complex illegal argument string!", complex_arg_str);
@@ -134,8 +134,8 @@ mod tests {
             let specific_format_err =
                 NumfmtError::NumfmtFormattingError("Number too large".to_string());
 
-            let generic_format_err_str = format!("{}", generic_format_err);
-            let specific_format_err_str = format!("{}", specific_format_err);
+            let generic_format_err_str = format!("{generic_format_err}");
+            let specific_format_err_str = format!("{specific_format_err}");
 
             assert_eq!("General formatting issue", generic_format_err_str);
             assert_eq!("Number too large", specific_format_err_str);

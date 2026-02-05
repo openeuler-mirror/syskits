@@ -16,7 +16,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::{BufRead, Write};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, parser::ValueSource};
 use std::str::FromStr;
 use sys_locale::get_locale;
@@ -107,7 +107,7 @@ fn numfmt_format_and_handle_validation(
             }
             NumfmtInvalidModes::Ignore => {}
         };
-        println!("{}", input_line);
+        println!("{input_line}");
     }
 
     Ok(())
@@ -299,25 +299,23 @@ fn parse_delimiter(arg_matches: &ArgMatches) -> Result<Option<String>> {
 }
 
 fn parse_invalid(arg_matches: &ArgMatches) -> NumfmtInvalidModes {
-    let invalid = NumfmtInvalidModes::from_str(
+    NumfmtInvalidModes::from_str(
         arg_matches
             .get_one::<String>(numfmt_flags::NUMFMT_INVALID)
             .unwrap(),
     )
-    .unwrap();
-    invalid
+    .unwrap()
 }
 
 fn parse_suffix(arg_matches: &ArgMatches) -> Option<String> {
-    let suffix = arg_matches
+    arg_matches
         .get_one::<String>(numfmt_flags::NUMFMT_SUFFIX)
-        .cloned();
-    suffix
+        .cloned()
 }
 
 fn parse_round(arg_matches: &ArgMatches) -> NumfmtRoundMethod {
     // 因为参数有一个默认值，所以解包没有问题
-    let round = match arg_matches
+    match arg_matches
         .get_one::<String>(numfmt_flags::NUMFMT_ROUND)
         .unwrap()
         .as_str()
@@ -328,8 +326,7 @@ fn parse_round(arg_matches: &ArgMatches) -> NumfmtRoundMethod {
         "towards-zero" => NumfmtRoundMethod::TowardsZero,
         "nearest" => NumfmtRoundMethod::Nearest,
         _ => unreachable!("Should be restricted by clap"),
-    };
-    round
+    }
 }
 
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -484,7 +481,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Numfmt::default();
+        let tool = Numfmt;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "numfmt");
@@ -8351,8 +8348,8 @@ mod tests {
             options.header = 0;
             let result = numfmt_handle_buffer(BufReader::new(mock_buffer), &options)
                 .expect_err("returned Ok after receiving IO error");
-            let result_debug = format!("{:?}", result);
-            let result_display = format!("{}", result);
+            let result_debug = format!("{result:?}");
+            let result_display = format!("{result}");
             assert_eq!(result_debug, "NumfmtIoError(\"broken pipe\")");
             assert_eq!(result_display, "broken pipe");
             assert_eq!(result.code(), 1);
@@ -8495,124 +8492,99 @@ mod tests {
         #[test]
         fn test_ctmain_input_h() {
             let args = ["-h", ""];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_v() {
             let args = ["--version", ""];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_uppercase_v() {
             let args = ["-V", ""];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_pr_main_default() {
-            let args = vec![ctcore::ct_util_name(), "1000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            let args = [ctcore::ct_util_name(), "1000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_execution_version() {
             // 测试用例1：有效输入
-            let args = vec![ctcore::ct_util_name(), "--version", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 0);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 0);
             }
         }
 
         #[test]
         fn test_ct_main_execution_other_version() {
             // 测试用例1：有效输入
-            let args = vec![ctcore::ct_util_name(), "-V", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 0);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 0);
             }
         }
 
         #[test]
         fn test_ct_main_execution_help() {
             // 测试用例2：验证 --help 参数是否正确处理
-            let args = vec![ctcore::ct_util_name(), "--help", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 0);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 0);
             }
         }
 
         #[test]
         fn test_ct_main_invalid_argument() {
             // 测试用例3：验证当提供未知参数时是否正确报错
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            let args = [ctcore::ct_util_name(), "--invalid-argument", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--delimiter",
                 "|",
@@ -8621,4944 +8593,3674 @@ mod tests {
                 "3",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_colon() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", ":", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", ":", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_comma() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", ",", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", ",", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_semicolon() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", ";", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", ";", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_vertical() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "|", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "|", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_tab() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "\t", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "\t", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_space() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", " ", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", " ", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_group_separator() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "\u{001d}", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "\u{001d}", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_record_separator() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "\u{001e}", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "\u{001e}", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_unit_separator() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "\u{001f}", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "\u{001f}", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_digital() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "6", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "6", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_letter() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "a", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "a", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_letter_aa() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "aa", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "aa", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_uppercase_letter() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "A", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "A", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_long_no_value() {
-            let args = vec![ctcore::ct_util_name(), "--delimiter", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--delimiter", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short() {
-            let args = vec![ctcore::ct_util_name(), "-d", "|", "1", "2", "3", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "|", "1", "2", "3", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_no_value() {
-            let args = vec![ctcore::ct_util_name(), "-d", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_colon() {
-            let args = vec![ctcore::ct_util_name(), "-d", ":", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", ":", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_comma() {
-            let args = vec![ctcore::ct_util_name(), "-d", ",", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", ",", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_semicolon() {
-            let args = vec![ctcore::ct_util_name(), "-d", ";", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", ";", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_vertical() {
-            let args = vec![ctcore::ct_util_name(), "-d", "|", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "|", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_tab() {
-            let args = vec![ctcore::ct_util_name(), "-d", "\t", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "\t", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_space() {
-            let args = vec![ctcore::ct_util_name(), "-d", " ", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", " ", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_group_separator() {
-            let args = vec![ctcore::ct_util_name(), "-d", "\u{001d}", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "\u{001d}", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_record_separator() {
-            let args = vec![ctcore::ct_util_name(), "-d", "\u{001e}", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "\u{001e}", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_unit_separator() {
-            let args = vec![ctcore::ct_util_name(), "-d", "\u{001f}", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "\u{001f}", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_digital() {
-            let args = vec![ctcore::ct_util_name(), "-d", "6", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "6", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_letter() {
-            let args = vec![ctcore::ct_util_name(), "-d", "a", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "a", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_letter_aa() {
-            let args = vec![ctcore::ct_util_name(), "-d", "aa", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "aa", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_delimiter_short_uppercase_letter() {
-            let args = vec![ctcore::ct_util_name(), "-d", "A", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", "A", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_1() {
-            let args = vec![ctcore::ct_util_name(), "--field", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_1_2() {
-            let args = vec![ctcore::ct_util_name(), "--field", "1-2", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "1-2", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_none_2() {
-            let args = vec![ctcore::ct_util_name(), "--field", "-2", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "-2", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long__() {
-            let args = vec![ctcore::ct_util_name(), "--field", "-", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "-", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_1_() {
-            let args = vec![ctcore::ct_util_name(), "--field", "1-", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "1-", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_2_1() {
-            let args = vec![ctcore::ct_util_name(), "--field", "2-1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "2-1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_200() {
-            let args = vec![ctcore::ct_util_name(), "--field", "200", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "200", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_20000000000() {
-            let args = vec![ctcore::ct_util_name(), "--field", "20000000000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "20000000000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_not_digital() {
-            let args = vec![ctcore::ct_util_name(), "--field", "aa", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "aa", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_negative() {
-            let args = vec![ctcore::ct_util_name(), "--field", "-1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "-1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_zero() {
-            let args = vec![ctcore::ct_util_name(), "--field", "0", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "0", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_float() {
-            let args = vec![ctcore::ct_util_name(), "--field", "2.1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "2.1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_field_long_none() {
-            let args = vec![ctcore::ct_util_name(), "--field", "2.1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field", "2.1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_none() {
-            let args = vec![ctcore::ct_util_name(), "--format", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_d() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%d'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%d'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_i() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%i'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%i'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_u() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%u'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%u'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_c() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%c'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%c'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_s() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%s'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%s'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_o() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%o'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%o'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_x() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%x'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%x'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_uppercase_s() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%X'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%X'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_f() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%f'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%f'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_uppercase_e() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%E'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%E'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_e() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%e'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%e'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_g() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%g'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%g'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_uppercase_g() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%G'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%G'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_p() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%p'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%p'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_precentage() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%%'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%%'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_with_right_padding() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%10d'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%10d'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_with_left_padding() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%-10d'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%-10d'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_with_keep_2_digits() {
-            let args = vec![ctcore::ct_util_name(), "--format", "'%.2f'", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "'%.2f'", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_with_strings() {
-            let args = vec![ctcore::ct_util_name(), "--format", "sssss", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "sssss", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_format_long_with_err_precentage() {
-            let args = vec![ctcore::ct_util_name(), "--format", "%%% %", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format", "%%% %", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long() {
-            let args = vec![ctcore::ct_util_name(), "--from", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_none() {
-            let args = vec![ctcore::ct_util_name(), "--from", "none", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "none", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_none_ok() {
-            let args = vec![ctcore::ct_util_name(), "--from", "none", "1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "none", "1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_none_err() {
-            let args = vec![ctcore::ct_util_name(), "--from", "none", "1000G"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "none", "1000G"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1g() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1G", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1G", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1gi() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1Gi", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1Gi", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1k() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1K", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1K", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1ki() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1Ki", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1Ki", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1m() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1M", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1M", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_1mi() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1Mi", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1Mi", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_small_1m() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "100m"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "100m"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_auto_with_value_small_1mi() {
-            let args = vec![ctcore::ct_util_name(), "--from", "auto", "1mi"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "auto", "1mi"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_si_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--from", "si", "1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "si", "1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_si_with_value_1k() {
-            let args = vec![ctcore::ct_util_name(), "--from", "si", "1K", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "si", "1K", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_si_with_value_1ki() {
-            let args = vec![ctcore::ct_util_name(), "--from", "si", "1Ki"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "si", "1Ki"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_si_with_value_1g() {
-            let args = vec![ctcore::ct_util_name(), "--from", "si", "1G", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "si", "1G", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_si_with_value_1gi() {
-            let args = vec![ctcore::ct_util_name(), "--from", "si", "1Gi"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "si", "1Gi"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec", "1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec", "1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_with_value_1k() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec", "1K", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec", "1K", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_with_value_1ki() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec", "1Ki"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec", "1Ki"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_with_value_1g() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec", "1G", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec", "1G", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_with_value_1gi() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec", "1Gi"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec", "1Gi"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_i_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec-i", "1000Gi"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec-i", "1000Gi"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_i_with_value_1k() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec-i", "1Ki"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec-i", "1Ki"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_i_with_value_1ki() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec-i", "1Ki"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec-i", "1Ki"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_i_with_value_1g() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec-i", "1Gi"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec-i", "1Gi"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_long_iec_i_with_value_1gi() {
-            let args = vec![ctcore::ct_util_name(), "--from", "iec-i", "1Gi"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from", "iec-i", "1Gi"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_unit_long_0() {
-            let args = vec![ctcore::ct_util_name(), "--from-unit", "0", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from-unit", "0", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_unit_long_1() {
-            let args = vec![ctcore::ct_util_name(), "--from-unit", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from-unit", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_unit_long_2() {
-            let args = vec![ctcore::ct_util_name(), "--from-unit", "2", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from-unit", "2", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_unit_long_100000000000000000000000000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--from-unit",
                 "100000000000000000000000000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_from_unit_long_aa() {
-            let args = vec![ctcore::ct_util_name(), "--from-unit", "aa", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--from-unit", "aa", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_2() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "2", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "2", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "999", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "999", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1023() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1023", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1023", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1024() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1024", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1024", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "999999", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "999999", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1000000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1000000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1048575() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1048575", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1048575", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1048576() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "1048576", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "1048576", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "none", "999999999", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "none", "999999999", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1073741823() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1073741823",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1073741824() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1073741824",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_999999999999() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "999999999999",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1000000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1000000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1099511627775() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1099511627775",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1099511627776() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1099511627776",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_999999999999999() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "999999999999999",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1000000000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1000000000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1125899906842623() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1125899906842623",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_none_with_value_1125899906842624() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "none",
                 "1125899906842624",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_2() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "2", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "2", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "999", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "999", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1023() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1023", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1023", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1024() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1024", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1024", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "999999", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "999999", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1000000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1000000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1048575() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1048575", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1048575", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1048576() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1048576", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1048576", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "999999999", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "999999999", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "1000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1073741823() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "1073741823",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1073741824() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "1073741824",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_999999999999() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "999999999999",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1000000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "1000000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1099511627775() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "1099511627775",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1099511627776() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to",
                 "auto",
                 "1099511627776",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_999999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "999999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "999999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1000000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1000000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1000000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1125899906842623() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1125899906842623"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1125899906842623"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_auto_with_value_1125899906842624() {
-            let args = vec![ctcore::ct_util_name(), "--to", "auto", "1125899906842624"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "auto", "1125899906842624"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 2);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 2);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_2() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "2"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "2"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1023() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1023"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1023"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1024() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1024"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1024"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1048575() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1048575"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1048575"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1048576() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1048576"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1048576"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1073741823() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1073741823"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1073741823"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1073741824() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1073741824"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1073741824"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1099511627775() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1099511627775"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1099511627775"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1099511627776() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1099511627776"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1099511627776"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_999999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "999999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "999999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1000000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1000000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1000000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1125899906842623() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1125899906842623"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1125899906842623"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_si_with_value_1125899906842624() {
-            let args = vec![ctcore::ct_util_name(), "--to", "si", "1125899906842624"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "si", "1125899906842624"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_2() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "2"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "2"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1023() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1023"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1023"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1024() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1024"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1024"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1048575() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1048575"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1048575"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1048576() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1048576"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1048576"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1073741823() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1073741823"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1073741823"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1073741824() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1073741824"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1073741824"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1099511627775() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1099511627775"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1099511627775"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1099511627776() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1099511627776"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1099511627776"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_999999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "999999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "999999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1000000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1000000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1000000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1125899906842623() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1125899906842623"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1125899906842623"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_i_with_value_1125899906842624() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec-i", "1125899906842624"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec-i", "1125899906842624"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_2() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "2"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "2"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1023() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1023"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1023"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1024() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1024"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1024"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1048575() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1048575"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1048575"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1048576() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1048576"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1048576"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1073741823() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1073741823"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1073741823"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1073741824() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1073741824"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1073741824"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1099511627775() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1099511627775"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1099511627775"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1099511627776() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1099511627776"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1099511627776"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_999999999999999() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "999999999999999"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "999999999999999"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1000000000000000() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1000000000000000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1000000000000000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1125899906842623() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1125899906842623"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1125899906842623"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_long_iec_with_value_1125899906842624() {
-            let args = vec![ctcore::ct_util_name(), "--to", "iec", "1125899906842624"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to", "iec", "1125899906842624"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_unit_long_0() {
-            let args = vec![ctcore::ct_util_name(), "--to-unit", "0", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to-unit", "0", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_unit_long_1() {
-            let args = vec![ctcore::ct_util_name(), "--to-unit", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to-unit", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_unit_long_2() {
-            let args = vec![ctcore::ct_util_name(), "--to-unit", "2", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to-unit", "2", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_unit_long_100000000000000000000000000000000() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--to-unit",
                 "100000000000000000000000000000000",
                 "10000",
             ];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_to_unit_long_aa() {
-            let args = vec![ctcore::ct_util_name(), "--to-unit", "aa", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--to-unit", "aa", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_0() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "0", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "0", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_1() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_100() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "100", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "100", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_a() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "a", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "a", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_negative_1() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "-1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "-1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_negative_100() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "-100", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "-100", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_padding_long_negative_1000() {
-            let args = vec![ctcore::ct_util_name(), "--padding", "-1000", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--padding", "-1000", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_header_long_0() {
-            let args = vec![ctcore::ct_util_name(), "--header", "0", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--header", "0", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_header_long_1() {
-            let args = vec![ctcore::ct_util_name(), "--header", "1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--header", "1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_header_long_10() {
-            let args = vec![ctcore::ct_util_name(), "--header", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--header", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_header_long_100() {
-            let args = vec![ctcore::ct_util_name(), "--header", "100", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--header", "100", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_header_long_negitive_1() {
-            let args = vec![ctcore::ct_util_name(), "--header", "-1", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--header", "-1", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_header_long_a() {
-            let args = vec![ctcore::ct_util_name(), "--header", "a", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--header", "a", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_round_long() {
-            let args = vec![ctcore::ct_util_name(), "--round", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--round", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_round_long_from_zero() {
-            let args = vec![ctcore::ct_util_name(), "--round", "from-zero", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--round", "from-zero", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_round_long_down() {
-            let args = vec![ctcore::ct_util_name(), "--round", "down", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--round", "down", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_round_long_towards_zero() {
-            let args = vec![ctcore::ct_util_name(), "--round", "towards-zero", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--round", "towards-zero", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_round_long_nearest() {
-            let args = vec![ctcore::ct_util_name(), "--round", "nearest", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--round", "nearest", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_k_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "K", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "K", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_ki_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Ki", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Ki", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_m_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "M", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "M", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_mi_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Mi", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Mi", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_g_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "G", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "G", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_gi_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Gi", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Gi", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_ti_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Ti", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Ti", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_t_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "T", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "T", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_p_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "P", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "P", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_pi_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Pi", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Pi", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_e_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "E", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "E", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_ei_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Ei", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Ei", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_z_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Z", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Z", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_zi_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Zi", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Zi", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_y_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Y", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Y", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_yi_10() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Yi", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Yi", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_wi_10_limit() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "Wi", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "Wi", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_suffix_long_uppercase_w_10_limit() {
-            let args = vec![ctcore::ct_util_name(), "--suffix", "W", "10", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "W", "10", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_invalid_long() {
-            let args = vec![ctcore::ct_util_name(), "--invalid", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_invalid_long_abort() {
-            let args = vec![ctcore::ct_util_name(), "--invalid", "abort", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid", "abort", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_invalid_long_fail() {
-            let args = vec![ctcore::ct_util_name(), "--invalid", "fail", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid", "fail", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_invalid_long_warn() {
-            let args = vec![ctcore::ct_util_name(), "--invalid", "warn", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid", "warn", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
 
         #[test]
         fn test_ct_main_invalid_long_ignore() {
-            let args = vec![ctcore::ct_util_name(), "--invalid", "ignore", "10000"];
-            let result = numfmt_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid", "ignore", "10000"];
+            let result = numfmt_main(args.iter().map(OsString::from));
 
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                    assert_eq!(code, 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
+                assert_eq!(code, 1);
             }
         }
     }

@@ -87,7 +87,7 @@ mod tests {
 
         for (raw_suffix, with_i, expected) in suffixes {
             let suffix = DisplayableSuffix((raw_suffix, with_i));
-            assert_eq!(format!("{}", suffix), expected);
+            assert_eq!(format!("{suffix}"), expected);
         }
     }
 
@@ -106,7 +106,7 @@ mod tests {
 
         for (raw_suffix, with_i, expected) in suffixes {
             let suffix = DisplayableSuffix((raw_suffix, with_i));
-            assert_eq!(format!("{}", suffix), expected);
+            assert_eq!(format!("{suffix}"), expected);
         }
     }
 }

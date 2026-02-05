@@ -21,7 +21,6 @@ pub mod test_case;
 use crate::config::Config;
 use crate::executor::{CommandExecutor, ParallelTestExecutor};
 use crate::test_case::TestCaseManager;
-use hex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -418,31 +417,31 @@ mod tests {
     #[test]
     fn test_test_config_new_cmd_args_override() {
         // 测试命令行参数覆盖默认值
-        let cmd_syskits_path = Some(PathBuf::from("/usr/bin/syskits"));
-        let cmd_test_cases_dir = Some(PathBuf::from("/test_cases"));
+        let cmd_syskits_path = PathBuf::from("/usr/bin/syskits");
+        let cmd_test_cases_dir = PathBuf::from("/test_cases");
         let cmd_no_progress = true;
         let cmd_no_cleanup = true;
-        let cmd_report_format = Some("json".to_string());
+        let cmd_report_format = "json".to_string();
         let cmd_verbose = true;
         let cmd_debug = true;
 
         let config = TestConfig::new(
-            cmd_syskits_path.clone(),
+            Some(cmd_syskits_path.clone()),
             None,
-            cmd_test_cases_dir.clone(),
+            Some(cmd_test_cases_dir.clone()),
             cmd_no_progress,
             cmd_no_cleanup,
-            cmd_report_format.clone(),
+            Some(cmd_report_format.clone()),
             cmd_verbose,
             cmd_debug,
             None,
         );
 
-        assert_eq!(config.syskits_path, cmd_syskits_path.unwrap());
-        assert_eq!(config.test_cases_dir, cmd_test_cases_dir.unwrap());
+        assert_eq!(config.syskits_path, cmd_syskits_path);
+        assert_eq!(config.test_cases_dir, cmd_test_cases_dir);
         assert!(!config.show_progress);
         assert!(!config.cleanup);
-        assert_eq!(config.report_format, cmd_report_format.unwrap());
+        assert_eq!(config.report_format, cmd_report_format);
         assert!(config.verbose);
         assert!(config.debug);
     }
@@ -450,23 +449,29 @@ mod tests {
     #[test]
     fn test_test_config_new_with_config_file() {
         // 创建一个模拟的配置文件
-        let mut config_syskits = config::SyskitsConfig::default();
-        config_syskits.syskits_path = Some(PathBuf::from("/config/syskits"));
-        config_syskits.coreutils_path = Some(PathBuf::from("/config/coreutils"));
-        config_syskits.mode = config::SyskitsMode::Multiple;
-        config_syskits.commands_dir = Some(PathBuf::from("/config/commands"));
+        let config_syskits = config::SyskitsConfig {
+            syskits_path: Some(PathBuf::from("/config/syskits")),
+            coreutils_path: Some(PathBuf::from("/config/coreutils")),
+            mode: config::SyskitsMode::Multiple,
+            commands_dir: Some(PathBuf::from("/config/commands")),
+        };
 
-        let mut config_test_env = config::TestEnvConfig::default();
-        config_test_env.show_progress = false;
-        config_test_env.report_format = "html".to_string();
+        let config_test_env = config::TestEnvConfig {
+            show_progress: false,
+            report_format: "html".to_string(),
+            ..Default::default()
+        };
 
-        let mut config_test = config::TestSettings::default();
-        config_test.test_cases_dir = Some(PathBuf::from("/config/test_cases"));
-        config_test.env = config_test_env;
+        let config_test = config::TestSettings {
+            test_cases_dir: Some(PathBuf::from("/config/test_cases")),
+            env: config_test_env,
+            ..Default::default()
+        };
 
-        let mut config_file = config::Config::default();
-        config_file.syskits = config_syskits;
-        config_file.test = config_test;
+        let config_file = config::Config {
+            syskits: config_syskits,
+            test: config_test,
+        };
 
         // 测试配置文件的值会覆盖默认值
         let config = TestConfig::new(
@@ -501,22 +506,27 @@ mod tests {
         // 测试优先级：命令行参数 > 配置文件 > 默认值
 
         // 创建配置文件
-        let mut config_syskits = config::SyskitsConfig::default();
-        config_syskits.syskits_path = Some(PathBuf::from("/config/syskits"));
+        let config_syskits = config::SyskitsConfig {
+            syskits_path: Some(PathBuf::from("/config/syskits")),
+            ..Default::default()
+        };
 
-        let mut config_test = config::TestSettings::default();
-        config_test.test_cases_dir = Some(PathBuf::from("/config/test_cases"));
+        let config_test = config::TestSettings {
+            test_cases_dir: Some(PathBuf::from("/config/test_cases")),
+            ..Default::default()
+        };
 
-        let mut config_file = config::Config::default();
-        config_file.syskits = config_syskits;
-        config_file.test = config_test;
+        let config_file = config::Config {
+            syskits: config_syskits,
+            test: config_test,
+        };
 
         // 创建命令行参数（覆盖配置文件）
-        let cmd_syskits_path = Some(PathBuf::from("/cmd/syskits"));
+        let cmd_syskits_path = PathBuf::from("/cmd/syskits");
 
         // 配置
         let config = TestConfig::new(
-            cmd_syskits_path.clone(),
+            Some(cmd_syskits_path.clone()),
             None,
             None,
             false,
@@ -529,7 +539,7 @@ mod tests {
 
         // 验证优先级
         // 命令行参数应该覆盖配置文件
-        assert_eq!(config.syskits_path, cmd_syskits_path.unwrap());
+        assert_eq!(config.syskits_path, cmd_syskits_path);
         // 配置文件应该覆盖默认值
         assert_eq!(config.test_cases_dir, PathBuf::from("/config/test_cases"));
         // 未指定的内容应该使用默认值
@@ -583,19 +593,16 @@ mod tests {
         // 测试TestError的Display实现
         let error = TestError::ExecutionError("failed to execute".to_string());
         assert_eq!(
-            format!("{}", error),
+            format!("{error}"),
             "Failed to execute command: failed to execute"
         );
 
         let error = TestError::TestCaseError("invalid case".to_string());
-        assert_eq!(
-            format!("{}", error),
-            "Failed to read test case: invalid case"
-        );
+        assert_eq!(format!("{error}"), "Failed to read test case: invalid case");
 
         let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
         let error: TestError = io_error.into();
-        assert!(format!("{}", error).contains("IO error:"));
+        assert!(format!("{error}").contains("IO error:"));
     }
 
     // TestRunner需要一个完整的环境才能测试，这里添加一些模拟测试
@@ -688,8 +695,10 @@ mod tests {
     #[test]
     fn test_config_with_large_timeout() {
         // 测试大超时值
-        let mut config = TestConfig::default();
-        config.default_timeout = 3600; // 1小时
+        let config = TestConfig {
+            default_timeout: 3600, // 1小时
+            ..Default::default()
+        };
 
         assert_eq!(config.default_timeout, 3600);
     }
@@ -697,9 +706,11 @@ mod tests {
     #[test]
     fn test_config_with_empty_paths() {
         // 测试路径为空字符串的情况
-        let mut config = TestConfig::default();
-        config.syskits_path = PathBuf::from("");
-        config.test_cases_dir = PathBuf::from("");
+        let config = TestConfig {
+            syskits_path: PathBuf::from(""),
+            test_cases_dir: PathBuf::from(""),
+            ..Default::default()
+        };
 
         assert_eq!(config.syskits_path, PathBuf::from(""));
         assert_eq!(config.test_cases_dir, PathBuf::from(""));
@@ -708,10 +719,12 @@ mod tests {
     #[test]
     fn test_test_runner_with_custom_config() {
         // 测试自定义配置的TestRunner
-        let mut config = TestConfig::default();
-        config.syskits_path = PathBuf::from("/custom/syskits");
-        config.show_progress = false;
-        config.cleanup = false;
+        let config = TestConfig {
+            syskits_path: PathBuf::from("/custom/syskits"),
+            show_progress: false,
+            cleanup: false,
+            ..Default::default()
+        };
 
         let runner = TestRunner::new(config);
 
@@ -727,7 +740,7 @@ mod tests {
             byte_mode: false,
             tty: false,
             command: command.to_string(),
-            description: format!("Test for {}", command),
+            description: format!("Test for {command}"),
             args: vec![],
             expectation: TestExpectation {
                 execution: CommandExecution {
@@ -775,7 +788,7 @@ mod tests {
         command: &str,
         cases: &[TestCase],
     ) -> std::io::Result<()> {
-        let file_path = test_cases_dir.join(format!("{}.json", command));
+        let file_path = test_cases_dir.join(format!("{command}.json"));
         let test_suite = crate::test_case::TestSuite {
             tests: cases.to_vec(),
         };
@@ -818,7 +831,7 @@ mod tests {
             }
             Err(e) => {
                 // 如果执行失败（可能是因为无法找到echo命令），我们检查错误类型
-                println!("Test execution failed: {}", e);
+                println!("Test execution failed: {e}");
             }
         }
     }
@@ -852,7 +865,7 @@ mod tests {
             }
             Err(e) => {
                 // 如果执行失败，我们检查错误类型
-                println!("Test execution failed: {}", e);
+                println!("Test execution failed: {e}");
             }
         }
     }
@@ -888,7 +901,7 @@ mod tests {
             }
             Err(e) => {
                 // 如果执行失败，我们检查错误类型
-                println!("Parallel test execution failed: {}", e);
+                println!("Parallel test execution failed: {e}");
             }
         }
     }
@@ -931,7 +944,7 @@ mod tests {
             }
             Err(e) => {
                 // 如果执行失败，我们检查错误类型
-                println!("Parallel all tests execution failed: {}", e);
+                println!("Parallel all tests execution failed: {e}");
             }
         }
     }

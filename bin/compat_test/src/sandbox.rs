@@ -71,7 +71,7 @@ impl SignalHandler {
         for &sig in &self.signals {
             let flag = Arc::clone(&terminate);
             signal_hook::flag::register(sig as i32, flag).map_err(|e| {
-                TestError::ExecutionError(format!("Failed to register signal handler: {}", e))
+                TestError::ExecutionError(format!("Failed to register signal handler: {e}"))
             })?;
         }
 
@@ -114,7 +114,7 @@ impl ResourceLimiter {
     pub fn apply_limits(&self) -> Result<()> {
         for (&resource, &(soft, hard)) in &self.limits {
             resource::setrlimit(resource, soft, hard).map_err(|e| {
-                TestError::ExecutionError(format!("Failed to set resource limit: {}", e))
+                TestError::ExecutionError(format!("Failed to set resource limit: {e}"))
             })?;
         }
         Ok(())
@@ -146,7 +146,7 @@ impl IsolatedSandbox {
     /// 创建新的隔离沙箱
     pub fn new(debug: bool) -> Result<Self> {
         let temp_dir = TempDir::new()
-            .map_err(|e| TestError::ExecutionError(format!("Failed to create sandbox: {}", e)))?;
+            .map_err(|e| TestError::ExecutionError(format!("Failed to create sandbox: {e}")))?;
         let temp_path = temp_dir.path().to_path_buf();
 
         // 生成唯一ID：时间戳 + 随机数
@@ -155,7 +155,7 @@ impl IsolatedSandbox {
             .unwrap()
             .as_secs();
         let random_num = rand::thread_rng().gen_range(0..1000000);
-        let id = format!("{:x}-{:x}", timestamp, random_num);
+        let id = format!("{timestamp:x}-{random_num:x}");
 
         Ok(Self {
             id,
@@ -181,7 +181,7 @@ impl IsolatedSandbox {
 
         // 创建测试所需的文件和目录
         for file in &test_case.environment.files {
-            self.debug_fmt(format_args!("Creating test file: {:?}", file));
+            self.debug_fmt(format_args!("Creating test file: {file:?}"));
             self.debug_fmt(format_args!("File type: {:?}", file.file_type));
             self.create_test_file(file)?;
         }
@@ -190,8 +190,7 @@ impl IsolatedSandbox {
         if let Some(ref working_dir) = test_case.environment.working_dir {
             let work_dir = self.path().join(working_dir);
             self.debug_fmt(format_args!(
-                "Setting specified working directory: {:?}",
-                work_dir
+                "Setting specified working directory: {work_dir:?}"
             ));
             std::env::set_current_dir(&work_dir)?;
             self.current_dir = work_dir;
@@ -217,19 +216,19 @@ impl IsolatedSandbox {
             if let Some(ref mut limiter) = self.resource_limiter.as_mut() {
                 if let Some(cpu_time) = limits.cpu_time {
                     limiter.add_limit(Resource::RLIMIT_CPU, cpu_time, cpu_time);
-                    debug_msgs.push(format!("Setting CPU time limit: {}", cpu_time));
+                    debug_msgs.push(format!("Setting CPU time limit: {cpu_time}"));
                 }
                 if let Some(file_size) = limits.file_size {
                     limiter.add_limit(Resource::RLIMIT_FSIZE, file_size, file_size);
-                    debug_msgs.push(format!("Setting file size limit: {}", file_size));
+                    debug_msgs.push(format!("Setting file size limit: {file_size}"));
                 }
                 if let Some(memory_size) = limits.memory_size {
                     limiter.add_limit(Resource::RLIMIT_AS, memory_size, memory_size);
-                    debug_msgs.push(format!("Setting memory size limit: {}", memory_size));
+                    debug_msgs.push(format!("Setting memory size limit: {memory_size}"));
                 }
                 if let Some(open_files) = limits.open_files {
                     limiter.add_limit(Resource::RLIMIT_NOFILE, open_files, open_files);
-                    debug_msgs.push(format!("Setting open files limit: {}", open_files));
+                    debug_msgs.push(format!("Setting open files limit: {open_files}"));
                 }
 
                 limiter.apply_limits()?;
@@ -248,21 +247,21 @@ impl IsolatedSandbox {
     /// 创建测试文件
     fn create_test_file(&self, file: &TestFile) -> Result<()> {
         let path = self.path().join(&file.path);
-        self.debug_fmt(format_args!("Creating file: {:?}", path));
+        self.debug_fmt(format_args!("Creating file: {path:?}"));
         self.debug_fmt(format_args!("File type: {:?}", file.file_type));
 
         match file.file_type {
             FileType::Directory => {
-                self.debug_fmt(format_args!("Creating directory: {:?}", path));
+                self.debug_fmt(format_args!("Creating directory: {path:?}"));
                 fs::create_dir_all(&path)?;
                 self.debug_fmt(format_args!("Directory created successfully"));
             }
             FileType::Regular => {
                 if let Some(parent) = path.parent() {
-                    self.debug_fmt(format_args!("Creating parent directory: {:?}", parent));
+                    self.debug_fmt(format_args!("Creating parent directory: {parent:?}"));
                     fs::create_dir_all(parent)?;
                 }
-                self.debug_fmt(format_args!("Creating file: {:?}", path));
+                self.debug_fmt(format_args!("Creating file: {path:?}"));
                 let mut file_handle = File::create(&path)?;
                 if let Some(ref content) = file.content {
                     self.debug_fmt(format_args!(
@@ -272,9 +271,9 @@ impl IsolatedSandbox {
                     file_handle.write_all(content.as_bytes())?;
                 }
                 if let Some(ref perms) = file.permissions {
-                    self.debug_fmt(format_args!("Setting file permissions: {}", perms));
+                    self.debug_fmt(format_args!("Setting file permissions: {perms}"));
                     let mode = u32::from_str_radix(perms, 8).map_err(|e| {
-                        TestError::ExecutionError(format!("Invalid permissions: {}", e))
+                        TestError::ExecutionError(format!("Invalid permissions: {e}"))
                     })?;
                     fs::set_permissions(&path, Permissions::from_mode(mode))?;
                 }
@@ -282,7 +281,7 @@ impl IsolatedSandbox {
             }
             FileType::Symlink => {
                 if let Some(ref target) = file.symlink_target {
-                    self.debug_fmt(format_args!("Creating symlink: {:?} -> {:?}", path, target));
+                    self.debug_fmt(format_args!("Creating symlink: {path:?} -> {target:?}"));
                     std::os::unix::fs::symlink(target, &path)?;
                     self.debug_fmt(format_args!("Symlink created successfully"));
                 }
@@ -376,7 +375,7 @@ impl IsolatedSandbox {
         } else {
             Ok(CommandResult {
                 stdout: String::new(),
-                stderr: format!("cd: {}: No such file or directory\n", new_dir),
+                stderr: format!("cd: {new_dir}: No such file or directory\n"),
                 exit_code: 1,
             })
         }
@@ -428,7 +427,7 @@ impl IsolatedSandbox {
             } else {
                 Ok(CommandResult {
                     stdout: String::new(),
-                    stderr: format!("umask: invalid mode: {}\n", mode),
+                    stderr: format!("umask: invalid mode: {mode}\n"),
                     exit_code: 1,
                 })
             }
@@ -494,7 +493,7 @@ impl IsolatedSandbox {
         timeout: Option<u64>,
         output_hex: bool,
     ) -> Result<CommandResult> {
-        self.debug_fmt(format_args!("Executing command: {} {:?}", cmd, args));
+        self.debug_fmt(format_args!("Executing command: {cmd} {args:?}"));
         self.debug_fmt(format_args!(
             "Current working directory: {:?}",
             self.current_dir
@@ -519,9 +518,9 @@ impl IsolatedSandbox {
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(e) => {
-                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Command execution failed: {e}"));
                 self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
-                let stderr = encode_if_hex(&format!("Failed to execute command: {}", e));
+                let stderr = encode_if_hex(&format!("Failed to execute command: {e}"));
                 return Ok(CommandResult {
                     stdout: String::new(),
                     stderr,
@@ -535,8 +534,8 @@ impl IsolatedSandbox {
             if let Some(stdin) = child.stdin.as_mut() {
                 if !content.is_empty() {
                     if let Err(e) = stdin.write_all(content) {
-                        self.debug_fmt(format_args!("Failed to write to stdin: {}", e));
-                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {}", e));
+                        self.debug_fmt(format_args!("Failed to write to stdin: {e}"));
+                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {e}"));
                         return Ok(CommandResult {
                             stdout: String::new(),
                             stderr,
@@ -566,7 +565,7 @@ impl IsolatedSandbox {
                     Ok(Some(_)) => break,
                     Ok(None) => thread::sleep(Duration::from_millis(100)),
                     Err(e) => {
-                        let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
+                        let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                         return Ok(CommandResult {
                             stdout: String::new(),
                             stderr,
@@ -582,8 +581,8 @@ impl IsolatedSandbox {
                     output
                 }
                 Err(e) => {
-                    self.debug_fmt(format_args!("Failed to wait for command: {}", e));
-                    let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
+                    self.debug_fmt(format_args!("Failed to wait for command: {e}"));
+                    let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                     return Ok(CommandResult {
                         stdout: String::new(),
                         stderr,
@@ -598,8 +597,8 @@ impl IsolatedSandbox {
                     output
                 }
                 Err(e) => {
-                    self.debug_fmt(format_args!("Failed to wait for command: {}", e));
-                    let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
+                    self.debug_fmt(format_args!("Failed to wait for command: {e}"));
+                    let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                     return Ok(CommandResult {
                         stdout: String::new(),
                         stderr,
@@ -626,7 +625,7 @@ impl IsolatedSandbox {
             if self.debug {
                 println!("DEBUG: stdout hex representation:");
                 for (i, byte) in result.stdout.as_bytes().iter().enumerate().take(100) {
-                    print!("{:02x} ", byte);
+                    print!("{byte:02x} ");
                     if (i + 1) % 16 == 0 {
                         println!();
                     }
@@ -670,7 +669,7 @@ impl IsolatedSandbox {
         timeout: Option<u64>,
         output_hex: bool,
     ) -> Result<CommandResult> {
-        self.debug_fmt(format_args!("Executing command (tty): {} {:?}", cmd, args));
+        self.debug_fmt(format_args!("Executing command (tty): {cmd} {args:?}"));
         self.debug_fmt(format_args!(
             "Current working directory: {:?}",
             self.current_dir
@@ -691,7 +690,7 @@ impl IsolatedSandbox {
             ws_ypixel: 0,
         };
         let pty = openpty(Some(&winsize), None)
-            .map_err(|e| TestError::ExecutionError(format!("Failed to create pty: {}", e)))?;
+            .map_err(|e| TestError::ExecutionError(format!("Failed to create pty: {e}")))?;
         let master = pty.master;
         let master_fd = master.as_raw_fd();
         let mut flags = OFlag::from_bits_truncate(fcntl(master_fd, FcntlArg::F_GETFL).unwrap_or(0));
@@ -700,9 +699,9 @@ impl IsolatedSandbox {
 
         let slave_fd = pty.slave.into_raw_fd();
         let stdout_fd = dup(slave_fd)
-            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {}", e)))?;
+            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {e}")))?;
         let stderr_fd = dup(slave_fd)
-            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {}", e)))?;
+            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {e}")))?;
         let slave_fd_for_ioctl = slave_fd;
 
         let mut command = Command::new(cmd);
@@ -719,7 +718,7 @@ impl IsolatedSandbox {
 
         unsafe {
             command.pre_exec(move || {
-                setsid().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                setsid().map_err(std::io::Error::other)?;
                 let rc = libc::ioctl(slave_fd_for_ioctl, libc::TIOCSCTTY, 0);
                 if rc < 0 {
                     return Err(std::io::Error::last_os_error());
@@ -731,9 +730,9 @@ impl IsolatedSandbox {
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(e) => {
-                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Command execution failed: {e}"));
                 self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
-                let stderr = encode_if_hex(&format!("Failed to execute command: {}", e));
+                let stderr = encode_if_hex(&format!("Failed to execute command: {e}"));
                 return Ok(CommandResult {
                     stdout: String::new(),
                     stderr,
@@ -746,7 +745,7 @@ impl IsolatedSandbox {
             if let Some(content) = stdin_content {
                 if !content.is_empty() {
                     if let Err(e) = stdin.write_all(content) {
-                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {}", e));
+                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {e}"));
                         return Ok(CommandResult {
                             stdout: String::new(),
                             stderr,
@@ -809,7 +808,7 @@ impl IsolatedSandbox {
         let status = match child.wait() {
             Ok(status) => status,
             Err(e) => {
-                let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
+                let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                 return Ok(CommandResult {
                     stdout: String::new(),
                     stderr,
@@ -864,7 +863,7 @@ impl IsolatedSandbox {
 
     /// 执行外部命令
     fn execute_external_command(&mut self, command: &str) -> Result<CommandResult> {
-        self.debug_fmt(format_args!("Executing external command: {}", command));
+        self.debug_fmt(format_args!("Executing external command: {command}"));
         self.debug_fmt(format_args!(
             "Current working directory: {:?}",
             self.current_dir
@@ -898,11 +897,11 @@ impl IsolatedSandbox {
                 CommandResult::from(output)
             }
             Err(e) => {
-                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Command execution failed: {e}"));
                 self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
                 CommandResult {
                     stdout: String::new(),
-                    stderr: format!("Failed to execute command: {}", e),
+                    stderr: format!("Failed to execute command: {e}"),
                     exit_code: 127, // Common error code for command not found
                 }
             }
@@ -1080,7 +1079,7 @@ mod tests {
         fs::create_dir_all(&test_dir_path)?;
 
         // 执行cd命令
-        sandbox.execute_shell_command(&format!("cd {}", test_dir))?;
+        sandbox.execute_shell_command(&format!("cd {test_dir}"))?;
 
         // 验证当前目录已更改 - 检查路径的最后一部分
         let current_dir_name = sandbox
@@ -1352,7 +1351,7 @@ mod tests {
 
         // 添加文件
         test_case.environment.files.push(TestFile {
-            path: format!("{}/test_file.txt", work_dir),
+            path: format!("{work_dir}/test_file.txt"),
             content: Some("Test content".to_string()),
             permissions: Some("644".to_string()),
             owner: None,

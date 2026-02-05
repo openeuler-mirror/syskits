@@ -122,7 +122,7 @@ fn print_test_result(
 
     // 显示详细输出
     if config.verbose {
-        println!("\n{} output:", reference_label);
+        println!("\n{reference_label} output:");
         println!("  Exit Code: {}", result.expected.exit_code);
         println!(
             "  Stdout: \\n{}\\n",
@@ -147,7 +147,7 @@ fn print_test_result(
     if !result.passed {
         println!("\nDifferences:");
         for diff in &result.differences {
-            println!("  {}", diff);
+            println!("  {diff}");
         }
     }
 
@@ -213,13 +213,13 @@ fn run_tests_with_progress(
         }
 
         // 读取并执行 JSON 测试用例
-        let test_file = config.test_cases_dir.join(format!("{}.json", command));
+        let test_file = config.test_cases_dir.join(format!("{command}.json"));
         if test_file.exists() {
             let content = fs::read_to_string(&test_file)?;
 
             // 确认配置文件配置是否正常
             let _simple_tests: SimpleTests = serde_json::from_str(&content)
-                .map_err(|e| TestError::TestCaseError(format!("解析 JSON 测试用例失败: {}", e)))?;
+                .map_err(|e| TestError::TestCaseError(format!("解析 JSON 测试用例失败: {e}")))?;
 
             // 并行执行测试用例
             let parallel = true;
@@ -257,7 +257,7 @@ fn run_tests_with_progress(
                 println!("{}", "-".repeat(40));
             } else {
                 // 简洁模式：只显示命令级别的结果
-                print!("\r{}: ", command);
+                print!("\r{command}: ");
                 if failed == 0 {
                     println!("{}", "所有测试通过".green());
                 } else {
@@ -265,7 +265,7 @@ fn run_tests_with_progress(
                 }
             }
         } else {
-            println!("警告: 未找到命令的测试文件: {}", command);
+            println!("警告: 未找到命令的测试文件: {command}");
             println!("No file found {}", test_file.display());
             missing_tests.push(command.clone());
         }
@@ -436,7 +436,7 @@ fn main() -> Result<()> {
         if test_config.show_progress {
             println!("{}", "\nRunning specified commands:".bold());
             for cmd in &commands {
-                println!("  {}", cmd);
+                println!("  {cmd}");
             }
             println!();
         }
@@ -446,7 +446,7 @@ fn main() -> Result<()> {
         if test_config.show_progress {
             println!("{}", "\nRunning default commands:".bold());
             for cmd in &default_commands {
-                println!("  {}", cmd);
+                println!("  {cmd}");
             }
             println!();
         }
@@ -457,7 +457,7 @@ fn main() -> Result<()> {
         if test_config.show_progress {
             println!("{}", "\nRunning all available commands:".bold());
             for cmd in &commands {
-                println!("  {}", cmd);
+                println!("  {cmd}");
             }
             println!();
         }
@@ -604,13 +604,13 @@ mod tests {
         match result {
             Ok(config) => {
                 // 检查加载的配置是否有效
-                match config.syskits.mode {
-                    SyskitsMode::Single => assert!(true),
-                    SyskitsMode::Multiple => assert!(true),
-                }
+                assert!(matches!(
+                    config.syskits.mode,
+                    SyskitsMode::Single | SyskitsMode::Multiple
+                ));
             }
             Err(e) => {
-                println!("Configuration loading error: {}", e);
+                println!("Configuration loading error: {e}");
                 // 不做断言，因为在某些环境中可能会失败
             }
         }

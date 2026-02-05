@@ -66,7 +66,7 @@ impl Reporter {
         missing_tests: &[String],
     ) -> Result<()> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-        let path = self.output_dir.join(format!("report_{}.txt", timestamp));
+        let path = self.output_dir.join(format!("report_{timestamp}.txt"));
         let mut file = File::create(path)?;
 
         // 1. 总体报告头部
@@ -100,10 +100,10 @@ impl Reporter {
         if !missing_tests.is_empty() {
             writeln!(file, "【未找到测试文件的命令】")?;
             for cmd in missing_tests.iter().take(missing_tests.len() - 1) {
-                writeln!(file, "├─ {}", cmd)?;
+                writeln!(file, "├─ {cmd}")?;
             }
             if let Some(last) = missing_tests.last() {
-                writeln!(file, "└─ {}", last)?;
+                writeln!(file, "└─ {last}")?;
             }
             writeln!(file)?;
         }
@@ -122,11 +122,11 @@ impl Reporter {
         // 4. 输出每个命令的测试结果
         for (command, command_results) in command_groups {
             writeln!(file, "───────────────────────────────────────────────────")?;
-            writeln!(file, "【命令: {}】", command)?;
+            writeln!(file, "【命令: {command}】")?;
             let passed = command_results.iter().filter(|r| r.passed).count();
             let total = command_results.len();
-            writeln!(file, "├─ 测试用例数: {}", total)?;
-            writeln!(file, "├─ 通过数量: {}", passed)?;
+            writeln!(file, "├─ 测试用例数: {total}")?;
+            writeln!(file, "├─ 通过数量: {passed}")?;
             writeln!(
                 file,
                 "└─ 成功率: {:.1}%",
@@ -152,7 +152,7 @@ impl Reporter {
                 if !result.passed {
                     writeln!(file, "    └─ 差异详情:")?;
                     for diff in &result.differences {
-                        writeln!(file, "        {}", diff)?;
+                        writeln!(file, "        {diff}")?;
                     }
                 } else {
                     writeln!(file, "    └─ 测试通过，无差异")?;
@@ -177,7 +177,7 @@ impl Reporter {
         missing_tests: &[String],
     ) -> Result<()> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-        let path = self.output_dir.join(format!("report_{}.json", timestamp));
+        let path = self.output_dir.join(format!("report_{timestamp}.json"));
 
         println!("正在生成 JSON 报告: {}", path.display());
 
@@ -238,7 +238,7 @@ impl Reporter {
         })?;
 
         serde_json::to_writer_pretty(file, &report)
-            .map_err(|e| TestError::ExecutionError(format!("写入 JSON 报告失败: {}", e)))?;
+            .map_err(|e| TestError::ExecutionError(format!("写入 JSON 报告失败: {e}")))?;
 
         println!("报告已成功生成");
         Ok(())
@@ -251,7 +251,7 @@ impl Reporter {
         missing_tests: &[String],
     ) -> Result<()> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-        let path = self.output_dir.join(format!("report_{}.html", timestamp));
+        let path = self.output_dir.join(format!("report_{timestamp}.html"));
         let mut file = File::create(path)?;
 
         // 按命令分组结果
@@ -316,7 +316,7 @@ impl Reporter {
             <ul>"#
             )?;
             for cmd in missing_tests {
-                writeln!(file, "                <li>{}</li>", cmd)?;
+                writeln!(file, "                <li>{cmd}</li>")?;
             }
             writeln!(file, "            </ul>\n        </div>")?;
         }
@@ -478,7 +478,7 @@ mod tests {
 
         // 测试克隆
         let format = ReportFormat::Text;
-        let cloned = format.clone();
+        let cloned = format;
         assert_eq!(format, cloned);
     }
 

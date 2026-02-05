@@ -156,7 +156,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -173,7 +173,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -190,7 +190,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -224,7 +224,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -241,7 +241,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -258,7 +258,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -275,7 +275,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -292,7 +292,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -309,7 +309,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -326,7 +326,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -360,7 +360,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -377,7 +377,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), false);
+        assert!(check(file_path.as_ref(), &settings).is_err());
     }
 
     #[test]
@@ -394,7 +394,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -411,7 +411,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -445,7 +445,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -462,7 +462,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -479,7 +479,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -496,7 +496,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -513,7 +513,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -530,7 +530,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -547,7 +547,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -564,7 +564,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -581,7 +581,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -598,7 +598,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -615,7 +615,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -632,7 +632,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -649,7 +649,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -666,7 +666,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -683,7 +683,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -700,7 +700,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -717,7 +717,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -734,7 +734,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -751,7 +751,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -768,7 +768,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -785,7 +785,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -802,7 +802,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -819,7 +819,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -836,7 +836,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -853,7 +853,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -870,7 +870,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -887,7 +887,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -904,7 +904,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -921,7 +921,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -938,7 +938,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -955,7 +955,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -972,7 +972,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -989,7 +989,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -1006,7 +1006,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -1023,7 +1023,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -1045,7 +1045,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -1079,7 +1079,7 @@ mod tests {
             )
             .unwrap(),
         );
-        assert_eq!(check(file_path.as_ref(), &settings).is_ok(), true);
+        assert!(check(file_path.as_ref(), &settings).is_ok());
     }
 
     #[test]
@@ -1095,7 +1095,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_err(), true);
+        assert!(check(file_path.as_ref(), &settings).is_err());
     }
 
     #[test]
@@ -1110,7 +1110,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(check(file_path.as_ref(), &settings).is_err(), true);
+        assert!(check(file_path.as_ref(), &settings).is_err());
     }
 
     #[test]

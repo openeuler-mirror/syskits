@@ -1898,8 +1898,7 @@ mod tests {
             let contents = std::fs::read_to_string(output_path).unwrap();
             assert!(
                 contents.is_empty(),
-                "Output file should be empty but was: {}",
-                contents
+                "Output file should be empty but was: {contents}"
             );
         }
 
@@ -1936,8 +1935,7 @@ mod tests {
             let contents = std::fs::read_to_string(output_path).unwrap();
             assert!(
                 !contents.is_empty(),
-                "Output file should be empty but was: {}",
-                contents
+                "Output file should be empty but was: {contents}"
             );
         }
 
@@ -2013,8 +2011,7 @@ mod tests {
             let contents = std::fs::read_to_string(output_path).unwrap();
             assert!(
                 contents.is_empty(),
-                "Output file should be empty but was: {}",
-                contents
+                "Output file should be empty but was: {contents}"
             );
         }
 
@@ -2051,8 +2048,7 @@ mod tests {
             let contents = std::fs::read_to_string(output_path).unwrap();
             assert!(
                 !contents.is_empty(),
-                "Output file should be empty but was: {}",
-                contents
+                "Output file should be empty but was: {contents}"
             );
         }
     }
@@ -3460,7 +3456,7 @@ mod tests {
         #[test]
         fn test_write_lines_single_line() {
             let lines = [SortLine {
-                line: "Hello".into(),
+                line: "Hello",
                 index: 0,
             }];
 
@@ -3475,15 +3471,15 @@ mod tests {
         fn test_write_lines_multiple_lines() {
             let lines = vec![
                 SortLine {
-                    line: "Hello".into(),
+                    line: "Hello",
                     index: 0,
                 },
                 SortLine {
-                    line: "World".into(),
+                    line: "World",
                     index: 1,
                 },
                 SortLine {
-                    line: "Rust".into(),
+                    line: "Rust",
                     index: 2,
                 },
             ];
@@ -3499,15 +3495,15 @@ mod tests {
         fn test_write_lines_with_different_separator() {
             let lines = vec![
                 SortLine {
-                    line: "Hello".into(),
+                    line: "Hello",
                     index: 0,
                 },
                 SortLine {
-                    line: "World".into(),
+                    line: "World",
                     index: 1,
                 },
                 SortLine {
-                    line: "Rust".into(),
+                    line: "Rust",
                     index: 2,
                 },
             ];
@@ -3522,7 +3518,7 @@ mod tests {
         #[test]
         fn test_write_lines_single_line_index2() {
             let lines = vec![SortLine {
-                line: "Hello".into(),
+                line: "Hello",
                 index: 2,
             }];
             let mut writer = Cursor::new(Vec::new());
@@ -3534,18 +3530,9 @@ mod tests {
         #[test]
         fn test_write_lines_empty_lines_index2() {
             let lines = vec![
-                SortLine {
-                    line: "".into(),
-                    index: 2,
-                },
-                SortLine {
-                    line: "".into(),
-                    index: 2,
-                },
-                SortLine {
-                    line: "".into(),
-                    index: 2,
-                },
+                SortLine { line: "", index: 2 },
+                SortLine { line: "", index: 2 },
+                SortLine { line: "", index: 2 },
             ];
             let mut writer = Cursor::new(Vec::new());
             ext_sort_write_lines(&lines, &mut writer, b'\n');
@@ -3557,15 +3544,15 @@ mod tests {
         fn test_write_lines_separator_space() {
             let lines = vec![
                 SortLine {
-                    line: "Hello".into(),
+                    line: "Hello",
                     index: 0,
                 },
                 SortLine {
-                    line: "World".into(),
+                    line: "World",
                     index: 0,
                 },
                 SortLine {
-                    line: "Rust".into(),
+                    line: "Rust",
                     index: 0,
                 },
             ];

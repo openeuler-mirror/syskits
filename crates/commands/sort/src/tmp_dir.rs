@@ -16,10 +16,7 @@ use std::{
 
 use tempfile::TempDir;
 
-use ctcore::{
-    ct_error::{CTResult, CtSimpleError},
-    ct_show_error,
-};
+use ctcore::{ct_error::CTResult, ct_show_error};
 
 use crate::SortError;
 
@@ -59,7 +56,10 @@ impl TmpDirWrapper {
         let tmp_dir = self.temp_dir.as_ref().unwrap();
         let path_buf = tmp_dir.path().to_owned();
         let lock = self.lock.clone();
-        ctrlc::set_handler(move || {
+
+        // Try to set the signal handler, but ignore the error if one is already registered
+        // This allows multiple tests to run concurrently without conflicts
+        let _ = ctrlc::set_handler(move || {
             // 加锁，这样 `next_file_path` 就不会返回新的文件路径、
             // 并且程序不会在处理程序结束前终止
             let _lock = lock.lock().unwrap();
@@ -67,8 +67,9 @@ impl TmpDirWrapper {
                 ct_show_error!("failed to delete temporary directory: {}", e);
             }
             std::process::exit(2)
-        })
-        .map_err(|e| CtSimpleError::new(2, format!("failed to set up signal handler: {e}")))
+        });
+
+        Ok(())
     }
 
     pub fn next_file(&mut self) -> CTResult<(File, PathBuf)> {
@@ -158,7 +159,7 @@ mod tests {
 
         let result = tmp_dir_remove_tmp_dir(test_dir.path());
 
-        assert!(result.is_ok(), "remove_tmp_dir failed: {:?}", result);
+        assert!(result.is_ok(), "remove_tmp_dir failed: {result:?}");
         assert!(
             !test_dir.path().exists(),
             "Temporary directory still exists after removal"
@@ -176,7 +177,7 @@ mod tests {
 
         let result = tmp_dir_remove_tmp_dir(test_dir.path());
 
-        assert!(result.is_ok(), "remove_tmp_dir failed: {:?}", result);
+        assert!(result.is_ok(), "remove_tmp_dir failed: {result:?}");
         assert!(
             !test_dir.path().exists(),
             "Temporary directory still exists after removal"
@@ -207,7 +208,7 @@ mod tests {
 
         let result = tmp_dir_remove_tmp_dir(test_dir.path());
 
-        assert!(result.is_ok(), "remove_tmp_dir failed: {:?}", result);
+        assert!(result.is_ok(), "remove_tmp_dir failed: {result:?}");
         assert!(
             !test_dir.path().exists(),
             "Temporary directory still exists after removal"

@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::cmp::Ordering;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::env;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -1374,7 +1374,7 @@ pub fn ct_app() -> Command {
     let application_info = t!("sort.about");
     let usage_description = t!("sort.usage");
 
-    let args = vec![
+    let args = [
         Arg::new(sort_flags::SORT_HELP)
             .long(sort_flags::SORT_HELP)
             .help(t!("sort.clap.sort_help"))
@@ -1965,7 +1965,7 @@ mod tests {
         assert!(command.get_name().contains("sort"));
 
         // Test execute method with help flag (should work)
-        let args = vec![OsString::from("sort"), OsString::from("--help")];
+        let args = [OsString::from("sort"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_ok());
     }
@@ -2493,11 +2493,11 @@ mod tests {
         #[test]
         fn test_general_numeric_comparison() {
             let a = SortLine {
-                line: "3.14",
+                line: "3.141592653589793",
                 index: 0,
             };
             let b = SortLine {
-                line: "2.718",
+                line: "2.718281828459045",
                 index: 1,
             };
             let global_settings = SortGlobalConfigs {
@@ -2509,12 +2509,12 @@ mod tests {
             let a_line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
-                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(3.14)],
+                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(std::f64::consts::PI)],
             };
             let b_line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
-                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(2.718)],
+                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(std::f64::consts::E)],
             };
 
             let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);
@@ -2754,7 +2754,7 @@ mod tests {
             // 测试大小写敏感的比较
             let result4 = strcoll_compare(b"Apple", b"apple", false);
             // 结果会根据当前系统的locale设置而变化，但函数应该能正常工作
-            assert!(result4 != Ordering::Equal || result4 == Ordering::Equal); // 总是true，但确保函数能被调用
+            let _ = result4;
         }
     }
 
@@ -2809,8 +2809,10 @@ mod tests {
                     index: 3,
                 },
             ];
-            let mut settings = SortGlobalConfigs::default();
-            settings.is_stable = true;
+            let settings = SortGlobalConfigs {
+                is_stable: true,
+                ..Default::default()
+            };
             let line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
@@ -2840,8 +2842,10 @@ mod tests {
                     index: 3,
                 },
             ];
-            let mut settings = SortGlobalConfigs::default();
-            settings.is_unique = true; // Simulate unique behavior
+            let settings = SortGlobalConfigs {
+                is_unique: true, // Simulate unique behavior
+                ..Default::default()
+            };
             let line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
@@ -3066,8 +3070,8 @@ mod tests {
                 is_needs_selection: true,
             };
             let line = "12345 abc";
-            let tokens = vec![(0..5)]; // Simplified token representation
-            let selection = selector.get_selection(line, &tokens);
+            let token = 0..5; // Simplified token representation
+            let selection = selector.get_selection(line, std::slice::from_ref(&token));
             match selection {
                 SortSelection::WithNumInfo(s, _) => assert_eq!(s, "12345"),
                 _ => panic!("Expected numeric selection"),
@@ -3184,7 +3188,7 @@ mod tests {
             let key_position = result.unwrap();
             assert_eq!(key_position.field, 1);
             assert_eq!(key_position.char, 0);
-            assert_eq!(key_position.is_ignore_blanks, false);
+            assert!(!key_position.is_ignore_blanks);
         }
 
         #[test]
@@ -3240,7 +3244,7 @@ mod tests {
             let key_position = result.unwrap();
             assert_eq!(key_position.field, 1);
             assert_eq!(key_position.char, 1);
-            assert_eq!(key_position.is_ignore_blanks, false);
+            assert!(!key_position.is_ignore_blanks);
         }
 
         #[test]
@@ -3255,7 +3259,7 @@ mod tests {
             let key_position = result.unwrap();
             assert_eq!(key_position.field, 1);
             assert_eq!(key_position.char, 0);
-            assert_eq!(key_position.is_ignore_blanks, true);
+            assert!(key_position.is_ignore_blanks);
         }
     }
 
@@ -3323,11 +3327,10 @@ mod tests {
 
         #[test]
         fn test_tokenize_with_separator_special_characters() {
-            let line = "Unicode: 😊, 控制字符: \n, 非常长的字符串: ".to_owned()
-                + std::iter::repeat("x")
-                    .take(1000)
-                    .collect::<String>()
-                    .as_str();
+            let line = format!(
+                "Unicode: 😊, 控制字符: \n, 非常长的字符串: {}",
+                "x".repeat(1000)
+            );
             let separator = ',';
             let mut token_buffer = Vec::new();
             tokenize_with_separator(&line, separator, &mut token_buffer);
@@ -3408,11 +3411,10 @@ mod tests {
 
         #[test]
         fn test_tokenize_default_special_characters() {
-            let line = "Unicode: 😊, 控制字符: \n, 非常长的字符串: ".to_owned()
-                + std::iter::repeat("x")
-                    .take(1000)
-                    .collect::<String>()
-                    .as_str();
+            let line = format!(
+                "Unicode: 😊, 控制字符: \n, 非常长的字符串: {}",
+                "x".repeat(1000)
+            );
             let mut token_buffer = Vec::new();
             tokenize_default(&line, &mut token_buffer);
 
@@ -3553,11 +3555,10 @@ mod tests {
 
         #[test]
         fn test_tokenize_special_characters() {
-            let line = "Unicode: 😊, 控制字符: \n, 非常长的字符串: ".to_owned()
-                + std::iter::repeat("x")
-                    .take(1000)
-                    .collect::<String>()
-                    .as_str();
+            let line = format!(
+                "Unicode: 😊, 控制字符: \n, 非常长的字符串: {}",
+                "x".repeat(1000)
+            );
             let separator = Some(',');
             let mut token_buffer = Vec::new();
             tokenize(&line, separator, &mut token_buffer);
@@ -3869,8 +3870,10 @@ mod tests {
 
         #[test]
         fn test_set_dictionary_order() {
-            let mut settings = SortKeySettings::default();
-            settings.mode = SortMode::SortDefault;
+            let mut settings = SortKeySettings {
+                mode: SortMode::SortDefault,
+                ..Default::default()
+            };
             assert!(settings.set_dictionary_order().is_ok());
 
             settings.mode = SortMode::SortNumeric;
@@ -3879,8 +3882,10 @@ mod tests {
 
         #[test]
         fn test_set_ignore_non_printing() {
-            let mut settings = SortKeySettings::default();
-            settings.mode = SortMode::SortDefault;
+            let mut settings = SortKeySettings {
+                mode: SortMode::SortDefault,
+                ..Default::default()
+            };
             assert!(settings.set_ignore_non_printing().is_ok());
 
             settings.mode = SortMode::SortNumeric;
@@ -3899,11 +3904,8 @@ mod tests {
             for mode in modes {
                 for &dict_order in &[false, true] {
                     for &ignore_np in &[false, true] {
-                        let result = SortKeySettings::check_compatibility(
-                            mode.clone(),
-                            ignore_np,
-                            dict_order,
-                        );
+                        let result =
+                            SortKeySettings::check_compatibility(mode, ignore_np, dict_order);
                         if matches!(
                             mode,
                             SortMode::SortNumeric
@@ -3914,18 +3916,12 @@ mod tests {
                         {
                             assert!(
                                 result.is_err(),
-                                "Failed in mode {:?} with dict_order: {}, ignore_np: {}",
-                                mode,
-                                dict_order,
-                                ignore_np
+                                "Failed in mode {mode:?} with dict_order: {dict_order}, ignore_np: {ignore_np}"
                             );
                         } else {
                             assert!(
                                 result.is_ok(),
-                                "Unexpected error in mode {:?} with dict_order: {}, ignore_np: {}",
-                                mode,
-                                dict_order,
-                                ignore_np
+                                "Unexpected error in mode {mode:?} with dict_order: {dict_order}, ignore_np: {ignore_np}"
                             );
                         }
                     }
@@ -3938,8 +3934,8 @@ mod tests {
             let mut settings = SortKeySettings::default();
             for initial_mode in &[SortMode::SortDefault, SortMode::SortNumeric] {
                 for target_mode in &[SortMode::SortGeneralNumeric, SortMode::SortMonth] {
-                    settings.mode = initial_mode.clone();
-                    let res = settings.set_sort_mode(target_mode.clone());
+                    settings.mode = *initial_mode;
+                    let res = settings.set_sort_mode(*target_mode);
                     if initial_mode == &SortMode::SortDefault || initial_mode == target_mode {
                         assert!(res.is_ok());
                         assert_eq!(settings.mode, *target_mode);
@@ -3989,7 +3985,7 @@ mod tests {
                 ..Default::default()
             };
             settings.init_precomputed();
-            assert_eq!(settings.precomputed.is_needs_tokens, false);
+            assert!(!settings.precomputed.is_needs_tokens);
             assert_eq!(settings.precomputed.selections_per_line, 0);
             assert_eq!(settings.precomputed.num_infos_per_line, 0);
             assert_eq!(settings.precomputed.floats_per_line, 0);
@@ -4031,7 +4027,7 @@ mod tests {
                 ..Default::default()
             };
             settings.init_precomputed();
-            assert_eq!(settings.precomputed.is_needs_tokens, true);
+            assert!(settings.precomputed.is_needs_tokens);
             assert_eq!(settings.precomputed.selections_per_line, 1);
             assert_eq!(settings.precomputed.num_infos_per_line, 1);
             assert_eq!(settings.precomputed.floats_per_line, 1);
@@ -4084,12 +4080,16 @@ mod tests {
     }
 
     #[cfg(test)]
+    #[allow(clippy::permissions_set_readonly_false)]
     mod output_tests {
         use std::fs;
         use std::fs::File;
         use std::io::Write;
 
         use super::*;
+
+        #[cfg(unix)]
+        use ctcore::libc;
 
         #[test]
         fn test_output_new_no_file() {
@@ -4180,6 +4180,12 @@ mod tests {
 
         #[test]
         fn test_output_new_read_only_file() {
+            // Skip this test if running as root, as root can write to read-only files
+            #[cfg(unix)]
+            if unsafe { libc::geteuid() == 0 } {
+                return;
+            }
+
             let test_file_name = "test_read_only_file.txt";
             let mut file = File::create(test_file_name).unwrap();
             writeln!(file, "Data").unwrap();
@@ -4208,6 +4214,12 @@ mod tests {
 
         #[test]
         fn test_into_write_read_only_truncation() {
+            // Skip this test if running as root, as root can write to read-only files
+            #[cfg(unix)]
+            if unsafe { libc::geteuid() == 0 } {
+                return;
+            }
+
             let test_file_name = "test_read_only_truncation.txt";
             let mut file = File::create(test_file_name).unwrap();
             writeln!(file, "Initial data").unwrap();
@@ -4264,7 +4276,7 @@ mod tests {
             };
 
             let mut output = String::new();
-            let result = write!(&mut output, "{}", error);
+            let result = write!(&mut output, "{error}");
             assert_eq!(result, Ok(()));
             assert_eq!(output, "");
         }
@@ -4279,7 +4291,7 @@ mod tests {
             };
 
             let mut output = String::new();
-            let result = write!(&mut output, "{}", error);
+            let result = write!(&mut output, "{error}");
             assert_eq!(result, Ok(()));
             assert_eq!(output, "file.txt:42: disorder: 1,2,3");
         }
@@ -4294,7 +4306,7 @@ mod tests {
             };
 
             assert_eq!(
-                format!("{}", err),
+                format!("{err}"),
                 "example.txt:10: disorder: Invalid data line"
             );
         }
@@ -4308,7 +4320,7 @@ mod tests {
             };
 
             assert_eq!(
-                format!("{}", err),
+                format!("{err}"),
                 "open failed: /nonexistent/path.txt: File not found"
             );
         }
@@ -4322,7 +4334,7 @@ mod tests {
             };
 
             assert_eq!(
-                format!("{}", err),
+                format!("{err}"),
                 "cannot read: /restricted/file.txt: Permission denied"
             );
         }
@@ -4335,18 +4347,18 @@ mod tests {
             };
 
             assert_eq!(
-                format!("{}", err),
+                format!("{err}"),
                 "failed to parse key 'invalid_key': Invalid character in key"
             );
         }
 
         #[test]
         fn display_ct_open_tmp_file_failed() {
-            let io_error = io::Error::new(ErrorKind::Other, "Unknown error");
+            let io_error = io::Error::other("Unknown error");
             let err = SortError::SortOpenTmpFileFailed { error: io_error };
 
             assert_eq!(
-                format!("{}", err),
+                format!("{err}"),
                 "failed to open temporary file: Unknown error"
             );
         }
@@ -4356,7 +4368,7 @@ mod tests {
             let err = SortError::SortCompressProgExecutionFailed { code: 127 };
 
             assert_eq!(
-                format!("{}", err),
+                format!("{err}"),
                 "couldn't execute compress program: errno 127"
             );
         }
@@ -4367,14 +4379,14 @@ mod tests {
                 prog: "gzip".to_string(),
             };
 
-            assert_eq!(format!("{}", err), "'gzip' terminated abnormally");
+            assert_eq!(format!("{err}"), "'gzip' terminated abnormally");
         }
 
         #[test]
         fn display_ct_tmp_dir_creation_failed() {
             let err = SortError::SortTmpDirCreationFailed;
 
-            assert_eq!(format!("{}", err), "could not create temporary directory");
+            assert_eq!(format!("{err}"), "could not create temporary directory");
         }
     }
 
@@ -4393,7 +4405,7 @@ mod tests {
         fn test_ctmain_input_h() {
             {
                 let args = ["-h", ""];
-                let result = sort_main(args.iter().map(|s| OsString::from(s)));
+                let result = sort_main(args.iter().map(OsString::from));
                 assert!(result.is_err());
             }
         }
@@ -4402,7 +4414,7 @@ mod tests {
         fn test_ctmain_input_v() {
             {
                 let args = ["--version", ""];
-                let result = sort_main(args.iter().map(|s| OsString::from(s)));
+                let result = sort_main(args.iter().map(OsString::from));
                 assert!(result.is_err());
             }
         }
@@ -4411,46 +4423,36 @@ mod tests {
         fn test_ctmain_input_uppercase_v() {
             {
                 let args = ["-V", ""];
-                let result = sort_main(args.iter().map(|s| OsString::from(s)));
+                let result = sort_main(args.iter().map(OsString::from));
                 assert!(result.is_err());
             }
         }
 
         #[test]
         fn test_ct_main_help_return() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
         #[test]
         fn test_ct_main_version_return() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4466,20 +4468,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4495,20 +4492,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-b", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4524,20 +4516,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-leading-blanks", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-leading-blanks", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4553,20 +4540,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--dictionary-order", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--dictionary-order", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4582,20 +4564,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-d", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4611,20 +4588,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-f", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-f", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4640,20 +4612,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-case", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-case", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4669,20 +4636,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--general-numeric-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--general-numeric-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4698,20 +4660,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-g", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-g", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4727,20 +4684,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-nonprinting", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-nonprinting", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4756,20 +4708,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-i", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-i", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4785,20 +4732,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--month-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--month-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4814,20 +4756,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-M", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-M", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4843,20 +4780,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--human-numeric-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--human-numeric-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4872,20 +4804,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-h", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4901,20 +4828,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--numeric-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--numeric-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4930,20 +4852,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-n", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-n", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4959,20 +4876,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--random-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--random-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -4988,20 +4900,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-R", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-R", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5017,20 +4924,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--reverse", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--reverse", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5046,20 +4948,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5080,25 +4977,20 @@ mod tests {
             writeln!(tmp_random_file, "ABC").unwrap();
             let random_file_name = random_path.to_str().unwrap();
             let random_source_flags = "--random-source=".to_string() + random_file_name;
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 &random_source_flags,
                 "--random-sort",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5119,25 +5011,20 @@ mod tests {
             writeln!(tmp_random_file, "ABC").unwrap();
             let random_file_name = random_path.to_str().unwrap();
             let random_source_flags = "--random-source=".to_string() + random_file_name;
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 &random_source_flags,
                 "-R",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5153,20 +5040,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=general-numeric", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=general-numeric", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5182,20 +5064,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=human-numeric", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=human-numeric", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5211,20 +5088,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=month", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=month", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5240,20 +5112,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=numeric", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=numeric", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5269,20 +5136,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=random", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=random", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5298,20 +5160,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=version", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=version", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5327,25 +5184,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=general-numeric",
                 "-r",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5361,25 +5213,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=human-numeric",
                 "-r",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5395,20 +5242,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=month", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=month", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5424,20 +5266,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=numeric", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=numeric", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5453,20 +5290,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=random", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=random", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5482,20 +5314,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=version", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=version", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5511,20 +5338,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--version-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5540,20 +5362,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-V", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5569,25 +5386,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=general-numeric",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5603,25 +5415,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=human-numeric",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5637,25 +5444,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=month",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5671,25 +5473,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=numeric",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5705,25 +5502,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=random",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5739,25 +5531,20 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=version",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5776,26 +5563,21 @@ mod tests {
             let output_file_path = dir.path().join("output_sort_test_file");
             let output_file_name = output_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--zero-terminated",
                 file_name,
                 "-o",
                 output_file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5812,26 +5594,21 @@ mod tests {
             let file_name = file_path.to_str().unwrap();
             let output_file_path = dir.path().join("output_sort_test_file");
             let output_file_name = output_file_path.to_str().unwrap();
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-z",
                 file_name,
                 "-o",
                 output_file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5847,20 +5624,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--unique", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--unique", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5876,20 +5648,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-u", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5905,20 +5672,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5934,20 +5696,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5963,20 +5720,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-C", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-C", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -5992,20 +5744,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check=diagnose-first", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check=diagnose-first", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6021,20 +5768,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check=silent", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check=silent", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6050,20 +5792,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check=quiet", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check=quiet", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6079,20 +5816,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c=silent", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c=silent", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6108,20 +5840,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c=quiet", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c=quiet", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6137,20 +5864,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c=diagnose-first", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c=diagnose-first", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6166,20 +5888,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--key=1", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--key=1", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6195,20 +5912,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--key=1", "--key=2", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--key=1", "--key=2", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6224,20 +5936,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--key=10", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--key=10", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6253,20 +5960,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-k", "1", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", "1", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6282,20 +5984,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-k", "1", "-k", "2", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", "1", "-k", "2", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6311,20 +6008,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-k", "100", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", "100", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6349,20 +6041,15 @@ mod tests {
             .unwrap();
             let file_name2 = file_path2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--merge", file_name, file_name2];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--merge", file_name, file_name2];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6387,20 +6074,15 @@ mod tests {
             .unwrap();
             let file_name2 = file_path2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-m", file_name, file_name2];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-m", file_name, file_name2];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6416,24 +6098,19 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--buffer-size=1000000000",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6449,20 +6126,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-S 1000000000", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-S 1000000000", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6478,20 +6150,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator=' '", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator=' '", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6507,20 +6174,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t ' '", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t ' '", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6536,20 +6198,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator=','", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator=','", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6565,20 +6222,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t ','", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t ','", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6594,20 +6246,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator=':'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator=':'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6623,20 +6270,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t ':'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t ':'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6652,20 +6294,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='-'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='-'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6681,20 +6318,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t '-'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t '-'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6710,20 +6342,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='g'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='g'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6739,20 +6366,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t 'g'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t 'g'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6768,20 +6390,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='G'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='G'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6797,20 +6414,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t 'G'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t 'G'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6826,20 +6438,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t '7'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t '7'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6855,20 +6462,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='7'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='7'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6888,20 +6490,15 @@ mod tests {
             let dir_name = dir2.path().to_str().unwrap();
             let temporary_directory_args = "--temporary-directory=".to_owned() + dir_name;
 
-            let args = vec![ctcore::ct_util_name(), &temporary_directory_args, file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &temporary_directory_args, file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
 
             dir.close().unwrap();
@@ -6924,20 +6521,15 @@ mod tests {
             let dir_name = dir2.path().to_str().unwrap();
             // let temporary_directory_args = "-T"  + dir_name;
 
-            let args = vec![ctcore::ct_util_name(), "-T", dir_name, file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-T", dir_name, file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
 
             dir.close().unwrap();
@@ -6956,20 +6548,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--stable", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--stable", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -6985,20 +6572,15 @@ mod tests {
             .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-s", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7009,20 +6591,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=numeric", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=numeric", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7032,20 +6609,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7055,20 +6627,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-b", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7078,20 +6645,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-leading-blanks", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-leading-blanks", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7101,20 +6663,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--dictionary-order", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--dictionary-order", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7124,20 +6681,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-d", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7147,20 +6699,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-f", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-f", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7170,20 +6717,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-case", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-case", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7193,20 +6735,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--general-numeric-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--general-numeric-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7216,20 +6753,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-g", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-g", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7239,20 +6771,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-nonprinting", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-nonprinting", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7262,20 +6789,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-i", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-i", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7285,20 +6807,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--month-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--month-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7308,20 +6825,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-M", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-M", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7331,20 +6843,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--human-numeric-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--human-numeric-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7354,20 +6861,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-h", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7377,20 +6879,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--numeric-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--numeric-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7400,20 +6897,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-n", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-n", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7423,20 +6915,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--random-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--random-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7446,20 +6933,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-R", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-R", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7469,20 +6951,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--reverse", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--reverse", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7492,20 +6969,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7517,25 +6989,20 @@ mod tests {
             let random_path = dir.path().join("random");
             let random_file_name = random_path.to_str().unwrap();
             let random_source_flags = "--random-source=".to_string() + random_file_name;
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 &random_source_flags,
                 "-R",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7545,20 +7012,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=general-numeric", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=general-numeric", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7568,20 +7030,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=human-numeric", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=human-numeric", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7591,20 +7048,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=month", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=month", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7614,20 +7066,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=numeric", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=numeric", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7637,20 +7084,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=random", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=random", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7660,20 +7102,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=version", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=version", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7683,25 +7120,20 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=general-numeric",
                 "-r",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7711,25 +7143,20 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=human-numeric",
                 "-r",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7739,20 +7166,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=month", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=month", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
         #[test]
@@ -7762,20 +7184,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=random", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=random", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7786,20 +7203,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--sort=version", "-r", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=version", "-r", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7810,20 +7222,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--version-sort", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version-sort", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7834,20 +7241,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-V", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7858,25 +7260,20 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=general-numeric",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7887,25 +7284,20 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=human-numeric",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7916,25 +7308,20 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=month",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7945,25 +7332,20 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=numeric",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -7974,25 +7356,20 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=random",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8003,25 +7380,20 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sort=version",
                 "--reverse",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
         #[test]
@@ -8034,26 +7406,21 @@ mod tests {
             let output_file_path = dir.path().join("output_sort_test_file");
             let output_file_name = output_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--zero-terminated",
                 file_name,
                 "-o",
                 output_file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8065,26 +7432,21 @@ mod tests {
             let file_name = file_path.to_str().unwrap();
             let output_file_path = dir.path().join("output_sort_test_file");
             let output_file_name = output_file_path.to_str().unwrap();
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-z",
                 file_name,
                 "-o",
                 output_file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8095,20 +7457,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--unique", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--unique", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8119,20 +7476,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-u", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8143,20 +7495,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8167,20 +7514,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8191,20 +7533,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-C", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-C", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8215,20 +7552,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check=diagnose-first", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check=diagnose-first", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8239,20 +7571,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check=silent", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check=silent", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8263,20 +7590,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check=quiet", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check=quiet", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8287,20 +7609,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c=silent", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c=silent", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8311,20 +7628,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c=quiet", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c=quiet", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8335,20 +7647,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c=diagnose-first", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c=diagnose-first", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8359,20 +7666,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--key=1", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--key=1", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8383,20 +7685,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--key=1", "--key=2", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--key=1", "--key=2", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8407,20 +7704,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--key=10", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--key=10", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8431,20 +7723,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-k", "1", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", "1", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8455,20 +7742,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-k", "1", "-k", "2", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", "1", "-k", "2", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8479,20 +7761,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-k", "100", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", "100", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8505,20 +7782,15 @@ mod tests {
             let file_path2 = dir.path().join("sort_test_file");
             let file_name2 = file_path2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--merge", file_name, file_name2];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--merge", file_name, file_name2];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8532,20 +7804,15 @@ mod tests {
             let file_path2 = dir.path().join("sort_test_file");
             let file_name2 = file_path2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-m", file_name, file_name2];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-m", file_name, file_name2];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8556,24 +7823,19 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--buffer-size=1000000000",
                 file_name,
             ];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8584,20 +7846,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-S 1000000000", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-S 1000000000", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8608,20 +7865,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator=' '", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator=' '", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8632,20 +7884,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t ' '", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t ' '", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8655,20 +7902,15 @@ mod tests {
             let file_path = dir.path().join("sort_test_file");
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator=','", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator=','", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8679,20 +7921,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t ','", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t ','", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8703,20 +7940,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator=':'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator=':'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8727,20 +7959,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t ':'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t ':'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8751,20 +7978,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='-'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='-'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8775,20 +7997,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t '-'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t '-'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8799,20 +8016,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='g'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='g'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8823,20 +8035,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t 'g'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t 'g'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8847,20 +8054,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='G'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='G'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8871,20 +8073,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t 'G'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t 'G'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8895,20 +8092,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t '7'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t '7'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8919,20 +8111,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--field-separator='7'", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--field-separator='7'", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -8947,20 +8134,15 @@ mod tests {
             let dir_name = dir2.path().to_str().unwrap();
             let temporary_directory_args = "--temporary-directory=".to_owned() + dir_name;
 
-            let args = vec![ctcore::ct_util_name(), &temporary_directory_args, file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &temporary_directory_args, file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
 
             dir.close().unwrap();
@@ -8978,20 +8160,15 @@ mod tests {
             let dir_name = dir2.path().to_str().unwrap();
             // let temporary_directory_args = "-T"  + dir_name;
 
-            let args = vec![ctcore::ct_util_name(), "-T", dir_name, file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-T", dir_name, file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
 
             dir.close().unwrap();
@@ -9005,20 +8182,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--stable", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--stable", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
 
@@ -9029,20 +8201,15 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-s", file_name];
-            let result = sort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", file_name];
+            let result = sort_main(args.iter().map(OsString::from));
             // let mut s = String::new();
             // 使用模式匹配提取字段值
-            match result {
-                Err(output) => {
-                    let code = output.code();
-                    let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
-                }
-                Ok(output) => {
-                    assert_eq!(output, ());
-                }
+            if let Err(output) = result {
+                let code = output.code();
+                let message = output.usage();
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
         }
     }
@@ -9113,7 +8280,7 @@ mod tests {
         fn test_ct_app_execution_version() {
             let command = ct_app();
 
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
             let executable = command.try_get_matches_from(args);
 
@@ -10624,16 +9791,44 @@ mod tests {
     #[cfg(test)]
     mod locale_tests {
         use super::*;
-        use serial_test::serial;
         use std::env;
+        use std::sync::Mutex;
+
+        static LOCALE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+        struct LocaleGuard {
+            previous: Option<String>,
+        }
+
+        impl LocaleGuard {
+            fn new(value: Option<&str>) -> Self {
+                let previous = env::var("LC_TIME").ok();
+                unsafe {
+                    match value {
+                        Some(val) => env::set_var("LC_TIME", val),
+                        None => env::remove_var("LC_TIME"),
+                    }
+                }
+                Self { previous }
+            }
+        }
+
+        impl Drop for LocaleGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    match &self.previous {
+                        Some(val) => env::set_var("LC_TIME", val),
+                        None => env::remove_var("LC_TIME"),
+                    }
+                }
+            }
+        }
 
         #[test]
-        #[serial]
         fn test_sort_month_parse_chinese_locale() {
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
             // 模拟中文locale环境
-            unsafe {
-                env::set_var("LC_TIME", "zh_CN.UTF-8");
-            }
 
             // 测试中文月份名称
             assert_eq!(sort_month_parse("一月"), SortMonth::January);
@@ -10644,20 +9839,13 @@ mod tests {
             // 英文月份仍然应该工作
             assert_eq!(sort_month_parse("JAN"), SortMonth::January);
             assert_eq!(sort_month_parse("feb"), SortMonth::February);
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
         }
 
         #[test]
-        #[serial]
         fn test_sort_month_parse_c_locale() {
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _guard = LocaleGuard::new(Some("C"));
             // 模拟C locale环境
-            unsafe {
-                env::set_var("LC_TIME", "C");
-            }
 
             // 只有英文月份应该工作
             assert_eq!(sort_month_parse("JAN"), SortMonth::January);
@@ -10665,25 +9853,19 @@ mod tests {
 
             // 中文月份应该返回Unknown
             assert_eq!(sort_month_parse("一月"), SortMonth::Unknown);
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
         }
 
         #[test]
-        #[serial]
         fn test_sort_month_compare_with_locale() {
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _guard = LocaleGuard::new(None);
             // 测试月份比较在不同locale下的一致性
             assert_eq!(sort_month_compare("JAN", "FEB"), Ordering::Less);
             assert_eq!(sort_month_compare("DEC", "JAN"), Ordering::Greater);
             assert_eq!(sort_month_compare("MAY", "MAY"), Ordering::Equal);
 
             // 模拟中文locale
-            unsafe {
-                env::set_var("LC_TIME", "zh_CN.UTF-8");
-            }
+            let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
 
             // 检查实际的中文月份解析是否工作（不依赖hard_locale_time判断）
             let jan_parsed = sort_month_parse("一月");
@@ -10704,31 +9886,17 @@ mod tests {
                 // 英文vs中文，英文应该被识别，中文为Unknown，所以JAN(1) vs Unknown(0) -> Greater
                 assert_eq!(sort_month_compare("JAN", "二月"), Ordering::Greater);
             }
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
         }
 
         #[test]
-        #[serial]
         fn test_hard_locale_time_integration() {
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
             // 测试hard_locale_time函数的使用
-            unsafe {
-                env::set_var("LC_TIME", "C");
-            }
+            let _guard = LocaleGuard::new(Some("C"));
             assert!(!hard_locale_time());
 
-            unsafe {
-                env::set_var("LC_TIME", "zh_CN.UTF-8");
-            }
+            let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
             assert!(hard_locale_time());
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
         }
     }
 }

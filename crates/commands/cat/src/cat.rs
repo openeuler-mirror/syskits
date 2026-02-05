@@ -27,7 +27,7 @@ use std::fs::metadata;
 use std::io::{self, IsTerminal, Read, Write};
 use sys_locale::get_locale;
 use thiserror::Error;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -887,7 +887,7 @@ mod tests {
     // 新增：测试 Tool trait 的基本实现
     #[test]
     fn test_tool_implementation() {
-        let tool = Cat::default();
+        let tool = Cat;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "cat");
@@ -1048,8 +1048,8 @@ mod tests {
         // let expected_output = "Test test_base_common_handle_input_encode_base16";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         let command = get_command();
@@ -1059,8 +1059,8 @@ mod tests {
 
         // 删除文件
         match base_delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         // assert_eq!(s, expected_output);
         assert!(matches.is_ok());
@@ -1884,7 +1884,7 @@ mod tests {
     fn test_read_file_with_long_filename() {
         let temp_dir = tempdir().expect("Failed to create temporary directory");
         let long_filename = "a".repeat(220); // 255字符的文件名
-        let temp_file_path = temp_dir.path().join(format!("{}.txt", long_filename));
+        let temp_file_path = temp_dir.path().join(format!("{long_filename}.txt"));
         let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
         temp_file
             .write_all(b"Content with long filename")

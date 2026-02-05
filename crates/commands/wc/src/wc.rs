@@ -34,7 +34,7 @@ use crate::word_count::WcWordCount;
 use ctcore::Tool;
 
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 mod count_fast;
 mod countable;
@@ -851,9 +851,7 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
             let _ =
                 print_stats(settings, &word_count, maybe_title_str, number_width).map_err(|err| {
                     let title = maybe_title_str.unwrap_or("<stdin>");
-                    ct_show!(
-                        err.map_err_context(|| format!("failed to print result for {}", title))
-                    )
+                    ct_show!(err.map_err_context(|| format!("failed to print result for {title}")))
                 });
         }
     }
@@ -962,6 +960,7 @@ mod tests {
 
     // ----------------- 测试 wc 函数 -----------------
     #[cfg(test)]
+    #[allow(clippy::module_inception)]
     mod tests {
         use std::io::Write;
 
@@ -1002,8 +1001,8 @@ mod tests {
             path_buf.push(file_name);
             // 创建文件并写入内容
             match base_create_file_with_content(file_name, content) {
-                Ok(_) => println!("File '{}' created successfully.", file_name),
-                Err(e) => eprintln!("Error creating file: {}", e),
+                Ok(_) => println!("File '{file_name}' created successfully."),
+                Err(e) => eprintln!("Error creating file: {e}"),
             }
 
             let inputs = WcInputs::Paths(vec![WcInput::Path(Cow::Owned(path_buf))]);
@@ -1011,8 +1010,8 @@ mod tests {
 
             // 删除文件
             match base_delete_file(file_name) {
-                Ok(_) => println!("File '{}' deleted successfully.", file_name),
-                Err(e) => eprintln!("Error deleting file: {}", e),
+                Ok(_) => println!("File '{file_name}' deleted successfully."),
+                Err(e) => eprintln!("Error deleting file: {e}"),
             }
 
             assert!(
@@ -1033,18 +1032,18 @@ mod tests {
             path_buf.push(file_name);
             // 创建文件并写入内容
             match base_create_file_with_content(file_name, content) {
-                Ok(_) => println!("File '{}' created successfully.", file_name),
-                Err(e) => eprintln!("Error creating file: {}", e),
+                Ok(_) => println!("File '{file_name}' created successfully."),
+                Err(e) => eprintln!("Error creating file: {e}"),
             }
 
             match base_create_file_with_content(file_name1, content1) {
-                Ok(_) => println!("File '{}' created successfully.", file_name1),
-                Err(e) => eprintln!("Error creating file: {}", e),
+                Ok(_) => println!("File '{file_name1}' created successfully."),
+                Err(e) => eprintln!("Error creating file: {e}"),
             }
 
             match base_create_file_with_content(file_name2, content2) {
-                Ok(_) => println!("File '{}' created successfully.", file_name2),
-                Err(e) => eprintln!("Error creating file: {}", e),
+                Ok(_) => println!("File '{file_name2}' created successfully."),
+                Err(e) => eprintln!("Error creating file: {e}"),
             }
 
             let inputs = WcInputs::Files0From(WcInput::Path(Cow::Owned(path_buf)));
@@ -1057,18 +1056,18 @@ mod tests {
 
             // 删除文件
             match base_delete_file(file_name1) {
-                Ok(_) => println!("File '{}' deleted successfully.", file_name1),
-                Err(e) => eprintln!("Error deleting file: {}", e),
+                Ok(_) => println!("File '{file_name1}' deleted successfully."),
+                Err(e) => eprintln!("Error deleting file: {e}"),
             }
 
             match base_delete_file(file_name2) {
-                Ok(_) => println!("File '{}' deleted successfully.", file_name2),
-                Err(e) => eprintln!("Error deleting file: {}", e),
+                Ok(_) => println!("File '{file_name2}' deleted successfully."),
+                Err(e) => eprintln!("Error deleting file: {e}"),
             }
 
             match base_delete_file(file_name) {
-                Ok(_) => println!("File '{}' deleted successfully.", file_name),
-                Err(e) => eprintln!("Error deleting file: {}", e),
+                Ok(_) => println!("File '{file_name}' deleted successfully."),
+                Err(e) => eprintln!("Error deleting file: {e}"),
             }
         }
 
@@ -1081,8 +1080,8 @@ mod tests {
             path_buf.push(file_name);
             // 创建文件并写入内容
             match base_create_file_with_content(file_name, content) {
-                Ok(_) => println!("File '{}' created successfully.", file_name),
-                Err(e) => eprintln!("Error creating file: {}", e),
+                Ok(_) => println!("File '{file_name}' created successfully."),
+                Err(e) => eprintln!("Error creating file: {e}"),
             }
 
             let inputs = WcInputs::Files0From(WcInput::Path(Cow::Owned(path_buf)));
@@ -1095,8 +1094,8 @@ mod tests {
 
             // 删除文件
             match base_delete_file(file_name) {
-                Ok(_) => println!("File '{}' deleted successfully.", file_name),
-                Err(e) => eprintln!("Error deleting file: {}", e),
+                Ok(_) => println!("File '{file_name}' deleted successfully."),
+                Err(e) => eprintln!("Error deleting file: {e}"),
             }
         }
     }
@@ -1167,9 +1166,8 @@ mod tests {
         let matches = get_matches_from_args(&["test", "--files0-from=file0.txt", "file1.txt"]);
         let settings = WcSettings::new(&matches);
         // Assume settings should not have initialized properly or should reflect an error state
-        assert_eq!(
+        assert!(
             settings.files0_from.is_some(),
-            true,
             "files0-from should not accept other file arguments"
         );
     }
@@ -1234,7 +1232,7 @@ mod tests {
     #[test]
     fn test_invalid_file_argument() {
         let result =
-            ct_app().try_get_matches_from(&["test", "--files0-from", "--some-invalid-file"]);
+            ct_app().try_get_matches_from(["test", "--files0-from", "--some-invalid-file"]);
         assert!(result.is_err(), "Should error with invalid file argument");
     }
 
@@ -1338,7 +1336,7 @@ mod tests {
 
     #[test]
     fn test_invalid_command_argument() {
-        let result = ct_app().try_get_matches_from(&["test", "--nonsensical"]);
+        let result = ct_app().try_get_matches_from(["test", "--nonsensical"]);
         assert!(result.is_err(), "Should error on nonsensical argument");
     }
 
@@ -1490,7 +1488,7 @@ mod tests {
     #[test]
     fn test_handle_io_error() {
         let mut total = WcWordCount::default();
-        let error = ReadBufDecoderError::Io(io::Error::new(io::ErrorKind::Other, "test error"));
+        let error = ReadBufDecoderError::Io(io::Error::other("test error"));
 
         let result = handle_error(error, &mut total);
         assert!(result.is_some(), "Should return an io::Error");

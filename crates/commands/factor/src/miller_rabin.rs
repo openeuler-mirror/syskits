@@ -162,7 +162,7 @@ mod tests {
             277, 281, 283, 293,
         ];
         for &p in &known_primes {
-            assert!(is_prime(p), "{} should be prime", p);
+            assert!(is_prime(p), "{p} should be prime");
         }
     }
 
@@ -176,7 +176,7 @@ mod tests {
             93, 94, 95, 96, 98, 99, 100,
         ];
         for &c in &known_composites {
-            assert!(!is_prime(c), "{} should be composite", c);
+            assert!(!is_prime(c), "{c} should be composite");
         }
     }
 
@@ -189,7 +189,7 @@ mod tests {
             1000000009, 1000000021,
         ];
         for &p in &large_primes {
-            assert!(is_prime(p), "{} should be prime", p);
+            assert!(is_prime(p), "{p} should be prime");
         }
     }
 
@@ -207,7 +207,7 @@ mod tests {
             1000003 * 1000033,
         ];
         for &c in &large_composites {
-            assert!(!is_prime(c), "{} should be composite", c);
+            assert!(!is_prime(c), "{c} should be composite");
         }
     }
 
@@ -220,11 +220,7 @@ mod tests {
             294409, 314821, 334153, 340561, 399001, 410041, 449065, 488881, 512461,
         ];
         for &c in &carmichael_numbers {
-            assert!(
-                !is_prime(c),
-                "{} should be composite (Carmichael number)",
-                c
-            );
+            assert!(!is_prime(c), "{c} should be composite (Carmichael number)");
         }
     }
 
@@ -252,7 +248,7 @@ mod tests {
             2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
         ];
         for &p in &known_primes {
-            assert_eq!(primality(p), Primality::Yes, "{} should be Prime", p);
+            assert_eq!(primality(p), Primality::Yes, "{p} should be Prime");
         }
     }
 
@@ -263,7 +259,7 @@ mod tests {
             4, 6, 8, 9, 10, 12, 14, 15, 16, 18, 20, 21, 22, 24, 25, 26, 27, 28, 30,
         ];
         for &c in &known_composites {
-            assert_eq!(primality(c), Primality::No, "{} should be Composite", c);
+            assert_eq!(primality(c), Primality::No, "{c} should be Composite");
         }
     }
 
@@ -278,9 +274,7 @@ mod tests {
             assert_eq!(
                 result,
                 Primality::No,
-                "{} should be identified as composite, got {:?}",
-                p,
-                result
+                "{p} should be identified as composite, got {result:?}"
             );
         }
     }
@@ -299,17 +293,13 @@ mod tests {
                 assert_eq!(
                     primality_result,
                     Primality::Yes,
-                    "{} is_prime() returned true but primality() returned {:?}",
-                    n,
-                    primality_result
+                    "{n} is_prime() returned true but primality() returned {primality_result:?}"
                 );
             } else {
                 assert_eq!(
                     primality_result,
                     Primality::No,
-                    "{} is_prime() returned false but primality() returned {:?}",
-                    n,
-                    primality_result
+                    "{n} is_prime() returned false but primality() returned {primality_result:?}"
                 );
             }
         }

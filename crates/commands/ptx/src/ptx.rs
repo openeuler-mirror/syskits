@@ -25,7 +25,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
@@ -1048,7 +1048,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Ptx::default();
+        let tool = Ptx;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "ptx");
@@ -1080,8 +1080,7 @@ mod tests {
             let err = get_config(&matches).unwrap_err();
             assert!(
                 err.to_string().contains("-S not implemented yet"),
-                "错误信息应提示 -S 尚未实现，当前为 {}",
-                err
+                "错误信息应提示 -S 尚未实现，当前为 {err}"
             );
         }
 
@@ -1115,7 +1114,7 @@ mod tests {
 
         fn create_temp_file_with_content(content: &str) -> NamedTempFile {
             let mut file = NamedTempFile::new().unwrap();
-            write!(file, "{}", content).unwrap();
+            write!(file, "{content}").unwrap();
             file
         }
 
@@ -1338,7 +1337,7 @@ mod tests {
             };
 
             let result = ptx_exec(&settings);
-            assert!(matches!(result, Err(_)));
+            assert!(result.is_err());
         }
     }
 

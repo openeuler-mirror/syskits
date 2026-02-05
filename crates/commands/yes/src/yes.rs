@@ -24,7 +24,7 @@ use rust_i18n::t;
 use sys_locale::get_locale;
 
 // 声明 i18n 宏和初始化函数
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 #[cfg(target_os = "linux")]
 mod splice;
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Yes::default();
+        let tool = Yes;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "yes");
@@ -358,9 +358,7 @@ mod tests {
 
     #[test]
     fn test_large_number_of_small_inputs() {
-        let small_inputs = std::iter::repeat(OsString::from("small"))
-            .take(10_000)
-            .collect::<Vec<_>>();
+        let small_inputs = std::iter::repeat_n(OsString::from("small"), 10_000).collect::<Vec<_>>();
         let mut v = Vec::new();
         yes_args_into_buff(&mut v, Some(small_inputs.iter())).unwrap();
         assert!(v.len() > 50_000); // 10,000 * "small ".length() + 1 for '\n'
@@ -385,7 +383,7 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
             yes_prepare_buff(&mut v);
             assert_eq!(v.len(), final_len);
         }
@@ -401,7 +399,7 @@ mod tests {
     #[test]
     fn test_large_vector() {
         let line = YES_BUF_SIZE * 2; // 输入超过了 CT_BUF_SIZE
-        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
         yes_prepare_buff(&mut v);
         assert_eq!(v.len(), line); // 由于超过 CT_BUF_SIZE，预期不会更改
     }
@@ -409,11 +407,11 @@ mod tests {
     #[test]
     fn test_performance_large_input() {
         let line = 100_000;
-        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
         let start = std::time::Instant::now();
         yes_prepare_buff(&mut v);
         let duration = start.elapsed();
-        println!("Duration for large input: {:?}", duration);
+        println!("Duration for large input: {duration:?}");
         // 可以通过断言确保性能在可接受的范围内
         assert!(duration < std::time::Duration::from_millis(100));
     }
@@ -427,7 +425,7 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
             yes_prepare_buff(&mut v);
             assert_eq!(v.len(), final_len);
         }
@@ -438,7 +436,7 @@ mod tests {
         let tests = [(1, YES_BUF_SIZE)];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
             yes_prepare_buff(&mut v);
             assert_eq!(v.len(), final_len);
         }
@@ -452,7 +450,7 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            let v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
             assert_eq!(v.len(), final_len);
         }
     }
@@ -460,7 +458,7 @@ mod tests {
     #[test]
     fn test_large_input_performance() {
         let line = YES_BUF_SIZE * 10; // Huge input size
-        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
         let start = std::time::Instant::now();
         yes_prepare_buff(&mut v);
         let duration = start.elapsed();
@@ -473,7 +471,7 @@ mod tests {
     #[test]
     fn test_repeated_calls2() {
         let line = 100;
-        let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+        let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
         for _ in 0..10 {
             // Repeat multiple times
             yes_prepare_buff(&mut v);
@@ -502,7 +500,7 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
             yes_prepare_buff(&mut v);
             assert_eq!(v.len(), final_len);
         }

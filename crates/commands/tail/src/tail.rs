@@ -693,7 +693,7 @@ mod tests {
     /// 辅助函数：创建临时文件并写入内容
     fn create_temp_file(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+        write!(file, "{content}").unwrap();
         file.flush().unwrap();
         file
     }
@@ -865,7 +865,7 @@ mod test_tail_bounded_unbounded {
     /// 辅助函数：创建临时文件并写入内容
     fn create_temp_file(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+        write!(file, "{content}").unwrap();
         file.flush().unwrap();
         file
     }

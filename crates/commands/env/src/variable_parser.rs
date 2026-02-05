@@ -32,8 +32,7 @@ impl<'a> VariableParser<'a, '_> {
                 return Err(EnvParseError::ParsingOfVariableNameFailed {
                     pos: self.parser.get_peek_position(),
                     msg: format!(
-                        "Unexpected character: '{}', expected variable name must not start with 0..9",
-                        c
+                        "Unexpected character: '{c}', expected variable name must not start with 0..9"
                     ),
                 });
             }
@@ -99,8 +98,7 @@ impl<'a> VariableParser<'a, '_> {
                     return Err(EnvParseError::ParsingOfVariableNameFailed {
                         pos: self.parser.get_peek_position(),
                         msg: format!(
-                            "Unexpected character: '{}', expected a closing brace ('}}') or colon (':')",
-                            c
+                            "Unexpected character: '{c}', expected a closing brace ('}}') or colon (':')"
                         ),
                     });
                 }

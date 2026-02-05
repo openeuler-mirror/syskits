@@ -55,7 +55,7 @@ fn main() {
     println!("测试calculate_modular_inverse函数:");
     for &p in &test_primes {
         let inv = calculate_modular_inverse(p);
-        println!("{}的逆元: {}", p, inv);
+        println!("{p}的逆元: {inv}");
     }
 
     // 测试Sieve::odd_primes()函数是否每次都返回相同的素数序列
@@ -66,7 +66,7 @@ fn main() {
         .collect::<Vec<_>>();
     println!("前10个奇素数:");
     for p in primes {
-        print!("{} ", p);
+        print!("{p} ");
     }
     println!();
 
@@ -80,7 +80,7 @@ fn main() {
     update_table_file(&table_path, &prime_table);
 
     let duration = start_time.elapsed();
-    println!("素数表生成完成，用时: {:?}", duration);
+    println!("素数表生成完成，用时: {duration:?}");
 }
 
 /// 查找table.rs文件
@@ -111,7 +111,7 @@ fn update_table_file(table_path: &Path, prime_table: &str) {
     let table_content = match fs::read_to_string(table_path) {
         Ok(content) => content,
         Err(e) => {
-            eprintln!("读取table.rs文件时出错: {}", e);
+            eprintln!("读取table.rs文件时出错: {e}");
             std::process::exit(1);
         }
     };
@@ -135,13 +135,13 @@ fn update_table_file(table_path: &Path, prime_table: &str) {
         let mut file = match File::create(table_path) {
             Ok(file) => file,
             Err(e) => {
-                eprintln!("创建文件时出错: {}", e);
+                eprintln!("创建文件时出错: {e}");
                 std::process::exit(1);
             }
         };
 
         if let Err(e) = file.write_all(new_content.as_bytes()) {
-            eprintln!("写入文件时出错: {}", e);
+            eprintln!("写入文件时出错: {e}");
             std::process::exit(1);
         }
 
@@ -150,8 +150,8 @@ fn update_table_file(table_path: &Path, prime_table: &str) {
         // 如果没有找到标记，提示用户添加标记
         eprintln!("在table.rs中找不到标记");
         eprintln!("请在table.rs中添加以下标记，以指定素数表的插入位置:");
-        eprintln!("{}", TABLE_START_MARKER);
-        eprintln!("{}", TABLE_END_MARKER);
+        eprintln!("{TABLE_START_MARKER}");
+        eprintln!("{TABLE_END_MARKER}");
         std::process::exit(1);
     }
 }
@@ -208,14 +208,14 @@ fn generate_prime_table() -> String {
         let ceil = u64::MAX / p;
 
         // 格式化条目
-        let entry = format!("({}, {}, {}),", p, inv, ceil);
+        let entry = format!("({p}, {inv}, {ceil}),");
 
         // 添加到输出，考虑行宽
         if cols + entry.len() > MAX_WIDTH {
-            output.push_str(&format!("\n    {}", entry));
+            output.push_str(&format!("\n    {entry}"));
             cols = 4 + entry.len();
         } else {
-            output.push_str(&format!(" {}", entry));
+            output.push_str(&format!(" {entry}"));
             cols += 1 + entry.len();
         }
 
@@ -223,18 +223,17 @@ fn generate_prime_table() -> String {
 
         // 每100个素数显示一次进度
         if count % 100 == 0 {
-            println!("已处理 {} 个素数...", count);
+            println!("已处理 {count} 个素数...");
         }
     }
 
     // 添加下一个素数常量
     output.push_str(&format!(
-        "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n\n",
-        next_prime
+        "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {next_prime};\n\n"
     ));
 
-    println!("共生成 {} 个素数的逆元表", count);
-    println!("下一个素数: {}", next_prime);
+    println!("共生成 {count} 个素数的逆元表");
+    println!("下一个素数: {next_prime}");
     output
 }
 

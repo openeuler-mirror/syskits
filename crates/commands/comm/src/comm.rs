@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use ctcore::ct_error::{CTResult, FromIo};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
@@ -155,15 +155,14 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
 }
 
 fn comm_get_del_im(options: &ArgMatches) -> &str {
-    let del_im = match options
+    match options
         .get_one::<String>(opt_flags::DELIMITER)
         .unwrap()
         .as_str()
     {
         "" => "\0",
         delim => delim,
-    };
-    del_im
+    }
 }
 
 fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineReader> {
@@ -283,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let comm = Comm::default();
+        let comm = Comm;
 
         // Test name method
         assert_eq!(comm.name(), "comm");
@@ -665,8 +664,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -680,8 +679,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -695,8 +694,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -710,8 +709,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -725,8 +724,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_1() {
-            let args = vec![ctcore::ct_util_name(), "-1", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-1", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -740,8 +739,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_2() {
-            let args = vec![ctcore::ct_util_name(), "-2", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-2", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -755,8 +754,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_3() {
-            let args = vec![ctcore::ct_util_name(), "-3", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-3", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -770,8 +769,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_12() {
-            let args = vec![ctcore::ct_util_name(), "-12", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-12", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -785,8 +784,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_13() {
-            let args = vec![ctcore::ct_util_name(), "-13", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-13", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -800,8 +799,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_23() {
-            let args = vec![ctcore::ct_util_name(), "-23", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-23", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -815,8 +814,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_11() {
-            let args = vec![ctcore::ct_util_name(), "-11", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-11", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -830,8 +829,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_22() {
-            let args = vec![ctcore::ct_util_name(), "-22", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-22", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -845,8 +844,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_33() {
-            let args = vec![ctcore::ct_util_name(), "-33", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-33", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -860,8 +859,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_column_123() {
-            let args = vec![ctcore::ct_util_name(), "-123", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-123", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -875,13 +874,13 @@ mod tests {
 
         #[test]
         fn test_ct_main_zero_terminated() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--zero-terminated",
                 "file1",
                 "file2",
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -895,8 +894,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_zero() {
-            let args = vec![ctcore::ct_util_name(), "-z", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-z", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -910,8 +909,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_total() {
-            let args = vec![ctcore::ct_util_name(), "--total", "file1", "file2"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--total", "file1", "file2"];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -928,8 +927,8 @@ mod tests {
 
             let flag = opt_flags::FILE_1.to_string();
             let files = test_file_path.to_string();
-            let args = vec![ctcore::ct_util_name(), &flag, &files];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &flag, &files];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -947,8 +946,8 @@ mod tests {
             // let expected_result = FILE_2;
             let flag = FILE_2.to_string();
             let files = test_file_path.to_string();
-            let args = vec![ctcore::ct_util_name(), &flag, &files];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &flag, &files];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -967,8 +966,8 @@ mod tests {
             let flag = DELIMITER.to_string();
             let file1 = test_file.to_string();
 
-            let args = vec![ctcore::ct_util_name(), &flag, &file1];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &flag, &file1];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -987,8 +986,8 @@ mod tests {
             let flag = DELIMITER_DEFAULT.to_string();
             let file1 = test_file.to_string();
 
-            let args = vec![ctcore::ct_util_name(), &flag, &file1];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &flag, &file1];
+            let result = comm_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1377,7 +1376,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1404,7 +1403,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1431,7 +1430,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1458,7 +1457,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1485,7 +1484,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
         #[test]
         fn tests_ct_open_file_delimiter_default() {
@@ -1511,7 +1510,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1539,7 +1538,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1567,7 +1566,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
 
         #[test]
@@ -1595,7 +1594,7 @@ mod tests {
 
             let f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string());
 
-            assert_eq!(f1.is_ok(), true);
+            assert!(f1.is_ok());
         }
     }
 
@@ -1610,29 +1609,29 @@ mod tests {
 
         #[test]
         fn tests_ctmain_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn tests_ctmain_h() {
-            let args = vec![ctcore::ct_util_name(), "--h"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--h"];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn tests_ctmain_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn tests_ctmain_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -1658,8 +1657,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-1", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-1", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1685,8 +1684,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-2", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-2", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1712,8 +1711,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-3", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-3", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1739,8 +1738,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-12", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-12", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1766,8 +1765,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-13", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-13", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1793,8 +1792,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-23", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-23", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1819,8 +1818,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-123", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-123", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1846,8 +1845,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-z", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-z", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1873,13 +1872,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1905,8 +1904,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--total", filename1, filename2];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--total", filename1, filename2];
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1931,14 +1930,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-z",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1966,14 +1965,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--zero-terminated",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1999,13 +1998,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2033,14 +2032,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--output-delimiter=STR",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2068,14 +2067,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--output-delimiter=STR",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2103,7 +2102,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--output-delimiter=STR",
                 "--zero-terminated",
@@ -2111,7 +2110,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2138,14 +2137,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-1",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2171,14 +2170,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-2",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2204,14 +2203,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-3",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2237,14 +2236,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-12",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2270,14 +2269,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-13",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2303,14 +2302,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-23",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -2335,14 +2334,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-123",
                 "--zero-terminated",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2368,14 +2367,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-1",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2401,14 +2400,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-2",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2434,14 +2433,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-3",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2467,14 +2466,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-12",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2500,14 +2499,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-13",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2533,14 +2532,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-23",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -2565,14 +2564,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-123",
                 "--total",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2598,14 +2597,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-1",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2631,14 +2630,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-2",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2664,14 +2663,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-3",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2699,14 +2698,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-12",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2734,14 +2733,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-13",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2769,14 +2768,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-23",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -2803,14 +2802,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-123",
                 "--output-delimiter=STR",
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2838,7 +2837,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-1",
                 "--output-delimiter=STR",
@@ -2846,7 +2845,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2874,7 +2873,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-2",
                 "--output-delimiter=STR",
@@ -2882,7 +2881,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2910,7 +2909,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-3",
                 "--output-delimiter=STR",
@@ -2918,7 +2917,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2946,7 +2945,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-12",
                 "--output-delimiter=STR",
@@ -2954,7 +2953,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2982,7 +2981,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-13",
                 "--output-delimiter=STR",
@@ -2990,7 +2989,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -3018,7 +3017,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-23",
                 "--output-delimiter=STR",
@@ -3026,7 +3025,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -3053,7 +3052,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-123",
                 "--output-delimiter=STR",
@@ -3061,7 +3060,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -3087,7 +3086,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-12",
                 "--output-delimiter=STR",
@@ -3096,7 +3095,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -3122,7 +3121,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-13",
                 "--output-delimiter=STR",
@@ -3131,7 +3130,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -3157,7 +3156,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-23",
                 "--output-delimiter=STR",
@@ -3166,7 +3165,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -3191,7 +3190,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-123",
                 "--output-delimiter=STR",
@@ -3200,7 +3199,7 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            let result = comm_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }

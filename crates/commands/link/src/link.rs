@@ -16,7 +16,7 @@
 extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, Command, crate_version};
 use ctcore::{
     Tool,
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Link::default();
+        let tool = Link;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "link");
@@ -377,36 +377,36 @@ mod tests {
         #[test]
         fn test_link_main_success() {
             let (_temp_dir, source, target) = setup_test_files();
-            let args = vec![ctcore::ct_util_name(), &source, &target];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &source, &target];
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_link_main_wrong_number_of_arguments() {
-            let args = vec![ctcore::ct_util_name(), "single_file.txt"];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "single_file.txt"];
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_link_main_nonexistent_source() {
-            let args = vec![ctcore::ct_util_name(), "nonexistent.txt", "target.txt"];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "nonexistent.txt", "target.txt"];
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_link_main_with_help_flag() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_link_main_empty_arguments() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -417,12 +417,12 @@ mod tests {
             let target_file = temp_dir.path().join("target file.txt");
             File::create(&source_file).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 source_file.to_str().unwrap(),
                 target_file.to_str().unwrap(),
             ];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -437,12 +437,12 @@ mod tests {
                 .strip_prefix(&current_dir)
                 .unwrap_or(Path::new(&target));
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 relative_source.to_str().unwrap(),
                 relative_target.to_str().unwrap(),
             ];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -453,12 +453,12 @@ mod tests {
             let target_file = temp_dir.path().join("目标文件.txt");
             File::create(&source_file).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 source_file.to_str().unwrap(),
                 target_file.to_str().unwrap(),
             ];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -466,16 +466,16 @@ mod tests {
         fn test_link_main_with_long_paths() {
             let temp_dir = Builder::new().prefix("link_test").tempdir().unwrap();
             let long_name = "a".repeat(100);
-            let source_file = temp_dir.path().join(format!("{}.txt", long_name));
-            let target_file = temp_dir.path().join(format!("{}_target.txt", long_name));
+            let source_file = temp_dir.path().join(format!("{long_name}.txt"));
+            let target_file = temp_dir.path().join(format!("{long_name}_target.txt"));
             File::create(&source_file).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 source_file.to_str().unwrap(),
                 target_file.to_str().unwrap(),
             ];
-            let result = link_main(args.iter().map(|s| OsString::from(s)));
+            let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }

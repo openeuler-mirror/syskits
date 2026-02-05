@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use ctcore::Tool;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let chgrp = Chgrp::default();
+        let chgrp = Chgrp;
 
         // Test name method
         assert_eq!(chgrp.name(), "chgrp");
@@ -332,88 +332,88 @@ mod tests {
 
     #[test]
     fn test_version_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--version"];
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--version"];
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--help"];
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--help"];
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_invalid_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-H"];
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-H"];
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_version_valid_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-V"];
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-V"];
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_true_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--dereference"];
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--dereference"];
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_false_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-h"];
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-h"];
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_whole_false_ctmain() {
         // 测试用例：有效输入 --no-dereference
-        let args = vec![ctcore::ct_util_name(), "--no-dereference"];
+        let args = [ctcore::ct_util_name(), "--no-dereference"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_preserve_root_true_ctmain() {
         // 测试用例：有效输入 --preserve-root
-        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+        let args = [ctcore::ct_util_name(), "--preserve-root"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_preserve_root_false_ctmain() {
         // 测试用例：有效输入 --no-preserve-root
-        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+        let args = [ctcore::ct_util_name(), "--no-preserve-root"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_recursive_ctmain() {
         // 测试用例：有效输入 --recursive
-        let args = vec![ctcore::ct_util_name(), "-R"];
+        let args = [ctcore::ct_util_name(), "-R"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_recursive_whole_ctmain() {
         // 测试用例：有效输入 --recursive
-        let args = vec![ctcore::ct_util_name(), "--recursive"];
+        let args = [ctcore::ct_util_name(), "--recursive"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -421,9 +421,9 @@ mod tests {
     #[test]
     fn test_verbose_ctmain() {
         // 测试用例：有效输入 --verbose
-        let args = vec![ctcore::ct_util_name(), "-v"];
+        let args = [ctcore::ct_util_name(), "-v"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -431,9 +431,9 @@ mod tests {
     #[test]
     fn test_verbose_whole_ctmain() {
         // 测试用例：有效输入 --verbose
-        let args = vec![ctcore::ct_util_name(), "--verbose"];
+        let args = [ctcore::ct_util_name(), "--verbose"];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -444,21 +444,21 @@ mod tests {
         let file_name = "test_chcon_invalid_user_id.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
+        let args = [ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err()); // Expect a non-zero exit code for invalid user ID
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
@@ -470,19 +470,19 @@ mod tests {
         let file_name = "test_chcon_invalid_user_id.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "-h",
             "-R",
@@ -490,7 +490,7 @@ mod tests {
             dir_path,
         ];
 
-        let result = chgrp_main(args.iter().map(|s| OsString::from(s)));
+        let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err()); // Expect a non-zero exit code for invalid user ID
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");

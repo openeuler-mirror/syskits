@@ -70,7 +70,7 @@ use number_prefix::NumberPrefix;
 use once_cell::sync::Lazy;
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use rust_i18n::t;
 
 mod dired;
@@ -1950,7 +1950,7 @@ fn show_dir_name<W: Write>(path_data: &PathData, out: &mut W, config: &LsConfig)
         true => {
             let name = escape_name(&path_data.display_name, &config.quoting_style);
             let hyperlink = create_hyperlink(&name, path_data);
-            write!(out, "{}:", hyperlink).unwrap()
+            write!(out, "{hyperlink}:").unwrap()
         }
         false => write!(out, "{}:", path_data.p_buf.display()).unwrap(),
     }
@@ -2795,7 +2795,7 @@ fn display_item_long<W: Write>(
             display_item_name(item, ls_config, None, String::new(), output, style_manager).contents;
 
         let displayed_item = if quoted && !item_name.starts_with('\'') {
-            format!(" {}", item_name)
+            format!(" {item_name}")
         } else {
             item_name
         };
@@ -2912,7 +2912,7 @@ fn display_item_long<W: Write>(
         )
         .unwrap();
     }
-    write!(output, "{}", output_display)?;
+    write!(output, "{output_display}")?;
 
     Ok(())
 }
@@ -3062,8 +3062,8 @@ fn display_len_or_rdev(mdata: &Metadata, config: &LsConfig) -> SizeOrDeviceId {
         if ft.is_char_device() || ft.is_block_device() {
             // 这里需要进行类型转换，因为不同操作系统的 `dev_t` 类型各不相同。
             let dev = mdata.rdev() as dev_t;
-            let major = unsafe { major(dev) };
-            let minor = unsafe { minor(dev) };
+            let major = major(dev);
+            let minor = minor(dev);
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
@@ -3556,7 +3556,6 @@ fn calculate_padding_collection<W: Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
     use std::ffi::OsString;
 
     #[test]

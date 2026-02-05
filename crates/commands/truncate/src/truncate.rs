@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::fs::{OpenOptions, metadata};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use std::io::ErrorKind;
 use std::os::linux::fs::MetadataExt;
@@ -1432,8 +1432,8 @@ mod tests {
         // }
         #[test]
         fn test_truncate_main_support_missing_argument() {
-            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()]; // 缺少任何参数
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
@@ -1444,8 +1444,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--io-blocks", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--io-blocks", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
@@ -1456,8 +1456,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-o", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-o", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
@@ -1468,8 +1468,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--no-create", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--no-create", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
@@ -1480,8 +1480,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-c", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
@@ -1503,13 +1503,13 @@ mod tests {
             .unwrap();
             let reference_file_name = reference_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--reference",
                 reference_file_name,
                 file_name,
             ];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1531,8 +1531,8 @@ mod tests {
             .unwrap();
             let reference_file_name = reference_file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-r", reference_file_name, file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-r", reference_file_name, file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1554,14 +1554,14 @@ mod tests {
             .unwrap();
             let reference_file_name = reference_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 reference_file_name,
                 "--io-blocks",
                 file_name,
             ];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1583,14 +1583,14 @@ mod tests {
             .unwrap();
             let reference_file_name = reference_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 reference_file_name,
                 "-o",
                 file_name,
             ];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1612,14 +1612,14 @@ mod tests {
             .unwrap();
             let reference_file_name = reference_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 reference_file_name,
                 "--no-create",
                 file_name,
             ];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1641,14 +1641,14 @@ mod tests {
             .unwrap();
             let reference_file_name = reference_file_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 reference_file_name,
                 "-c",
                 file_name,
             ];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1659,8 +1659,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "1000", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "1000", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1671,8 +1671,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "10KB", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "10KB", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1683,8 +1683,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "10K", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "10K", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1695,8 +1695,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "10MB", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "10MB", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1707,8 +1707,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "10M", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "10M", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1719,8 +1719,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "10GB", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "10GB", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1731,8 +1731,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "10G", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "10G", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1743,8 +1743,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "+100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "+100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1755,8 +1755,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size=-100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size=-100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1767,8 +1767,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "<100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "<100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1779,8 +1779,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", ">100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", ">100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1791,8 +1791,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "/100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "/100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1803,8 +1803,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--size", "%100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--size", "%100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1815,8 +1815,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "1000", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "1000", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1827,8 +1827,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "10KB", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "10KB", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1839,8 +1839,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "10K", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "10K", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1851,8 +1851,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "10MB", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "10MB", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1863,8 +1863,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "10M", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "10M", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1875,8 +1875,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "10GB", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "10GB", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1887,8 +1887,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "10G", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "10G", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1899,8 +1899,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "+100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "+100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1911,8 +1911,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s=-100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s=-100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1923,8 +1923,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "<100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "<100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1935,8 +1935,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", ">100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", ">100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1947,8 +1947,8 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "/100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "/100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
@@ -1959,15 +1959,15 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-s", "%100", file_name];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "%100", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_truncate_main_execution_version() {
-            let args_vec = vec![ctcore::ct_util_name(), "--version"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(OsString::from);
             let result = truncate_main(args);
 
             assert!(result.is_err());
@@ -1975,37 +1975,37 @@ mod tests {
 
         #[test]
         fn test_truncate_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = truncate_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_truncate_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_truncate_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_truncate_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_truncate_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = truncate_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
     }

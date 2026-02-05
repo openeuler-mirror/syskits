@@ -34,7 +34,7 @@
 extern crate rust_i18n;
 use clap::Arg;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
@@ -651,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Expand::default();
+        let tool = Expand;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "expand");
@@ -678,34 +678,34 @@ mod tests {
 
         #[test]
         fn test_expand_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let result = expand_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = expand_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
+            let args = [ctcore::ct_util_name(), "-V"];
 
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let result = expand_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = expand_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -727,8 +727,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--initial", filename];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--initial", filename];
+            let result = expand_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -750,8 +750,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-i", filename];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-i", filename];
+            let result = expand_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -773,8 +773,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--tabs", "4", filename];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--tabs", "4", filename];
+            let result = expand_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -796,8 +796,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t", "4", filename];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t", "4", filename];
+            let result = expand_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -819,8 +819,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--no-utf8", filename];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--no-utf8", filename];
+            let result = expand_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -842,8 +842,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-U", filename];
-            let result = expand_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-U", filename];
+            let result = expand_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }

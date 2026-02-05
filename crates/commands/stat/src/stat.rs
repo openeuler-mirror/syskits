@@ -29,7 +29,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
 // 声明 i18n 宏和初始化函数
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use sys_locale::get_locale;
 
 mod stat_options {
@@ -61,7 +61,7 @@ impl CachedMode {
             "default" => Ok(CachedMode::Default),
             "never" => Ok(CachedMode::Never),
             "always" => Ok(CachedMode::Always),
-            _ => Err(format!("invalid cached mode: {}", s)),
+            _ => Err(format!("invalid cached mode: {s}")),
         }
     }
 }
@@ -988,7 +988,7 @@ impl Stater {
                     };
                     format!("'{}' -> '{}'", display_name, dst.display())
                 } else {
-                    format!("'{}'", display_name)
+                    format!("'{display_name}'")
                 };
                 StatOutputType::Str(file_name)
             }
@@ -1261,7 +1261,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Stat::default();
+        let tool = Stat;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "stat");
@@ -1307,20 +1307,30 @@ mod tests {
 
     #[test]
     fn test_determine_padding_char_behaviour() {
-        let mut flags = StatFlags::default();
-        flags.is_zero = true;
+        let flags = StatFlags {
+            is_zero: true,
+            ..Default::default()
+        };
         assert!(matches!(
             determine_padding_char(&flags, &None),
             StatPadding::Zero
         ));
 
-        flags.is_left = true;
+        let flags = StatFlags {
+            is_zero: true,
+            is_left: true,
+            ..Default::default()
+        };
         assert!(matches!(
             determine_padding_char(&flags, &None),
             StatPadding::Space
         ));
 
-        flags.is_left = false;
+        let flags = StatFlags {
+            is_zero: true,
+            is_left: false,
+            ..Default::default()
+        };
         assert!(matches!(
             determine_padding_char(&flags, &Some(3)),
             StatPadding::Space
@@ -1668,8 +1678,8 @@ mod test_i18n {
 
         //let helps = "hello";
         let trans = rust_i18n::t!(&helps);
-        println!("\nOriginal help text:\n{}", helps);
-        println!("\nTranslated help text:\n{}", trans);
+        println!("\nOriginal help text:\n{helps}");
+        println!("\nTranslated help text:\n{trans}");
 
         // 测试参数描述
         println!("\nArgument descriptions:");

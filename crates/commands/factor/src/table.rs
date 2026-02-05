@@ -422,7 +422,7 @@ mod tests {
             let mut f_c = array::from_fn(|_| Factors::one());
 
             // 复制数组以便比较
-            let mut n_i = n_c.clone();
+            let mut n_i = n_c;
             let mut f_i = f_c.clone();
 
             // 使用相同的算法处理数据

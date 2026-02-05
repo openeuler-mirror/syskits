@@ -14,13 +14,12 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::ct_print_verbatim;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
-use std::path::Path;
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -99,13 +98,13 @@ pub fn compute_dirname(path: &str) -> String {
 
         // 4. 处理截断结果为空的情况
         if s.is_empty() {
-            return "/".to_string();
+            "/".to_string()
         } else {
-            return s.to_string();
+            s.to_string()
         }
     } else {
         // 没有 '/' → 返回 "."
-        return ".".to_string();
+        ".".to_string()
     }
 }
 
@@ -142,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Dirname::default();
+        let tool = Dirname;
 
         // Test name method
         assert_eq!(tool.name(), "dirname");
@@ -167,53 +166,53 @@ mod tests {
 
         #[test]
         fn test_dirname_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+            let result = dirname_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dirname_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = dirname_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dirname_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = dirname_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dirname_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = dirname_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dirname_main_z() {
-            let args = vec![ctcore::ct_util_name(), "-z", "3/etc/audi-efwe/few/35/2"];
-            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-z", "3/etc/audi-efwe/few/35/2"];
+            let result = dirname_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dirname_main_zero() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--zero",
                 " 3/etc/audi-efwe/few/35/2",
             ];
-            let result = dirname_main(args.iter().map(|s| OsString::from(s)));
+            let result = dirname_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -306,7 +305,7 @@ mod tests {
         #[test]
         fn test_dirname_process_with_non_empty_dirnames() {
             let line_ending = CtLineEnding::default();
-            let dirnames = vec!["dir1", "dir2", "dir3"]
+            let dirnames = ["dir1", "dir2", "dir3"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>();

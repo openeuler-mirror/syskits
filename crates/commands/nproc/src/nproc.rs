@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use crate::opt_flags::OPT_ALL;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::opt_flags::OPT_IGNORE;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
@@ -100,7 +100,7 @@ fn nproc_cores_num_process(
 }
 
 fn nproc_parse_cores_num(args_match: ArgMatches) -> usize {
-    let cores_num = if args_match.get_flag(OPT_ALL) {
+    if args_match.get_flag(OPT_ALL) {
         nproc_all()
     } else {
         // 尝试使用环境变量 OMP_NUM_THREADS 强制设置线程数
@@ -119,8 +119,7 @@ fn nproc_parse_cores_num(args_match: ArgMatches) -> usize {
             // OMP_NUM_THREADS 环境变量不存在，退回到默认的核心检测
             Err(_) => available_parallelism(),
         }
-    };
-    cores_num
+    }
 }
 
 fn nproc_parse_limit_thread() -> usize {
@@ -239,7 +238,7 @@ impl Tool for Nproc {
         let result = nproc_main(args.iter().cloned());
         match result {
             Ok(nproc_info) => {
-                println!("{}", nproc_info);
+                println!("{nproc_info}");
 
                 Ok(())
             }
@@ -261,7 +260,7 @@ mod tests {
 
         #[test]
         fn test_tool_implementation() {
-            let tool = Nproc::default();
+            let tool = Nproc;
 
             // 测试 name 方法
             assert_eq!(tool.name(), "nproc");
@@ -315,34 +314,34 @@ mod tests {
 
         #[test]
         fn test_nproc_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+            let result = nproc_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_nproc_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = nproc_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_nproc_main_all() {
-            let args = vec![ctcore::ct_util_name(), "--all"];
+            let args = [ctcore::ct_util_name(), "--all"];
 
-            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+            let result = nproc_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_nproc_main_ignore() {
-            let args = vec![ctcore::ct_util_name(), "--ignore=1"];
-            let result = nproc_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore=1"];
+            let result = nproc_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }

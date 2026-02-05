@@ -241,8 +241,7 @@ impl OdSettings {
                 _ => Err(CtSimpleError::new(
                     1,
                     format!(
-                        "invalid output address radix '{}'; it must be one character from [doxn]",
-                        s
+                        "invalid output address radix '{s}'; it must be one character from [doxn]"
                     ),
                 )),
             },
@@ -781,7 +780,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Od::default();
+        let tool = Od;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "od");

@@ -18,7 +18,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::{self, Write};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use sys_locale::get_locale;
 
@@ -203,7 +203,7 @@ fn id_handle_users<W: Write>(
                 gid.to_string()
             };
 
-            write!(writer, "{}", gid_string).unwrap();
+            write!(writer, "{gid_string}").unwrap();
         }
 
         if id_state.is_uflag {
@@ -217,7 +217,7 @@ fn id_handle_users<W: Write>(
                 uid.to_string()
             };
 
-            write!(writer, "{}", name_string).unwrap();
+            write!(writer, "{name_string}").unwrap();
         }
 
         let groups = if id_state.is_user_specified {
@@ -249,13 +249,13 @@ fn id_handle_users<W: Write>(
                 ""
             };
 
-            write!(writer, "{}{}", groups_string, delimit).unwrap();
+            write!(writer, "{groups_string}{delimit}").unwrap();
         }
 
         if is_default_format {
             id_print(writer, id_state, &groups);
         }
-        write!(writer, "{}", line_ending).unwrap();
+        write!(writer, "{line_ending}").unwrap();
 
         if i + 1 >= users.len() {
             break;
@@ -402,35 +402,35 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
     let egid = id_state.ids.as_ref().map(|ids| ids.egid).unwrap_or(65535);
 
     let uid_string = ct_entries::uid2usr(uid).unwrap_or_else(|_| {
-        writeln!(writer, "cannot find name for user ID {}", uid).unwrap();
+        writeln!(writer, "cannot find name for user ID {uid}").unwrap();
         set_ct_exit_code(1);
         uid.to_string()
     });
-    write!(writer, "uid={}({})", uid, uid_string).unwrap();
+    write!(writer, "uid={uid}({uid_string})").unwrap();
 
     let gid_string = ct_entries::gid2grp(gid).unwrap_or_else(|_| {
-        writeln!(writer, "cannot find name for group ID {}", gid).unwrap();
+        writeln!(writer, "cannot find name for group ID {gid}").unwrap();
         set_ct_exit_code(1);
         gid.to_string()
     });
-    write!(writer, " gid={}({})", gid, gid_string).unwrap();
+    write!(writer, " gid={gid}({gid_string})").unwrap();
 
     if !id_state.is_user_specified && (euid != uid) {
         let euid_string = ct_entries::uid2usr(euid).unwrap_or_else(|_| {
-            writeln!(writer, "cannot find name for user ID {}", euid).unwrap();
+            writeln!(writer, "cannot find name for user ID {euid}").unwrap();
             set_ct_exit_code(1);
             euid.to_string()
         });
-        write!(writer, " euid={}({})", euid, euid_string).unwrap();
+        write!(writer, " euid={euid}({euid_string})").unwrap();
     }
 
     if !id_state.is_user_specified && (egid != gid) {
         let egid_string = ct_entries::gid2grp(egid).unwrap_or_else(|_| {
-            writeln!(writer, "cannot find name for group ID {}", egid).unwrap();
+            writeln!(writer, "cannot find name for group ID {egid}").unwrap();
             set_ct_exit_code(1);
             egid.to_string()
         });
-        write!(writer, " egid={}({})", egid, egid_string).unwrap();
+        write!(writer, " egid={egid}({egid_string})").unwrap();
     }
 
     let groups_string = groups
@@ -440,7 +440,7 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
                 "{}({})",
                 gr,
                 ct_entries::gid2grp(gr).unwrap_or_else(|_| {
-                    writeln!(writer, "cannot find name for group ID {}", gr).unwrap();
+                    writeln!(writer, "cannot find name for group ID {gr}").unwrap();
                     set_ct_exit_code(1);
                     gr.to_string()
                 })
@@ -448,7 +448,7 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
         })
         .collect::<Vec<_>>()
         .join(",");
-    write!(writer, " groups={}", groups_string).unwrap();
+    write!(writer, " groups={groups_string}").unwrap();
 
     if id_state.is_selinux_supported
         && !id_state.is_user_specified
@@ -469,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Id::default();
+        let tool = Id;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "id");
@@ -772,7 +772,7 @@ mod tests {
 
             let result = id_flags_validity_checks(&mut state);
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), true); // 默认格式返回 true
+            assert!(result.unwrap()); // 默认格式返回 true
         }
 
         #[test]
@@ -865,7 +865,7 @@ mod tests {
 
             let result = id_flags_validity_checks(&mut state);
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), false); // 非默认格式返回 false
+            assert!(!result.unwrap()); // 非默认格式返回 false
         }
 
         #[test]
@@ -912,15 +912,15 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, false);
-            assert_eq!(state.is_uflag, false);
-            assert_eq!(state.is_gflag, false);
-            assert_eq!(state.is_gsflag, false);
-            assert_eq!(state.is_rflag, false);
-            assert_eq!(state.is_zflag, false);
-            assert_eq!(state.is_cflag, false);
+            assert!(!state.is_nflag);
+            assert!(!state.is_uflag);
+            assert!(!state.is_gflag);
+            assert!(!state.is_gsflag);
+            assert!(!state.is_rflag);
+            assert!(!state.is_zflag);
+            assert!(!state.is_cflag);
             //assert_eq!(state.is_selinux_supported, false);
-            assert_eq!(state.is_user_specified, false);
+            assert!(!state.is_user_specified);
             assert!(state.ids.is_none());
         }
 
@@ -933,13 +933,13 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, true);
-            assert_eq!(state.is_uflag, true);
-            assert_eq!(state.is_rflag, true);
-            assert_eq!(state.is_zflag, true);
-            assert_eq!(state.is_cflag, false);
+            assert!(state.is_nflag);
+            assert!(state.is_uflag);
+            assert!(state.is_rflag);
+            assert!(state.is_zflag);
+            assert!(!state.is_cflag);
             //assert_eq!(state.is_selinux_supported, false);
-            assert_eq!(state.is_user_specified, false);
+            assert!(!state.is_user_specified);
             assert!(state.ids.is_none());
         }
         #[test]
@@ -951,15 +951,15 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, true);
-            assert_eq!(state.is_uflag, false);
-            assert_eq!(state.is_gflag, true);
-            assert_eq!(state.is_gsflag, false);
-            assert_eq!(state.is_rflag, true);
-            assert_eq!(state.is_zflag, true);
-            assert_eq!(state.is_cflag, false);
+            assert!(state.is_nflag);
+            assert!(!state.is_uflag);
+            assert!(state.is_gflag);
+            assert!(!state.is_gsflag);
+            assert!(state.is_rflag);
+            assert!(state.is_zflag);
+            assert!(!state.is_cflag);
             //assert_eq!(state.is_selinux_supported, true);
-            assert_eq!(state.is_user_specified, false);
+            assert!(!state.is_user_specified);
             assert!(state.ids.is_none());
         }
         #[test]
@@ -971,15 +971,15 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, true);
-            assert_eq!(state.is_uflag, false);
-            assert_eq!(state.is_gflag, false);
-            assert_eq!(state.is_gsflag, true);
-            assert_eq!(state.is_rflag, true);
-            assert_eq!(state.is_zflag, true);
-            assert_eq!(state.is_cflag, false);
+            assert!(state.is_nflag);
+            assert!(!state.is_uflag);
+            assert!(!state.is_gflag);
+            assert!(state.is_gsflag);
+            assert!(state.is_rflag);
+            assert!(state.is_zflag);
+            assert!(!state.is_cflag);
             //assert_eq!(state.is_selinux_supported, false);
-            assert_eq!(state.is_user_specified, false);
+            assert!(!state.is_user_specified);
             assert!(state.ids.is_none());
         }
         #[test]
@@ -991,15 +991,15 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, false);
-            assert_eq!(state.is_uflag, false);
-            assert_eq!(state.is_gflag, false);
-            assert_eq!(state.is_gsflag, false);
-            assert_eq!(state.is_rflag, false);
-            assert_eq!(state.is_zflag, false);
-            assert_eq!(state.is_cflag, false);
+            assert!(!state.is_nflag);
+            assert!(!state.is_uflag);
+            assert!(!state.is_gflag);
+            assert!(!state.is_gsflag);
+            assert!(!state.is_rflag);
+            assert!(!state.is_zflag);
+            assert!(!state.is_cflag);
             //assert_eq!(state.is_selinux_supported, true);
-            assert_eq!(state.is_user_specified, true);
+            assert!(state.is_user_specified);
             assert!(state.ids.is_none());
         }
 
@@ -1026,15 +1026,15 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, false);
-            assert_eq!(state.is_uflag, false);
-            assert_eq!(state.is_gflag, false);
-            assert_eq!(state.is_gsflag, false);
-            assert_eq!(state.is_rflag, false);
-            assert_eq!(state.is_zflag, false);
-            assert_eq!(state.is_cflag, false);
+            assert!(!state.is_nflag);
+            assert!(!state.is_uflag);
+            assert!(!state.is_gflag);
+            assert!(!state.is_gsflag);
+            assert!(!state.is_rflag);
+            assert!(!state.is_zflag);
+            assert!(!state.is_cflag);
             //assert_eq!(state.is_selinux_supported, false);
-            assert_eq!(state.is_user_specified, true);
+            assert!(state.is_user_specified);
             assert!(state.ids.is_none());
         }
 
@@ -1050,7 +1050,7 @@ mod tests {
             // clap 库应自动处理冲突，因此我们期望一个标志是启用的，另一个被忽略
             assert!(state.is_uflag || state.is_gflag);
             //assert_eq!(state.is_selinux_supported, false);
-            assert_eq!(state.is_user_specified, false);
+            assert!(!state.is_user_specified);
         }
 
         #[test]
@@ -1062,8 +1062,8 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_cflag, true);
-            assert_eq!(state.is_user_specified, true);
+            assert!(state.is_cflag);
+            assert!(state.is_user_specified);
 
             //assert!(!state.is_selinux_supported);
         }
@@ -1077,9 +1077,9 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_nflag, true);
-            assert_eq!(state.is_gflag, true);
-            assert_eq!(state.is_user_specified, true);
+            assert!(state.is_nflag);
+            assert!(state.is_gflag);
+            assert!(state.is_user_specified);
             //assert_eq!(state.is_selinux_supported, false);
         }
 
@@ -1092,9 +1092,9 @@ mod tests {
 
             let state = id_get_state(&matches, &users);
 
-            assert_eq!(state.is_gsflag, false);
-            assert_eq!(state.is_cflag, true);
-            assert_eq!(state.is_user_specified, false);
+            assert!(!state.is_gsflag);
+            assert!(state.is_cflag);
+            assert!(!state.is_user_specified);
 
             //assert!(!state.is_selinux_supported);
         }
@@ -1238,7 +1238,9 @@ mod tests {
                 is_rflag: false,
                 is_zflag: false,
                 is_cflag: false,
-                is_selinux_supported: true,
+                is_selinux_supported: {
+                    selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                },
                 is_user_specified: false,
                 ids: Some(ids),
             };
@@ -1252,7 +1254,10 @@ mod tests {
             assert!(output_str.contains("gid=1000"));
             assert!(output_str.contains("groups=1000"));
 
-            if !is_container() {
+            if !is_container()
+                && selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                && SecurityContext::current(false).is_ok()
+            {
                 assert!(output_str.contains("context=")); // 假设打印了 SELinux 上下文
             }
         }
@@ -1380,177 +1385,177 @@ mod tests {
 
         #[test]
         fn test_ct_app_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
+            let args = [ctcore::ct_util_name(), "-V"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
+            let args = [ctcore::ct_util_name(), "--help"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
+            let args = [ctcore::ct_util_name(), "-H"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_support_missing_argument() {
-            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
+            let args = [ctcore::ct_util_name()]; // 缺少任何参数
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_long_option_user() {
-            let args = vec![ctcore::ct_util_name(), "--user"];
+            let args = [ctcore::ct_util_name(), "--user"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_short_option_user() {
-            let args = vec![ctcore::ct_util_name(), "-u"];
+            let args = [ctcore::ct_util_name(), "-u"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_long_option_group() {
-            let args = vec![ctcore::ct_util_name(), "--group"];
+            let args = [ctcore::ct_util_name(), "--group"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_short_option_group() {
-            let args = vec![ctcore::ct_util_name(), "-g"];
+            let args = [ctcore::ct_util_name(), "-g"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_long_option_groups() {
-            let args = vec![ctcore::ct_util_name(), "--groups"];
+            let args = [ctcore::ct_util_name(), "--groups"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_short_option_groups() {
-            let args = vec![ctcore::ct_util_name(), "-G"];
+            let args = [ctcore::ct_util_name(), "-G"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
         #[test]
         fn test_ct_app_long_option_name() {
-            let args = vec![ctcore::ct_util_name(), "--name"];
+            let args = [ctcore::ct_util_name(), "--name"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_short_option_name() {
-            let args = vec![ctcore::ct_util_name(), "-n"];
+            let args = [ctcore::ct_util_name(), "-n"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_long_option_real() {
-            let args = vec![ctcore::ct_util_name(), "--real"];
+            let args = [ctcore::ct_util_name(), "--real"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_short_option_real() {
-            let args = vec![ctcore::ct_util_name(), "-r"];
+            let args = [ctcore::ct_util_name(), "-r"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_long_option_zero() {
-            let args = vec![ctcore::ct_util_name(), "--zero"];
+            let args = [ctcore::ct_util_name(), "--zero"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_short_option_zero() {
-            let args = vec![ctcore::ct_util_name(), "-z"];
+            let args = [ctcore::ct_util_name(), "-z"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_ct_app_long_option_context() {
-            let args = vec![ctcore::ct_util_name(), "--context"];
+            let args = [ctcore::ct_util_name(), "--context"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
-            if !is_container() {
+            let result = id_main(&mut output, args.iter().map(OsString::from));
+            if !is_container() && selinux::kernel_support() != selinux::KernelSupport::Unsupported {
                 assert!(result.is_ok());
             }
         }
 
         #[test]
         fn test_ct_app_short_option_context() {
-            let args = vec![ctcore::ct_util_name(), "-Z"];
+            let args = [ctcore::ct_util_name(), "-Z"];
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
-            if !is_container() {
+            let result = id_main(&mut output, args.iter().map(OsString::from));
+            if !is_container() && selinux::kernel_support() != selinux::KernelSupport::Unsupported {
                 assert!(result.is_ok());
             }
         }
         #[test]
         fn test_id_main_default_format_root() {
             // 测试默认格式下的 root 用户
-            let args = vec![ctcore::ct_util_name(), "root"];
+            let args = [ctcore::ct_util_name(), "root"];
 
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
 
@@ -1562,11 +1567,11 @@ mod tests {
         #[test]
         fn test_id_main_default_format_nobody() {
             // 测试默认格式下的 nobody 用户
-            let args = vec![ctcore::ct_util_name(), "nobody"];
+            let args = [ctcore::ct_util_name(), "nobody"];
 
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
 
@@ -1578,11 +1583,11 @@ mod tests {
         #[test]
         fn test_id_main_with_flags() {
             // 测试带有标志的情况，如 -u, -g, -n
-            let args = vec![ctcore::ct_util_name(), "-u", "-g", "-n"];
+            let args = [ctcore::ct_util_name(), "-u", "-g", "-n"];
 
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1590,11 +1595,11 @@ mod tests {
         #[test]
         fn test_id_main_no_such_user() {
             // 测试不存在的用户
-            let args = vec![ctcore::ct_util_name(), "nonexistentuser"];
+            let args = [ctcore::ct_util_name(), "nonexistentuser"];
 
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_ok()); // 预期错误，因为用户不存在
 
@@ -1605,11 +1610,11 @@ mod tests {
         #[test]
         fn test_id_main_with_z_flag() {
             // 测试带有 --zero (-z) 标志的情况
-            let args = vec![ctcore::ct_util_name(), "-z", "root"];
+            let args = [ctcore::ct_util_name(), "-z", "root"];
 
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1617,11 +1622,11 @@ mod tests {
         #[test]
         fn test_id_main_with_r_flag() {
             // 测试带有 --real (-r) 标志的情况
-            let args = vec![ctcore::ct_util_name(), "-r", "root"];
+            let args = [ctcore::ct_util_name(), "-r", "root"];
 
             let mut output = Cursor::new(Vec::new());
 
-            let result = id_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }

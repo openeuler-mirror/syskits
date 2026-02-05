@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use clap::ArgAction;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::{Arg, ArgMatches, Command};
@@ -1329,11 +1329,7 @@ fn compute_and_output_hash<W: Write>(
         write!(writer, "{} {}{}\0", sum, binary_marker, filename.display())?;
     } else {
         // 标准 GNU 格式输出
-        writeln!(
-            writer,
-            "{}{} {}{}",
-            prefix, sum, binary_marker, escaped_filename
-        )?;
+        writeln!(writer, "{prefix}{sum} {binary_marker}{escaped_filename}")?;
     }
 
     Ok(())
@@ -1662,13 +1658,7 @@ mod tests {
         let _original_open_file = open_file;
         let _guard = ScopedFnGuard::new(|| {
             // 这里我们模拟了open_file函数，让它返回一个空的BufReader
-            // 使用unsafe块包裹不安全操作
-            unsafe {
-                std::mem::transmute::<
-                    fn(&Path) -> CTResult<BufReader<Box<dyn Read>>>,
-                    *mut fn(&Path) -> CTResult<BufReader<Box<dyn Read>>>,
-                >(mock_open_file as _)
-            }
+            mock_open_file as *mut fn(&Path) -> CTResult<BufReader<Box<dyn Read>>>
         });
 
         // 创建一个MockDigest实例
@@ -1678,7 +1668,7 @@ mod tests {
         let flags = create_test_flags("MD5", digest);
 
         // 创建测试文件列表
-        let files = vec![OsString::from("test.txt")];
+        let files = [OsString::from("test.txt")];
         let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
 
         // 准备输出缓冲区
@@ -1692,7 +1682,6 @@ mod tests {
         // assert!(result.is_ok());
 
         // 复原open_file函数
-        std::mem::drop(_guard);
     }
 
     #[test]
@@ -1726,7 +1715,7 @@ mod tests {
         let mut checksum_file = NamedTempFile::new().expect("Failed to create checksum file");
 
         // 写入校验和数据到校验文件 (MD5格式: <hash>  <filename>)
-        writeln!(checksum_file, "abcdef1234567890  {}", content_filename)
+        writeln!(checksum_file, "abcdef1234567890  {content_filename}")
             .expect("Failed to write to checksum file");
         checksum_file
             .flush()
@@ -1744,7 +1733,7 @@ mod tests {
 
         // 创建参数，指向校验和文件
         let file_os_str = checksum_path.as_os_str();
-        let files = vec![file_os_str.to_owned()];
+        let files = [file_os_str.to_owned()];
         let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
 
         // 准备输出缓冲区
@@ -1756,7 +1745,7 @@ mod tests {
 
         // 验证函数运行不会崩溃
         // 在实际测试环境中，由于文件路径不匹配，会返回错误，但函数应该正常执行
-        println!("Check mode result: {:?}", result);
+        println!("Check mode result: {result:?}");
         println!("Check mode output: {:?}", String::from_utf8_lossy(&output));
 
         // 不要断言具体输出内容，因为它们可能取决于环境
@@ -2059,7 +2048,7 @@ mod tests {
             // 创建一个较大的数据缓冲区
             let mut data = Vec::with_capacity(100000);
             for i in 0..10000 {
-                data.extend_from_slice(format!("line {}\n", i).as_bytes());
+                data.extend_from_slice(format!("line {i}\n").as_bytes());
             }
             let mut reader = BufReader::new(Cursor::new(data));
 
@@ -2162,7 +2151,7 @@ mod tests {
 
         // 创建测试文件列表，使用临时文件的路径
         let file_os_str = file_path.as_os_str();
-        let files = vec![file_os_str.to_owned()];
+        let files = [file_os_str.to_owned()];
         let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
 
         // 准备输出缓冲区
@@ -2217,7 +2206,7 @@ mod tests {
         let flags = create_test_flags("MD5", digest);
 
         // 创建测试文件列表，使用临时文件的路径
-        let files = vec![
+        let files = [
             file_path1.as_os_str().to_owned(),
             file_path2.as_os_str().to_owned(),
         ];
@@ -2281,7 +2270,7 @@ mod tests {
 
         // 创建测试文件列表，使用临时文件的路径
         let file_os_str = file_path.as_os_str();
-        let files = vec![file_os_str.to_owned()];
+        let files = [file_os_str.to_owned()];
         let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
 
         // 准备输出缓冲区
@@ -2303,8 +2292,8 @@ mod tests {
         assert!(output_str.contains("abcdef1234567890"));
 
         // 打印调试信息
-        println!("Binary mode output: {:?}", output_str);
-        println!("File name: {:?}", file_name);
+        println!("Binary mode output: {output_str:?}");
+        println!("File name: {file_name:?}");
 
         // 以下检查更宽松，只要文件名出现在输出中即可
         assert!(output_str.contains(&file_name.to_string()));
@@ -2336,7 +2325,7 @@ mod tests {
 
         // 创建测试文件列表，使用临时文件的路径
         let file_os_str = file_path.as_os_str();
-        let files = vec![file_os_str.to_owned()];
+        let files = [file_os_str.to_owned()];
         let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
 
         // 准备输出缓冲区
@@ -2358,8 +2347,8 @@ mod tests {
         assert!(output_str.starts_with("MD5"));
 
         // 打印调试信息
-        println!("Tag mode output: {:?}", output_str);
-        println!("File name: {:?}", file_name);
+        println!("Tag mode output: {output_str:?}");
+        println!("File name: {file_name:?}");
 
         // 以下检查更宽松，只验证主要部分是否存在
         assert!(output_str.contains(&file_name.to_string()));

@@ -45,7 +45,7 @@ pub enum EnvParseError {
 
 impl fmt::Display for EnvParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(format!("{:?}", self).as_str())
+        f.write_str(format!("{self:?}").as_str())
     }
 }
 
@@ -66,7 +66,7 @@ fn test_env_parse_error() {
     let error1 = EnvParseError::MissingClosingQuote { pos: 5, c: '"' };
     assert_eq!(
         "MissingClosingQuote { pos: 5, c: '\"' }",
-        format!("{}", error1)
+        format!("{error1}")
     );
 
     // Test InvalidBackslashAtEndOfStringInMinusS
@@ -76,21 +76,21 @@ fn test_env_parse_error() {
     };
     assert_eq!(
         "InvalidBackslashAtEndOfStringInMinusS { pos: 10, quoting: \"'\" }",
-        format!("{}", error2)
+        format!("{error2}")
     );
 
     // Test BackslashCNotAllowedInDoubleQuotes
     let error3 = EnvParseError::BackslashCNotAllowedInDoubleQuotes { pos: 15 };
     assert_eq!(
         "BackslashCNotAllowedInDoubleQuotes { pos: 15 }",
-        format!("{}", error3)
+        format!("{error3}")
     );
 
     // Test InvalidSequenceBackslashXInMinusS
     let error4 = EnvParseError::InvalidSequenceBackslashXInMinusS { pos: 20, c: 'a' };
     assert_eq!(
         "InvalidSequenceBackslashXInMinusS { pos: 20, c: 'a' }",
-        format!("{}", error4)
+        format!("{error4}")
     );
 
     // Test ParsingOfVariableNameFailed
@@ -100,7 +100,7 @@ fn test_env_parse_error() {
     };
     assert_eq!(
         "ParsingOfVariableNameFailed { pos: 25, msg: \"Invalid character\" }",
-        format!("{}", error5)
+        format!("{error5}")
     );
 
     // // Test InternalError
@@ -115,9 +115,9 @@ fn test_env_parse_error() {
 
     // Test ReachedEnd
     let error7 = EnvParseError::ReachedEnd;
-    assert_eq!("ReachedEnd", format!("{}", error7));
+    assert_eq!("ReachedEnd", format!("{error7}"));
 
     // Test ContinueWithDelimiter
     let error8 = EnvParseError::ContinueWithDelimiter;
-    assert_eq!("ContinueWithDelimiter", format!("{}", error8));
+    assert_eq!("ContinueWithDelimiter", format!("{error8}"));
 }

@@ -19,7 +19,7 @@ mod termios;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
@@ -105,7 +105,7 @@ impl SttyFlags {
                     .read(true)
                     .custom_flags(O_NONBLOCK)
                     .open(f)
-                    .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {}", e)))?;
+                    .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {e}")))?;
                 Device::File(fd)
             }
             None => Device::Stdout(stdout()),
@@ -1029,15 +1029,15 @@ mod tests {
 
         #[test]
         fn test_stty_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = stty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_stty_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = stty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -1048,8 +1048,8 @@ mod tests {
                 return;
             }
 
-            let args = vec![ctcore::ct_util_name(), "-a"];
-            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-a"];
+            let result = stty_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1060,15 +1060,15 @@ mod tests {
                 return;
             }
 
-            let args = vec![ctcore::ct_util_name(), "-g"];
-            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-g"];
+            let result = stty_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_stty_main_invalid_device() {
-            let args = vec![ctcore::ct_util_name(), "-F", "/nonexistent/device"];
-            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-F", "/nonexistent/device"];
+            let result = stty_main(args.iter().map(OsString::from));
             match result {
                 Err(e) => {
                     assert!(e.to_string().contains("No such file or directory"));
@@ -1086,8 +1086,8 @@ mod tests {
                 return;
             }
 
-            let args = vec![ctcore::ct_util_name(), "9600", "-echo", "raw"];
-            let result = stty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "9600", "-echo", "raw"];
+            let result = stty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
     }

@@ -20,7 +20,7 @@ mod progress;
 
 use crate::bufferedoutput::DDBufferedOutput;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use blocks::conv_block_unblock_helper;
 use ctcore::ct_io::CtOwnedFileDescriptorOrHandle;
 use datastructures::*;
@@ -1466,7 +1466,7 @@ mod dd_copy_tests {
 
         // 如果设置了skip，需要相应地调整文件位置
         if settings.skip > 0 {
-            temp_file.seek(SeekFrom::Start(settings.skip as u64))?;
+            temp_file.seek(SeekFrom::Start(settings.skip))?;
         }
 
         Ok(Input {

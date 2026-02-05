@@ -720,7 +720,7 @@ mod tests {
     fn test_od_parse_format_flags_edge_cases() {
         // 测试空参数列表
         let result = od_parse_format_flags(&["od".to_string()]).unwrap();
-        println!("Empty args result: {:?}", result);
+        println!("Empty args result: {result:?}");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].formatter_item_info, FORMAT_ITEM_OCT16); // 默认格式
 
@@ -731,9 +731,9 @@ mod tests {
             "--".to_string(),
             "-d".to_string(),
         ];
-        println!("Args before processing: {:?}", args);
+        println!("Args before processing: {args:?}");
         let result = od_parse_format_flags(&args).unwrap();
-        println!("Result after --: {:?}", result);
+        println!("Result after --: {result:?}");
         for (i, fmt) in result.iter().enumerate() {
             println!(
                 "Format {}: {:?}, ascii_dump: {}",
@@ -746,7 +746,7 @@ mod tests {
         // 测试缺少格式说明符
         let args = vec!["od".to_string(), "-t".to_string()];
         let err = od_parse_format_flags(&args).unwrap_err();
-        println!("Expected error for missing format: {}", err);
+        println!("Expected error for missing format: {err}");
         assert!(err.contains("missing format specification"));
     }
 }

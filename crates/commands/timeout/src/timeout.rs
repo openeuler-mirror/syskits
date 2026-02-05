@@ -22,7 +22,7 @@ mod exit_status;
 
 use crate::exit_status::ExitStatus;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -412,7 +412,7 @@ mod tests {
     // 新增：测试 Tool trait 的基本实现
     #[test]
     fn test_tool_implementation() {
-        let tool = Timeout::default();
+        let tool = Timeout;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "timeout");
@@ -610,24 +610,24 @@ mod tests {
 
         #[test]
         fn test_main_normal_timeout() {
-            let args = vec![ctcore::ct_util_name(), "1s", "sleep", "2"];
-            let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "1s", "sleep", "2"];
+            let result = timeout_main(args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 124);
         }
 
         #[test]
         fn test_main_command_exits() {
-            let args = vec![ctcore::ct_util_name(), "2s", "true"];
-            let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "2s", "true"];
+            let result = timeout_main(args.iter().map(OsString::from));
             // 进程在超时前正常结束，应该返回成功
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_main_command_with_nonzero_exit() {
-            let args = vec![ctcore::ct_util_name(), "--preserve-status", "2s", "false"];
-            let result = timeout_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--preserve-status", "2s", "false"];
+            let result = timeout_main(args.iter().map(OsString::from));
             // 进程正常退出但返回非零退出码，preserve-status模式下应该保留原始退出码
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);

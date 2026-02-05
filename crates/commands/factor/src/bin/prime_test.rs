@@ -33,17 +33,17 @@ fn main() {
         }
     };
 
-    println!("Testing primality of {} using Miller-Rabin test...", number);
+    println!("Testing primality of {number} using Miller-Rabin test...");
 
     let start = Instant::now();
     let is_prime_result = is_prime(number);
     let duration = start.elapsed();
 
     if is_prime_result {
-        println!("{} is prime", number);
+        println!("{number} is prime");
     } else {
-        println!("{} is not prime", number);
+        println!("{number} is not prime");
     }
 
-    println!("Time taken: {:?}", duration);
+    println!("Time taken: {duration:?}");
 }

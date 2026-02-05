@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version, parser::ValueSource};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let rm = Rm::default();
+        let rm = Rm;
 
         // Test name method
         assert_eq!(rm.name(), "rm");
@@ -875,7 +875,7 @@ mod tests {
         std::fs::write(&file_path, b"content").unwrap();
 
         let options = base_options();
-        let files_vec = vec![file_path.into_os_string()];
+        let files_vec = [file_path.into_os_string()];
         let removed_path = PathBuf::from(&files_vec[0]);
         let refs: Vec<&OsStr> = files_vec.iter().map(|s| s.as_os_str()).collect();
 
@@ -990,7 +990,7 @@ mod tests {
         let result = handle_dir(path, &options);
 
         // 断言结果
-        assert_eq!(result, false);
+        assert!(!result);
     }
 
     #[test]
@@ -1019,7 +1019,7 @@ mod tests {
         let result = handle_dir(path, &options);
 
         // 断言结果
-        assert_eq!(result, false);
+        assert!(!result);
     }
 
     /*

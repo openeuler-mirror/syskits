@@ -24,7 +24,7 @@ use std::path::is_separator;
 use sys_locale::get_locale;
 
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 pub mod flags {
     pub static MULTIPLE: &str = "multiple";
@@ -177,7 +177,7 @@ fn basename(fullname: &str, suffix: &str) -> String {
     let last_component_option = path_buffer.components().next_back();
 
     // 步骤5：处理最后一部分缺失的情况
-    let result = match last_component_option {
+    match last_component_option {
         Some(last_component) => {
             // 步骤6：将最后一部分作为字符串获取
             let last_component_name = last_component.as_os_str().to_str().unwrap();
@@ -207,10 +207,7 @@ fn basename(fullname: &str, suffix: &str) -> String {
             // 步骤13：如果没有最后一部分，则返回空字符串作为基名称
             String::new()
         }
-    };
-
-    // 步骤14：返回计算出的基名称
-    result
+    }
 }
 
 #[cfg(test)]
@@ -244,16 +241,16 @@ mod tests {
     fn test_i18n_error_messages() {
         // 测试英文错误消息
         rust_i18n::set_locale("en-US");
-        let args = vec![ctcore::ct_util_name()];
-        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name()];
+        let result = basename_main(args.iter().map(OsString::from));
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.code(), 1);
 
         // 测试中文错误消息
         rust_i18n::set_locale("zh-CN");
-        let args = vec![ctcore::ct_util_name()];
-        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name()];
+        let result = basename_main(args.iter().map(OsString::from));
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.code(), 1);
@@ -263,8 +260,8 @@ mod tests {
     fn test_i18n_fallback() {
         // 测试不存在的语言环境，应该回退到中文
         rust_i18n::set_locale("fr-FR");
-        let args = vec![ctcore::ct_util_name()];
-        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name()];
+        let result = basename_main(args.iter().map(OsString::from));
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.code(), 1);
@@ -418,14 +415,10 @@ mod tests {
         ];
         let matches = command.try_get_matches_from(args).unwrap();
 
-        match matches.get_one::<String>(flags::SUFFIX) {
-            Some(suffix) => {
-                assert_eq!(suffix, "SUFFIX");
-            }
-            None => {
-                assert!(false);
-            }
-        }
+        let suffix = matches
+            .get_one::<String>(flags::SUFFIX)
+            .expect("missing suffix");
+        assert_eq!(suffix, "SUFFIX");
     }
     #[test]
     fn test_flags_zero() {
@@ -563,17 +556,17 @@ mod tests {
     #[test]
     fn test_ct_main() {
         // Test case: Input is a single slash
-        let args = vec![ctcore::ct_util_name(), "/path/to/file@#$%^&*.txt", ".txt"];
+        let args = [ctcore::ct_util_name(), "/path/to/file@#$%^&*.txt", ".txt"];
         let expected_result = "/path/to/file@#$%^&*";
-        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        let result = basename_main(args.iter().map(OsString::from));
         let mut s = String::new();
         // println!("{:?}", result);
         match result {
             Err(_output) => {
                 let code = _output.code();
                 let message = _output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(_output) => {
                 s = "/path/to/file@#$%^&*".to_string();

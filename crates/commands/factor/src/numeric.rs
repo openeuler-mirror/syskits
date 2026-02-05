@@ -231,7 +231,7 @@ mod tests {
         // 测试加法溢出
         let (sum, overflow) = a.overflowing_add(b);
         assert_eq!(sum, 1);
-        assert_eq!(overflow, true);
+        assert!(overflow);
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
         // 测试加法溢出
         let (sum, overflow) = a.overflowing_add(b);
         assert_eq!(sum, 1);
-        assert_eq!(overflow, true);
+        assert!(overflow);
     }
 
     #[test]

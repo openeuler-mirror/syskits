@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use bstr::io::BufReadExt;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use self::searcher::Searcher;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
@@ -919,7 +919,7 @@ fn cut_mode_parse<'a>(
     mode_args_count: usize,
 ) -> Result<CutMode<'a>, String> {
     let no_split_multibyte = args_match.get_flag(opt_flags::NO_SPLIT_MULTIBYTE);
-    let mode_parse = match (
+    match (
         mode_args_count,
         args_match.get_one::<String>(opt_flags::BYTES),
         args_match.get_one::<String>(opt_flags::CHARACTERS),
@@ -965,8 +965,7 @@ fn cut_mode_parse<'a>(
             "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
         ),
         _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
-    };
-    mode_parse
+    }
 }
 
 /// 从输入流中按字符位置切割数据
@@ -1062,7 +1061,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Cut::default();
+        let tool = Cut;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "cut");
@@ -1499,7 +1498,7 @@ mod tests {
             let filename1 = test_file_1.to_str().unwrap();
 
             let content = "abc\0def\0ghi.\0\
-                   012\0456\0789.\0\
+                   \x0a\x256\x0789.\0\
                    ";
 
             file.write_all(content.as_bytes()).unwrap();
@@ -1548,33 +1547,33 @@ mod tests {
 
         #[test]
         fn test_cut_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_cut_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_cut_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_cut_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1597,8 +1596,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-b", "3-8"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-b", "3-8"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1621,8 +1620,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "3-8"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "3-8"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1645,8 +1644,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-c", "3-8"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-c", "3-8"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1669,8 +1668,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--characters", "3-8"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--characters", "3-8"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1693,8 +1692,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-f", "1", "-d", "o"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-f", "1", "-d", "o"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1717,7 +1716,7 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "-f",
@@ -1725,7 +1724,7 @@ mod tests {
                 "--delimiter",
                 "o",
             ];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1748,8 +1747,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-f", "3-8"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-f", "3-8"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1772,8 +1771,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--fields", "3-8"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--fields", "3-8"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1796,7 +1795,7 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "-f",
@@ -1805,7 +1804,7 @@ mod tests {
                 "o",
                 "--complement",
             ];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1828,7 +1827,7 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--fields",
@@ -1837,7 +1836,7 @@ mod tests {
                 "o",
                 "--complement",
             ];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1860,14 +1859,14 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--fields",
                 "1",
                 "--only-delimited",
             ];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1890,14 +1889,14 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--fields",
                 "2",
                 "--output-delimiter='R'",
             ];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1920,8 +1919,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-z", "-c", "1"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-z", "-c", "1"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1939,19 +1938,19 @@ mod tests {
             let filename1 = test_file_1.to_str().unwrap();
 
             let content = "abc\0def\0ghi.\0\
-                   012\0456\0789.\0\
+                   \x0a\x256\x0789.\0\
                    ";
 
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--zero-terminated",
                 "-f",
                 "1",
             ];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1971,8 +1970,8 @@ mod tests {
             let content = "测试文本\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-n", "-b", "1-3"];
-            let result = cut_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-n", "-b", "1-3"];
+            let result = cut_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -2220,7 +2219,7 @@ mod tests {
             // 简单测试cut功能的基本行为
             use ctcore::Tool;
 
-            let cut = super::Cut::default();
+            let cut = super::Cut;
             assert_eq!(cut.name(), "cut");
 
             // 测试一个简单的命令行解析
@@ -2271,7 +2270,7 @@ mod tests {
         fn test_parse_position_ranges_complement() {
             // 测试complement功能
             let ranges = super::parse_position_ranges("2-3", true).unwrap();
-            assert!(ranges.len() >= 1);
+            assert!(!ranges.is_empty());
             // complement会生成补集范围，第一个范围应该是1-1
             assert_eq!(ranges[0].low, 1);
             assert_eq!(ranges[0].high, 1);

@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -2199,14 +2199,11 @@ mod tests {
             arg_name: Option<&str>,
             value: Option<&str>,
         ) -> ClapError {
-            let name = if let Some(n) = arg_name { n } else { "" };
+            let name = arg_name.unwrap_or_default();
 
-            let val = if let Some(v) = value { v } else { "" };
+            let val = value.unwrap_or_default();
 
-            ClapError::raw(
-                error_kind,
-                format!("dummy error for testing: {} {}", name, val),
-            )
+            ClapError::raw(error_kind, format!("dummy error for testing: {name} {val}"))
         }
 
         #[test]
@@ -2498,38 +2495,38 @@ mod tests {
 
         #[test]
         fn test_ct_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = uniq_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = uniq_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -2545,8 +2542,8 @@ mod tests {
             )
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2563,9 +2560,9 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--all-repeated=prepend", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
-            println!("{:?}", result);
+            let args = [ctcore::ct_util_name(), "--all-repeated=prepend", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
+            println!("{result:?}");
             assert!(result.is_ok());
         }
 
@@ -2582,8 +2579,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--group=separate", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--group=separate", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2600,8 +2597,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--check-chars=3", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--check-chars=3", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2618,8 +2615,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--count", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--count", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2636,8 +2633,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--ignore-case", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-case", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2654,8 +2651,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--repeated", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--repeated", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2672,8 +2669,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--skip-chars", "8", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--skip-chars", "8", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2690,8 +2687,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--skip-fields", "5", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--skip-fields", "5", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2708,8 +2705,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--unique", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--unique", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2726,8 +2723,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-D=prepend", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-D=prepend", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2744,8 +2741,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-w", "6", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-w", "6", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2762,8 +2759,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2780,8 +2777,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-i", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-i", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2798,8 +2795,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-d", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2816,8 +2813,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-s", "11", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", "11", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2834,8 +2831,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-f", "8", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-f", "8", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2852,8 +2849,8 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-u", file_name];
-            let result = uniq_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", file_name];
+            let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }

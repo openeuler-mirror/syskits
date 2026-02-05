@@ -131,9 +131,9 @@ pub fn dired_print_dired_output<W: Write>(
 
 /// 帮助函数，用于打印带有给定前缀的位置。
 fn dired_print_positions(prefix: &str, dired_positions: &Vec<DiredBytePosition>) {
-    print!("{}", prefix);
+    print!("{prefix}");
     for c in dired_positions {
-        print!(" {}", c);
+        print!(" {c}");
     }
     println!();
 }
@@ -425,7 +425,7 @@ mod tests {
 
         dired_print_positions(prefix, &positions);
 
-        let expected_output = format!("{}\n", prefix);
+        let expected_output = format!("{prefix}\n");
 
         assert_eq!("//PREFIX//\n", expected_output);
     }

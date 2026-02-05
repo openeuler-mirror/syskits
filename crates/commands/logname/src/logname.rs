@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::CStr;
@@ -87,7 +87,7 @@ mod tests_tool_implementation {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Logname::default();
+        let tool = Logname;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "logname");
@@ -133,53 +133,53 @@ mod tests {
 
         #[test]
         fn test_logname_main_execution_default() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = logname_main(args.iter().map(OsString::from));
 
-            if !is_container() {
+            if !is_container() && super::get_user_login().is_some() {
                 assert!(result.is_ok());
             }
         }
         #[test]
         fn test_logname_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = logname_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_logname_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = logname_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_logname_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = logname_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_logname_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = logname_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_logname_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = logname_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_logname_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = logname_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = logname_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
     }

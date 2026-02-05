@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use clap::Arg;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
@@ -308,33 +308,33 @@ mod tests {
         use std::io::Write;
         #[test]
         fn test_echo_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_echo_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_echo_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_echo_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -357,8 +357,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-n", "12345", ">", filename1];
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-n", "12345", ">", filename1];
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -381,8 +381,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-e", "12345", ">", filename1];
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-e", "12345", ">", filename1];
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -405,8 +405,8 @@ mod tests {
                    Hello world Rust Cut command.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-E", "12345", ">", filename1];
-            let result = echo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-E", "12345", ">", filename1];
+            let result = echo_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -492,20 +492,14 @@ mod tests {
 
         #[test]
         fn test_echo_execute() {
-            let result = echo_execute(false, true, &["hello".to_string(), "world".to_string()])
+            echo_execute(false, true, &["hello".to_string(), "world".to_string()])
                 .expect("echo_execute failed");
 
-            assert_eq!(result, ());
-
-            let result = echo_execute(true, false, &["hello".to_string(), "world".to_string()])
+            echo_execute(true, false, &["hello".to_string(), "world".to_string()])
                 .expect("echo_execute failed");
 
-            assert_eq!(result, ());
-
-            let result = echo_execute(true, true, &["hello".to_string(), "world".to_string()])
+            echo_execute(true, true, &["hello".to_string(), "world".to_string()])
                 .expect("echo_execute failed");
-
-            assert_eq!(result, ());
         }
 
         #[test]

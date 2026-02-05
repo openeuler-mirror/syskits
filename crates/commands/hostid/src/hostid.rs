@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use clap::{Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use libc::c_long;
@@ -84,7 +84,7 @@ mod tests {
     use std::ffi::OsString;
     #[test]
     fn test_tool_implementation() {
-        let tool = Hostid::default();
+        let tool = Hostid;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "hostid");
@@ -105,42 +105,42 @@ mod tests {
 
         #[test]
         fn test_expand_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+            let result = hostid_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = hostid_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
+            let args = [ctcore::ct_util_name(), "-V"];
 
-            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+            let result = hostid_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = hostid_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_expand_main() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = hostid_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = hostid_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }

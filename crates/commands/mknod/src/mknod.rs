@@ -41,14 +41,14 @@ fn parse_device_number(s: &str) -> Result<u64, String> {
     if s.starts_with("0x") || s.starts_with("0X") {
         // 十六进制格式
         u64::from_str_radix(&s[2..], 16)
-            .map_err(|e| format!("invalid hexadecimal device number: {}", e))
+            .map_err(|e| format!("invalid hexadecimal device number: {e}"))
     } else if let Some(stripped) = s.strip_prefix('0') {
         // 八进制格式
-        u64::from_str_radix(stripped, 8).map_err(|e| format!("invalid octal device number: {}", e))
+        u64::from_str_radix(stripped, 8).map_err(|e| format!("invalid octal device number: {e}"))
     } else {
         // 十进制格式
         s.parse::<u64>()
-            .map_err(|e| format!("invalid decimal device number: {}", e))
+            .map_err(|e| format!("invalid decimal device number: {e}"))
     }
 }
 
@@ -123,7 +123,7 @@ fn set_security_context(
             // 如果提供了具体的上下文，使用它
             SecurityContext::from_c_str(&c_context, false)
                 .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("failed to set default file creation context: {}", e))
+                .map_err(|e| format!("failed to set default file creation context: {e}"))
         }
         None => {
             // 使用selabel_lookup获取基于路径的默认上下文（与GNU的defaultcon()函数等价）
@@ -141,7 +141,7 @@ fn set_security_context(
             // 创建文件上下文标签器（等价于GNU的selabel_open）
             let labeler = Labeler::<FileBackEnd>::restorecon_default(false).map_err(|e| {
                 // 如果无法创建labeler，发出警告但继续（与GNU行为一致）
-                eprintln!("mknod: warning: cannot create SELinux labeler: {}", e);
+                eprintln!("mknod: warning: cannot create SELinux labeler: {e}");
                 String::new()
             })?;
 
@@ -156,8 +156,7 @@ fn set_security_context(
                     // 如果查询失败，发出警告但继续（与GNU行为一致）
                     // GNU会在ENOENT时映射为ENODATA
                     eprintln!(
-                        "mknod: warning: cannot look up default SELinux context for {}: {}",
-                        file_path, e
+                        "mknod: warning: cannot look up default SELinux context for {file_path}: {e}"
                     );
                     String::new()
                 })?;
@@ -167,10 +166,7 @@ fn set_security_context(
                 .set_for_new_file_system_objects(false)
                 .map_err(|e| {
                     // 如果设置失败，发出警告但继续（与GNU行为一致）
-                    eprintln!(
-                        "mknod: warning: cannot set default file creation context: {}",
-                        e
-                    );
+                    eprintln!("mknod: warning: cannot set default file creation context: {e}");
                     String::new()
                 })?;
 
@@ -242,7 +238,7 @@ fn mknod_processing(
             } else {
                 Err(CtSimpleError::new(
                     1,
-                    format!("failed to create FIFO: {}", file_name),
+                    format!("failed to create FIFO: {file_name}"),
                 ))
             }
         }
@@ -265,7 +261,7 @@ fn mknod_processing(
                     if dev == NODEV {
                         return Err(CtSimpleError::new(
                             1,
-                            format!("invalid device {} {}", major, minor),
+                            format!("invalid device {major} {minor}"),
                         ));
                     }
                 }
@@ -282,7 +278,7 @@ fn mknod_processing(
                 } else {
                     Err(CtSimpleError::new(
                         1,
-                        format!("failed to create device: {}", file_name),
+                        format!("failed to create device: {file_name}"),
                     ))
                 }
             }
@@ -427,7 +423,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Mknod::default();
+        let tool = Mknod;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "mknod");
@@ -448,17 +444,17 @@ mod tests {
 
         #[test]
         fn test_mknod_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = mknod_main(args.iter().map(|s| OsString::from(s)));
+            let result = mknod_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_mknod_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = mknod_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = mknod_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }

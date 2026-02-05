@@ -37,7 +37,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
@@ -807,7 +807,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Shred::default();
+        let tool = Shred;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "shred");
@@ -1146,7 +1146,7 @@ mod tests {
             };
 
             let result = shred_exec(&settings);
-            assert!(result.is_ok(), "使用随机源文件应该成功: {:?}", result);
+            assert!(result.is_ok(), "使用随机源文件应该成功: {result:?}");
 
             // 验证文件仍然存在但内容已被覆盖
             assert!(file_path.exists(), "文件应该仍然存在");

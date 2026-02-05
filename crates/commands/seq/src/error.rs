@@ -61,7 +61,7 @@ impl Display for SeqError {
             }
             Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
             Self::NoArguments => write!(f, "missing operand"),
-            Self::IoError(s) => write!(f, "IO error: {}", s),
+            Self::IoError(s) => write!(f, "IO error: {s}"),
         }
     }
 }

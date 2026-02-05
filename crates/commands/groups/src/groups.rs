@@ -21,7 +21,7 @@ use ctcore::{
 use rust_i18n::t;
 use std::error::Error;
 use std::fmt::Display;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use std::ffi::OsString;
@@ -119,7 +119,7 @@ impl Tool for Groups {
         match result {
             Ok(groups) => {
                 for g in groups.iter() {
-                    println!("{}", g);
+                    println!("{g}");
                 }
 
                 Ok(())
@@ -216,7 +216,7 @@ mod tests {
 
         #[test]
         fn test_tool_implementation() {
-            let tool = Groups::default();
+            let tool = Groups;
 
             // 测试 name 方法
             assert_eq!(tool.name(), "groups");
@@ -238,25 +238,25 @@ mod tests {
 
         #[test]
         fn test_groups_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = groups_main(args.iter().map(|s| OsString::from(s)));
+            let result = groups_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_groups_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = groups_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = groups_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_groups_main() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = groups_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = groups_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }

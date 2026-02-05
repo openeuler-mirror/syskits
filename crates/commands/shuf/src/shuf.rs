@@ -37,7 +37,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
@@ -640,22 +640,22 @@ fn shuf_parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> 
         // 解析起始值
         let begin = from
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: '{}'", input_range))?;
+            .map_err(|_| format!("invalid input range: '{input_range}'"))?;
 
         // 解析结束值
         let end = to
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: '{}'", input_range))?;
+            .map_err(|_| format!("invalid input range: '{input_range}'"))?;
 
         // 确保范围有效（起始值不大于结束值）
         if begin <= end {
             Ok(begin..=end)
         } else {
-            Err(format!("invalid input range: '{}'", input_range))
+            Err(format!("invalid input range: '{input_range}'"))
         }
     } else {
         // 没有找到分隔符 '-'
-        Err(format!("invalid input range: '{}'", input_range))
+        Err(format!("invalid input range: '{input_range}'"))
     }
 }
 
@@ -676,7 +676,7 @@ fn shuf_parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
         // 解析当前数字
         let n = count
             .parse::<usize>()
-            .map_err(|_| format!("invalid line count: '{}'", count))?;
+            .map_err(|_| format!("invalid line count: '{count}'"))?;
 
         // 更新为较小的值
         result = result.min(n);
@@ -779,17 +779,17 @@ mod test_number_set_decision {
 
     #[test]
     fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(0, usize::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(1, usize::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(9, usize::MAX));
     }
 
     #[test]
@@ -833,17 +833,14 @@ mod test_number_set_decision {
     // Ensure that we are overflow-free:
     #[test]
     fn test_no_crash_exceed_max_size1() {
-        assert_eq!(
-            false,
-            number_set_should_list_remaining(12345, std::usize::MAX)
-        );
+        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
     }
 
     #[test]
     fn test_no_crash_exceed_max_size2() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(std::usize::MAX - 1, std::usize::MAX)
+            number_set_should_list_remaining(usize::MAX - 1, usize::MAX)
         );
     }
 
@@ -851,7 +848,7 @@ mod test_number_set_decision {
     fn test_no_crash_exceed_max_size3() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(std::usize::MAX, std::usize::MAX)
+            number_set_should_list_remaining(usize::MAX, usize::MAX)
         );
     }
 }
@@ -863,7 +860,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Shuf::default();
+        let tool = Shuf;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "shuf");
@@ -1071,10 +1068,10 @@ mod tests {
             let iter = create_test_iterator(1..=5, 5, &mut rng);
             let numbers: HashSet<_> = iter.collect();
 
-            println!("Collected numbers: {:?}", numbers);
+            println!("Collected numbers: {numbers:?}");
             assert_eq!(numbers.len(), 5, "Should generate 5 unique numbers");
             assert!(
-                numbers.iter().all(|&n| n >= 1 && n <= 5),
+                numbers.iter().all(|&n| (1..=5).contains(&n)),
                 "All numbers should be in range 1..=5"
             );
         }
@@ -1085,10 +1082,10 @@ mod tests {
             let iter = create_test_iterator(1..=10, 5, &mut rng);
             let numbers: HashSet<_> = iter.collect();
 
-            println!("Collected numbers: {:?}", numbers);
+            println!("Collected numbers: {numbers:?}");
             assert_eq!(numbers.len(), 5, "Should generate exactly 5 numbers");
             assert!(
-                numbers.iter().all(|&n| n >= 1 && n <= 10),
+                numbers.iter().all(|&n| (1..=10).contains(&n)),
                 "All numbers should be in range 1..=10"
             );
         }
@@ -1099,7 +1096,7 @@ mod tests {
             let iter = create_test_iterator(1..=3, 3, &mut rng);
             let numbers: Vec<_> = iter.collect();
 
-            println!("Generated sequence: {:?}", numbers);
+            println!("Generated sequence: {numbers:?}");
             assert_eq!(numbers.len(), 3, "Should generate exactly 3 numbers");
             let unique: HashSet<_> = numbers.into_iter().collect();
             assert_eq!(unique.len(), 3, "All numbers should be unique");
@@ -1108,10 +1105,11 @@ mod tests {
         #[test]
         fn test_iterator_empty_range() {
             let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(5..=1, 5, &mut rng);
+            let range = RangeInclusive::new(1, 0);
+            let iter = create_test_iterator(range, 5, &mut rng);
             let numbers: Vec<_> = iter.collect();
 
-            println!("Empty range result: {:?}", numbers);
+            println!("Empty range result: {numbers:?}");
             assert!(
                 numbers.is_empty(),
                 "Should generate no numbers for invalid range"
@@ -1124,7 +1122,7 @@ mod tests {
             let iter = create_test_iterator(1..=10, 0, &mut rng);
             let numbers: Vec<_> = iter.collect();
 
-            println!("Zero amount result: {:?}", numbers);
+            println!("Zero amount result: {numbers:?}");
             assert!(
                 numbers.is_empty(),
                 "Should generate no numbers when amount is 0"
@@ -1137,7 +1135,7 @@ mod tests {
             let iter = create_test_iterator(42..=42, 1, &mut rng);
             let numbers: Vec<_> = iter.collect();
 
-            println!("Single element result: {:?}", numbers);
+            println!("Single element result: {numbers:?}");
             assert_eq!(numbers, vec![42], "Should generate exactly one number (42)");
         }
 
@@ -1147,7 +1145,7 @@ mod tests {
             let iter = create_test_iterator(1..=4, 4, &mut rng);
             let numbers: Vec<_> = iter.collect();
 
-            println!("Mode switch result: {:?}", numbers);
+            println!("Mode switch result: {numbers:?}");
             assert_eq!(numbers.len(), 4, "Should generate all 4 numbers");
             let unique: HashSet<_> = numbers.into_iter().collect();
             assert_eq!(unique.len(), 4, "All numbers should be unique");
@@ -1160,7 +1158,7 @@ mod tests {
 
             // 测试连续调用 next()
             let first = iter.next();
-            println!("First next(): {:?}", first);
+            println!("First next(): {first:?}");
             assert!(first.is_some(), "First call should return Some");
             assert!(
                 (1..=3).contains(&first.unwrap()),
@@ -1168,7 +1166,7 @@ mod tests {
             );
 
             let second = iter.next();
-            println!("Second next(): {:?}", second);
+            println!("Second next(): {second:?}");
             assert!(second.is_some(), "Second call should return Some");
             assert!(
                 (1..=3).contains(&second.unwrap()),
@@ -1177,7 +1175,7 @@ mod tests {
             assert_ne!(first, second, "Numbers should be unique");
 
             let third = iter.next();
-            println!("Third next(): {:?}", third);
+            println!("Third next(): {third:?}");
             assert!(third.is_some(), "Third call should return Some");
             assert!(
                 (1..=3).contains(&third.unwrap()),
@@ -1188,7 +1186,7 @@ mod tests {
 
             // 测试迭代结束
             let fourth = iter.next();
-            println!("Fourth next(): {:?}", fourth);
+            println!("Fourth next(): {fourth:?}");
             assert!(fourth.is_none(), "Fourth call should return None");
         }
     }

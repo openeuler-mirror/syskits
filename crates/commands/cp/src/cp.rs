@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use quick_error::quick_error;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -2288,7 +2288,7 @@ mod tests {
 
         #[test]
         fn test_tool_implementation() {
-            let tool = Cp::default();
+            let tool = Cp;
 
             // 测试 name 方法
             assert_eq!(tool.name(), "cp");
@@ -2528,6 +2528,7 @@ mod tests {
     }
 
     #[cfg(test)]
+    #[allow(clippy::needless_borrow)]
     mod tests_ctmain {
         use crate::cp_main;
 
@@ -2539,8 +2540,8 @@ mod tests {
 
         #[test]
         fn test_ctmain_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2553,8 +2554,8 @@ mod tests {
 
         #[test]
         fn test_ctmain_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2567,8 +2568,8 @@ mod tests {
 
         #[test]
         fn test_ctmain_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2581,8 +2582,8 @@ mod tests {
 
         #[test]
         fn test_ctmain_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2609,8 +2610,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-g", filename1, filename2];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-g", filename1, filename2];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2639,9 +2640,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-d", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-d", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2668,8 +2669,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-ad", filename1, filename2];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-ad", filename1, filename2];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2696,14 +2697,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-d",
                 filename1,
                 filename2,
                 "extra_arg",
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2730,9 +2731,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--preserve", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--preserve", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2759,7 +2760,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve",
@@ -2767,7 +2768,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2794,14 +2795,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=all",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2828,14 +2829,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=all",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2862,8 +2863,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-d", filename1, filename2];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", filename1, filename2];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2890,8 +2891,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-ad", filename1, filename2];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-ad", filename1, filename2];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2918,9 +2919,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-adr", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-adr", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2947,9 +2948,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-adrf", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-adrf", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -2976,9 +2977,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-adrfv", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-adrfv", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3005,13 +3006,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=mode",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3038,14 +3039,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=mode",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3072,13 +3073,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=mode",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3104,13 +3105,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=timestamps",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3137,14 +3138,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=timestamps",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3171,7 +3172,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=context",
@@ -3179,7 +3180,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -3207,13 +3208,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=link",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3240,7 +3241,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=link",
@@ -3248,7 +3249,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3275,13 +3276,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=links",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3308,14 +3309,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=links",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3342,13 +3343,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve=xattr",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3374,13 +3375,13 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--preserve-default-attributes",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3407,14 +3408,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve=xattr",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3440,14 +3441,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--preserve-default-attributes",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3474,14 +3475,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve=mode",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3507,14 +3508,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve=ownership",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3540,8 +3541,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", filename1, filename2];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3568,14 +3569,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve=context",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -3602,7 +3603,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve=link",
@@ -3610,7 +3611,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3637,7 +3638,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve=links",
@@ -3645,7 +3646,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3672,14 +3673,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 "-u",
                 ctcore::ct_util_name(),
                 "--preserve=xattr",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3706,7 +3707,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve-default-attributes",
@@ -3714,7 +3715,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3741,14 +3742,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-p",
                 "--preserve-default-attributes",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3775,14 +3776,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-uar",
                 "--preserve=ownership",
                 filename1,
                 filename2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3808,8 +3809,8 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", filename1, filename2];
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3836,7 +3837,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--preserve=context",
@@ -3844,7 +3845,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -3871,7 +3872,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-aru",
                 "--preserve=link",
@@ -3879,7 +3880,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3906,7 +3907,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-aru",
                 "--preserve=links",
@@ -3914,7 +3915,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3941,7 +3942,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 "-aru",
                 ctcore::ct_util_name(),
                 "--preserve=xattr",
@@ -3949,7 +3950,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -3976,7 +3977,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-aru",
                 "--preserve-default-attributes",
@@ -3984,7 +3985,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4011,7 +4012,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-aup",
                 "--preserve-default-attributes",
@@ -4019,7 +4020,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4048,14 +4049,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--no-preserve",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -4083,7 +4084,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-p",
                 "--no-preserve",
@@ -4091,7 +4092,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -4119,9 +4120,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--parents", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--parents", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4147,7 +4148,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-p",
                 "--parents",
@@ -4155,7 +4156,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4182,9 +4183,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-H", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-H", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4211,9 +4212,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-L", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-L", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4240,14 +4241,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--dereference",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4274,7 +4275,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-L",
                 "--dereference",
@@ -4282,7 +4283,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4309,9 +4310,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-P", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-P", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4338,14 +4339,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--no-dereference",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4372,7 +4373,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-P",
                 "--no-dereference",
@@ -4380,7 +4381,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4407,9 +4408,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-a", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-a", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4435,9 +4436,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--archive", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--archive", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4464,14 +4465,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--reflink=always",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4498,14 +4499,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--reflink=auto",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4532,14 +4533,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--reflink=never",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4566,7 +4567,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--reflink=never",
@@ -4574,7 +4575,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4601,7 +4602,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--reflink=always",
@@ -4609,7 +4610,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4636,7 +4637,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-u",
                 "--reflink=auto",
@@ -4644,7 +4645,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4671,14 +4672,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--attributes-only",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4705,9 +4706,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-c", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-c", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -4734,9 +4735,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-u", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-u", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4763,9 +4764,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, filename2];
+            let args = [ctcore::ct_util_name(), filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4792,9 +4793,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, filename2, sub_dir1];
+            let args = [ctcore::ct_util_name(), filename1, filename2, sub_dir1];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4822,7 +4823,7 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
             let sub_dir2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 filename2,
@@ -4830,7 +4831,7 @@ mod tests {
                 sub_dir2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4858,7 +4859,7 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
             let sub_dir2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 filename2,
@@ -4866,7 +4867,7 @@ mod tests {
                 sub_dir2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4893,9 +4894,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, filename2];
+            let args = [ctcore::ct_util_name(), filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4908,13 +4909,13 @@ mod tests {
 
         #[test]
         fn test_ctmain_paths_special_characters() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 r#"source\path with spaces and !@#$%^&*().txt"#,
                 r#"dest/path/with/special_chars/!@#$%^&*().txt"#,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -4927,9 +4928,9 @@ mod tests {
 
         #[test]
         fn test_ctmain_paths_empty() {
-            let args = vec![ctcore::ct_util_name()];
+            let args = [ctcore::ct_util_name()];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -4942,9 +4943,9 @@ mod tests {
 
         #[test]
         fn test_ctmain_paths_missing() {
-            let args = vec![ctcore::ct_util_name(), ""];
+            let args = [ctcore::ct_util_name(), ""];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     // panic!("ct_main returned an error:{}", output.code());
@@ -4972,14 +4973,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--one-file-system",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5006,7 +5007,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--one-file-system",
@@ -5014,7 +5015,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5041,7 +5042,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-x",
                 "--one-file-system",
@@ -5049,7 +5050,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5076,7 +5077,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ax",
                 "--one-file-system",
@@ -5084,7 +5085,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5111,14 +5112,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sparse=always",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5145,7 +5146,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--sparse=always",
@@ -5153,7 +5154,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5180,14 +5181,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--sparse=auto",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5214,7 +5215,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--sparse=never",
@@ -5222,7 +5223,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5249,7 +5250,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--sparse=never",
@@ -5257,7 +5258,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5284,7 +5285,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-x",
                 "--sparse=always",
@@ -5292,7 +5293,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5319,7 +5320,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ax",
                 "--sparse=always",
@@ -5327,7 +5328,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5354,7 +5355,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-x",
                 "--sparse=auto",
@@ -5362,7 +5363,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5389,7 +5390,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ax",
                 "--sparse=auto",
@@ -5397,7 +5398,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5424,7 +5425,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-x",
                 "--sparse=never",
@@ -5432,7 +5433,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5459,7 +5460,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ax",
                 "--sparse=never",
@@ -5467,7 +5468,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5494,14 +5495,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--copy-contents",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5528,7 +5529,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--copy-contents",
@@ -5536,7 +5537,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5563,7 +5564,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-x",
                 "--copy-contents",
@@ -5571,7 +5572,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5598,7 +5599,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ax",
                 "--copy-contents",
@@ -5606,7 +5607,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5633,9 +5634,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--context", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--context", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -5663,7 +5664,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-af",
                 "--context",
@@ -5671,7 +5672,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(_output) => {
                     assert_eq!(1, 1);
@@ -5699,14 +5700,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--suffix=SUFFIX",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5733,7 +5734,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--suffix=SUFFIX",
@@ -5741,7 +5742,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5774,7 +5775,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-x",
                 "--suffix=SUFFIX",
@@ -5782,7 +5783,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5809,7 +5810,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ax",
                 "--suffix=SUFFIX",
@@ -5817,7 +5818,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5844,9 +5845,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--update", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--update", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5873,7 +5874,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--update",
@@ -5881,7 +5882,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5908,14 +5909,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--update=none",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5942,7 +5943,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--update=none",
@@ -5950,7 +5951,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -5977,7 +5978,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--update",
@@ -5985,7 +5986,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6012,7 +6013,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-aS",
                 "--update",
@@ -6020,7 +6021,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6046,7 +6047,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--update=none",
@@ -6054,7 +6055,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6081,7 +6082,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-aS",
                 "--update=none",
@@ -6089,7 +6090,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6116,7 +6117,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--update=never",
@@ -6124,7 +6125,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6151,7 +6152,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "-S",
@@ -6160,7 +6161,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6187,7 +6188,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--update=always",
@@ -6195,7 +6196,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6222,7 +6223,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "-S",
@@ -6231,7 +6232,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6258,9 +6259,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-b", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-b", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6287,9 +6288,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-ab", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-ab", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6316,9 +6317,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-f", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-f", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6345,9 +6346,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-af", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-af", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6374,9 +6375,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--force", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--force", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6403,7 +6404,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--force",
@@ -6411,7 +6412,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6438,14 +6439,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--remove-destination",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6472,7 +6473,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--remove-destination",
@@ -6480,7 +6481,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6506,7 +6507,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-f",
                 "--backup",
@@ -6514,7 +6515,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6541,7 +6542,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-af",
                 "--backup",
@@ -6549,7 +6550,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6575,7 +6576,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-f",
                 "--remove-destination",
@@ -6583,7 +6584,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6610,7 +6611,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-af",
                 "--remove-destination",
@@ -6618,7 +6619,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6645,7 +6646,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-f",
                 "--backup",
@@ -6654,7 +6655,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6681,7 +6682,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-af",
                 "--backup",
@@ -6690,7 +6691,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6717,7 +6718,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--force",
                 "--backup",
@@ -6725,7 +6726,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6752,7 +6753,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--force",
@@ -6761,7 +6762,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6788,7 +6789,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--force",
                 "--remove-destination",
@@ -6796,7 +6797,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6823,7 +6824,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--force",
@@ -6832,7 +6833,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6859,7 +6860,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--force",
                 "--backup",
@@ -6868,7 +6869,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6895,7 +6896,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--force",
@@ -6905,7 +6906,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6932,9 +6933,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-s", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-s", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6961,9 +6962,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-as", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-as", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -6990,14 +6991,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--symbolic-link",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7024,7 +7025,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--symbolic-link",
@@ -7032,7 +7033,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7059,9 +7060,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-v", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-v", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7087,9 +7088,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--verbose", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--verbose", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7116,9 +7117,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-av", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-av", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7144,7 +7145,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--verbose",
@@ -7152,7 +7153,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7179,9 +7180,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--recursive", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--recursive", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7208,7 +7209,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--recursive",
@@ -7216,7 +7217,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7243,9 +7244,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-r", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-r", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7272,9 +7273,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-ar", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-ar", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7301,14 +7302,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--strip-trailing-slashes",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7335,7 +7336,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--strip-trailing-slashes",
@@ -7343,7 +7344,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7370,9 +7371,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--debug", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--debug", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7399,7 +7400,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--debug",
@@ -7407,7 +7408,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7434,7 +7435,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 "--strip-trailing-slashes",
@@ -7442,7 +7443,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7469,7 +7470,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ar",
                 "--strip-trailing-slashes",
@@ -7477,7 +7478,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7504,7 +7505,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 "--debug",
@@ -7512,7 +7513,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7539,7 +7540,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ar",
                 "--debug",
@@ -7547,7 +7548,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7574,7 +7575,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-r",
                 "--debug",
@@ -7583,7 +7584,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7610,7 +7611,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ar",
                 "--debug",
@@ -7619,7 +7620,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7646,9 +7647,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-n", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-n", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7674,9 +7675,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-an", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-an", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7703,9 +7704,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--no-clobber", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--no-clobber", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7732,7 +7733,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--no-clobber",
@@ -7740,7 +7741,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7767,9 +7768,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-l", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-l", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7796,9 +7797,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-al", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-al", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7825,9 +7826,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--link", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "--link", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -7854,9 +7855,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-a", "--link", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-a", "--link", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8013,9 +8014,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-T", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-T", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8042,9 +8043,9 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-aT", filename1, filename2];
+            let args = [ctcore::ct_util_name(), "-aT", filename1, filename2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8071,14 +8072,14 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--no-target-directory",
                 filename1,
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8105,7 +8106,7 @@ mod tests {
             File::create(&test_file_2).unwrap();
             let filename2 = test_file_2.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--no-target-directory",
@@ -8113,7 +8114,7 @@ mod tests {
                 filename2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8137,9 +8138,9 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-t", &temp_dir_1, &temp_dir_2];
+            let args = [ctcore::ct_util_name(), "-t", &temp_dir_1, &temp_dir_2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8163,9 +8164,9 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-at", &temp_dir_1, &temp_dir_2];
+            let args = [ctcore::ct_util_name(), "-at", &temp_dir_1, &temp_dir_2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8189,9 +8190,9 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-rt", &temp_dir_1, &temp_dir_2];
+            let args = [ctcore::ct_util_name(), "-rt", &temp_dir_1, &temp_dir_2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8215,9 +8216,9 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-art", &temp_dir_1, &temp_dir_2];
+            let args = [ctcore::ct_util_name(), "-art", &temp_dir_1, &temp_dir_2];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8247,14 +8248,14 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--target-directory",
                 &temp_dir_1,
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8278,7 +8279,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-a",
                 "--target-directory",
@@ -8286,7 +8287,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8310,7 +8311,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-ar",
                 "--target-directory",
@@ -8318,7 +8319,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8342,7 +8343,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-arf",
                 "--target-directory",
@@ -8350,7 +8351,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8374,7 +8375,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-arfv",
                 "--target-directory",
@@ -8382,7 +8383,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8406,7 +8407,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--archive",
                 "--recursive",
@@ -8417,7 +8418,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8441,7 +8442,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-arfvi",
                 "--target-directory",
@@ -8449,7 +8450,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8473,7 +8474,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--archive",
                 "--recursive",
@@ -8485,7 +8486,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8509,14 +8510,14 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-arfviuln",
                 "--target-directory",
                 &temp_dir_1,
                 &temp_dir_2,
             ];
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());
@@ -8539,7 +8540,7 @@ mod tests {
 
             let temp_dir_2 = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--archive",
                 "--recursive",
@@ -8554,7 +8555,7 @@ mod tests {
                 &temp_dir_2,
             ];
 
-            let result = cp_main(args.iter().map(|s| OsString::from(s)));
+            let result = cp_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     panic!("ct_main returned an error:{}", output.code());

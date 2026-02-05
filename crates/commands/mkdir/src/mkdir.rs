@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
@@ -280,7 +280,7 @@ mod tests_tool_implementation {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Mkdir::default();
+        let tool = Mkdir;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "mkdir");
@@ -389,12 +389,14 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_with_umask() {
-            // Set a specific umask for the test
-            unsafe {
-                libc::umask(0o027);
-            }
+            // Set a specific umask for the test and restore afterwards
+            let original_umask = unsafe { libc::umask(0o027) };
             let matches = get_test_matches(vec![ctcore::ct_util_name()]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches, false);
+            unsafe {
+                libc::umask(original_umask);
+            }
+            let mode = mode.unwrap();
             assert_eq!(mode, 0o750);
         }
         #[cfg(windows)]
@@ -432,7 +434,7 @@ mod tests {
         fn test_strip_minus_from_mode_no_change() {
             let mut args = vec![ctcore::ct_util_name().to_string(), "dir".to_string()];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, false);
+            assert!(!result);
             assert_eq!(
                 args,
                 vec![ctcore::ct_util_name().to_string(), "dir".to_string()]
@@ -449,7 +451,7 @@ mod tests {
                 "dir".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, true);
+            assert!(result);
             assert_eq!(
                 args,
                 vec![
@@ -473,7 +475,7 @@ mod tests {
                 "dir".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, true);
+            assert!(result);
             assert_eq!(
                 args,
                 vec![
@@ -492,7 +494,7 @@ mod tests {
         fn test_strip_minus_from_mode_no_mode() {
             let mut args = vec![ctcore::ct_util_name().to_string(), "dir".to_string()];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, false);
+            assert!(!result);
             assert_eq!(
                 args,
                 vec![ctcore::ct_util_name().to_string(), "dir".to_string()]
@@ -510,7 +512,7 @@ mod tests {
                 "dir".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, true);
+            assert!(result);
             assert_eq!(
                 args,
                 vec![
@@ -532,7 +534,7 @@ mod tests {
                 "dir".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, false);
+            assert!(!result);
             assert_eq!(
                 args,
                 vec![
@@ -553,7 +555,7 @@ mod tests {
                 "-rw-r--r--".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, true);
+            assert!(result);
             assert_eq!(
                 args,
                 vec![
@@ -576,7 +578,7 @@ mod tests {
                 "dir2".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, true);
+            assert!(result);
             assert_eq!(
                 args,
                 vec![
@@ -599,7 +601,7 @@ mod tests {
                 "dir".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, false);
+            assert!(!result);
             assert_eq!(
                 args,
                 vec![
@@ -620,7 +622,7 @@ mod tests {
                 "-rw-r--r--".to_string(),
             ];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, true);
+            assert!(result);
             assert_eq!(
                 args,
                 vec![
@@ -636,7 +638,7 @@ mod tests {
         fn test_strip_minus_from_mode_empty_args() {
             let mut args: Vec<String> = vec![];
             let result = mkdir_strip_minus_from_mode(&mut args);
-            assert_eq!(result, false);
+            assert!(!result);
             assert!(args.is_empty());
         }
     }
@@ -904,6 +906,8 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         use std::path::Path;
 
+        use tempfile::tempdir;
+
         use super::*;
 
         #[test]
@@ -1026,39 +1030,35 @@ mod tests {
 
         #[test]
         fn test_mkdir_with_no_permissions() {
-            let test_dir = Path::new("test_mkdir_no_permission_dir");
-            if test_dir.exists() {
-                fs::remove_dir_all(test_dir).unwrap();
-            }
+            let temp_dir = tempdir().unwrap();
+            let parent_dir = temp_dir.path().join("test_mkdir_no_permission_dir");
+            fs::create_dir(&parent_dir).unwrap();
+            let test_dir = parent_dir.join("child_dir");
 
-            // 临时设置当前目录的权限，确保没有写权限
-            let current_dir = std::env::current_dir().unwrap();
-            let original_permissions = fs::metadata(&current_dir).unwrap().permissions();
+            let is_root = ctcore::ct_process::geteuid() == 0;
+            let original_permissions = fs::metadata(&parent_dir).unwrap().permissions();
             let mut no_write_permissions = original_permissions.clone();
             no_write_permissions.set_mode(original_permissions.mode() & !0o222);
-            fs::set_permissions(&current_dir, no_write_permissions).unwrap();
+            fs::set_permissions(&parent_dir, no_write_permissions).unwrap();
 
-            let result = mkdir(&current_dir, false, 0o755, false);
+            let result = mkdir(&test_dir, false, 0o755, false);
 
-            // 恢复原始权限
-            fs::set_permissions(&current_dir, original_permissions).unwrap();
-
-            assert!(result.is_err());
-            if test_dir.exists() {
-                fs::remove_dir_all(test_dir).unwrap();
+            fs::set_permissions(&parent_dir, original_permissions).unwrap();
+            if !is_root {
+                assert!(result.is_err());
             }
         }
 
         #[test]
         fn test_mkdir_with_non_existent_parent() {
             let test_dir = Path::new("test_mkdir_non_existent_parent/child_dir");
-            if test_dir.exists() {
-                fs::remove_dir_all(test_dir).unwrap();
+            let parent_dir = test_dir.parent().unwrap();
+            if parent_dir.exists() {
+                fs::remove_dir_all(parent_dir).unwrap();
             }
 
             assert!(mkdir(test_dir, false, 0o755, false).is_err());
 
-            let parent_dir = test_dir.parent().unwrap();
             assert!(mkdir(parent_dir, false, 0o755, false).is_ok());
             assert!(mkdir(test_dir, false, 0o755, false).is_ok());
 
@@ -1335,6 +1335,8 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         use std::path::Path;
 
+        use tempfile::tempdir;
+
         use super::*;
 
         #[test]
@@ -1475,23 +1477,23 @@ mod tests {
 
         #[test]
         fn test_create_dir_with_no_permissions() {
-            let test_dir = Path::new("test_no_permission_dir");
-            if test_dir.exists() {
-                fs::remove_dir_all(test_dir).unwrap();
-            }
+            let temp_dir = tempdir().unwrap();
+            let parent_dir = temp_dir.path().join("test_no_permission_dir");
+            fs::create_dir(&parent_dir).unwrap();
+            let test_dir = parent_dir.join("child_dir");
 
-            // 临时设置当前目录的权限，确保没有写权限
-            let current_dir = std::env::current_dir().unwrap();
-            let original_permissions = fs::metadata(&current_dir).unwrap().permissions();
+            let is_root = ctcore::ct_process::geteuid() == 0;
+            let original_permissions = fs::metadata(&parent_dir).unwrap().permissions();
             let mut no_write_permissions = original_permissions.clone();
             no_write_permissions.set_mode(original_permissions.mode() & !0o222);
-            fs::set_permissions(&current_dir, no_write_permissions).unwrap();
+            fs::set_permissions(&parent_dir, no_write_permissions).unwrap();
 
-            let result = mkdir_create_dir(&current_dir, false, false, false);
+            let result = mkdir_create_dir(&test_dir, false, false, false);
 
-            // 恢复原始权限
-            fs::set_permissions(&current_dir, original_permissions).unwrap();
-            assert!(result.is_err());
+            fs::set_permissions(&parent_dir, original_permissions).unwrap();
+            if !is_root {
+                assert!(result.is_err());
+            }
         }
     }
     #[cfg(test)]
@@ -1502,92 +1504,92 @@ mod tests {
 
         #[test]
         fn test_ct_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_parents_long() {
-            let args = vec![ctcore::ct_util_name(), "--parents"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--parents"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_parents_short() {
-            let args = vec![ctcore::ct_util_name(), "-p"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-p"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_mode_long() {
-            let args = vec![ctcore::ct_util_name(), "--mode"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--mode"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_mode_short() {
-            let args = vec![ctcore::ct_util_name(), "-m"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-m"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_verbose_long() {
-            let args = vec![ctcore::ct_util_name(), "--verbose"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--verbose"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_verbose_short() {
-            let args = vec![ctcore::ct_util_name(), "-v"];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-v"];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_support_missing_argument() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1598,8 +1600,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-m", "u+rwx,go-w", file_name];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-m", "u+rwx,go-w", file_name];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1610,8 +1612,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--mode", "u+rwx,go-w", file_name];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--mode", "u+rwx,go-w", file_name];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1622,8 +1624,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--mode", "+rwx", file_name];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--mode", "+rwx", file_name];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1634,8 +1636,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--mode", "0755,u+s", file_name];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--mode", "0755,u+s", file_name];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -1646,8 +1648,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-m", "0755", file_name];
-            let result = mkdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-m", "0755", file_name];
+            let result = mkdir_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }

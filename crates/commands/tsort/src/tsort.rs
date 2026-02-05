@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
@@ -47,7 +47,7 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
         if path.is_dir() {
             return Err(CtSimpleError::new(
                 1,
-                format!("{}: read error: Is a directory", input_file),
+                format!("{input_file}: read error: Is a directory"),
             ));
         }
         file_buf = File::open(path).map_err_context(|| input_file.to_string())?;
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Tsort::default();
+        let tool = Tsort;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "tsort");
@@ -261,8 +261,8 @@ mod tests {
             let mut graph = TSortGraph::new();
             graph.init_node("A");
             assert!(graph.is_has_node("A"));
-            assert!(graph.tsort_in_edges.get("A").is_some());
-            assert!(graph.tsort_out_edges.get("A").is_some());
+            assert!(graph.tsort_in_edges.contains_key("A"));
+            assert!(graph.tsort_out_edges.contains_key("A"));
         }
 
         #[test]
@@ -371,8 +371,8 @@ mod tests {
         fn test_tsort_main_execution_default_nul_file() {
             let file_name = "test_tsort_main_execution_default_nul_file";
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -386,8 +386,8 @@ mod tests {
             let _ = File::create(&file_path).unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -402,8 +402,8 @@ mod tests {
             writeln!(tmp_file, "a b c\nc d e\nf c g\nb c d").unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -418,8 +418,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(OsString::from));
             assert!(result.is_err());
             assert!(
                 result
@@ -437,16 +437,16 @@ mod tests {
             writeln!(tmp_file, "a b\nb a").unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = tsort_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tsort_main_execution_version() {
-            let args_vec = vec![ctcore::ct_util_name(), "--version"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(OsString::from);
             let result = tsort_main(args);
 
             assert!(result.is_err());
@@ -454,37 +454,37 @@ mod tests {
 
         #[test]
         fn test_tsort_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = tsort_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tsort_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = tsort_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tsort_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = tsort_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tsort_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = tsort_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tsort_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = tsort_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = tsort_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
     }

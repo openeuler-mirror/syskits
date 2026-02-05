@@ -15,7 +15,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::stdout;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ops::ControlFlow;
 
 use clap::{Arg, ArgAction, Command, crate_version};
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Printf::default();
+        let tool = Printf;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "printf");
@@ -172,25 +172,25 @@ mod tests {
 
         #[test]
         fn test_printf_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = printf_main(args.iter().map(|s| OsString::from(s)));
+            let result = printf_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_printf_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = printf_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = printf_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_printf_main_f() {
-            let args = vec![ctcore::ct_util_name(), "%0.3f", "1.23456"];
-            let result = printf_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "%0.3f", "1.23456"];
+            let result = printf_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }

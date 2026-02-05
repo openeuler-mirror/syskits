@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use clap::{Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};
@@ -92,7 +92,7 @@ mod tests {
     use clap::error::ErrorKind;
 
     use super::*;
-    rust_i18n::i18n!("locales", fallback = "zh-CN");
+    rust_i18n::i18n!("locales", fallback = "en-US");
 
     #[test]
     fn test_tool_implementation() {
@@ -120,7 +120,7 @@ mod tests {
         fn test_ctmain_input_h() {
             {
                 let args = ["-h", ""];
-                let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+                let result = whoami_main(args.iter().map(OsString::from));
                 assert!(result.is_err());
             }
 
@@ -138,7 +138,7 @@ mod tests {
         fn test_ctmain_input_v() {
             {
                 let args = ["--version", ""];
-                let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+                let result = whoami_main(args.iter().map(OsString::from));
                 assert!(result.is_err());
             }
             {
@@ -156,7 +156,7 @@ mod tests {
         fn test_ctmain_input_uppercase_v() {
             {
                 let args = ["-V", ""];
-                let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+                let result = whoami_main(args.iter().map(OsString::from));
                 assert!(result.is_err());
             }
             {
@@ -173,25 +173,25 @@ mod tests {
         #[test]
         fn test_ctmain_return() {
             // println!("当前操作系统架构：{}", expected_arch);
-            let expected = if let Some(username) = std::env::var("USER").ok() {
+            let expected = if let Ok(username) = std::env::var("USER") {
                 username
             } else {
                 "root".to_string()
             };
-            let args = vec![ctcore::ct_util_name()];
-            let result = whoami_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = whoami_main(args.iter().map(OsString::from));
             let mut s = String::new();
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
                     let code = output.code();
                     let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
+                    println!("Error code: {code}");
+                    println!("Error message: {message}");
                 }
                 Ok(output) => {
                     s = output.to_string();
-                    println!("result:{}", s);
+                    println!("result:{s}");
                     // //assert_eq!(s,expected_output);
                 }
             }

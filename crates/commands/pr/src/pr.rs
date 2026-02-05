@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::fs::{File, metadata};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -607,7 +607,7 @@ fn parse_line_width(
     is_join_lines: bool,
     columns_to_print: usize,
 ) -> Option<usize> {
-    let line_width = if is_join_lines {
+    if is_join_lines {
         None
     } else if columns_to_print > 1 {
         Some(
@@ -618,32 +618,29 @@ fn parse_line_width(
         )
     } else {
         page_width
-    };
-    line_width
+    }
 }
 
 fn parse_columns_to_print(
     merge_files_print: Option<usize>,
     column_mode_options: &Option<PrColumnModeOptions>,
 ) -> usize {
-    let columns_to_print = merge_files_print
-        .unwrap_or_else(|| column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1));
-    columns_to_print
+    merge_files_print
+        .unwrap_or_else(|| column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1))
 }
 
 fn parse_col_sep_for_printing(
     merge_files_print: Option<usize>,
     column_mode_options: &Option<PrColumnModeOptions>,
 ) -> String {
-    let col_sep_for_printing = column_mode_options
+    column_mode_options
         .as_ref()
         .map(|i| i.column_separator.clone())
         .unwrap_or_else(|| {
             merge_files_print
                 .map(|_k| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
                 .unwrap_or_default()
-        });
-    col_sep_for_printing
+        })
 }
 
 fn parse_column_mode_options(
@@ -693,14 +690,12 @@ fn parse_page_width(arg_matches: &ArgMatches) -> Result<Option<usize>, PrError> 
 }
 
 fn parse_column_separator(arg_matches: &ArgMatches) -> String {
-    let column_separator =
-        match arg_matches.get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
-            Some(x) => Some(x),
-            None => arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR),
-        }
-        .map(ToString::to_string)
-        .unwrap_or_else(|| PR_DEFAULT_COLUMN_SEPARATOR.to_string());
-    column_separator
+    match arg_matches.get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
+        Some(x) => Some(x),
+        None => arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR),
+    }
+    .map(ToString::to_string)
+    .unwrap_or_else(|| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
 }
 
 fn parse_column_width(arg_matches: &ArgMatches) -> Result<usize, PrError> {
@@ -1263,7 +1258,7 @@ fn pr_get_line_for_printing(
         Err(e) => return Err(std::io::Error::new(e.kind(), e.to_string())),
     };
 
-    let complete_line = format!("{}{}", formatted_line_number, content);
+    let complete_line = format!("{formatted_line_number}{content}");
 
     let offset_spaces = &output_opts.offset_spaces;
 
@@ -1298,7 +1293,7 @@ fn pr_get_line_for_printing(
         })
         .unwrap_or_else(|| Ok(complete_line.clone()));
 
-    result_line.map(|line| format!("{}{}{}", offset_spaces, line, sep))
+    result_line.map(|line| format!("{offset_spaces}{line}{sep}"))
 }
 
 fn pr_get_formatted_line_number(
@@ -1471,7 +1466,7 @@ mod tests {
                 line_number: 10,
                 page_number: 2,
                 group_key: 5,
-                line_content: Err(Error::new(ErrorKind::Other, "测试错误")),
+                line_content: Err(Error::other("测试错误")),
                 form_feeds_after: 0,
             };
 
@@ -1483,7 +1478,7 @@ mod tests {
                 line_number: 10,
                 page_number: 2,
                 group_key: 5,
-                line_content: Err(Error::new(ErrorKind::Other, "测试错误")),
+                line_content: Err(Error::other("测试错误")),
                 form_feeds_after: 0,
             };
 
@@ -1528,7 +1523,7 @@ mod tests {
             }
 
             // 测试空错误消息
-            let io_error3 = Error::new(ErrorKind::Other, "");
+            let io_error3 = Error::other("");
             let pr_error3: PrError = io_error3.into();
 
             match pr_error3 {
@@ -2314,7 +2309,7 @@ mod tests {
         #[test]
         fn test_pr_split_lines_if_form_feed_with_error() {
             // 测试处理错误情况
-            let error_content = Err(std::io::Error::new(std::io::ErrorKind::Other, "测试IO错误"));
+            let error_content = Err(std::io::Error::other("测试IO错误"));
             let result = pr_split_lines_if_form_feed(error_content);
 
             // 应该返回包含错误的PrFileLine
@@ -3260,7 +3255,7 @@ mod tests {
                 file_id: 0,
                 page_number: 0,
                 group_key: 0,
-                line_content: Err(std::io::Error::new(std::io::ErrorKind::Other, "测试IO错误")),
+                line_content: Err(std::io::Error::other("测试IO错误")),
                 form_feeds_after: 0,
             };
             let lines = vec![file_line];
@@ -3314,18 +3309,18 @@ mod tests {
 
         // 辅助函数：将字符串参数转换为OsString
         fn strings_to_os_strings(args: &[&str]) -> Vec<OsString> {
-            args.iter().map(|s| OsString::from(s)).collect()
+            args.iter().map(OsString::from).collect()
         }
 
         #[test]
         fn test_pr_name() {
-            let pr = Pr::default();
+            let pr = Pr;
             assert_eq!(pr.name(), "pr");
         }
 
         #[test]
         fn test_pr_command() {
-            let pr = Pr::default();
+            let pr = Pr;
             let command = pr.command();
 
             // 测试生成的Command对象的名称
@@ -3336,7 +3331,7 @@ mod tests {
 
         #[test]
         fn test_pr_execute() {
-            let pr = Pr::default();
+            let pr = Pr;
 
             // 创建一个测试文件
             let file = create_temp_file_with_content("line1\nline2\nline3\n");
@@ -3451,7 +3446,7 @@ mod tests {
 
         #[test]
         fn test_pr_execute_with_invalid_arguments() {
-            let pr = Pr::default();
+            let pr = Pr;
 
             // 创建无效的命令行参数
             let args: Vec<OsString> = vec![
@@ -3606,7 +3601,7 @@ mod tests {
         fn test_invalid_pages_map_with_invalid_value() {
             // 测试 invalid_pages_map 函数处理无效页码值的情况
             let cmd = ct_app();
-            let matches = cmd.try_get_matches_from(&["pr", "--pages=abc"]).unwrap();
+            let matches = cmd.try_get_matches_from(["pr", "--pages=abc"]).unwrap();
 
             let invalid_pages_map = |i: String| {
                 let unparsed_value = matches.get_one::<String>(pr_flags::PR_PAGES).unwrap();
@@ -3633,7 +3628,7 @@ mod tests {
         fn test_parse_start_page_from_args() {
             // 测试从参数中解析起始页
             let cmd1 = ct_app();
-            let matches1 = cmd1.try_get_matches_from(&["pr", "--pages=5"]).unwrap();
+            let matches1 = cmd1.try_get_matches_from(["pr", "--pages=5"]).unwrap();
 
             let res = matches1.get_one::<String>(pr_flags::PR_PAGES).map(|i| {
                 let x: Vec<_> = i.split(':').collect();
@@ -3645,7 +3640,7 @@ mod tests {
 
             // 测试解析起始页和结束页
             let cmd2 = ct_app();
-            let matches2 = cmd2.try_get_matches_from(&["pr", "--pages=5:10"]).unwrap();
+            let matches2 = cmd2.try_get_matches_from(["pr", "--pages=5:10"]).unwrap();
 
             let res = matches2.get_one::<String>(pr_flags::PR_PAGES).map(|i| {
                 let x: Vec<_> = i.split(':').collect();

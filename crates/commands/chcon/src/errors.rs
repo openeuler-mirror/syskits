@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_io_error_source() {
-        let error = Error::from_io("read", io::Error::new(io::ErrorKind::Other, "IO error"));
+        let error = Error::from_io("read", io::Error::other("IO error"));
         let result = report_full_error(&error);
         assert_eq!(result, "read failed. IO error");
     }
@@ -111,7 +111,7 @@ mod tests {
         let error = Error::from_io1(
             "write",
             OsString::from("file.txt"),
-            io::Error::new(io::ErrorKind::Other, "IO error"),
+            io::Error::other("IO error"),
         );
         let result = report_full_error(&error);
         assert_eq!(result, "write failed on 'file.txt'. IO error");
@@ -166,7 +166,7 @@ mod tests {
         let error = Error::Io1 {
             operation: "write",
             operand1: OsString::from("file.txt"),
-            source: io::Error::new(io::ErrorKind::Other, "IO error"),
+            source: io::Error::other("IO error"),
         };
         let result = report_full_error(&error);
         assert_eq!(result, "write failed on 'file.txt'. IO error");

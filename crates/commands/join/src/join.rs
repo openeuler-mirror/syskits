@@ -36,7 +36,7 @@ extern crate rust_i18n;
 use clap::builder::ValueParser;
 
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_crash_if_err;
@@ -1381,7 +1381,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Join::default();
+        let tool = Join;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "join");

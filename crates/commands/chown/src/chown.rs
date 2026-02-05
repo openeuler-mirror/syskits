@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use ctcore::ct_display::Quotable;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
@@ -600,88 +600,88 @@ mod tests {
 
     #[test]
     fn test_version_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--version"];
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--version"];
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--help"];
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--help"];
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_invalid_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-H"];
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-H"];
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_version_valid_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-V"];
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-V"];
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_true_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--dereference"];
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--dereference"];
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_false_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-h"];
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-h"];
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_whole_false_ctmain() {
         // 测试用例：有效输入 --no-dereference
-        let args = vec![ctcore::ct_util_name(), "--no-dereference"];
+        let args = [ctcore::ct_util_name(), "--no-dereference"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_preserve_root_true_ctmain() {
         // 测试用例：有效输入 --preserve-root
-        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+        let args = [ctcore::ct_util_name(), "--preserve-root"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_preserve_root_false_ctmain() {
         // 测试用例：有效输入 --no-preserve-root
-        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+        let args = [ctcore::ct_util_name(), "--no-preserve-root"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_recursive_ctmain() {
         // 测试用例：有效输入 --recursive
-        let args = vec![ctcore::ct_util_name(), "-R"];
+        let args = [ctcore::ct_util_name(), "-R"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_recursive_whole_ctmain() {
         // 测试用例：有效输入 --recursive
-        let args = vec![ctcore::ct_util_name(), "--recursive"];
+        let args = [ctcore::ct_util_name(), "--recursive"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -689,9 +689,9 @@ mod tests {
     #[test]
     fn test_verbose_ctmain() {
         // 测试用例：有效输入 --verbose
-        let args = vec![ctcore::ct_util_name(), "-v"];
+        let args = [ctcore::ct_util_name(), "-v"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -699,9 +699,9 @@ mod tests {
     #[test]
     fn test_verbose_whole_ctmain() {
         // 测试用例：有效输入 --verbose
-        let args = vec![ctcore::ct_util_name(), "--verbose"];
+        let args = [ctcore::ct_util_name(), "--verbose"];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -712,21 +712,21 @@ mod tests {
         let file_name = "test_chgrp_r_ctmain_w.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![ctcore::ct_util_name(), "-R", "1000", dir_path];
+        let args = [ctcore::ct_util_name(), "-R", "1000", dir_path];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_ok());
         // 删除目录及其内容
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
@@ -741,11 +741,11 @@ mod tests {
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![ctcore::ct_util_name(), "1000", file_name];
+        let args = [ctcore::ct_util_name(), "1000", file_name];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_ok());
 
         // Remove the file
@@ -759,19 +759,19 @@ mod tests {
         let file_name = "test_chgrp_no_recursive_ctmain.txt";
 
         // Create a directory hierarchy
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // Create a file in the subdirectory and write content
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![ctcore::ct_util_name(), "--recursive", "1000", dir_path];
+        let args = [ctcore::ct_util_name(), "--recursive", "1000", dir_path];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_ok());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
@@ -784,21 +784,21 @@ mod tests {
         let file_name = "test_chcon_invalid_user_id.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
+        let args = [ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
@@ -810,19 +810,19 @@ mod tests {
         let file_name = "test_chcon_invalid_user_id.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "-h",
             "-R",
@@ -830,7 +830,7 @@ mod tests {
             dir_path,
         ];
 
-        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(OsString::from));
         assert!(result.is_err());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
@@ -839,7 +839,7 @@ mod tests {
     // 新增：测试 Tool trait 的基本实现
     #[test]
     fn test_tool_implementation() {
-        let tool = Chown::default();
+        let tool = Chown;
 
         // Test name method
         assert_eq!(tool.name(), "chown");

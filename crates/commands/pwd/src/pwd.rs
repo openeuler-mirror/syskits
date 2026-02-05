@@ -212,8 +212,8 @@ mod tests {
         use std::ffi::OsString;
         #[test]
         fn test_pwd_main_execution_version() {
-            let args_vec = vec![ctcore::ct_util_name(), "--version"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(OsString::from);
             let result = pwd_main(args);
 
             assert!(result.is_err());
@@ -221,9 +221,9 @@ mod tests {
 
         #[test]
         fn test_pwd_main_execution_other_version() {
-            let args_vec = vec![ctcore::ct_util_name(), "-V"];
+            let args_vec = [ctcore::ct_util_name(), "-V"];
 
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args = args_vec.iter().map(OsString::from);
             let result = pwd_main(args);
 
             assert!(result.is_err());
@@ -231,32 +231,32 @@ mod tests {
 
         #[test]
         fn test_pwd_main_execution_help() {
-            let args_vec = vec![ctcore::ct_util_name(), "--help"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "--help"];
+            let args = args_vec.iter().map(OsString::from);
             let result = pwd_main(args);
             assert!(result.is_err());
         }
 
         #[test]
         fn test_pwd_main_execution_help_short() {
-            let args_vec = vec![ctcore::ct_util_name(), "-h"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "-h"];
+            let args = args_vec.iter().map(OsString::from);
             let result = pwd_main(args);
             assert!(result.is_err());
         }
 
         #[test]
         fn test_pwd_main_execution_unsupport_help() {
-            let args_vec = vec![ctcore::ct_util_name(), "-H"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "-H"];
+            let args = args_vec.iter().map(OsString::from);
             let result = pwd_main(args);
             assert!(result.is_err());
         }
 
         #[test]
         fn test_pwd_main_invalid_argument() {
-            let args_vec = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "--invalid-argument"];
+            let args = args_vec.iter().map(OsString::from);
             let result = pwd_main(args);
             assert!(result.is_err());
         }
@@ -274,40 +274,40 @@ mod tests {
         fn test_env_data() {
             // test_pwd_main_support_missing_argument()
             {
-                let args_vec = vec![ctcore::ct_util_name()];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name()];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
 
             // test_pwd_main_logical_long()
             {
-                let args_vec = vec![ctcore::ct_util_name(), "--logical"];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "--logical"];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
 
             // test_pwd_main_logical_short()
             {
-                let args_vec = vec![ctcore::ct_util_name(), "-L"];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "-L"];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
 
             //  test_pwd_main_physical_long()
             {
-                let args_vec = vec![ctcore::ct_util_name(), "--physical"];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "--physical"];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
 
             // test_pwd_main_physical_short()
             {
-                let args_vec = vec![ctcore::ct_util_name(), "-P"];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "-P"];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
@@ -316,8 +316,8 @@ mod tests {
             {
                 let file_name = "test_pwd_main_logical_long";
 
-                let args_vec = vec![ctcore::ct_util_name(), "--logical", file_name];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "--logical", file_name];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
@@ -326,8 +326,8 @@ mod tests {
             {
                 let file_name = "test_pwd_main_logical_short";
 
-                let args_vec = vec![ctcore::ct_util_name(), "-L", file_name];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "-L", file_name];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
@@ -336,8 +336,8 @@ mod tests {
             {
                 let file_name = "test_pwd_main_physical_long";
 
-                let args_vec = vec![ctcore::ct_util_name(), "--physical", file_name];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "--physical", file_name];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }
@@ -346,8 +346,8 @@ mod tests {
             {
                 let file_name = "test_pwd_main_physical_short";
 
-                let args_vec = vec![ctcore::ct_util_name(), "-P", file_name];
-                let args = args_vec.iter().map(|s| OsString::from(s));
+                let args_vec = [ctcore::ct_util_name(), "-P", file_name];
+                let args = args_vec.iter().map(OsString::from);
                 let result = pwd_main(args);
                 assert!(result.is_ok());
             }

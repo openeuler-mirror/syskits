@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
@@ -612,7 +612,7 @@ fn print_file_header(options: &HeadOptions, first: bool, name: &str) {
         if !first {
             println!();
         }
-        println!("==> {} <==", name);
+        println!("==> {name} <==");
     }
 }
 
@@ -1044,7 +1044,7 @@ mod tests {
         // 辅助函数：创建临时文件并写入内容
         fn create_temp_file(content: &str) -> NamedTempFile {
             let mut file = NamedTempFile::new().unwrap();
-            write!(file, "{}", content).unwrap();
+            write!(file, "{content}").unwrap();
             file
         }
 

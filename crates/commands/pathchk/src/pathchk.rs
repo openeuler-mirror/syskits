@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::ArgMatches;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -211,8 +211,7 @@ fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
         if component_len > PATHCHK_POSIX_NAME_MAX {
             writeln!(
                 writer,
-                "pathchk: limit {} exceeded by length {} of file name component ‘{}’",
-                PATHCHK_POSIX_NAME_MAX, component_len, p
+                "pathchk: limit {PATHCHK_POSIX_NAME_MAX} exceeded by length {component_len} of file name component '{p}'"
             )?;
             return Ok(false);
         }
@@ -222,8 +221,7 @@ fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
     if total_len > PATHCHK_POSIX_PATH_MAX {
         writeln!(
             writer,
-            "pathchk: limit {} exceeded by length {} of file name '{}'",
-            PATHCHK_POSIX_PATH_MAX, total_len, joined_path
+            "pathchk: limit {PATHCHK_POSIX_PATH_MAX} exceeded by length {total_len} of file name '{joined_path}'"
         )?;
         return Ok(false);
     }
@@ -325,10 +323,10 @@ fn check_searchable<W: Write>(writer: &mut W, path: &str) -> CTResult<bool> {
                 Ok(true)
             } else if e.raw_os_error() == Some(36) {
                 // ENAMETOOLONG
-                writeln!(writer, "pathchk: {}: File name too long", path)?;
+                writeln!(writer, "pathchk: {path}: File name too long")?;
                 Ok(false)
             } else {
-                writeln!(writer, "pathchk: {}: {}", path, e)?;
+                writeln!(writer, "pathchk: {path}: {e}")?;
                 Ok(false)
             }
         }
@@ -350,8 +348,7 @@ fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResul
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 writer,
-                "pathchk: nonportable character ‘{}’ in file name '{}'",
-                invalid, path_segment
+                "pathchk: nonportable character '{invalid}' in file name '{path_segment}'"
             )?;
             return Ok(false);
         }
@@ -444,23 +441,23 @@ mod tests {
 
         #[test]
         fn test_nonportable_character() {
-            let args = vec![ctcore::ct_util_name(), "-p", "special#file"];
+            let args = [ctcore::ct_util_name(), "-p", "special#file"];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(
                 output_str
-                    .contains("pathchk: nonportable character ‘#’ in file name 'special#file'")
+                    .contains("pathchk: nonportable character '#' in file name 'special#file'")
             );
         }
 
         #[test]
         fn test_component_too_long() {
             let long_name = "a".repeat(15);
-            let args = vec![ctcore::ct_util_name(), "-p", &long_name];
+            let args = [ctcore::ct_util_name(), "-p", &long_name];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("limit 14 exceeded by length 15"));
@@ -468,9 +465,9 @@ mod tests {
 
         #[test]
         fn test_leading_hyphen() {
-            let args = vec![ctcore::ct_util_name(), "-P", "-"];
+            let args = [ctcore::ct_util_name(), "-P", "-"];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("leading '-' in a component of file name '-'"));
@@ -478,9 +475,9 @@ mod tests {
 
         #[test]
         fn test_empty_filename() {
-            let args = vec![ctcore::ct_util_name(), "-P", ""];
+            let args = [ctcore::ct_util_name(), "-P", ""];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
 
@@ -490,9 +487,9 @@ mod tests {
         #[test]
         fn test_filename_too_long() {
             let long_name = "a".repeat(300);
-            let args = vec![ctcore::ct_util_name(), "-P", &long_name];
+            let args = [ctcore::ct_util_name(), "-P", &long_name];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("File name too long"));
@@ -501,44 +498,44 @@ mod tests {
 
         #[test]
         fn test_path_with_multiple_components() {
-            let args = vec![ctcore::ct_util_name(), "-p", "dir1/dir2/file"];
+            let args = [ctcore::ct_util_name(), "-p", "dir1/dir2/file"];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_multiple_paths() {
-            let args = vec![ctcore::ct_util_name(), "-p", "file1", "file2"];
+            let args = [ctcore::ct_util_name(), "-p", "file1", "file2"];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_path_with_dots() {
-            let args = vec![ctcore::ct_util_name(), "-p", "../file"];
+            let args = [ctcore::ct_util_name(), "-p", "../file"];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_path_with_special_chars() {
-            let args = vec![ctcore::ct_util_name(), "-p", "file@name"];
+            let args = [ctcore::ct_util_name(), "-p", "file@name"];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str.contains("pathchk: nonportable character ‘@’"));
+            assert!(output_str.contains("pathchk: nonportable character '@'"));
         }
 
         #[test]
         fn test_path_with_long_component() {
             let long_component = format!("dir/{}", "a".repeat(15));
-            let args = vec![ctcore::ct_util_name(), "-p", &long_component];
+            let args = [ctcore::ct_util_name(), "-p", &long_component];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("limit 14 exceeded"));
@@ -547,9 +544,9 @@ mod tests {
         #[test]
         fn test_path_with_long_total_length() {
             let long_path = format!("{}/file", "a".repeat(255));
-            let args = vec![ctcore::ct_util_name(), "-p", &long_path];
+            let args = [ctcore::ct_util_name(), "-p", &long_path];
             let mut output = Cursor::new(Vec::new());
-            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
 
@@ -653,7 +650,7 @@ mod tests {
 
         #[test]
         fn test_tool_implementation() {
-            let tool = Pathchk::default();
+            let tool = Pathchk;
 
             // 测试 name 方法
             assert_eq!(tool.name(), "pathchk");

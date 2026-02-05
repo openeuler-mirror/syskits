@@ -65,6 +65,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open("/tmp/test_stty")
             .unwrap();
         let device = Device::File(file);
@@ -81,6 +82,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open("/tmp/test_stty")
             .unwrap();
         let file_fd = file.as_raw_fd();
@@ -98,6 +100,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open("/tmp/test_stty")
             .unwrap();
         let file_fd = file.as_raw_fd();
@@ -118,6 +121,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open("/tmp/test_stty")
             .unwrap();
         let device = Device::File(file);
@@ -128,17 +132,18 @@ mod tests {
     #[test]
     fn test_device_debug() {
         let stdout_device = Device::Stdout(stdout());
-        let debug_str = format!("{:?}", stdout_device);
+        let debug_str = format!("{stdout_device:?}");
         assert!(debug_str.contains("Stdout"));
 
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open("/tmp/test_stty")
             .unwrap();
         let file_device = Device::File(file);
-        let debug_str = format!("{:?}", file_device);
+        let debug_str = format!("{file_device:?}");
         assert!(debug_str.contains("File"));
     }
 }

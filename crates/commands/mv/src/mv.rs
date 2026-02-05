@@ -16,7 +16,7 @@ mod error;
 use crate::opt_flags::ARG_FILES;
 use ctcore::ct_error::CTIoError;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::opt_flags::OPT_CONTEXT;
 use crate::opt_flags::OPT_DEBUG;
 use crate::opt_flags::OPT_FORCE;
@@ -41,6 +41,7 @@ use ctcore::ct_fs::{
 #[cfg(target_os = "linux")]
 use ctcore::ct_fsxattr;
 use ctcore::ct_update_control;
+use ctcore::libc;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -49,7 +50,6 @@ use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
-use ctcore::libc;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
@@ -513,7 +513,7 @@ fn mv_handle_two_paths(
                         } else {
                             Err(e.map_err_context(|| msg))
                         }
-                    },
+                    }
                     Ok(()) => Ok(()),
                 }
             } else {
@@ -537,7 +537,7 @@ fn mv_handle_two_paths(
             MvOverwriteMode::NoClobber => return Ok(()),
             MvOverwriteMode::Interactive => {
                 if !ct_prompt_yes!("overwrite {}? ", target_path.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, "").into());
+                    return Err(io::Error::other("").into());
                 }
             }
             MvOverwriteMode::Force => {}
@@ -692,7 +692,7 @@ fn move_files_into_dir(
                                 source_path
                                     .file_name()
                                     .map(|s| s.to_string_lossy().into_owned())
-                                    .unwrap_or_else(|| String::new())
+                                    .unwrap_or_default()
                             )
                         ));
                         continue;
@@ -778,12 +778,12 @@ fn mv_rename(
             MvOverwriteMode::NoClobber => {
                 // 如果设置为不覆盖,返回错误码
                 let err_msg = format!("not replacing {}", to_path.quote());
-                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+                return Err(io::Error::other(err_msg));
             }
             MvOverwriteMode::Interactive => {
                 // 如果设置为交互式覆盖，询问用户是否覆盖
                 if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, ""));
+                    return Err(io::Error::other(""));
                 }
             }
             MvOverwriteMode::Force => {
@@ -807,7 +807,7 @@ fn mv_rename(
             if is_empty_dir(to_path) {
                 fs::remove_dir(to_path)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                return Err(io::Error::other("Directory not empty"));
             }
         }
     }
@@ -857,12 +857,12 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
         // 获取文件的默认安全上下文
         let default_context = match selinux::Context::from_path(path) {
             Ok(ctx) => ctx,
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+            Err(e) => return Err(io::Error::other(e)),
         };
 
         // 设置文件的安全上下文
         if let Err(e) = selinux::set_context(path, &default_context) {
-            return Err(io::Error::new(io::ErrorKind::Other, e));
+            return Err(io::Error::other(e));
         }
 
         Ok(())
@@ -905,11 +905,11 @@ fn mv_rename_with_fallback(
         // 如果不是跨设备错误，直接返回
         if !is_cross_device {
             let message = format!(
-                    "cannot move {} to {}: {}",
-                    from.quote(),
-                    to.quote(),
-                    rename_error
-                );
+                "cannot move {} to {}: {}",
+                from.quote(),
+                to.quote(),
+                rename_error
+            );
             return Err(io::Error::new(rename_error.kind(), message));
         }
         // 如果启用了调试模式，说明重命名失败的原因
@@ -921,9 +921,9 @@ fn mv_rename_with_fallback(
             );
             match multi_progress {
                 Some(pb) => pb.suspend(|| {
-                    println!("mv: {}", message);
+                    println!("mv: {message}");
                 }),
-                None => println!("mv: {}", message),
+                None => println!("mv: {message}"),
             };
         }
 
@@ -936,9 +936,9 @@ fn mv_rename_with_fallback(
                     to.quote()
                 )
             } else {
-                format!("rename failed: {}", rename_error)
+                format!("rename failed: {rename_error}")
             };
-            return Err(io::Error::new(io::ErrorKind::Other, error_message));
+            return Err(io::Error::other(error_message));
         }
 
         // 获取原始路径的元数据，不跟随符号链接。
@@ -952,9 +952,9 @@ fn mv_rename_with_fallback(
                 let message = format!("copying symlink {} to {}", from.quote(), to.quote());
                 match multi_progress {
                     Some(pb) => pb.suspend(|| {
-                        println!("mv: {}", message);
+                        println!("mv: {message}");
                     }),
-                    None => println!("mv: {}", message),
+                    None => println!("mv: {message}"),
                 };
             }
             // 对符号链接执行特定的重命名策略。
@@ -967,16 +967,16 @@ fn mv_rename_with_fallback(
                     to.quote(),
                     rename_error
                 );
-                return Err(io::Error::new(io::ErrorKind::Other, message).into());
+                return Err(io::Error::other(message));
             }
             // 如果启用了调试模式，说明正在处理目录
             if options.debug {
                 let message = format!("copying directory {} to {}", from.quote(), to.quote());
                 match multi_progress {
                     Some(pb) => pb.suspend(|| {
-                        println!("mv: {}", message);
+                        println!("mv: {message}");
                     }),
-                    None => println!("mv: {}", message),
+                    None => println!("mv: {message}"),
                 };
             }
 
@@ -1037,7 +1037,7 @@ fn mv_rename_with_fallback(
                         io::ErrorKind::PermissionDenied,
                         "Permission denied",
                     )),
-                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
+                    _ => Err(io::Error::other(format!("{err:?}"))),
                 };
             }
         } else {
@@ -1046,9 +1046,9 @@ fn mv_rename_with_fallback(
                 let message = format!("copying file {} to {}", from.quote(), to.quote());
                 match multi_progress {
                     Some(pb) => pb.suspend(|| {
-                        println!("mv: {}", message);
+                        println!("mv: {message}");
                     }),
-                    None => println!("mv: {}", message),
+                    None => println!("mv: {message}"),
                 };
             }
 
@@ -1150,7 +1150,7 @@ mod tests_tool_implementation {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Mv::default();
+        let tool = Mv;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "mv");
@@ -1489,17 +1489,17 @@ mod tests {
 
         #[test]
         fn test_mv_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_mv_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1523,8 +1523,8 @@ mod tests {
 
             let src_dir = sub_dir_path.to_str().unwrap();
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_dir, dst_dir, "-f"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_dir, dst_dir, "-f"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1547,8 +1547,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--force"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--force"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1571,13 +1571,13 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let _dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 src_file,
                 "test_mv_main_file_to_file",
                 "--force",
             ];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let result = mv_main(args.iter().map(OsString::from));
             let _ = delete_file("test_mv_main_file_to_file");
             assert!(result.is_ok());
         }
@@ -1600,8 +1600,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--interactive"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--interactive"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1623,8 +1623,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--no-clobber"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--no-clobber"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1647,13 +1647,13 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 src_file,
                 dst_dir,
                 "--strip-trailing-slashes",
             ];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1676,8 +1676,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--backup=simple"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--backup=simple"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1700,8 +1700,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "-u"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "-u"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1724,8 +1724,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--suffix=.bak"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--suffix=.bak"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1748,8 +1748,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--update=none"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--update=none"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1772,8 +1772,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--update=all"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--update=all"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1796,8 +1796,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--update=older"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--update=older"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1820,13 +1820,13 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 src_file,
                 dst_dir,
                 "--no-target-directory",
             ];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1849,8 +1849,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--verbose"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--verbose"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1873,8 +1873,8 @@ mod tests {
             file.write_all(content.as_bytes()).unwrap();
 
             let dst_dir = dst_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), src_file, dst_dir, "--progress"];
-            let result = mv_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), src_file, dst_dir, "--progress"];
+            let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -1893,7 +1893,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1903,7 +1903,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
+            let args = [ctcore::ct_util_name(), "--help"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1913,7 +1913,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_f() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-f"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-f"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1923,7 +1923,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_force() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--force"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--force"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1933,7 +1933,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_i() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-i"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-i"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1946,7 +1946,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_interactive() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--interactive"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--interactive"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1959,7 +1959,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_n() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-n"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-n"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1969,7 +1969,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_no_clobber() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--no-clobber"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--no-clobber"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1979,7 +1979,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_strip_trailing_slashes() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--strip-trailing-slashes"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--strip-trailing-slashes"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -1992,7 +1992,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_backup_simple() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--backup=simple"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--backup=simple"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2001,7 +2001,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_b_simple() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-b", "simple"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-b", "simple"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2010,7 +2010,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_s() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-S", ".bak"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-S", ".bak"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2019,7 +2019,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_suffix() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--suffix=.bak"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--suffix=.bak"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2028,7 +2028,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_update_none() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--update=none"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--update=none"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2037,7 +2037,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_update_all() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--update=all"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--update=all"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2046,7 +2046,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_update_older() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--update=older"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--update=older"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2055,7 +2055,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_u_none() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-u", "none"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-u", "none"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2064,7 +2064,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_u_all() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-u", "all"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-u", "all"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2073,7 +2073,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_u_older() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-u", "older"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-u", "older"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2082,7 +2082,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_t_directory() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-t", "target-directory"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-t", "target-directory"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2098,7 +2098,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_target_directory() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "a",
                 "b",
@@ -2120,7 +2120,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_n_t_directory() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-T", "target-directory"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-T", "target-directory"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2133,7 +2133,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_n_target_directory() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "a",
                 "b",
@@ -2152,7 +2152,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_v() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-v"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-v"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2161,7 +2161,7 @@ mod tests {
         }
         #[test]
         fn test_ct_app_verbose() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--verbose"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--verbose"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2171,7 +2171,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_g() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "-g"];
+            let args = [ctcore::ct_util_name(), "a", "b", "-g"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2180,7 +2180,7 @@ mod tests {
         }
         #[test]
         fn test_ct_app_progress() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--progress"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--progress"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2190,7 +2190,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_debug() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--debug"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--debug"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2200,7 +2200,7 @@ mod tests {
 
         #[test]
         fn test_ct_app_no_copy() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--no-copy"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--no-copy"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
@@ -2210,7 +2210,7 @@ mod tests {
 
         #[test]
         fn test_debug_implies_verbose() {
-            let args = vec![ctcore::ct_util_name(), "a", "b", "--debug"];
+            let args = [ctcore::ct_util_name(), "a", "b", "--debug"];
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 

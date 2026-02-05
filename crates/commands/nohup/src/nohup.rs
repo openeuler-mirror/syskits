@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, UClapError, set_ct_exit_code};
 use ctcore::ct_show_error;
@@ -242,7 +242,7 @@ mod tests {
 
         #[test]
         fn test_tool_implementation() {
-            let tool = Nohup::default();
+            let tool = Nohup;
 
             // 测试 name 方法
             assert_eq!(tool.name(), "nohup");
@@ -264,17 +264,17 @@ mod tests {
 
         #[test]
         fn test_false_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = nohup_main(args.iter().map(|s| OsString::from(s)));
+            let result = nohup_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_false_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = nohup_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = nohup_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }

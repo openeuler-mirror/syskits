@@ -16,7 +16,7 @@ mod operation;
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_show;
 use operation::{
     Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = super::Tr::default();
+        let tool = super::Tr;
 
         // Test name method
         assert_eq!(tool.name(), "tr");
@@ -572,13 +572,8 @@ mod tests {
             let mut output = Vec::new();
 
             // 测试基本功能
-            let args = vec!["tr", "aeiou", "12345"];
-            tr_main(
-                &mut input,
-                &mut output,
-                args.iter().map(|s| OsString::from(s)),
-            )
-            .unwrap();
+            let args = ["tr", "aeiou", "12345"];
+            tr_main(&mut input, &mut output, args.iter().map(OsString::from)).unwrap();
 
             assert_eq!(output, b"h2ll4 w4rld");
         }
@@ -589,15 +584,8 @@ mod tests {
             let mut output = Vec::new();
 
             // 测试无效参数
-            let args = vec!["tr"];
-            assert!(
-                tr_main(
-                    &mut input,
-                    &mut output,
-                    args.iter().map(|s| OsString::from(s))
-                )
-                .is_err()
-            );
+            let args = ["tr"];
+            assert!(tr_main(&mut input, &mut output, args.iter().map(OsString::from)).is_err());
         }
     }
 }

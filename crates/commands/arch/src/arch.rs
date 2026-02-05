@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 
 // 声明 i18n 宏和初始化函数
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use sys_locale::get_locale;
 
 use clap::Arg;
@@ -42,7 +42,7 @@ impl Tool for Arch {
         let result = arch_main(args.iter().cloned());
         match result {
             Ok(s) => {
-                println!("{}", s);
+                println!("{s}");
                 Ok(())
             }
             Err(e) => Err(e),
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Arch::default();
+        let tool = Arch;
         assert_eq!(tool.name(), "arch");
 
         let command = tool.command();
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_command_line_args() {
-        let tool = Arch::default();
+        let tool = Arch;
 
         let args = vec![OsString::from("arch"), OsString::from("--help")];
         assert!(tool.execute(&args).is_err());
@@ -191,16 +191,16 @@ mod tests {
     fn test_arch_ctmain() {
         let expected_arch = std::env::consts::ARCH;
 
-        let args = vec![ctcore::ct_util_name()];
-        let mut args_iter = args.iter().map(|s| OsString::from(s));
+        let args = [ctcore::ct_util_name()];
+        let mut args_iter = args.iter().map(OsString::from);
         let result = arch_main(&mut args_iter);
         let mut s = String::new();
         match result {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -211,8 +211,8 @@ mod tests {
 
     #[test]
     fn test_arch_ctmain_help() {
-        let args = vec![ctcore::ct_util_name(), "--help"];
-        let mut args_iter = args.iter().map(|s| OsString::from(s));
+        let args = [ctcore::ct_util_name(), "--help"];
+        let mut args_iter = args.iter().map(OsString::from);
         let result = arch_main(&mut args_iter);
         assert!(result.is_err());
     }

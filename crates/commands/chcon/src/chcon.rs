@@ -25,7 +25,7 @@ use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 use sys_locale::get_locale;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 mod errors;
 mod fts;
@@ -857,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Chcon::default();
+        let tool = Chcon;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "chcon");
@@ -1030,88 +1030,88 @@ mod tests {
     ///////////////////////////////////////////
     #[test]
     fn test_version_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--version"];
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--version"];
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--help"];
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--help"];
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_invalid_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-H"];
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-H"];
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_version_valid_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-V"];
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-V"];
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_true_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "--dereference"];
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--dereference"];
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_false_ctmain() {
-        let args = vec![ctcore::ct_util_name(), "-h"];
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "-h"];
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_whole_false_ctmain() {
         // 测试用例：有效输入 --no-dereference
-        let args = vec![ctcore::ct_util_name(), "--no-dereference"];
+        let args = [ctcore::ct_util_name(), "--no-dereference"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_preserve_root_true_ctmain() {
         // 测试用例：有效输入 --preserve-root
-        let args = vec![ctcore::ct_util_name(), "--preserve-root"];
+        let args = [ctcore::ct_util_name(), "--preserve-root"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_preserve_root_false_ctmain() {
         // 测试用例：有效输入 --no-preserve-root
-        let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
+        let args = [ctcore::ct_util_name(), "--no-preserve-root"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_recursive_ctmain() {
         // 测试用例：有效输入 --recursive
-        let args = vec![ctcore::ct_util_name(), "-R"];
+        let args = [ctcore::ct_util_name(), "-R"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_recursive_whole_ctmain() {
         // 测试用例：有效输入 --recursive
-        let args = vec![ctcore::ct_util_name(), "--recursive"];
+        let args = [ctcore::ct_util_name(), "--recursive"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -1119,9 +1119,9 @@ mod tests {
     #[test]
     fn test_verbose_ctmain() {
         // 测试用例：有效输入 --verbose
-        let args = vec![ctcore::ct_util_name(), "-v"];
+        let args = [ctcore::ct_util_name(), "-v"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -1129,9 +1129,9 @@ mod tests {
     #[test]
     fn test_verbose_whole_ctmain() {
         // 测试用例：有效输入 --verbose
-        let args = vec![ctcore::ct_util_name(), "--verbose"];
+        let args = [ctcore::ct_util_name(), "--verbose"];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
         assert!(result.is_err());
     }
 
@@ -1157,27 +1157,26 @@ mod tests {
 
         // 创建文件并写入内容
         match chcon_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "system_u:object_r:httpd_sys_content_t",
             filename,
         ];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
 
         // 删除文件
         match chcon_delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
-        match result {
-            Ok(result) => assert_eq!(result, ()),
-            Err(e) => eprintln!("Error result: {:?}", e),
+        if let Err(e) = result {
+            eprintln!("Error result: {e:?}");
         }
     }
 
@@ -1188,33 +1187,32 @@ mod tests {
         let file_name = "test_chcon_h_ctmain.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{}/{}", dir_path, subdir_name);
+        let subdir_path = format!("{dir_path}/{subdir_name}");
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{}/{}", subdir_path, file_name);
+        let file_path = format!("{subdir_path}/{file_name}");
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{}' created successfully.", file_path);
+        println!("File '{file_path}' created successfully.");
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "-R",
             "system_u:object_r:httpd_sys_content_t",
             dir_path,
         ];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
 
         // 删除目录及其内容
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
 
-        match result {
-            Ok(result) => assert_eq!(result, ()),
-            Err(e) => eprintln!("Error result: {:?}", e),
+        if let Err(e) = result {
+            eprintln!("Error result: {e:?}");
         }
     }
 
@@ -1239,11 +1237,11 @@ mod tests {
 
         // 创建文件并写入内容
         match chcon_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "-R",
             "-t",
@@ -1251,17 +1249,16 @@ mod tests {
             filename,
         ];
 
-        let result = chcon_main(args.iter().map(|s| OsString::from(s)));
+        let result = chcon_main(args.iter().map(OsString::from));
 
         // 删除文件
         match chcon_delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
-        match result {
-            Ok(result) => assert_eq!(result, ()),
-            Err(e) => eprintln!("Error result: {:?}", e),
+        if let Err(e) = result {
+            eprintln!("Error result: {e:?}");
         }
     }
 }

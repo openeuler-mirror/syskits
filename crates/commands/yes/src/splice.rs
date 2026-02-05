@@ -84,6 +84,7 @@ fn splice_maybe_unsupported(error: nix::Error) -> SpliceError {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use std::fs;
     use std::fs::File;
@@ -128,11 +129,8 @@ mod tests {
         let nix_error = nix::Error::EAGAIN;
 
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::WouldBlock);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::WouldBlock);
         }
     }
 
@@ -154,11 +152,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_eperm() {
         let nix_error = nix::Error::EPERM;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::PermissionDenied);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::PermissionDenied);
         }
     }
 
@@ -166,11 +161,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_enoent() {
         let nix_error = nix::Error::ENOENT;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::NotFound);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::NotFound);
         }
     }
 
@@ -192,11 +184,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_eintr() {
         let nix_error = nix::Error::EINTR;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::Interrupted);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::Interrupted);
         }
     }
 
@@ -288,11 +277,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_eagain() {
         let nix_error = nix::Error::EAGAIN;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::WouldBlock);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::WouldBlock);
         }
     }
 
@@ -300,11 +286,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_enomem() {
         let nix_error = nix::Error::ENOMEM;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::OutOfMemory);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::OutOfMemory);
         }
     }
 
@@ -312,11 +295,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_eacces() {
         let nix_error = nix::Error::EACCES;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::PermissionDenied);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::PermissionDenied);
         }
     }
 
@@ -366,11 +346,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_eexist() {
         let nix_error = nix::Error::EEXIST;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::AlreadyExists);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::AlreadyExists);
         }
     }
 
@@ -434,11 +411,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_einval() {
         let nix_error = nix::Error::EINVAL;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::InvalidInput);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::InvalidInput);
         }
     }
 
@@ -572,11 +546,8 @@ mod tests {
     fn test_from_nix_error_to_io_error_epipe() {
         let nix_error = nix::Error::EPIPE;
         let custom_error: SpliceError = nix_error.into();
-        match custom_error {
-            SpliceError::Io(inner_io_error) => {
-                assert_eq!(inner_io_error.kind(), io::ErrorKind::BrokenPipe);
-            }
-            _ => {}
+        if let SpliceError::Io(inner_io_error) = custom_error {
+            assert_eq!(inner_io_error.kind(), io::ErrorKind::BrokenPipe);
         }
     }
 
@@ -1380,7 +1351,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_einval() {
-        let error = Errno::EINVAL.into();
+        let error = Errno::EINVAL;
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Unsupported
@@ -1389,7 +1360,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_enosys() {
-        let error = Errno::ENOSYS.into();
+        let error = Errno::ENOSYS;
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Unsupported
@@ -1398,7 +1369,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_ebadf() {
-        let error = Errno::EBADF.into();
+        let error = Errno::EBADF;
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Unsupported
@@ -1407,7 +1378,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_other_error() {
-        let error = nix::Error::E2BIG.into(); // Random error
+        let error = nix::Error::E2BIG; // Random error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1416,7 +1387,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_enomem() {
-        let error = Errno::ENOMEM.into(); // Out of memory error
+        let error = Errno::ENOMEM; // Out of memory error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1425,7 +1396,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_eperm() {
-        let error = Errno::EPERM.into(); // Permission denied error
+        let error = Errno::EPERM; // Permission denied error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1434,7 +1405,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_esrch() {
-        let error = Errno::ESRCH.into(); // No such process error
+        let error = Errno::ESRCH; // No such process error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1443,7 +1414,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_efault() {
-        let error = Errno::EFAULT.into(); // Bad address error
+        let error = Errno::EFAULT; // Bad address error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1452,7 +1423,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_econnreset() {
-        let error = Errno::ECONNRESET.into(); // Connection reset by peer error
+        let error = Errno::ECONNRESET; // Connection reset by peer error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1461,7 +1432,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_eaddrinuse() {
-        let error = Errno::EADDRINUSE.into(); // Address already in use error
+        let error = Errno::EADDRINUSE; // Address already in use error
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)
@@ -1470,7 +1441,7 @@ mod tests {
 
     #[test]
     fn test_maybe_unsupported_with_eintr() {
-        let error = Errno::EINTR.into();
+        let error = Errno::EINTR;
         assert!(matches!(
             splice_maybe_unsupported(error),
             SpliceError::Io(_)

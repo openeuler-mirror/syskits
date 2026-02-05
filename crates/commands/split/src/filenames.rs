@@ -247,11 +247,10 @@ impl FilenameSuffix {
     }
 
     fn get_additional(matches: &ArgMatches) -> String {
-        let additional = matches
+        matches
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
-            .to_string();
-        additional
+            .to_string()
     }
 }
 
@@ -375,6 +374,7 @@ impl Iterator for FilenameIterator<'_> {
 }
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use crate::filenames::FilenameSuffix;
     use crate::filenames::FilenameSuffixType;
@@ -721,7 +721,7 @@ mod tests {
     #[test]
     fn test_suffix_error_not_parsable_display() {
         let error = FilenameSuffixError::NotParsable("123".to_string());
-        assert_eq!("invalid suffix length: '123'", format!("{}", error));
+        assert_eq!("invalid suffix length: '123'", format!("{error}"));
     }
 
     #[test]
@@ -729,7 +729,7 @@ mod tests {
         let error = FilenameSuffixError::TooSmall(5);
         assert_eq!(
             "the suffix length needs to be at least 5",
-            format!("{}", error)
+            format!("{error}")
         );
     }
 
@@ -738,26 +738,26 @@ mod tests {
         let error = FilenameSuffixError::ContainsSeparator("/".to_string());
         assert_eq!(
             "invalid suffix '/', contains directory separator",
-            format!("{}", error)
+            format!("{error}")
         );
     }
     #[test]
     fn test_suffix_error_contains_separator_debug() {
         let error = FilenameSuffixError::ContainsSeparator("/".to_string());
-        assert_eq!("ContainsSeparator(\"/\")", format!("{:?}", error));
+        assert_eq!("ContainsSeparator(\"/\")", format!("{error:?}"));
     }
     #[test]
     fn test_suffix_error_contains_separator_display_with_path() {
         let error = FilenameSuffixError::ContainsSeparator("/".to_string());
         assert_eq!(
             "invalid suffix '/', contains directory separator",
-            format!("{}", error)
+            format!("{error}")
         );
     }
 
     #[test]
     fn test_suffix_error_contains_separator_debug_with_path() {
         let error = FilenameSuffixError::ContainsSeparator("/".to_string());
-        assert_eq!("ContainsSeparator(\"/\")", format!("{:?}", error));
+        assert_eq!("ContainsSeparator(\"/\")", format!("{error:?}"));
     }
 }

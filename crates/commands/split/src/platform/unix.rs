@@ -14,7 +14,7 @@ use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_show;
 use std::env;
 use std::io::Write;
-use std::io::{BufWriter, Error, ErrorKind, Result};
+use std::io::{BufWriter, Error, Result};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
@@ -109,7 +109,7 @@ impl Drop for UnixFilterWriter {
             if return_code != 0 {
                 ct_show!(CtSimpleError::new(
                     1,
-                    format!("Shell process returned {}", return_code)
+                    format!("Shell process returned {return_code}")
                 ));
             }
         } else {
@@ -133,22 +133,14 @@ pub fn instantiate_current_writer(
                     .create(true)
                     .truncate(true)
                     .open(std::path::Path::new(&file_name))
-                    .map_err(|_| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("unable to open '{file_name}'; aborting"),
-                        )
-                    })?
+                    .map_err(|_| Error::other(format!("unable to open '{file_name}'; aborting")))?
             } else {
                 // 重新打开之前创建的文件以便追加写入
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(std::path::Path::new(&file_name))
                     .map_err(|_| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("unable to re-open '{file_name}'; aborting"),
-                        )
+                        Error::other(format!("unable to re-open '{file_name}'; aborting"))
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
@@ -216,7 +208,7 @@ mod tests {
     fn test_same_relative_paths() {
         let p9 = "file.txt";
         let p10 = "file.txt";
-        assert_eq!(paths_refer_to_same_file(p9, p10), false);
+        assert!(!paths_refer_to_same_file(p9, p10));
     }
 
     #[test]
@@ -230,7 +222,7 @@ mod tests {
     fn test_relative_and_absolute_paths_same_file() {
         let p13 = "file.txt";
         let p14 = "/path/to/file.txt";
-        assert_eq!(paths_refer_to_same_file(p13, p14), false);
+        assert!(!paths_refer_to_same_file(p13, p14));
     }
 
     #[test]

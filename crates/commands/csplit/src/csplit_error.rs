@@ -59,7 +59,7 @@ mod tests_csplit {
     #[test]
     fn test_csplit_error_io_error() {
         use crate::csplit_error::CsplitError;
-        let error = std::io::Error::new(std::io::ErrorKind::Other, "IO error");
+        let error = std::io::Error::other("IO error");
         let csplit_error = CsplitError::from(error);
 
         assert_eq!(csplit_error.to_string(), "IO error: IO error");

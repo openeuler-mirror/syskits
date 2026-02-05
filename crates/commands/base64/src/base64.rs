@@ -11,7 +11,7 @@
 extern crate rust_i18n;
 use ct_base32::base_common;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::base_common::opt_flags;
 use clap::Arg;
 use clap::ArgAction;
@@ -129,7 +129,7 @@ mod test {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Base64::default();
+        let tool = Base64;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "base64");
@@ -164,13 +164,13 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         // 测试用例1：有效输入
-        let args = vec![ctcore::ct_util_name(), filename];
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), filename];
+        let result = base64_main(args.iter().map(OsString::from));
         let expected_output = "VGVzdCBlbmNvZGUgYmFzZTY0";
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -178,20 +178,20 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
-                println!("result:{}", s);
-                println!("{}", expected_output);
+                println!("result:{s}");
+                println!("{expected_output}");
                 //assert_eq!(s,expected_output);
             }
         }
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
     }
@@ -202,13 +202,13 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         // 测试用例1：有效输入
-        let args = vec![ctcore::ct_util_name(), "--wrap=8", filename];
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), "--wrap=8", filename];
+        let result = base64_main(args.iter().map(OsString::from));
         let expected_output = "VGVzdCB0ZXN0X3ZhbGlkX3dyYXBfY3RtYWlu";
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -216,20 +216,20 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
-                println!("result:{}", s);
-                println!("{}", expected_output);
+                println!("result:{s}");
+                println!("{expected_output}");
                 //assert_eq!(s,expected_output);
             }
         }
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
     }
@@ -241,14 +241,14 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         // 测试用例1：有效输入
-        let args = vec![ctcore::ct_util_name(), filename];
+        let args = [ctcore::ct_util_name(), filename];
 
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result = base64_main(args.iter().map(OsString::from));
         let expected_output = ""; // 预期输出结果为空
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -256,20 +256,20 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
-                println!("result:{}", s);
-                println!("{}", expected_output);
+                println!("result:{s}");
+                println!("{expected_output}");
                 //assert_eq!(s,expected_output);
             }
         }
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
     }
@@ -281,14 +281,14 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         // 测试用例1：有效输入
-        let args = vec![ctcore::ct_util_name(), "--wrap=8", filename];
+        let args = [ctcore::ct_util_name(), "--wrap=8", filename];
 
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result = base64_main(args.iter().map(OsString::from));
         let expected_output = ""; // 预期输出结果为空
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -296,20 +296,20 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
-                println!("result:{}", s);
-                println!("{}", expected_output);
+                println!("result:{s}");
+                println!("{expected_output}");
                 //assert_eq!(s,expected_output);
             }
         }
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
     }
@@ -321,13 +321,13 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         // 测试用例1：有效输入
-        let args = vec![ctcore::ct_util_name(), filename];
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let args = [ctcore::ct_util_name(), filename];
+        let result = base64_main(args.iter().map(OsString::from));
         let expected_output = "S1JTWEc1QkFNUlNXRzMzRU1VUUdFWUxUTVVaVEU9PT0=";
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -335,20 +335,20 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
-                println!("result:{}", s);
-                println!("{}", expected_output);
+                println!("result:{s}");
+                println!("{expected_output}");
                 //assert_eq!(s,expected_output);
             }
         }
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
     }
@@ -360,13 +360,13 @@ mod test {
         let expected_output = "Test encode base64";
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![ctcore::ct_util_name(), "-d", filename];
+        let args = [ctcore::ct_util_name(), "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result: CTResult<String> = base64_main(args.iter().map(OsString::from));
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -374,8 +374,8 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -384,8 +384,8 @@ mod test {
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(s, expected_output);
@@ -398,13 +398,13 @@ mod test {
         let expected_output = "Test encode base64";
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![ctcore::ct_util_name(), "--decode", filename];
+        let args = [ctcore::ct_util_name(), "--decode", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result: CTResult<String> = base64_main(args.iter().map(OsString::from));
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -412,8 +412,8 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -422,8 +422,8 @@ mod test {
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(s, expected_output);
@@ -436,13 +436,13 @@ mod test {
         let expected_output = "Test encode base64";
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![ctcore::ct_util_name(), "--wrap=64", "-d", filename];
+        let args = [ctcore::ct_util_name(), "--wrap=64", "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result: CTResult<String> = base64_main(args.iter().map(OsString::from));
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -450,8 +450,8 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -460,8 +460,8 @@ mod test {
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(s, expected_output);
@@ -475,13 +475,13 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![ctcore::ct_util_name(), " --ignore-garbage", "-d", filename];
+        let args = [ctcore::ct_util_name(), " --ignore-garbage", "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result: CTResult<String> = base64_main(args.iter().map(OsString::from));
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -489,8 +489,8 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -499,8 +499,8 @@ mod test {
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(s, expected_output);
@@ -513,13 +513,13 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![ctcore::ct_util_name(), " -i", "-d", filename];
+        let args = [ctcore::ct_util_name(), " -i", "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result: CTResult<String> = base64_main(args.iter().map(OsString::from));
         let mut s = String::new();
         let expected_output = "";
         // 使用模式匹配提取字段值
@@ -527,8 +527,8 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -537,8 +537,8 @@ mod test {
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(s, expected_output);
@@ -552,11 +552,11 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "--wrap",
             "--ignore-garbage",
@@ -564,7 +564,7 @@ mod test {
             filename,
         ];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result: CTResult<String> = base64_main(args.iter().map(OsString::from));
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -572,8 +572,8 @@ mod test {
             Err(output) => {
                 let code = output.code();
                 let message = output.usage();
-                println!("Error code: {}", code);
-                println!("Error message: {}", message);
+                println!("Error code: {code}");
+                println!("Error message: {message}");
             }
             Ok(output) => {
                 s = output.to_string();
@@ -582,8 +582,8 @@ mod test {
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(s, expected_output);
@@ -596,17 +596,17 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![ctcore::ct_util_name(), "--wrap=64", filename];
+        let args = [ctcore::ct_util_name(), "--wrap=64", filename];
         //let args = ["--wrap", ""];
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result = base64_main(args.iter().map(OsString::from));
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert!(result.is_ok());
@@ -615,7 +615,7 @@ mod test {
     fn test_base64_i_ctmain() {
         // 测试用例1：
         let args = ["--ignore-garbage", ""];
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result = base64_main(args.iter().map(OsString::from));
         assert!(result.is_err());
 
         let filename = "test_base64_i_ctmain.txt";
@@ -623,23 +623,23 @@ mod test {
 
         // 创建文件并写入内容
         match create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             "--wrap=64",
             "--ignore-garbage",
             filename,
         ];
         //let args = ["--wrap", ""];
-        let result = base64_main(args.iter().map(|s| OsString::from(s)));
+        let result = base64_main(args.iter().map(OsString::from));
 
         // 删除文件
         match delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert!(result.is_ok());
@@ -649,7 +649,7 @@ mod test {
     fn test_base64_h_ctmain() {
         {
             let args = ["--help", ""];
-            let result = base64_main(args.iter().map(|s| OsString::from(s)));
+            let result = base64_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         {
@@ -666,7 +666,7 @@ mod test {
     fn test_base64_hh_ctmain() {
         {
             let args = ["-h", ""];
-            let result = base64_main(args.iter().map(|s| OsString::from(s)));
+            let result = base64_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -685,7 +685,7 @@ mod test {
     fn test_base64_v_ctmain() {
         {
             let args = ["--version", ""];
-            let result = base64_main(args.iter().map(|s| OsString::from(s)));
+            let result = base64_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         {
@@ -703,7 +703,7 @@ mod test {
     fn test_base64_vv_ctmain() {
         {
             let args = ["-V", ""];
-            let result = base64_main(args.iter().map(|s| OsString::from(s)));
+            let result = base64_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         {

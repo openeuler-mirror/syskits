@@ -18,6 +18,15 @@ use unicode_width::UnicodeWidthChar;
 use crate::FmtConfigs;
 use crate::FmtFileOrStdReader;
 
+#[inline]
+fn is_fmt_whitespace(c: char) -> bool {
+    c.is_ascii_whitespace()
+}
+
+fn trim_fmt_whitespace_start(s: &str) -> &str {
+    s.trim_start_matches(is_fmt_whitespace)
+}
+
 fn fmt_char_width(c: char) -> usize {
     match (c as usize) < 0xA0 {
         true => {
@@ -113,7 +122,7 @@ impl FmtFileLines<'_> {
                 for (i, char) in line.char_indices() {
                     if line[i..].starts_with(pfx) {
                         return (true, i);
-                    } else if !char.is_whitespace() {
+                    } else if !is_fmt_whitespace(char) {
                         break;
                     }
                 }
@@ -132,7 +141,7 @@ impl FmtFileLines<'_> {
                 prefix_len = indent_len;
             }
 
-            if (os >= prefix_end) && !c.is_whitespace() {
+            if (os >= prefix_end) && !is_fmt_whitespace(c) {
                 // 发现前缀后第一个非空格，这是 indent_end
                 indent_end = os;
                 break;
@@ -158,7 +167,7 @@ impl Iterator for FmtFileLines<'_> {
         // 发送一个空行
         // Err(true) 表示这是一个换行符、
         // 在检测邮件头时必须知道这一点
-        if n.chars().all(char::is_whitespace) {
+        if n.chars().all(is_fmt_whitespace) {
             return Some(FmtLine::NoFormatLine(String::new(), true));
         }
 
@@ -175,7 +184,7 @@ impl Iterator for FmtFileLines<'_> {
         if is_p_match
             && n[p_offset + self.opts.prefix_option.as_ref().map_or(0, |s| s.len())..]
                 .chars()
-                .all(char::is_whitespace)
+                .all(is_fmt_whitespace)
         {
             return Some(FmtLine::NoFormatLine(n, false));
         }
@@ -495,7 +504,7 @@ impl FmtWordSplit<'_> {
         let mut after_tab = 0;
         let mut word_start = None;
         for (os, c) in string.char_indices() {
-            if !c.is_whitespace() {
+            if !is_fmt_whitespace(c) {
                 word_start = Some(os);
                 break;
             } else if c == '\t' {
@@ -516,7 +525,7 @@ impl FmtWordSplit<'_> {
 impl FmtWordSplit<'_> {
     fn new<'b>(fmt_opts: &'b FmtConfigs, string: &'b str) -> FmtWordSplit<'b> {
         // 分词 *must* 以非空格字符开始
-        let trim_string = string.trim_start();
+        let trim_string = trim_fmt_whitespace_start(string);
         FmtWordSplit {
             opts: fmt_opts,
             string: trim_string,
@@ -568,7 +577,7 @@ impl<'a> Iterator for FmtWordSplit<'a> {
         // 查找下一个空白字符的起始位置 注意，这样做保留了 self.position 指向空白字符或字符串末尾的不变性
         let mut word_n_chars = 0;
         self.position = match self.string[word_start..].find(|x: char| {
-            if x.is_whitespace() {
+            if is_fmt_whitespace(x) {
                 true
             } else {
                 word_n_chars += fmt_char_width(x);

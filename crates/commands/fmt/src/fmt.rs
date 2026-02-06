@@ -18,8 +18,8 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_show_warning;
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_show_error;
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::OsString;
@@ -166,17 +166,18 @@ impl FmtConfigs {
             (None, None) => (FMT_DEFAULT_WIDTH, FMT_DEFAULT_GOAL),
         };
 
-        debug_assert!(
-            width >= goal,
-            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
-        );
-
         if width > FMT_MAX_WIDTH {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid width: '{width}': Numerical result out of range"),
             ));
         }
+
+        debug_assert!(
+            width >= goal,
+            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
+        );
+
         Ok((width, goal))
     }
 }
@@ -196,15 +197,19 @@ fn fmt_process_file<W: ?Sized + Write>(
     file_name: &str,
     fmt_configs: &FmtConfigs,
     output_stream: &mut W,
-) -> CTResult<()> {
+) -> CTResult<bool> {
     let mut fp = if file_name == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>)
     } else {
         match File::open(file_name) {
             Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
             Err(e) => {
-                ct_show_warning!("{}: {}", file_name.maybe_quote(), e);
-                return Ok(());
+                ct_show_error!(
+                    "cannot open {} for reading: {}",
+                    file_name.quote(),
+                    io_error_message(&e)
+                );
+                return Ok(false);
             }
         }
     };
@@ -230,7 +235,7 @@ fn fmt_process_file<W: ?Sized + Write>(
         .flush()
         .map_err_context(|| "failed to write output".to_string())?;
 
-    Ok(())
+    Ok(true)
 }
 
 #[derive(Default)]
@@ -252,7 +257,10 @@ impl Tool for Fmt {
 pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+
+    let raw_args: Vec<OsString> = args.collect();
+    let processed_args = preprocess_legacy_width_syntax(raw_args)?;
+    let matches = ct_app().try_get_matches_from(processed_args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(fmt_flags::FMT_FILES)
@@ -262,12 +270,77 @@ pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let fmt_opts = FmtConfigs::from_matches(&matches)?;
 
     let mut ostream = BufWriter::new(stdout());
+    let mut all_ok = true;
 
     for file_name in &files {
-        fmt_process_file(file_name, &fmt_opts, &mut ostream)?;
+        all_ok &= fmt_process_file(file_name, &fmt_opts, &mut ostream)?;
+    }
+
+    if !all_ok {
+        set_ct_exit_code(1);
     }
 
     Ok(())
+}
+
+fn preprocess_legacy_width_syntax(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
+    if args.is_empty() {
+        return Ok(args);
+    }
+
+    let mut saw_double_dash = false;
+    for (idx, arg) in args.iter().enumerate().skip(1) {
+        let s = arg.to_string_lossy();
+        if saw_double_dash {
+            continue;
+        }
+        if s == "--" {
+            saw_double_dash = true;
+            continue;
+        }
+        if idx > 1 && is_legacy_width_flag(&s) {
+            let invalid = s.chars().nth(1).unwrap_or('?');
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "invalid option -- {invalid}; -WIDTH is recognized only when it is the first\noption; use -w N instead\nTry 'fmt --help' for more information."
+                ),
+            ));
+        }
+    }
+
+    if args.len() > 1 {
+        let first = args[1].to_string_lossy();
+        if is_legacy_width_flag(&first) {
+            let width_raw = first[1..].to_string();
+            if !width_raw.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("invalid width: {}", width_raw.quote()),
+                ));
+            }
+            let mut converted = Vec::with_capacity(args.len() + 1);
+            converted.push(args[0].clone());
+            converted.push(OsString::from("-w"));
+            converted.push(OsString::from(width_raw));
+            converted.extend(args.into_iter().skip(2));
+            return Ok(converted);
+        }
+    }
+
+    Ok(args)
+}
+
+fn is_legacy_width_flag(arg: &str) -> bool {
+    arg.len() >= 2 && arg.starts_with('-') && arg.as_bytes()[1].is_ascii_digit()
+}
+
+fn io_error_message(err: &std::io::Error) -> String {
+    let mut msg = err.to_string();
+    if let Some(idx) = msg.find(" (os error ") {
+        msg.truncate(idx);
+    }
+    msg
 }
 
 pub fn ct_app() -> Command {

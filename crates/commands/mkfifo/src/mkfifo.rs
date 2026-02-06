@@ -26,6 +26,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
 use libc::mkfifo;
 use selinux::SecurityContext;
+use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
@@ -45,67 +46,180 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args)?;
 
-    // 检查不支持的选项
-    if args_match.contains_id(opt_flags::CONTEXT) {
-        let context = args_match.get_one::<OsString>(opt_flags::CONTEXT);
-        set_security_context(context).map_err(|e| CtSimpleError::new(1, e))?;
-    }
-    if args_match.get_flag(opt_flags::SE_LINUX_SECURITY_CONTEXT) {
-        set_security_context(None).map_err(|e| CtSimpleError::new(1, e))?;
+    // 处理安全上下文(仅当用户明确指定-Z或--context时)
+    let has_z_flag = args_match.get_flag(opt_flags::SE_LINUX_SECURITY_CONTEXT);
+    let has_context_flag =
+        args_match.value_source(opt_flags::CONTEXT) == Some(clap::parser::ValueSource::CommandLine);
+    let context = args_match
+        .get_one::<OsString>(opt_flags::CONTEXT)
+        .filter(|v| !v.is_empty());
+    let set_context = has_z_flag || has_context_flag;
+    let warn_on_unsupported = context.is_some();
+
+    if set_context && context.is_some() {
+        set_security_context_for_all(context).map_err(|e| CtSimpleError::new(1, e))?;
     }
 
     // 解析文件权限模式
     let fifo_mode = match args_match.get_one::<String>(opt_flags::MODE) {
-        Some(m) => match usize::from_str_radix(m, 8) {
-            Ok(m) => m,
-            Err(e) => return Err(CtSimpleError::new(1, format!("invalid mode: {e}"))),
-        },
+        Some(mode_str) => {
+            let mode =
+                parse_mkfifo_mode(mode_str).map_err(|_| CtSimpleError::new(1, "invalid mode"))?;
+            if mode > 0o777 {
+                return Err(CtSimpleError::new(
+                    1,
+                    "mode must specify only file permission bits".to_string(),
+                ));
+            }
+            mode as libc::mode_t
+        }
         None => 0o666,
     };
 
     // 解析FIFO路径列表
     let fifo_strs: Vec<String> = match args_match.get_many::<String>(opt_flags::FIFO) {
         Some(v) => v.cloned().collect(),
-        None => return Err(CtSimpleError::new(1, "missing operand")),
+        None => {
+            let err_message = format!(
+                "missing operand\nTry '{} --help' for more information.",
+                ctcore::ct_util_name()
+            );
+            return Err(CtSimpleError::new(1, err_message));
+        }
     };
 
     // 创建FIFO
+    let mut has_error = false;
+    let specified_mode =
+        args_match.value_source(opt_flags::MODE) == Some(clap::parser::ValueSource::CommandLine);
+
     for fifo in fifo_strs {
-        let e = unsafe {
+        if set_context && context.is_none() {
+            set_default_context_for_path(&fifo, fifo_mode as libc::mode_t, warn_on_unsupported)
+                .map_err(|e| CtSimpleError::new(1, e))?;
+        }
+
+        let result = unsafe {
             let fifo_name = CString::new(fifo.as_bytes()).unwrap();
-            mkfifo(fifo_name.as_ptr(), fifo_mode as libc::mode_t)
+            mkfifo(fifo_name.as_ptr(), fifo_mode)
         };
-        if e == -1 {
+
+        if result == -1 {
+            let err = std::io::Error::last_os_error();
             ct_show!(CtSimpleError::new(
                 1,
-                format!("cannot create fifo {}: File exists", fifo.quote())
+                format!("cannot create fifo {}: {}", fifo.quote(), err)
             ));
+            has_error = true;
+        } else if specified_mode {
+            // 如果指定了模式,使用lchmod确保权限正确设置(匹配GNU的lchmod行为)
+            unsafe {
+                let c_path =
+                    CString::new(fifo.as_bytes()).expect("Failed to convert path to CString");
+                #[cfg(target_os = "linux")]
+                let chmod_result = {
+                    // Linux 没有 lchmod,但对于 FIFO 使用 chmod 是安全的
+                    libc::chmod(c_path.as_ptr(), fifo_mode)
+                };
+                #[cfg(not(target_os = "linux"))]
+                let chmod_result = libc::lchmod(c_path.as_ptr(), fifo_mode);
+
+                if chmod_result != 0 {
+                    let err = std::io::Error::last_os_error();
+                    ct_show!(CtSimpleError::new(
+                        1,
+                        format!("cannot set permissions of {}: {}", fifo.quote(), err)
+                    ));
+                    has_error = true;
+                }
+            }
         }
     }
 
-    Ok(())
+    if has_error {
+        Err(CtSimpleError::new(1, String::new()))
+    } else {
+        Ok(())
+    }
 }
 
-fn set_security_context(context: Option<&OsString>) -> Result<(), String> {
+fn set_security_context_for_all(context: Option<&OsString>) -> Result<(), String> {
+    // 首先检查SELinux是否启用
+    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        // SELinux未启用,如果用户明确指定了上下文,发出警告
+        if context.is_some() {
+            eprintln!(
+                "mkfifo: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+            );
+        }
+        return Ok(());
+    }
+
     match context {
         Some(ctx) => {
             let c_context = os_str_to_c_string(ctx);
-            // 如果提供了具体的上下文，使用它
+            // 如果提供了具体的上下文,使用它
             SecurityContext::from_c_str(&c_context, false)
                 .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("Failed to set security context: {e}"))
+                .map_err(|e| format!("failed to set default file creation context: {e}"))
         }
-        None => {
-            // 使用空字符串来触发默认安全上下文
-            let empty_ctx = CString::new("").unwrap();
-            SecurityContext::from_c_str(&empty_ctx, false)
-                .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("Failed to set default security context: {e}"))
-        }
+        None => Ok(()),
     }
+}
+
+fn set_default_context_for_path(
+    fifo_path: &str,
+    fifo_mode: libc::mode_t,
+    warn_on_unsupported: bool,
+) -> Result<(), String> {
+    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        if warn_on_unsupported {
+            eprintln!(
+                "mkfifo: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+            );
+        }
+        return Ok(());
+    }
+
+    let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
+        Ok(labeler) => labeler,
+        Err(_) => return Ok(()),
+    };
+
+    let file_mode = (libc::S_IFIFO as libc::mode_t) | fifo_mode;
+    let file_access_mode =
+        selinux::FileAccessMode::new(file_mode).expect("mode should be non-zero");
+    let default_context = match labeler.look_up_by_path(fifo_path, Some(file_access_mode)) {
+        Ok(context) => context,
+        Err(_) => return Ok(()),
+    };
+
+    let _ = default_context.set_for_new_file_system_objects(false);
+    Ok(())
 }
 pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
     CString::new(os_str.as_bytes()).expect("Failed to convert OsStr to CString")
+}
+
+fn parse_mkfifo_mode(mode: &str) -> Result<libc::mode_t, String> {
+    if mode.contains(',') && !mode.chars().any(|c| c.is_ascii_digit()) {
+        let mut current: u32 = libc::S_IRUSR
+            | libc::S_IWUSR
+            | libc::S_IRGRP
+            | libc::S_IWGRP
+            | libc::S_IROTH
+            | libc::S_IWOTH;
+        let umask = ctcore::ct_mode::get_umask();
+        for part in mode.split(',') {
+            if part.is_empty() {
+                return Err("invalid mode".to_string());
+            }
+            current = ctcore::ct_mode::parse_symbolic(current, part, umask, true)?;
+        }
+        return Ok(current as libc::mode_t);
+    }
+
+    ctcore::ct_mode::parse_mode(mode).map(|m| m as libc::mode_t)
 }
 // 构建命令行解析器
 pub fn ct_app() -> Command {
@@ -128,7 +242,6 @@ pub fn ct_app() -> Command {
             .short('m')
             .long(opt_flags::MODE)
             .help(t!("mkfifo.clap.mode"))
-            .default_value("0666")
             .value_name("MODE"),
         Arg::new(opt_flags::SE_LINUX_SECURITY_CONTEXT)
             .short('Z')
@@ -139,6 +252,8 @@ pub fn ct_app() -> Command {
             .value_name("CTX")
             .value_parser(ValueParser::os_string())
             .num_args(0..=1)
+            .require_equals(true)
+            .default_missing_value("")
             .help(
                 "like -Z, or if CTX is specified then set the SELinux \
                     or SMACK security context to CTX",

@@ -125,9 +125,9 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
 
     // 正则表达式用于匹配模式中的"upto"、"skipto"和可选的偏移量
     let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]\d+)?$").unwrap();
+        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[+-]?\d+)?$").unwrap();
     // 正则表达式用于匹配模式重复的次数
-    let execute_n_times_reg = Regex::new(r"^\{(?P<TIMES>\d+)|\*\}$").unwrap();
+    let execute_n_times_reg = Regex::new(r"^\{(?:(?P<TIMES>\d+)|\*)\}$").unwrap();
 
     // 使用peekable迭代器以便于向前查看下一个参数
     let mut iter = args.iter().peekable();
@@ -163,11 +163,11 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
             };
             // 根据匹配的类型，构建相应的模式
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = Regex::new(up_to_match.as_str())
+                let pattern = Regex::new(&bre_to_rust_regex(up_to_match.as_str()))
                     .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = Regex::new(skip_to_match.as_str())
+                let pattern = Regex::new(&bre_to_rust_regex(skip_to_match.as_str()))
                     .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
                 csplit_patterns.push(CsplitPattern::SkipToMatch(pattern, offset, execute_n_times));
             }
@@ -181,6 +181,17 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
     }
     // 成功解析所有参数后，返回模式向量
     Ok(csplit_patterns)
+}
+
+fn bre_to_rust_regex(pattern: &str) -> String {
+    pattern
+        .replace(r"\{", "{")
+        .replace(r"\}", "}")
+        .replace(r"\(", "(")
+        .replace(r"\)", ")")
+        .replace(r"\+", "+")
+        .replace(r"\?", "?")
+        .replace(r"\|", "|")
 }
 
 /// Asserts the line numbers are in increasing order, starting at 1.

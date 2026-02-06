@@ -47,11 +47,15 @@ use ctcore::ct_process::{getegid, geteuid};
 use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
+#[cfg(target_os = "linux")]
+use selinux::{self, SecurityContext};
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{CString, OsStr, OsString};
 use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
@@ -89,6 +93,14 @@ pub struct Installer {
     create_leading: bool,
     /// 指定的目标目录
     target_dir: Option<String>,
+    /// 将目标视为普通文件
+    no_target_dir: bool,
+    /// 是否保留安全上下文
+    preserve_context: bool,
+    /// 是否设置安全上下文（-Z/--context）
+    set_context: bool,
+    /// 指定的安全上下文
+    context: Option<OsString>,
 }
 
 impl Default for Installer {
@@ -107,6 +119,10 @@ impl Default for Installer {
             strip_program: String::from(DEFAULT_STRIP_PROGRAM),
             create_leading: false,
             target_dir: None,
+            no_target_dir: false,
+            preserve_context: false,
+            set_context: false,
+            context: None,
         }
     }
 }
@@ -165,13 +181,6 @@ mod install_options {
 /// 安装命令可能遇到的错误类型
 #[derive(Debug)]
 enum InstallError {
-    /// 尝试使用未实现的功能特性
-    /// 参数: 未实现特性的名称
-    Unimplemented(String),
-
-    /// -d 选项使用时未提供目录参数
-    DirNeedsArg(),
-
     /// chmod 操作失败
     /// 参数: 目标文件路径
     ChmodFailed(PathBuf),
@@ -185,10 +194,6 @@ enum InstallError {
     /// 目标路径无效(不存在)
     /// 参数: 无效的目标路径
     InvalidTarget(PathBuf),
-
-    /// 目标应该是目录但不是目录
-    /// 参数: 目标路径
-    TargetDirIsntDir(PathBuf),
 
     /// 备份文件失败
     /// 参数:
@@ -237,10 +242,7 @@ enum InstallError {
 
 impl CTError for InstallError {
     fn code(&self) -> i32 {
-        match self {
-            Self::Unimplemented(_) => 2,
-            _ => 1,
-        }
+        1
     }
 
     fn usage(&self) -> bool {
@@ -253,18 +255,6 @@ impl Error for InstallError {}
 impl Display for InstallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            // 未实现的功能特性错误
-            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {opt}"),
-
-            // -d 选项需要至少一个参数
-            Self::DirNeedsArg() => {
-                write!(
-                    f,
-                    "{} with -d requires at least one argument.",
-                    ctcore::ct_util_name()
-                )
-            }
-
             // 创建目录失败,显示具体错误原因
             Self::CreateDirFailed(dir, e) => {
                 Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
@@ -279,14 +269,9 @@ impl Display for InstallError {
             // 目标路径不存在
             Self::InvalidTarget(target) => write!(
                 f,
-                "invalid target {}: No such file or directory",
+                "failed to access {}: No such file or directory",
                 target.quote()
             ),
-
-            // 目标不是目录
-            Self::TargetDirIsntDir(target) => {
-                write!(f, "target {} is not a directory", target.quote())
-            }
 
             // 备份文件失败,显示源文件、目标文件和错误原因
             Self::BackupFailed(from, to, e) => Display::fmt(
@@ -370,13 +355,15 @@ impl Installer {
     fn check_conflicts(preserve_timestamps: bool, compare: bool, strip: bool) -> CTResult<()> {
         // 检查时间戳保留和比较选项的冲突
         if preserve_timestamps && compare {
-            ct_show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
+            ct_show_error!(
+                "options --compare (-C) and --preserve-timestamps are mutually exclusive"
+            );
             return Err(1.into());
         }
 
         // 检查比较和strip选项的冲突
         if compare && strip {
-            ct_show_error!("Options --compare and --strip are mutually exclusive");
+            ct_show_error!("options --compare (-C) and --strip are mutually exclusive");
             return Err(1.into());
         }
         Ok(())
@@ -431,13 +418,61 @@ impl Installer {
             .cloned();
 
         let preserve_timestamps = matches.get_flag(install_options::INSTALL_PRESERVE_TIMESTAMPS);
-        let compare = matches.get_flag(install_options::INSTALL_COMPARE);
+        let mut compare = matches.get_flag(install_options::INSTALL_COMPARE);
         let strip = matches.get_flag(install_options::INSTALL_STRIP);
+        let no_target_dir = matches.get_flag(install_options::INSTALL_NO_TARGET_DIRECTORY);
+        let preserve_context = matches.get_flag(install_options::INSTALL_PRESERVE_CONTEXT);
+        let context = matches
+            .get_one::<OsString>(install_options::INSTALL_CONTEXT)
+            .cloned();
+        let set_context = matches.contains_id(install_options::INSTALL_CONTEXT);
 
         Self::check_conflicts(preserve_timestamps, compare, strip)?;
 
         let owner_id = Self::parse_owner(matches)?;
         let group_id = Self::parse_group(matches)?;
+
+        if main_function == MainFunction::Directory && strip {
+            ct_show_error!("the strip option may not be used when installing a directory");
+            return Err(1.into());
+        }
+        if main_function == MainFunction::Directory && target_dir.is_some() {
+            ct_show_error!("target directory not allowed when installing a directory");
+            return Err(1.into());
+        }
+        if no_target_dir && target_dir.is_some() {
+            ct_show_error!("cannot combine --target-directory (-t) and --no-target-directory (-T)");
+            return Err(1.into());
+        }
+
+        if compare {
+            if let Some(mode) = specified_mode {
+                if mode & !0o777 != 0 {
+                    ct_show_error!(
+                        "the --compare (-C) option is ignored when you specify a mode with non-permission bits"
+                    );
+                    compare = false;
+                }
+            }
+        }
+
+        let strip_program = matches
+            .get_one::<String>(install_options::INSTALL_STRIP_PROGRAM)
+            .map(|s| s.as_str())
+            .unwrap_or(DEFAULT_STRIP_PROGRAM);
+        if !strip && matches.contains_id(install_options::INSTALL_STRIP_PROGRAM) {
+            ct_show_error!(
+                "WARNING: ignoring --strip-program option as -s option was not specified"
+            );
+        }
+
+        let (preserve_context, set_context, context) =
+            normalize_context_flags(preserve_context, set_context, context)?;
+
+        if preserve_context && set_context {
+            ct_show_error!("cannot set target context and preserve it");
+            return Err(1.into());
+        }
 
         Ok(Self {
             main_function,
@@ -450,14 +485,13 @@ impl Installer {
             preserve_timestamps,
             compare,
             strip,
-            strip_program: String::from(
-                matches
-                    .get_one::<String>(install_options::INSTALL_STRIP_PROGRAM)
-                    .map(|s| s.as_str())
-                    .unwrap_or(DEFAULT_STRIP_PROGRAM),
-            ),
+            strip_program: String::from(strip_program),
             create_leading: matches.get_flag(install_options::INSTALL_CREATE_LEADING),
             target_dir,
+            no_target_dir,
+            preserve_context,
+            set_context,
+            context,
         })
     }
 
@@ -466,7 +500,7 @@ impl Installer {
             return Err(InstallError::InvalidTarget(target_dir.to_path_buf()).into());
         }
         if !target_dir.is_dir() {
-            return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
+            return Err(InstallError::NotADirectory(target_dir.to_path_buf()).into());
         }
         Ok(())
     }
@@ -478,7 +512,7 @@ impl Installer {
 
         if self.create_leading {
             if let Some(parent) = to.parent() {
-                std::fs::create_dir_all(parent)
+                create_leading_dirs(parent, self.verbose)
                     .map_err(|e| InstallError::CreateDirFailed(parent.to_path_buf(), e))?;
 
                 // 验证创建的目录
@@ -587,6 +621,18 @@ impl Installer {
     }
 
     fn need_copy(&self, from: &Path, to: &Path) -> CTResult<bool> {
+        let from_lmeta = match fs::symlink_metadata(from) {
+            Ok(meta) => meta,
+            Err(_) => return Ok(true),
+        };
+        let to_lmeta = match fs::symlink_metadata(to) {
+            Ok(meta) => meta,
+            Err(_) => return Ok(true),
+        };
+        if !from_lmeta.file_type().is_file() || !to_lmeta.file_type().is_file() {
+            return Ok(true);
+        }
+
         // 获取并检查元数据
         let (from_meta, to_meta) = match self.check_metadata(from, to)? {
             Some(meta) => meta,
@@ -606,6 +652,21 @@ impl Installer {
         // 检查所有权
         if self.check_ownership(&to_meta) {
             return Ok(true);
+        }
+
+        #[cfg(target_os = "linux")]
+        if self.preserve_context && selinux_supported() {
+            let from_ctx = match SecurityContext::of_path(from, true, false) {
+                Ok(Some(ctx)) => ctx,
+                _ => return Ok(true),
+            };
+            let to_ctx = match SecurityContext::of_path(to, true, false) {
+                Ok(Some(ctx)) => ctx,
+                _ => return Ok(true),
+            };
+            if from_ctx.as_bytes() != to_ctx.as_bytes() {
+                return Ok(true);
+            }
         }
 
         // 比较文件内容
@@ -632,13 +693,9 @@ impl Installer {
         // 处理特殊情况：install -d foo/. 应该创建 foo/
         let path_to_create = dir_strip_dot_for_creation(path);
 
-        // 创建目录及其所有父目录
-        fs::create_dir_all(path_to_create.as_path())
+        // 创建目录及其所有父目录，并在 verbose 模式下打印每一层
+        create_leading_dirs(path_to_create.as_path(), self.verbose)
             .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())?;
-
-        if self.verbose {
-            println!("creating directory {}", path_to_create.quote());
-        }
 
         Ok(())
     }
@@ -784,7 +841,6 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         // TODO implement flag
         Arg::new(install_options::INSTALL_PRESERVE_CONTEXT)
-            .short('P')
             .long(install_options::INSTALL_PRESERVE_CONTEXT)
             .help(t!("install.clap.install_preserve_context"))
             .action(ArgAction::SetTrue),
@@ -794,7 +850,8 @@ pub fn ct_app() -> Command {
             .long(install_options::INSTALL_CONTEXT)
             .help(t!("install.clap.install_context"))
             .value_name("CONTEXT")
-            .action(ArgAction::SetTrue),
+            .num_args(0..=1)
+            .value_parser(clap::builder::ValueParser::os_string()),
         Arg::new(install_options::INSTALL_FILES)
             .action(ArgAction::Append)
             .num_args(1..)
@@ -821,16 +878,8 @@ pub fn ct_app() -> Command {
 /// Error datum is a string of the unimplemented argument.
 ///
 ///
-fn check_unimplemented(matches: &ArgMatches) -> CTResult<()> {
-    if matches.get_flag(install_options::INSTALL_NO_TARGET_DIRECTORY) {
-        Err(InstallError::Unimplemented(String::from("--no-target-directory, -T")).into())
-    } else if matches.get_flag(install_options::INSTALL_PRESERVE_CONTEXT) {
-        Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
-    } else if matches.get_flag(install_options::INSTALL_CONTEXT) {
-        Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
-    } else {
-        Ok(())
-    }
+fn check_unimplemented(_matches: &ArgMatches) -> CTResult<()> {
+    Ok(())
 }
 
 /// 创建目录并设置其权限。
@@ -846,7 +895,7 @@ fn check_unimplemented(matches: &ArgMatches) -> CTResult<()> {
 /// * `b` - 安装器配置，包含权限模式和其他选项
 ///
 /// # 错误处理
-/// - 如果路径列表为空，返回 `DirNeedsArg` 错误
+/// - 如果路径列表为空，返回错误
 /// - 目录创建失败时继续处理其他目录
 /// - 权限设置失败时继续处理其他目录
 ///
@@ -854,7 +903,8 @@ fn check_unimplemented(matches: &ArgMatches) -> CTResult<()> {
 /// 返回 `CTResult<()>`，表示操作是否成功完成
 fn install_directory(paths: &[String], b: &Installer) -> CTResult<()> {
     if paths.is_empty() {
-        return Err(InstallError::DirNeedsArg().into());
+        ct_show_error!("missing file operand");
+        return Err(1.into());
     }
 
     for path in paths.iter().map(Path::new) {
@@ -894,16 +944,87 @@ fn is_potential_directory_path(path: &Path) -> bool {
 /// 返回 `CTResult<()>`，表示操作是否成功完成
 fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
     // 验证路径数量
-    if paths.len() < 2 && b.target_dir.is_none() {
+    if paths.is_empty() {
+        ct_show_error!("missing file operand");
+        return Err(1.into());
+    }
+    if b.no_target_dir && paths.len() > 2 {
+        ct_show_error!("extra operand {}", paths[2].as_str().quote());
+        return Err(1.into());
+    }
+    if b.target_dir.is_none() && paths.len() < 2 {
+        ct_show_error!(
+            "missing destination file operand after {}",
+            paths[0].as_str().quote()
+        );
+        return Err(1.into());
+    }
+
+    // 处理两种模式:
+    // 1. install source dest (单文件复制)
+    // 2. install source1 source2 ... target_dir (多文件复制到目录)
+    if b.target_dir.is_none() && paths.len() == 2 {
+        // 单文件复制模式: install source dest
+        let from = Path::new(&paths[0]);
+        let to = Path::new(&paths[1]);
+
+        if b.no_target_dir {
+            if to.is_dir() {
+                ct_show_error!("cannot create regular file {}: Is a directory", to.quote());
+                ctcore::ct_error::set_ct_exit_code(1);
+                return Err(1.into());
+            }
+            if let Err(e) = b.process_source_file(from, to) {
+                ct_show!(e);
+                ctcore::ct_error::set_ct_exit_code(1);
+            }
+            return Ok(());
+        }
+
+        // 如果目标是已存在的目录,则复制到该目录内
+        if to.is_dir() {
+            if from.is_dir() {
+                ct_show!(InstallError::OmittingDirectory(from.to_path_buf()));
+                ctcore::ct_error::set_ct_exit_code(1);
+                return Ok(());
+            }
+            let file_name = match from.file_name() {
+                Some(name) => name,
+                None => {
+                    ct_show!(InstallError::OmittingDirectory(from.to_path_buf()));
+                    ctcore::ct_error::set_ct_exit_code(1);
+                    return Ok(());
+                }
+            };
+            let to = to.join(file_name);
+            if let Err(e) = b.process_source_file(from, &to) {
+                ct_show!(e);
+                ctcore::ct_error::set_ct_exit_code(1);
+            }
+        } else {
+            // 否则直接复制为新文件
+            if let Err(e) = b.process_source_file(from, to) {
+                ct_show!(e);
+                ctcore::ct_error::set_ct_exit_code(1);
+            }
+        }
         return Ok(());
     }
 
-    // 获取并验证目标目录
+    // 多文件复制模式: 目标必须是目录
     let target_dir = if let Some(ref dir) = b.target_dir {
         PathBuf::from(dir)
     } else {
         PathBuf::from(&paths[paths.len() - 1])
     };
+    if !target_dir.exists() {
+        if b.create_leading {
+            create_leading_dirs(&target_dir, b.verbose)
+                .map_err(|e| InstallError::CreateDirFailed(target_dir.clone(), e))?;
+        } else {
+            return Err(InstallError::InvalidTarget(target_dir).into());
+        }
+    }
     b.validate_target_dir(&target_dir)?;
 
     // 处理源文件
@@ -914,6 +1035,11 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
     };
 
     for from in sources.iter().map(Path::new) {
+        if from.is_dir() {
+            ct_show!(InstallError::OmittingDirectory(from.to_path_buf()));
+            ctcore::ct_error::set_ct_exit_code(1);
+            continue;
+        }
         let file_name = match from.file_name() {
             Some(name) => name,
             None => continue,
@@ -977,6 +1103,124 @@ fn chown_optional_user_group(path: &Path, b: &Installer) -> CTResult<()> {
         Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
     }
 
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn selinux_supported() -> bool {
+    selinux::kernel_support() != selinux::KernelSupport::Unsupported
+}
+
+#[cfg(not(target_os = "linux"))]
+fn selinux_supported() -> bool {
+    false
+}
+
+fn os_str_to_c_string(os_str: &OsStr) -> CString {
+    CString::new(os_str.as_bytes()).expect("Failed to convert OsStr to CString")
+}
+
+fn normalize_context_flags(
+    preserve_context: bool,
+    set_context: bool,
+    context: Option<OsString>,
+) -> CTResult<(bool, bool, Option<OsString>)> {
+    if !selinux_supported() {
+        if preserve_context {
+            eprintln!(
+                "install: WARNING: ignoring --preserve-context; this kernel is not SELinux-enabled"
+            );
+        }
+        if context.is_some() {
+            eprintln!(
+                "install: warning: ignoring --context; it requires an SELinux-enabled kernel"
+            );
+        }
+        return Ok((false, false, None));
+    }
+    Ok((preserve_context, set_context, context))
+}
+
+#[cfg(target_os = "linux")]
+fn apply_default_selinux_context(path: &Path, mode: u32) -> CTResult<()> {
+    let _ = mode;
+    SecurityContext::set_default_for_path(path).map_err(|e| {
+        ct_show_error!(
+            "warning: failed to restore context for {}: {e}",
+            path.display()
+        );
+        1
+    })?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn apply_explicit_selinux_context(path: &Path, context: &OsString) -> CTResult<()> {
+    let c_context = os_str_to_c_string(context);
+    SecurityContext::from_c_str(&c_context, false)
+        .set_for_path(path, true, false)
+        .map_err(|e| {
+            ct_show_error!("failed to set default file creation context: {e}");
+            1
+        })?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn apply_preserve_context(from: &Path, to: &Path) -> CTResult<()> {
+    let ctx = match SecurityContext::of_path(from, true, false) {
+        Ok(Some(c)) => c,
+        Ok(None) => return Ok(()),
+        Err(e) => {
+            ct_show_error!(
+                "warning: failed to get security context for {}: {e}",
+                from.display()
+            );
+            return Ok(());
+        }
+    };
+    if let Err(e) = ctx.set_for_path(to, true, false) {
+        ct_show_error!(
+            "warning: failed to set security context for {}: {e}",
+            to.display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_default_selinux_context(_path: &Path, _mode: u32) -> CTResult<()> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_explicit_selinux_context(_path: &Path, _context: &OsString) -> CTResult<()> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_preserve_context(_from: &Path, _to: &Path) -> CTResult<()> {
+    Ok(())
+}
+
+fn create_leading_dirs(path: &Path, verbose: bool) -> Result<(), std::io::Error> {
+    let mut cur = PathBuf::new();
+    for component in path.components() {
+        cur.push(component);
+        if cur.exists() {
+            if !cur.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotADirectory,
+                    "Not a directory",
+                ));
+            }
+            continue;
+        }
+        fs::create_dir(&cur)?;
+        if verbose {
+            println!("install: creating directory {}", cur.quote());
+        }
+    }
     Ok(())
 }
 
@@ -1210,6 +1454,18 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
 
     copy_file(from, to)?;
 
+    if b.set_context {
+        if let Some(ref ctx) = b.context {
+            apply_explicit_selinux_context(to, ctx)?;
+        } else {
+            apply_default_selinux_context(to, b.mode())?;
+        }
+    }
+
+    if b.preserve_context {
+        apply_preserve_context(from, to)?;
+    }
+
     #[cfg(not(windows))]
     if b.strip {
         strip_file(to, b)?;
@@ -1298,6 +1554,10 @@ mod tests {
             strip_program: String::from(DEFAULT_STRIP_PROGRAM),
             create_leading: false,
             target_dir: None,
+            no_target_dir: false,
+            preserve_context: false,
+            set_context: false,
+            context: None,
         };
         assert!(installer.need_copy(&source, &dest).unwrap());
 
@@ -1460,8 +1720,25 @@ mod tests {
             .arg(
                 Arg::new(install_options::INSTALL_CREATE_LEADING)
                     .short('D')
-                    .long(install_options::INSTALL_CREATE_LEADING)
-                    .action(ArgAction::SetFalse),
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_NO_TARGET_DIRECTORY)
+                    .short('T')
+                    .long(install_options::INSTALL_NO_TARGET_DIRECTORY)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_PRESERVE_CONTEXT)
+                    .long(install_options::INSTALL_PRESERVE_CONTEXT)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_CONTEXT)
+                    .short('Z')
+                    .long(install_options::INSTALL_CONTEXT)
+                    .num_args(0..=1)
+                    .value_parser(clap::builder::ValueParser::os_string()),
             );
 
         // 测试目录模式
@@ -1550,6 +1827,24 @@ mod tests {
                     .short('d')
                     .long(install_options::INSTALL_DIRECTORY)
                     .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_NO_TARGET_DIRECTORY)
+                    .short('T')
+                    .long(install_options::INSTALL_NO_TARGET_DIRECTORY)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_PRESERVE_CONTEXT)
+                    .long(install_options::INSTALL_PRESERVE_CONTEXT)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_CONTEXT)
+                    .short('Z')
+                    .long(install_options::INSTALL_CONTEXT)
+                    .num_args(0..=1)
+                    .value_parser(clap::builder::ValueParser::os_string()),
             );
 
         let matches = cmd
@@ -1572,6 +1867,10 @@ mod tests {
         assert_eq!(installer.strip_program, DEFAULT_STRIP_PROGRAM);
         assert!(!installer.create_leading);
         assert!(installer.target_dir.is_none());
+        assert!(!installer.no_target_dir);
+        assert!(!installer.preserve_context);
+        assert!(!installer.set_context);
+        assert!(installer.context.is_none());
     }
 
     #[test]
@@ -1601,6 +1900,10 @@ mod tests {
             strip_program: String::from(DEFAULT_STRIP_PROGRAM),
             create_leading: false,
             target_dir: Some(target_dir.to_string_lossy().into_owned()),
+            no_target_dir: false,
+            preserve_context: false,
+            set_context: false,
+            context: None,
         };
 
         let paths = vec![source.to_string_lossy().into_owned()];
@@ -1646,20 +1949,6 @@ mod tests {
 
     #[test]
     fn test_install_error_display() {
-        // 测试 Unimplemented
-        let err = InstallError::Unimplemented("test".to_string());
-        assert_eq!(err.to_string(), "Unimplemented feature: test");
-
-        // 测试 DirNeedsArg
-        let err = InstallError::DirNeedsArg();
-        assert_eq!(
-            err.to_string(),
-            format!(
-                "{} with -d requires at least one argument.",
-                ctcore::ct_util_name()
-            )
-        );
-
         // 测试 ChmodFailed
         let err = InstallError::ChmodFailed(PathBuf::from("/test/path"));
         assert_eq!(err.to_string(), "failed to chmod '/test/path'");
@@ -1676,12 +1965,8 @@ mod tests {
         let err = InstallError::InvalidTarget(PathBuf::from("/test/path"));
         assert_eq!(
             err.to_string(),
-            "invalid target '/test/path': No such file or directory"
+            "failed to access '/test/path': No such file or directory"
         );
-
-        // 测试 TargetDirIsntDir
-        let err = InstallError::TargetDirIsntDir(PathBuf::from("/test/path"));
-        assert_eq!(err.to_string(), "target '/test/path' is not a directory");
 
         // 测试 InvalidUser
         let err = InstallError::InvalidUser("testuser".to_string());

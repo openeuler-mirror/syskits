@@ -19,6 +19,8 @@ use ctcore::ct_error::CTError;
 pub enum CsplitError {
     #[error("IO error: {}", _0)]
     IoError(io::Error),
+    #[error("{}: {}", _0, _1)]
+    WriteError(String, String),
     #[error("{}: line number out of range", ._0.quote())]
     LineOutOfRange(String),
     #[error("{}: line number out of range on repetition {}", ._0.quote(), _1)]

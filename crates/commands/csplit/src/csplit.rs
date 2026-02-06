@@ -150,17 +150,22 @@ where
     let patterns: Vec<patterns::CsplitPattern> = patterns::get_patterns(&csplit_patterns[..])?;
 
     // 执行拆分操作
-    let result = do_csplit(&mut split_writer, patterns, &mut input_iter);
+    let mut result = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
-    // 处理剩余的输入行
-    input_iter.csplit_rewind_buffer();
-    if let Some((_, line)) = input_iter.next() {
-        split_writer.new_writer()?;
-        split_writer.writeln(&line?)?;
-        for (_, line) in input_iter {
-            split_writer.writeln(&line?)?;
+    // 仅在拆分流程成功时处理剩余输入，错误路径应直接进入清理逻辑。
+    if result.is_ok() {
+        input_iter.csplit_rewind_buffer();
+        if let Some((_, line)) = input_iter.next() {
+            result = (|| -> Result<(), CsplitError> {
+                split_writer.new_writer()?;
+                split_writer.writeln(&line?)?;
+                for (_, line) in input_iter {
+                    split_writer.writeln(&line?)?;
+                }
+                split_writer.finish_split()?;
+                Ok(())
+            })();
         }
-        split_writer.finish_split();
     }
 
     // 如果拆分过程中发生错误，并且设置为不保留文件，则删除所有拆分结果
@@ -247,6 +252,15 @@ where
     Ok(())
 }
 
+fn trim_os_error_suffix(message: String) -> String {
+    if let Some((base, suffix)) = message.rsplit_once(" (os error ") {
+        if suffix.ends_with(')') {
+            return base.to_string();
+        }
+    }
+    message
+}
+
 /// Write a portion of the input file into a split which filename is based on an incrementing
 /// counter.
 struct SplitWriter<'a> {
@@ -256,19 +270,12 @@ struct SplitWriter<'a> {
     counter: usize,
     /// the writer to the current split
     current_writer: Option<BufWriter<File>>,
+    /// filename of the current split
+    current_filename: Option<String>,
     /// the size in bytes of the current split
     size: usize,
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
-}
-
-impl Drop for SplitWriter<'_> {
-    fn drop(&mut self) {
-        if self.options.elide_empty_files && self.size == 0 {
-            let file_name = self.options.split_name.get(self.counter);
-            remove_file(file_name).expect("Failed to elide split");
-        }
-    }
 }
 
 impl SplitWriter<'_> {
@@ -277,6 +284,7 @@ impl SplitWriter<'_> {
             options,
             counter: 0,
             current_writer: None,
+            current_filename: None,
             size: 0,
             dev_null: false,
         }
@@ -287,13 +295,32 @@ impl SplitWriter<'_> {
     /// # Errors
     ///
     /// The creation of the split file may fail with some [`io::Error`].
-    fn new_writer(&mut self) -> io::Result<()> {
+    fn new_writer(&mut self) -> Result<(), CsplitError> {
+        self.close_current_writer()?;
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(file_name)?;
+        let file = File::create(&file_name)?;
         self.current_writer = Some(BufWriter::new(file));
+        self.current_filename = Some(file_name);
         self.counter += 1;
         self.size = 0;
         self.dev_null = false;
+        Ok(())
+    }
+
+    fn current_write_error(&self, err: io::Error) -> CsplitError {
+        let filename = self
+            .current_filename
+            .clone()
+            .unwrap_or_else(|| "<unknown>".to_string());
+        CsplitError::WriteError(filename, trim_os_error_suffix(err.to_string()))
+    }
+
+    fn close_current_writer(&mut self) -> Result<(), CsplitError> {
+        if let Some(mut current_writer) = self.current_writer.take() {
+            current_writer
+                .flush()
+                .map_err(|err| self.current_write_error(err))?;
+        }
         Ok(())
     }
 
@@ -308,13 +335,24 @@ impl SplitWriter<'_> {
     /// # Errors
     ///
     /// Some [`io::Error`] may occur when attempting to write the line.
-    fn writeln(&mut self, line: &str) -> io::Result<()> {
+    fn writeln(&mut self, line: &str) -> Result<(), CsplitError> {
         if !self.dev_null {
             match self.current_writer {
                 Some(ref mut current_writer) => {
                     let bytes = line.as_bytes();
-                    current_writer.write_all(bytes)?;
-                    current_writer.write_all(b"\n")?;
+                    let filename = self
+                        .current_filename
+                        .clone()
+                        .unwrap_or_else(|| "<unknown>".to_string());
+                    current_writer.write_all(bytes).map_err(|err| {
+                        CsplitError::WriteError(
+                            filename.clone(),
+                            trim_os_error_suffix(err.to_string()),
+                        )
+                    })?;
+                    current_writer.write_all(b"\n").map_err(|err| {
+                        CsplitError::WriteError(filename, trim_os_error_suffix(err.to_string()))
+                    })?;
                     self.size += bytes.len() + 1;
                 }
                 None => panic!("trying to write to a split that was not created"),
@@ -330,14 +368,24 @@ impl SplitWriter<'_> {
     /// # Errors
     ///
     /// Some [`io::Error`] if the split could not be removed in case it should be elided.
-    fn finish_split(&mut self) {
-        if !self.dev_null {
-            if self.options.elide_empty_files && self.size == 0 {
-                self.counter -= 1;
-            } else if !self.options.quiet {
-                println!("{}", self.size);
-            }
+    fn finish_split(&mut self) -> Result<(), CsplitError> {
+        if self.dev_null {
+            self.current_writer = None;
+            self.current_filename = None;
+            return Ok(());
         }
+
+        self.close_current_writer()?;
+        if self.options.elide_empty_files && self.size == 0 {
+            if let Some(file_name) = self.current_filename.take() {
+                remove_file(file_name)?;
+            }
+            self.counter = self.counter.saturating_sub(1);
+        } else if !self.options.quiet {
+            println!("{}", self.size);
+        }
+        self.current_filename = None;
+        Ok(())
     }
 
     /// Removes all the split files that were created.
@@ -403,7 +451,7 @@ impl SplitWriter<'_> {
             }
             self.writeln(&l)?;
         }
-        self.finish_split();
+        self.finish_split()?;
         result
     }
 
@@ -459,7 +507,7 @@ impl SplitWriter<'_> {
                                 self.writeln(&line?)?;
                             }
                             None => {
-                                self.finish_split();
+                                self.finish_split()?;
                                 return Err(CsplitError::LineOutOfRange(
                                     pattern_as_str.to_string(),
                                 ));
@@ -467,7 +515,7 @@ impl SplitWriter<'_> {
                         };
                         offset -= 1;
                     }
-                    self.finish_split();
+                    self.finish_split()?;
                     return Ok(());
                 }
                 self.writeln(&l)?;
@@ -491,7 +539,7 @@ impl SplitWriter<'_> {
                             "should be big enough to hold every lines"
                         );
                     }
-                    self.finish_split();
+                    self.finish_split()?;
                     if input_splitter.csplit_buffer_len() < f_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                     }
@@ -507,7 +555,7 @@ impl SplitWriter<'_> {
             }
         }
 
-        self.finish_split();
+        self.finish_split()?;
         // 如果未找到匹配，返回错误。
         Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
     }
@@ -631,7 +679,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 处理标准输入
         let stdin = io::stdin();
         csplit(&csplit_opts, patterns, stdin.lock()).map_err(|err| {
-            eprintln!("Error: {err}");
+            eprintln!("{}: {err}", ctcore::ct_util_name());
             1 // 错误时返回状态码 1
         })?;
     } else {
@@ -648,7 +696,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         }
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {
-            eprintln!("Error: {err}");
+            eprintln!("{}: {err}", ctcore::ct_util_name());
             1 // 错误时返回状态码 2
         })?;
     }
@@ -712,7 +760,8 @@ fn csplit_args_init() -> Vec<Arg> {
             .value_name("DIGITS")
             .help(t!("csplit.clap.digits")),
         Arg::new(opt_flags::QUIET)
-            .short('s')
+            .short('q')
+            .visible_short_alias('s')
             .long(opt_flags::QUIET)
             .visible_alias("silent")
             .help(t!("csplit.clap.quiet"))

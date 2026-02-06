@@ -1,8 +1,10 @@
 mkdir:
   clap:
-    mode: 设置文件模式（在windows上未实现）
-    parents: 按需创建父目录
+    help: 显示此帮助信息并退出
+    version: 输出版本信息并退出
+    mode: 设置文件模式(如 chmod),而不是 a=rwx - umask
+    parents: 如果已存在则不报错,按需创建父目录
     verbose: 为每个创建的目录打印消息
   usage: mkdir [选项]... 目录...
-  about: '如果不存在，则创建给定的目录'
+  about: '如果目录不存在,则创建目录。'
   after_help: '每个模式的格式为''[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+''.'

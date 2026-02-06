@@ -25,7 +25,17 @@ use ctcore::ct_show_if_err;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use sys_locale::get_locale;
+
+#[cfg(target_os = "linux")]
+use ctcore::libc;
+#[cfg(target_os = "linux")]
+use selinux::SecurityContext;
+#[cfg(target_os = "linux")]
+use selinux::label::{Labeler, back_end::File as FileBackEnd};
+#[cfg(target_os = "linux")]
+use std::ffi::{CString, OsStr};
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 
 const MKDIR_DEFAULT_PERM: u32 = 0o777;
 
@@ -33,6 +43,8 @@ mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
+    pub const CTX: &str = "ctx";
+    pub const CONTEXT: &str = "context";
     pub const DIRS: &str = "dirs";
 }
 
@@ -98,7 +110,23 @@ impl Tool for Mkdir {
 }
 
 pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    // 从环境变量读取 locale,符合 GNU coreutils 行为
+    let lang_code = std::env::var("LANG")
+        .ok()
+        .map(|lang| {
+            // 处理 LANG=C 或 LANG=C.UTF-8 等情况,使用英文
+            if lang.starts_with("C.") || lang == "C" || lang == "POSIX" {
+                String::from("en-US")
+            } else if lang.starts_with("zh") {
+                String::from("zh-CN")
+            } else if lang.starts_with("en") {
+                String::from("en-US")
+            } else {
+                // 其他情况尝试解析
+                lang.replace('_', "-")
+            }
+        })
+        .unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args = args.collect_lossy();
 
@@ -114,11 +142,30 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let dirs = matches
         .get_many::<OsString>(mkdir_flags::DIRS)
         .unwrap_or_default();
+    if dirs.len() == 0 {
+        return Err(CtSimpleError::new(1, "missing operand"));
+    }
     let is_verbose = matches.get_flag(mkdir_flags::VERBOSE);
     let is_recursive = matches.get_flag(mkdir_flags::PARENTS);
+    let has_z_flag = matches.get_flag(mkdir_flags::CTX);
+    let has_context_flag =
+        matches.value_source(mkdir_flags::CONTEXT) == Some(clap::parser::ValueSource::CommandLine);
+    let context = matches
+        .get_one::<OsString>(mkdir_flags::CONTEXT)
+        .filter(|v| !v.is_empty());
+    let set_context = has_z_flag || has_context_flag;
+    let warn_on_unsupported = context.is_some();
 
     match mkdir_get_mode(&matches, is_mode_had_minus_prefix) {
-        Ok(mode) => mkdir_exec(dirs, is_recursive, mode, is_verbose),
+        Ok(mode) => mkdir_exec(
+            dirs,
+            is_recursive,
+            mode,
+            is_verbose,
+            context,
+            set_context,
+            warn_on_unsupported,
+        ),
         Err(f) => Err(CtSimpleError::new(1, f)),
     }
 }
@@ -153,6 +200,18 @@ pub fn ct_app() -> Command {
             .long(mkdir_flags::VERBOSE)
             .help(t!("mkdir.clap.verbose"))
             .action(ArgAction::SetTrue),
+        Arg::new(mkdir_flags::CTX)
+            .short('Z')
+            .action(ArgAction::SetTrue)
+            .help("set the default SELinux security context"),
+        Arg::new(mkdir_flags::CONTEXT)
+            .long(mkdir_flags::CONTEXT)
+            .value_name("CTX")
+            .help("if CTX is specified then set the SELinux security context to CTX")
+            .value_parser(ValueParser::os_string())
+            .num_args(0..=1)
+            .require_equals(true)
+            .default_missing_value(""),
         Arg::new(mkdir_flags::DIRS)
             .action(ArgAction::Append)
             .num_args(1..)
@@ -179,12 +238,23 @@ fn mkdir_exec(
     is_recursive: bool,
     mode: u32,
     is_verbose: bool,
+    context: Option<&OsString>,
+    set_context: bool,
+    warn_on_unsupported: bool,
 ) -> CTResult<()> {
     for d in dirs {
         let p_buf = PathBuf::from(d);
         let p = p_buf.as_path();
 
-        ct_show_if_err!(mkdir(p, is_recursive, mode, is_verbose));
+        ct_show_if_err!(mkdir(
+            p,
+            is_recursive,
+            mode,
+            is_verbose,
+            context,
+            set_context,
+            warn_on_unsupported
+        ));
     }
     Ok(())
 }
@@ -200,14 +270,39 @@ fn mkdir_exec(
 /// ## 尾随点
 ///
 /// 为匹配 GNU 的行为，路径的最后一个目录是单个点（如 `some/path/to/.`）的情况会创建（并去除点）。
-pub fn mkdir(path: &Path, is_recursive: bool, mode: u32, is_verbose: bool) -> CTResult<()> {
+pub fn mkdir(
+    path: &Path,
+    is_recursive: bool,
+    mode: u32,
+    is_verbose: bool,
+    context: Option<&OsString>,
+    set_context: bool,
+    warn_on_unsupported: bool,
+) -> CTResult<()> {
     // 特殊情况匹配 GNU 的行为：
     // mkdir -p foo/. 应该工作并只创建 foo/
     // std::fs::create_dir("foo/."); 在纯 Rust 中失败
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
 
-    mkdir_create_dir(path, is_recursive, is_verbose, false)?;
+    if path.exists() && path.is_dir() {
+        if !is_recursive {
+            let err_message = format!("cannot create directory {}: File exists", path.quote());
+            return Err(CtSimpleError::new(1, err_message));
+        }
+        return Ok(());
+    }
+
+    mkdir_create_dir(
+        path,
+        is_recursive,
+        is_verbose,
+        false,
+        mode,
+        context,
+        set_context,
+        warn_on_unsupported,
+    )?;
     mkdir_chmod(path, mode)
 }
 
@@ -229,32 +324,60 @@ fn mkdir_chmod(_path: &Path, _mode: u32) -> CTResult<()> {
 
 // `is_parent` 参数在 windows 上不使用
 #[allow(unused_variables)]
+#[allow(clippy::too_many_arguments)]
 fn mkdir_create_dir(
     path: &Path,
     is_recursive: bool,
     is_verbose: bool,
     is_parent: bool,
+    mode: u32,
+    context: Option<&OsString>,
+    set_context: bool,
+    warn_on_unsupported: bool,
 ) -> CTResult<()> {
     if path == Path::new("") {
         return Ok(());
     }
 
     if path.exists() && !is_recursive {
-        let err_message = format!("{}: File exists", path.display());
+        let err_message = format!("cannot create directory {}: File exists", path.quote());
         return Err(CtSimpleError::new(1, err_message));
     }
 
     if is_recursive {
         if let Some(p) = path.parent() {
-            mkdir_create_dir(p, is_recursive, is_verbose, true)?;
+            mkdir_create_dir(
+                p,
+                is_recursive,
+                is_verbose,
+                true,
+                mode,
+                context,
+                set_context,
+                warn_on_unsupported,
+            )?;
         } else {
             CtSimpleError::new(1, "failed to create whole tree");
         }
     }
 
     if let Err(e) = std::fs::create_dir(path) {
-        if path.is_dir() { Ok(()) } else { Err(e.into()) }
+        if path.is_dir() {
+            Ok(())
+        } else {
+            let msg = format!("cannot create directory {}: {}", path.quote(), e);
+            Err(CtSimpleError::new(1, msg))
+        }
     } else {
+        if set_context {
+            #[cfg(target_os = "linux")]
+            {
+                if let Err(e) = mkdir_set_security_context(context, path, mode, warn_on_unsupported)
+                {
+                    return Err(CtSimpleError::new(1, e));
+                }
+            }
+        }
         if is_verbose {
             println!(
                 "{}: created directory {}",
@@ -270,6 +393,62 @@ fn mkdir_create_dir(
         }
         Ok(())
     }
+}
+
+#[cfg(target_os = "linux")]
+fn mkdir_set_security_context(
+    context: Option<&OsString>,
+    path: &Path,
+    mode: u32,
+    warn_on_unsupported: bool,
+) -> Result<(), String> {
+    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        if warn_on_unsupported {
+            eprintln!(
+                "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+            );
+        }
+        return Ok(());
+    }
+
+    match context {
+        Some(ctx) => {
+            let c_context = os_str_to_c_string(ctx);
+            SecurityContext::from_c_str(&c_context, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| format!("failed to set default file creation context: {e}"))
+        }
+        None => {
+            let labeler = Labeler::<FileBackEnd>::restorecon_default(false).map_err(|e| {
+                eprintln!("mkdir: warning: cannot create SELinux labeler: {e}");
+                String::new()
+            })?;
+            let file_mode = libc::S_IFDIR | mode;
+            let file_access_mode =
+                selinux::FileAccessMode::new(file_mode).expect("mode should be non-zero");
+            let default_context = labeler
+                .look_up_by_path(path, Some(file_access_mode))
+                .map_err(|e| {
+                    eprintln!(
+                        "mkdir: warning: cannot look up default SELinux context for {}: {e}",
+                        path.display()
+                    );
+                    String::new()
+                })?;
+            default_context
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| {
+                    eprintln!("mkdir: warning: cannot set default file creation context: {e}");
+                    String::new()
+                })?;
+            Ok(())
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn os_str_to_c_string(os_str: &OsStr) -> CString {
+    CString::new(os_str.as_bytes()).expect("Failed to convert OsStr to CString")
 }
 
 #[cfg(test)]
@@ -669,7 +848,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -690,7 +869,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path1.exists());
             assert!(test_path1.is_dir());
@@ -712,7 +891,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, true, 0o755, false);
+            let result = mkdir_exec(dirs, true, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -732,7 +911,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, true);
+            let result = mkdir_exec(dirs, false, 0o755, true, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -745,7 +924,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
         }
 
@@ -760,7 +939,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -778,7 +957,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -798,7 +977,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, true, 0o755, false);
+            let result = mkdir_exec(dirs, true, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -811,7 +990,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
         }
 
@@ -822,7 +1001,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
             assert!(result.is_ok());
         }
 
@@ -843,7 +1022,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, true, 0o755, false);
+            let result = mkdir_exec(dirs, true, 0o755, false, None, false, false);
             assert!(result.is_ok());
             assert!(nested_path.exists());
             assert!(nested_path.is_dir());
@@ -864,7 +1043,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, true);
+            let result = mkdir_exec(dirs, false, 0o755, true, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -885,7 +1064,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o700, false);
+            let result = mkdir_exec(dirs, false, 0o700, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -917,7 +1096,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -935,7 +1114,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -953,7 +1132,7 @@ mod tests {
                 fs::create_dir(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false).is_err());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_err());
 
             fs::remove_dir_all(test_dir).unwrap();
         }
@@ -965,7 +1144,7 @@ mod tests {
                 fs::remove_dir_all(test_dir.parent().unwrap()).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
             assert!(!test_dir.parent().unwrap().exists());
             assert!(!test_dir.parent().unwrap().is_dir());
             let remove_dir = Path::new("test_mkdir_with_dot");
@@ -982,7 +1161,7 @@ mod tests {
             }
 
             let output = std::panic::catch_unwind(|| {
-                mkdir(test_dir, false, 0o755, true).unwrap();
+                mkdir(test_dir, false, 0o755, true, None, false, false).unwrap();
             });
             assert!(output.is_ok());
             assert!(test_dir.exists());
@@ -1006,7 +1185,7 @@ mod tests {
             }
 
             for dir in &dirs {
-                assert!(mkdir(dir, false, 0o755, false).is_ok());
+                assert!(mkdir(dir, false, 0o755, false, None, false, false).is_ok());
                 assert!(dir.exists());
                 assert!(dir.is_dir());
             }
@@ -1023,7 +1202,7 @@ mod tests {
                 fs::File::create(test_file).unwrap();
             }
 
-            assert!(mkdir(test_file, false, 0o755, false).is_err());
+            assert!(mkdir(test_file, false, 0o755, false, None, false, false).is_err());
 
             fs::remove_file(test_file).unwrap();
         }
@@ -1041,7 +1220,7 @@ mod tests {
             no_write_permissions.set_mode(original_permissions.mode() & !0o222);
             fs::set_permissions(&parent_dir, no_write_permissions).unwrap();
 
-            let result = mkdir(&test_dir, false, 0o755, false);
+            let result = mkdir(&test_dir, false, 0o755, false, None, false, false);
 
             fs::set_permissions(&parent_dir, original_permissions).unwrap();
             if !is_root {
@@ -1057,10 +1236,10 @@ mod tests {
                 fs::remove_dir_all(parent_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false).is_err());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_err());
 
-            assert!(mkdir(parent_dir, false, 0o755, false).is_ok());
-            assert!(mkdir(test_dir, false, 0o755, false).is_ok());
+            assert!(mkdir(parent_dir, false, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
 
             fs::remove_dir_all(parent_dir).unwrap();
         }
@@ -1076,7 +1255,7 @@ mod tests {
             fs::create_dir(parent_dir).unwrap();
             fs::create_dir(parent_dir.join("child_dir1")).unwrap();
 
-            assert!(mkdir(&child_dir, true, 0o755, false).is_ok());
+            assert!(mkdir(&child_dir, true, 0o755, false, None, false, false).is_ok());
             assert!(child_dir.exists());
 
             fs::remove_dir_all(parent_dir).unwrap();
@@ -1089,7 +1268,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o700, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o700, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1107,7 +1286,7 @@ mod tests {
                 fs::remove_dir_all(test_dir.parent().unwrap()).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
             assert!(!test_dir.parent().unwrap().exists());
             assert!(!test_dir.parent().unwrap().is_dir());
 
@@ -1124,7 +1303,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1134,7 +1313,7 @@ mod tests {
         #[test]
         fn test_mkdir_with_empty_string() {
             let test_dir = Path::new("");
-            assert!(mkdir(test_dir, false, 0o755, false).is_err());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_err());
         }
 
         #[test]
@@ -1144,7 +1323,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1158,7 +1337,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1181,7 +1360,7 @@ mod tests {
             fs::create_dir(parent_dir).unwrap();
             std::os::unix::fs::symlink(parent_dir, test_symlink).unwrap();
 
-            assert!(mkdir(&child_dir, true, 0o755, false).is_ok());
+            assert!(mkdir(&child_dir, true, 0o755, false, None, false, false).is_ok());
             assert!(child_dir.exists());
 
             fs::remove_dir_all(test_symlink).unwrap();
@@ -1346,7 +1525,9 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir, false, false, false).is_ok());
+            assert!(
+                mkdir_create_dir(test_dir, false, false, false, 0o777, None, false, false).is_ok()
+            );
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1360,7 +1541,9 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir, true, false, false).is_ok());
+            assert!(
+                mkdir_create_dir(test_dir, true, false, false, 0o777, None, false, false).is_ok()
+            );
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1374,7 +1557,9 @@ mod tests {
                 fs::create_dir(test_dir).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir, false, false, false).is_err());
+            assert!(
+                mkdir_create_dir(test_dir, false, false, false, 0o777, None, false, false).is_err()
+            );
 
             fs::remove_dir_all(test_dir).unwrap();
         }
@@ -1387,7 +1572,19 @@ mod tests {
                 fs::remove_dir_all(test_dir.as_path()).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir.as_path(), false, false, false).is_err());
+            assert!(
+                mkdir_create_dir(
+                    test_dir.as_path(),
+                    false,
+                    false,
+                    false,
+                    0o777,
+                    None,
+                    false,
+                    false
+                )
+                .is_err()
+            );
         }
 
         #[test]
@@ -1397,7 +1594,9 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir, false, false, false).is_ok());
+            assert!(
+                mkdir_create_dir(test_dir, false, false, false, 0o777, None, false, false).is_ok()
+            );
             assert!(mkdir_chmod(test_dir, 0o755).is_ok());
 
             let metadata = fs::metadata(test_dir).unwrap();
@@ -1414,7 +1613,9 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir, false, true, false).is_ok());
+            assert!(
+                mkdir_create_dir(test_dir, false, true, false, 0o777, None, false, false).is_ok()
+            );
             assert!(test_dir.exists());
 
             fs::remove_dir_all(test_dir).unwrap();
@@ -1427,7 +1628,9 @@ mod tests {
                 fs::remove_dir_all(test_dir.parent().unwrap()).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_dir, true, false, false).is_err());
+            assert!(
+                mkdir_create_dir(test_dir, true, false, false, 0o777, None, false, false).is_err()
+            );
             assert!(!test_dir.parent().unwrap().exists());
             assert!(!test_dir.parent().unwrap().is_dir());
         }
@@ -1435,7 +1638,9 @@ mod tests {
         #[test]
         fn test_create_dir_with_invalid_path() {
             let test_dir = Path::new("");
-            assert!(mkdir_create_dir(test_dir, false, false, false).is_ok());
+            assert!(
+                mkdir_create_dir(test_dir, false, false, false, 0o777, None, false, false).is_ok()
+            );
         }
 
         #[test]
@@ -1453,7 +1658,9 @@ mod tests {
             }
 
             for dir in &dirs {
-                assert!(mkdir_create_dir(dir, false, false, false).is_ok());
+                assert!(
+                    mkdir_create_dir(dir, false, false, false, 0o777, None, false, false).is_ok()
+                );
                 assert!(dir.exists());
                 assert!(dir.is_dir());
             }
@@ -1470,7 +1677,10 @@ mod tests {
                 fs::File::create(test_file).unwrap();
             }
 
-            assert!(mkdir_create_dir(test_file, false, false, false).is_err());
+            assert!(
+                mkdir_create_dir(test_file, false, false, false, 0o777, None, false, false)
+                    .is_err()
+            );
 
             fs::remove_file(test_file).unwrap();
         }
@@ -1488,7 +1698,8 @@ mod tests {
             no_write_permissions.set_mode(original_permissions.mode() & !0o222);
             fs::set_permissions(&parent_dir, no_write_permissions).unwrap();
 
-            let result = mkdir_create_dir(&test_dir, false, false, false);
+            let result =
+                mkdir_create_dir(&test_dir, false, false, false, 0o777, None, false, false);
 
             fs::set_permissions(&parent_dir, original_permissions).unwrap();
             if !is_root {
@@ -1548,14 +1759,14 @@ mod tests {
         fn test_ct_main_parents_long() {
             let args = [ctcore::ct_util_name(), "--parents"];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_parents_short() {
             let args = [ctcore::ct_util_name(), "-p"];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -1576,21 +1787,21 @@ mod tests {
         fn test_ct_main_verbose_long() {
             let args = [ctcore::ct_util_name(), "--verbose"];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_verbose_short() {
             let args = [ctcore::ct_util_name(), "-v"];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_support_missing_argument() {
             let args = [ctcore::ct_util_name()];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]

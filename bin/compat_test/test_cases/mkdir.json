@@ -1,153 +1,777 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "基本功能测试 - 创建单个目录",
-            "args": ["test_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d test_dir && echo 'exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -rf test_dir"
-            ]
+  "tests": [
+    {
+      "command": "mkdir",
+      "description": "errors: missing operand",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "创建多个目录",
-            "args": ["dir1", "dir2", "dir3"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d dir1 && test -d dir2 && test -d dir3 && echo 'all exist'",
-                        "expected_exit": 0,
-                        "expected_stdout": "all exist"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -rf dir1 dir2 dir3"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "递归创建目录",
-            "args": ["-p", "parent/child/grandchild"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d parent/child/grandchild && echo 'exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -rf parent"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "设置目录权限",
-            "args": ["-m", "700", "private_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c %a private_dir",
-                        "expected_exit": 0,
-                        "expected_stdout": "700"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -rf private_dir"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "创建已存在目录（不使用-p）",
-            "setup_commands": [
-                "mkdir existing_dir"
-            ],
-            "args": ["existing_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": ".*cannot create directory.*File exists.*"
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf existing_dir"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "创建已存在目录（使用-p）",
-            "setup_commands": [
-                "mkdir existing_dir"
-            ],
-            "args": ["-p", "existing_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf existing_dir"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkdir",
-            "description": "verbose模式",
-            "args": ["-v", "verbose_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": ".*created directory.*verbose_dir.*",
-                    "stderr": ""
-                },
-                "ignore_fields": {
-                  "ignore_stdout": true
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf verbose_dir"
-            ]
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
         }
-    ]
-} 
+      }
+    },
+    {
+      "command": "mkdir",
+      "description": "basic: create directory",
+      "args": [
+        "basic_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d basic_dir && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf basic_dir"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "errors: existing directory without -p",
+      "args": [
+        "exist_dir"
+      ],
+      "setup_commands": [
+        "mkdir -p exist_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf exist_dir"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: -p on existing directory",
+      "args": [
+        "-p",
+        "exist_dir"
+      ],
+      "setup_commands": [
+        "mkdir -p exist_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d exist_dir && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf exist_dir"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: create nested directories",
+      "args": [
+        "-p",
+        "a/b/c"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d a/b/c && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf a"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: trailing slash",
+      "args": [
+        "-p",
+        "dir/"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d dir && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf dir"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "basic: trailing slash",
+      "args": [
+        "d2/"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d d2 && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf d2"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: trailing '/.'",
+      "args": [
+        "-p",
+        "d1/."
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d d1 && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf d1"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: trailing '/..'",
+      "args": [
+        "-p",
+        "d2/.."
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d d2 && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf d2"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: through symlink to directory",
+      "args": [
+        "-p",
+        "slink/x"
+      ],
+      "setup_commands": [
+        "ln -s . slink"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d x && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf slink x"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "verbose: -pv prints each created directory",
+      "args": [
+        "-p",
+        "-v",
+        "foo/a/b/c"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d foo/a/b/c && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf foo"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "mode: numeric -m 0750",
+      "args": [
+        "-m",
+        "0750",
+        "mode_num"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a mode_num",
+            "expected_exit": 0,
+            "expected_stdout": "750\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf mode_num"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "mode: symbolic -m u=rwx,go=rx",
+      "args": [
+        "-m",
+        "u=rwx,go=rx",
+        "mode_sym"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a mode_sym",
+            "expected_exit": 0,
+            "expected_stdout": "755\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf mode_sym"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "mode: special bits -m u=rwx,g=rx,o=w,-s,+t",
+      "args": [
+        "-m",
+        "u=rwx,g=rx,o=w,-s,+t",
+        "mode_special"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %A mode_special",
+            "expected_exit": 0,
+            "expected_stdout": "drwxr-x-wT\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf mode_special"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: -p -m does not change existing parent perms",
+      "args": [
+        "-p",
+        "-m",
+        "755",
+        "parent/child"
+      ],
+      "setup_commands": [
+        "mkdir -p parent",
+        "chmod 700 parent"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a parent",
+            "expected_exit": 0,
+            "expected_stdout": "700\n",
+            "expected_stderr": ""
+          },
+          {
+            "command": "stat -c %a parent/child",
+            "expected_exit": 0,
+            "expected_stdout": "755\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf parent"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: -p -m does not change existing final dir",
+      "args": [
+        "-p",
+        "-m",
+        "755",
+        "existing"
+      ],
+      "setup_commands": [
+        "mkdir -p existing",
+        "chmod 700 existing"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a existing",
+            "expected_exit": 0,
+            "expected_stdout": "700\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf existing"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "errors: -p with file in path",
+      "args": [
+        "-p",
+        "file/child"
+      ],
+      "setup_commands": [
+        "printf x > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf file"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "errors: existing file without -p",
+      "args": [
+        "afile"
+      ],
+      "setup_commands": [
+        "printf x > afile"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf afile"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: absolute path",
+      "args": [
+        "--parents",
+        "/tmp/compat_mkdir_abs1/a/b"
+      ],
+      "setup_commands": [
+        "rm -rf /tmp/compat_mkdir_abs1"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d /tmp/compat_mkdir_abs1/a/b && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/compat_mkdir_abs1"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "parents: multiple arguments",
+      "args": [
+        "-p",
+        "m1/a",
+        "m2/b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d m1/a && test -d m2/b && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf m1 m2"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "selinux: -Z default context",
+      "args": [
+        "-Z",
+        "ctx_default_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d ctx_default_dir && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf ctx_default_dir"
+      ]
+    },
+    {
+      "command": "mkdir",
+      "description": "selinux: --context=CTX warning on unsupported kernel",
+      "args": [
+        "--context=system_u:object_r:tmp_t:s0",
+        "ctx_explicit_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel\n"
+        },
+        "verifications": [
+          {
+            "command": "test -d ctx_explicit_dir && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf ctx_explicit_dir"
+      ]
+    }
+  ]
+}

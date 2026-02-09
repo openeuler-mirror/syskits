@@ -719,7 +719,7 @@ impl IsolatedSandbox {
         unsafe {
             command.pre_exec(move || {
                 setsid().map_err(std::io::Error::other)?;
-                let rc = libc::ioctl(slave_fd_for_ioctl, libc::TIOCSCTTY, 0);
+                let rc = libc::ioctl(slave_fd_for_ioctl, libc::TIOCSCTTY as libc::c_ulong, 0);
                 if rc < 0 {
                     return Err(std::io::Error::last_os_error());
                 }

@@ -721,6 +721,834 @@
       "cleanup_commands": [
         "rm -f file.in x*"
       ]
+    },
+    {
+      "command": "split",
+      "description": "split -n bytes: N can be greater than file size",
+      "args": [
+        "-n",
+        "4",
+        "abc"
+      ],
+      "setup_commands": [
+        "printf 'abc' > abc",
+        "printf 'a' > expa",
+        "printf 'b' > expb",
+        "printf 'c' > expc"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expa xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expb xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expc xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test -f xad && test ! -e xae",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f abc expa expb expc x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n bytes: 2 chunks on 3-byte input",
+      "args": [
+        "-n",
+        "2",
+        "abc"
+      ],
+      "setup_commands": [
+        "printf 'abc' > abc",
+        "printf 'ab' > expab",
+        "printf 'c' > expc"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expab xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expc xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f abc expab expc x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n bytes on /dev/null creates empty files",
+      "args": [
+        "-n",
+        "10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test $(stat -c %s x* | uniq -c | sed 's/^ *//; s/ /x/') = 10x0",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -e -n bytes on /dev/null elides empty files",
+      "args": [
+        "-e",
+        "-n",
+        "10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa && test ! -e xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n K/N on /dev/null outputs nothing and creates no files",
+      "args": [
+        "-n",
+        "2/3",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n bytes with ---io-blksize=1",
+      "args": [
+        "-n",
+        "3",
+        "---io-blksize=1",
+        "input"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > input",
+        "printf '1\\n2\\n' > exp1",
+        "printf '3\\n4' > exp2",
+        "printf '\\n5\\n' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cat xaa xab xac | cmp -s - input",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f input exp1 exp2 exp3 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n l invalid number of chunks",
+      "args": [
+        "-n",
+        "l/1o"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "split",
+      "description": "split -n l invalid chunk number K>N",
+      "args": [
+        "-n",
+        "l/16/15",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '12345\\n1\\n12345\\n1\\n12345\\n1\\n12345\\n1\\n12345\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n l/10 on /dev/null creates empty files",
+      "args": [
+        "-n",
+        "l/10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test $(stat -c %s x* | uniq -c | sed 's/^ *//; s/ /x/') = 10x0",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -e -n l/10 on /dev/null elides empty files",
+      "args": [
+        "-e",
+        "-n",
+        "l/10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n l/K/N extracts chunk with no trailing newline input",
+      "args": [
+        "-n",
+        "l/7/7",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '12\\n34\\n5' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n r/10 on /dev/null creates empty files",
+      "args": [
+        "-n",
+        "r/10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test $(stat -c %s x* | uniq -c | sed 's/^ *//; s/ /x/') = 10x0",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -e -n r/10 on /dev/null elides empty files",
+      "args": [
+        "-e",
+        "-n",
+        "r/10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n r/3 basic round-robin distribution",
+      "args": [
+        "-n",
+        "r/3",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n4\\n' > exp1",
+        "printf '2\\n5\\n' > exp2",
+        "printf '3\\n' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e xad",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -n r/K/N extract kth chunk",
+      "args": [
+        "-n",
+        "r/2/3",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "tstdin": "1\n2\n3\n4\n5",
+      "command": "split",
+      "description": "split -n r/K/N with stdin and no trailing newline",
+      "args": [
+        "-n",
+        "r/2/3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "tstdin": "x\n",
+      "command": "split",
+      "description": "split -C1 does not create extra empty file",
+      "args": [
+        "-C",
+        "1"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f xaa && test -f xab && test ! -e xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split -C with small io block and reconstruction",
+      "args": [
+        "---io-blksize=1",
+        "-C",
+        "4",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2222\\n3\\n4\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cat x* | cmp -s - in",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split record separator ':' with --lines=2",
+      "args": [
+        "--lines=2",
+        "-t",
+        ":",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1:2:3:4:5:' > in",
+        "printf '1:2:' > exp1",
+        "printf '3:4:' > exp2",
+        "printf '5:' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split record separator multi-character should fail",
+      "args": [
+        "-txx"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "split",
+      "description": "split record separator multiple different separators should fail",
+      "args": [
+        "-ta",
+        "-tb"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "split",
+      "description": "split record separator same value repeated should pass",
+      "args": [
+        "-t:",
+        "-t:"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split with mixed strategies should fail",
+      "args": [
+        "-l",
+        "2",
+        "-b",
+        "1",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
     }
   ]
 }

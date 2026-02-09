@@ -1,0 +1,38 @@
+{
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "domainname",
+      "description": "basic: domainname default entry",
+      "args": [],
+      "expectation": {
+        "execution": { "exit_code": null, "stdout": null, "stderr": null },
+        "verifications": [
+          {
+            "command": "ref_out=$(mktemp); ref_err=$(mktemp); domainname >\"$ref_out\" 2>\"$ref_err\"; ref_code=$?; sys_out=$(mktemp); sys_err=$(mktemp); printf '%s' \"$CMD_STDOUT\" >\"$sys_out\"; printf '%s' \"$CMD_STDERR\" >\"$sys_err\"; cmp -s \"$sys_out\" \"$ref_out\" && cmp -s \"$sys_err\" \"$ref_err\" && test \"$CMD_EXIT_CODE\" = \"$ref_code\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "domainname",
+      "description": "override flag: -d",
+      "args": ["-d"],
+      "expectation": {
+        "execution": { "exit_code": null, "stdout": null, "stderr": null },
+        "verifications": [
+          {
+            "command": "ref_out=$(mktemp); ref_err=$(mktemp); domainname -d >\"$ref_out\" 2>\"$ref_err\"; ref_code=$?; sys_out=$(mktemp); sys_err=$(mktemp); printf '%s' \"$CMD_STDOUT\" >\"$sys_out\"; printf '%s' \"$CMD_STDERR\" >\"$sys_err\"; cmp -s \"$sys_out\" \"$ref_out\" && cmp -s \"$sys_err\" \"$ref_err\" && test \"$CMD_EXIT_CODE\" = \"$ref_code\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      }
+    }
+  ]
+}

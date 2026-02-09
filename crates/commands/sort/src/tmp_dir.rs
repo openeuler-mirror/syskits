@@ -14,9 +14,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use tempfile::TempDir;
-
+use crate::CtSimpleError;
 use ctcore::{ct_error::CTResult, ct_show_error};
+use tempfile::TempDir;
 
 use crate::SortError;
 
@@ -56,10 +56,7 @@ impl TmpDirWrapper {
         let tmp_dir = self.temp_dir.as_ref().unwrap();
         let path_buf = tmp_dir.path().to_owned();
         let lock = self.lock.clone();
-
-        // Try to set the signal handler, but ignore the error if one is already registered
-        // This allows multiple tests to run concurrently without conflicts
-        let _ = ctrlc::set_handler(move || {
+        if let Err(e) = ctrlc::set_handler(move || {
             // 加锁，这样 `next_file_path` 就不会返回新的文件路径、
             // 并且程序不会在处理程序结束前终止
             let _lock = lock.lock().unwrap();
@@ -67,8 +64,14 @@ impl TmpDirWrapper {
                 ct_show_error!("failed to delete temporary directory: {}", e);
             }
             std::process::exit(2)
-        });
-
+        }) {
+            if !matches!(e, ctrlc::Error::MultipleHandlers) {
+                return Err(CtSimpleError::new(
+                    2,
+                    format!("failed to set up signal handler: {e}"),
+                ));
+            }
+        }
         Ok(())
     }
 

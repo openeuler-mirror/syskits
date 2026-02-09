@@ -213,6 +213,409 @@
     },
     {
       "command": "ptx",
+      "description": "Test -A flag (auto-reference)",
+      "args": [
+        "-A",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'hello world' > /tmp/test_ptx_A.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_A.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q ':1'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_A.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -f flag (ignore-case)",
+      "args": [
+        "-f",
+        "-w20"
+      ],
+      "setup_commands": [
+        "echo -e 'Apple\\napple' > /tmp/test_ptx_f.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_f.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test $(echo \"$CMD_STDOUT\" | wc -l) -eq 2",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_f.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -g flag (gap-size)",
+      "args": [
+        "-g5",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'one two' > /tmp/test_ptx_g.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_g.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_g.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -M flag (macro-name)",
+      "args": [
+        "-M",
+        "yy",
+        "-O"
+      ],
+      "setup_commands": [
+        "echo 'test' > /tmp/test_ptx_M.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_M.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".yy \"\" \"\" \"test\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_M.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -F flag (flag-truncation)",
+      "args": [
+        "-F",
+        "...",
+        "-w10"
+      ],
+      "setup_commands": [
+        "echo 'verylongword short' > /tmp/test_ptx_F.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_F.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_F.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -R flag (right-side-refs)",
+      "args": [
+        "-R",
+        "-A",
+        "-w40"
+      ],
+      "setup_commands": [
+        "echo 'test word' > /tmp/test_ptx_R.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_R.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q ':1'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_R.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -r flag (references - input reference mode)",
+      "args": [
+        "-r",
+        "-w40"
+      ],
+      "setup_commands": [
+        "echo 'ref1 this is a test' > /tmp/test_ptx_r.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_r.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_r.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -w flag (width)",
+      "args": [
+        "-w50"
+      ],
+      "setup_commands": [
+        "echo 'word1 word2 word3' > /tmp/test_ptx_w.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_w.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_w.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -G flag (traditional mode)",
+      "args": [
+        "-G"
+      ],
+      "setup_commands": [
+        "echo 'traditional test' > /tmp/test_ptx_G.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_G.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_G.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -b flag (break-file)",
+      "args": [
+        "-b",
+        "/tmp/test_ptx_break.txt",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo ',' > /tmp/test_ptx_break.txt",
+        "echo 'word1,word2' > /tmp/test_ptx_b_input.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_b_input.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'word1'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'word2'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_break.txt /tmp/test_ptx_b_input.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -i flag (ignore-file)",
+      "args": [
+        "-i",
+        "/tmp/test_ptx_ignore.txt",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'the' > /tmp/test_ptx_ignore.txt",
+        "echo 'the quick brown fox' > /tmp/test_ptx_i_input.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_i_input.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'quick'",
+            "expected_exit": 0
+          },
+          {
+            "command": "! echo \"$CMD_STDOUT\" | grep -q 'the'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_ignore.txt /tmp/test_ptx_i_input.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -o flag (only-file)",
+      "args": [
+        "-o",
+        "/tmp/test_ptx_only.txt",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'important' > /tmp/test_ptx_only.txt",
+        "echo 'important word and other' > /tmp/test_ptx_o_input.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_o_input.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'important'",
+            "expected_exit": 0
+          },
+          {
+            "command": "! echo \"$CMD_STDOUT\" | grep -q 'other'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_only.txt /tmp/test_ptx_o_input.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -W flag (word-regexp)",
+      "args": [
+        "-W",
+        "[a-z]+",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'test123 word456' > /tmp/test_ptx_W.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_W.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'test'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'word'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_W.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -S flag (sentence-regexp)",
+      "args": [
+        "-S",
+        "\\.",
+        "-w40"
+      ],
+      "setup_commands": [
+        "echo 'First sentence. Second sentence.' > /tmp/test_ptx_S.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_S.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_S.txt"
+      ]
+    },
+    {
+      "command": "ptx",
       "description": "Test stdin input (no file argument)",
       "args": [
         "-w20"
@@ -313,6 +716,188 @@
           }
         ]
       }
+    },
+    {
+      "command": "ptx",
+      "description": "Test combination: -A -R -w40",
+      "args": [
+        "-A",
+        "-R",
+        "-w40"
+      ],
+      "setup_commands": [
+        "echo 'combined flags test' > /tmp/test_ptx_combo1.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_combo1.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q ':1'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_combo1.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test combination: -f -w30 (case insensitive)",
+      "args": [
+        "-f",
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo -e 'Test\\nTEST\\ntest' > /tmp/test_ptx_combo2.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_combo2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test $(echo \"$CMD_STDOUT\" | wc -l) -eq 3",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_combo2.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test combination: -O -M custom -F ***",
+      "args": [
+        "-O",
+        "-M",
+        "custom",
+        "-F",
+        "***"
+      ],
+      "setup_commands": [
+        "echo 'verylongwordthatexceedslimit short' > /tmp/test_ptx_combo3.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_combo3.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q '.custom'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_combo3.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test whitespace handling in output",
+      "args": [
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'word1   word2' > /tmp/test_ptx_whitespace.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_whitespace.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'word1'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'word2'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_whitespace.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test multiple files with whitespace trimming",
+      "args": [
+        "-w30"
+      ],
+      "setup_commands": [
+        "echo 'This is a ptx whitespace Trimming test' > /tmp/test_ptx_ws1.txt",
+        "echo 'This is a ptx whitespace Trimming test' > /tmp/test_ptx_ws2.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_ws1.txt",
+        "/tmp/test_ptx_ws2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "ptx /tmp/test_ptx_ws1.txt /tmp/test_ptx_ws2.txt -w30 | sort | uniq -u | wc -l | grep -q '^0$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_ws1.txt /tmp/test_ptx_ws2.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -A with absolute path (heap reference test)",
+      "args": [
+        "-w1",
+        "-A"
+      ],
+      "setup_commands": [
+        "echo 'a' > /tmp/test_ptx_abs_path.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_abs_path.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_abs_path.txt"
+      ]
     }
   ]
 }

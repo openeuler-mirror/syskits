@@ -1,318 +1,726 @@
 {
-    "tests": [
-        {
-            "command": "split",
-            "description": "split: 按行拆分文件，每10行一个输出文件",
-            "args": [
-                "-l", "10",
-                "test_file_split.txt",
-                "out_"
-            ],
-            "setup_commands": [
-                "seq 1 98 > test_file_split.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls out_* | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "cat out_*",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file_split.txt out_*"
-            ]
+  "tests": [
+    {
+      "command": "split",
+      "description": "split lines: --lines=2 basic output files",
+      "args": [
+        "--lines=2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp1",
+        "printf '3\\n4\\n' > exp2",
+        "printf '5\\n' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "command": "split",
-            "description": "split: 按行拆分文件，文件行数小于参数，应该输出一个文件",
-            "args": [
-                "-l", "100",
-                "test_file_split.txt",
-                "out_"
-            ],
-            "setup_commands": [
-                "seq 1 10 > test_file_split.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "cat out_*",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "ls out_* | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file_split.txt out_*"
-            ]
-        },
-        {
-            "command": "split",
-            "description": "split: 按字节拆分文件，每5字节一个输出文件",
-            "args": [
-                "-b", "5",
-                "test_file_split.txt",
-                "out_"
-            ],
-            "setup_commands": [
-                "printf abcdefghijk > test_file_split.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls out_* | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "cat out_*",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file_split.txt out_*"
-            ]
-        },
-        {
-            "command": "split",
-            "description": "split: 使用数字后缀 (-d) 并指定后缀长度 (-a 3)",
-            "args": [
-                "-l", "10",
-                "-d",
-                "-a", "3",
-                "test_file_split.txt",
-                "out_"
-            ],
-            "setup_commands": [
-                "seq 1 35 > test_file_split.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls out_* | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "ls out_[0-9][0-9][0-9] | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "cat out_*",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file_split.txt out_*"
-            ]
-        },
-        {
-            "tstdin": "1\n2\n3\n4\n5\n6\n7\n8\n",
-            "command": "split",
-            "description": "split: 标准输入 -l",
-            "args": [
-                "-l", "3"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls x* | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "cat x*",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f x*"
-            ]
-        },
-        {
-            "tstdin": "abcdefghijk",
-            "command": "split",
-            "description": "split: 标准输入 -b",
-            "args": [
-                "-b", "3"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls x* | wc -l",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    },
-                    {
-                        "command": "cat x*",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f x*"
-            ]
-        },
-        {
-            "command": "split",
-            "description": "split: 输入文件不存在",
-            "args": [
-                "-l", "10",
-                "missing_file",
-                "out_"
-            ],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "command": "split",
-            "description": "split: 指定的行数为负数",
-            "args": [
-                "-l", "-10",
-                "test_file_split.txt",
-                "out_"
-            ],
-            "setup_commands": [
-                "seq 1 98 > test_file_split.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                    "ignore_exit_code": false,
-                    "ignore_stdout": false,
-                    "ignore_stderr": false,
-                    "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file_split.txt out_*"
-            ]
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e xad",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
         }
-    ]
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split additional suffix: --additional-suffix=.txt",
+      "args": [
+        "--lines=2",
+        "--additional-suffix=.txt",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp1",
+        "printf '3\\n4\\n' > exp2",
+        "printf '5\\n' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa.txt",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab.txt",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac.txt",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 x* *.txt"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split additional suffix invalid: contains directory separator",
+      "args": [
+        "--lines=2",
+        "--additional-suffix=a/b",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split bytes: -b 5",
+      "args": [
+        "-b",
+        "5",
+        "in",
+        "out_"
+      ],
+      "setup_commands": [
+        "printf 'abcdefghijk' > in",
+        "printf 'abcde' > exp1",
+        "printf 'fghij' > exp2",
+        "printf 'k' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 out_aa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 out_ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 out_ac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e out_ad",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 out_*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split suffix exhausted: -b1 -a1",
+      "args": [
+        "-b",
+        "1",
+        "-a",
+        "1",
+        "in"
+      ],
+      "setup_commands": [
+        "printf %s abcdefghijklmnopqrstuvwxyz0 > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f xa && test -f xz && test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split suffix length and verbose: --verbose -b1 -a2",
+      "args": [
+        "--verbose",
+        "-b",
+        "1",
+        "-a",
+        "2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf %s abcdefghijklmnopqrstuvwxyz0 > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f xba && test ! -e xbb",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test $(ls x?? | wc -l) -eq 27",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split with -a2 -n1000 fails early without creating files",
+      "args": [
+        "-a",
+        "2",
+        "-n",
+        "1000"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split obsolete option -1 works",
+      "args": [
+        "-1",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split obsolete option -0 fails",
+      "args": [
+        "-0",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split numeric suffixes default start",
+      "args": [
+        "--numeric-suffixes",
+        "--lines=2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp0",
+        "printf '3\\n4\\n' > exp1",
+        "printf '5\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp0 x00",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp1 x01",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 x02",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp0 exp1 exp2 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split numeric suffixes with start value 9",
+      "args": [
+        "--numeric-suffixes=9",
+        "--lines=2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp0",
+        "printf '3\\n4\\n' > exp1",
+        "printf '5\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp0 x09",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp1 x10",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 x11",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp0 exp1 exp2 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split hex suffixes with start value 9",
+      "args": [
+        "--hex-suffixes=9",
+        "--lines=2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp0",
+        "printf '3\\n4\\n' > exp1",
+        "printf '5\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp0 x09",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp1 x0a",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 x0b",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp0 exp1 exp2 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split numeric suffix start too large for suffix length",
+      "args": [
+        "-a",
+        "3",
+        "--numeric-suffixes=1000",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split numeric suffix invalid negative value",
+      "args": [
+        "--numeric-suffixes=-1",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split hex suffix invalid value",
+      "args": [
+        "--hex-suffixes=one",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split numeric suffix auto widening when no start specified",
+      "args": [
+        "-b",
+        "1",
+        "--numeric-suffixes",
+        "file.in",
+        "x"
+      ],
+      "setup_commands": [
+        "truncate -s91 file.in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -e x89 && test -e x9000",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test $(ls x*[0-9]* | wc -l) -eq 91",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file.in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split auto width with --number and start<n succeeds",
+      "args": [
+        "--numeric-suffixes=1",
+        "--number=r/100",
+        "file.in"
+      ],
+      "setup_commands": [
+        "truncate -s100 file.in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -e x001 && test -e x100",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test $(ls x* | wc -l) -eq 100",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file.in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split auto width with --number and start>=n fails",
+      "args": [
+        "--numeric-suffixes=100",
+        "--number=r/100",
+        "file.in"
+      ],
+      "setup_commands": [
+        "truncate -s100 file.in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file.in x*"
+      ]
+    }
+  ]
 }

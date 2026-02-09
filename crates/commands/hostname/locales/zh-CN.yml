@@ -1,8 +1,73 @@
 hostname:
   clap:
-    opt_domain: 如果可能，显示DNS域名
-    opt_ip_address: 显示主机的网络地址
-    opt_fqdn: 显示FQDN（完全限定域名）（默认）
-    opt_short: 如果可能，显示短主机名（第一个点之前的部分）
+    opt_alias: 显示别名
+    opt_all_fqdns: 显示所有长主机名（FQDN）
+    opt_boot: 如果没有可用的主机名，则设置默认主机名
+    opt_domain: 显示 DNS 域名
+    opt_fqdn: 显示长主机名（FQDN）
+    opt_file: 从给定文件读取主机名或 NIS 域名
+    opt_ip_address: 显示主机名的地址
+    opt_all_ip_addresses: 显示主机的所有地址
+    opt_short: 显示短主机名
+    opt_nis: 显示 NIS/YP 域名
   usage: hostname [选项]... [主机名]
-  about: '显示或设置系统的主机名。'
+  about: 显示或设置系统的主机名。
+  after_help: |
+    
+    此命令可以获取或设置主机名或 NIS 域名。您还可以
+    获取 DNS 域或 FQDN（完全限定域名）。
+    除非您使用 bind 或 NIS 进行主机查找，否则可以在
+    /etc/hosts 文件中更改 FQDN（完全限定域名）和 DNS 域名
+    （FQDN 的一部分）。
+    
+    程序名称别名:
+      {yp,nis,}domainname=hostname -y
+      dnsdomainname=hostname -d
+  usage_text: |
+    用法: hostname [-b] {主机名|-F 文件}         设置主机名（从文件）
+           hostname [-a|-A|-d|-f|-i|-I|-s|-y]       显示格式化的名称
+           hostname                                 显示主机名
+
+           {yp,nis,}domainname {nis域名|-F 文件}  设置 NIS 域名（从文件）
+           {yp,nis,}domainname                      显示 NIS 域名
+
+           dnsdomainname                            显示 DNS 域名
+
+           hostname -V|--version|-h|--help          打印信息并退出
+
+    程序名称:
+           {yp,nis,}domainname=hostname -y
+           dnsdomainname=hostname -d
+
+    程序选项:
+        -a, --alias            别名
+        -A, --all-fqdns        所有长主机名（FQDN）
+        -b, --boot             如果没有可用的主机名，则设置默认主机名
+        -d, --domain           DNS 域名
+        -f, --fqdn, --long     长主机名（FQDN）
+        -F, --file             从给定文件读取主机名或 NIS 域名
+        -i, --ip-address       主机名的地址
+        -I, --all-ip-addresses 主机的所有地址
+        -s, --short            短主机名
+        -y, --yp, --nis        NIS/YP 域名
+
+    描述:
+       此命令可以获取或设置主机名或 NIS 域名。您还可以
+       获取 DNS 域或 FQDN（完全限定域名）。
+       除非您使用 bind 或 NIS 进行主机查找，否则可以在
+       /etc/hosts 文件中更改 FQDN（完全限定域名）和 DNS 域名
+       （FQDN 的一部分）。
+  messages:
+    version_output: "hostname %{version}"
+    option_no_argument: "%{progname}: 选项 '--%{name}' 不允许带参数"
+    option_file_requires_arg: "%{progname}: 选项 '--file' 需要一个参数"
+    unrecognized_option: "%{progname}: 无法识别的选项 '--%{name}'"
+    option_requires_arg_short: "%{progname}: 选项需要一个参数 -- '%{ch}'"
+    invalid_option_short: "%{progname}: 无效的选项 -- '%{ch}'"
+    io_error: "%{progname}: %{msg}"
+    specified_hostname_invalid: "%{progname}: 指定的主机名无效"
+    local_domain_not_set: "%{progname}: 未设置本地域名"
+    must_be_root_change_host: "%{progname}: 您必须是 root 用户才能更改主机名"
+    must_be_root_change_domain: "%{progname}: 您必须是 root 用户才能更改域名"
+    name_too_long: "%{progname}: 名称太长"
+    gai_error: "%{progname}: %{msg}"

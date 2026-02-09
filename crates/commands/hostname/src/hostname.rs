@@ -10,873 +10,1026 @@
  */
 
 extern crate rust_i18n;
-use rust_i18n::t;
-use std::net::ToSocketAddrs;
-rust_i18n::i18n!("locales", fallback = "en-US");
-use std::str;
-
-use std::collections::hash_set::HashSet;
-
-use std::ffi::OsString;
-
-use clap::builder::ValueParser;
 use clap::crate_version;
-
-use clap::Arg;
-use clap::ArgAction;
-use clap::ArgMatches;
-use clap::Command;
-use ctcore::ct_error::{CTResult, FromIo};
+use clap::{Arg, ArgAction, Command};
+use ctcore::Tool;
+use ctcore::ct_error::{CTResult, ExitCode};
+use nix::ifaddrs::getifaddrs;
+use nix::libc;
+use nix::net::if_::InterfaceFlags;
+use nix::sys::socket::{AddressFamily, SockaddrLike};
+use rust_i18n::t;
+use std::ffi::{CStr, CString, OsString};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::os::raw::c_char;
 use sys_locale::get_locale;
 
-use ctcore::Tool;
-use nix::sys::socket::{AddressFamily, SockaddrLike};
-
-static OPT_DOMAIN: &str = "domain";
-static OPT_IP_ADDRESS: &str = "ip-address";
-static OPT_FQDN: &str = "fqdn";
-static OPT_SHORT: &str = "short";
-static OPT_HOST: &str = "host";
-static OPT_ALL_FQDNS: &str = "all-fqdns";
-static OPT_FILE: &str = "file";
-static OPT_ALIAS: &str = "alias";
-static OPT_BOOT: &str = "boot";
-static OPT_ALL_IP: &str = "all-ip-addresses";
-static OPT_NIS: &str = "nis";
-
-#[cfg(windows)]
-mod wsa {
-    use std::io;
-
-    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSADATA, WSAStartup};
-
-    pub(super) struct WsaHandle(());
-
-    pub(super) fn start() -> io::Result<WsaHandle> {
-        let err = unsafe {
-            let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-            WSAStartup(0x0202, data.as_mut_ptr())
-        };
-        if err == 0 {
-            Ok(WsaHandle(()))
-        } else {
-            Err(io::Error::from_raw_os_error(err))
-        }
-    }
-
-    impl Drop for WsaHandle {
-        fn drop(&mut self) {
-            unsafe {
-                // This possibly returns an error but we can't handle it
-                let _err = WSACleanup();
-            }
-        }
-    }
+rust_i18n::i18n!("locales", fallback = "en-US");
+mod opt_flags {
+    pub const ALIAS: &str = "alias";
+    pub const ALL_FQDNS: &str = "all-fqdns";
+    pub const BOOT: &str = "boot";
+    pub const DOMAIN: &str = "domain";
+    pub const FQDN: &str = "fqdn";
+    pub const FILE: &str = "file";
+    pub const IP_ADDRESS: &str = "ip-address";
+    pub const ALL_IP_ADDRESSES: &str = "all-ip-addresses";
+    pub const SHORT: &str = "short";
+    pub const NIS: &str = "nis";
+    pub const HELP_Q: &str = "help-question";
+    pub const NAME: &str = "name";
 }
 
-pub fn hostname_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
-    let arg_matches = ct_app().try_get_matches_from(args)?;
-
-    #[cfg(windows)]
-    let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;
-
-    match arg_matches.get_one::<OsString>(OPT_HOST) {
-        None => hostname_display(&arg_matches),
-        Some(host) => hostname::set(host).map_err_context(|| "failed to set hostname".to_owned()),
-    }
-}
-
-pub fn ct_app() -> Command {
-    let utility_name = ctcore::ct_util_name();
-    let command_version = crate_version!();
-    let application_info = t!("hostname.about");
-    let usage_description = t!("hostname.usage");
-
-    let args = vec![
-        Arg::new(OPT_DOMAIN)
-            .short('d')
-            .long("domain")
-            .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help(t!("hostname.clap.opt_domain"))
-            .action(ArgAction::SetTrue),
-        Arg::new(OPT_IP_ADDRESS)
-            .short('i')
-            .long("ip-address")
-            .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help(t!("hostname.clap.opt_ip_address"))
-            .action(ArgAction::SetTrue),
-        Arg::new(OPT_FQDN)
-            .short('f')
-            .long("fqdn")
-            .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help(t!("hostname.clap.opt_fqdn"))
-            .action(ArgAction::SetTrue),
-        Arg::new(OPT_SHORT)
-            .short('s')
-            .long("short")
-            .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-            .help(t!("hostname.clap.opt_short"))
-            .action(ArgAction::SetTrue),
-        Arg::new(OPT_HOST)
-            .value_parser(ValueParser::os_string())
-            .value_hint(clap::ValueHint::Hostname),
-        Arg::new(OPT_ALL_FQDNS)
-            .short('A')
-            .long("all-fqdns")
-            .help("Display all FQDNs for the host")
-            .action(ArgAction::SetTrue),
-        Arg::new(OPT_FILE)
-            .short('F')
-            .long("file")
-            .value_name("FILE")
-            .help("Read host name or NIS domain name from given file")
-            .value_parser(ValueParser::os_string())
-            .conflicts_with_all([
-                OPT_DOMAIN,
-                OPT_IP_ADDRESS,
-                OPT_FQDN,
-                OPT_SHORT,
-                OPT_ALL_FQDNS,
-            ]),
-        Arg::new(OPT_ALIAS)
-            .short('a')
-            .long("alias")
-            .help("Display alias names")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all([
-                OPT_DOMAIN,
-                OPT_IP_ADDRESS,
-                OPT_FQDN,
-                OPT_SHORT,
-                OPT_ALL_FQDNS,
-                OPT_FILE,
-            ]),
-        Arg::new(OPT_BOOT)
-            .short('b')
-            .long("boot")
-            .help("Set default hostname if none available")
-            .value_name("NAME")
-            .value_parser(ValueParser::os_string())
-            .num_args(0..=1) // 允许0或1个参数
-            .default_missing_value("my-host") // 无参数时的默认值
-            .conflicts_with_all([
-                OPT_DOMAIN,
-                OPT_IP_ADDRESS,
-                OPT_FQDN,
-                OPT_SHORT,
-                OPT_ALL_FQDNS,
-                OPT_ALIAS,
-            ]),
-        Arg::new(OPT_ALL_IP)
-            .short('I')
-            .long("all-ip-addresses")
-            .help("Display all addresses for the host")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all([
-                OPT_DOMAIN,
-                OPT_IP_ADDRESS,
-                OPT_FQDN,
-                OPT_SHORT,
-                OPT_ALL_FQDNS,
-                OPT_FILE,
-                OPT_ALIAS,
-                OPT_BOOT,
-            ]),
-        Arg::new(OPT_NIS)
-            .short('y')
-            .long("yp")
-            .alias("nis")
-            .help("Display the NIS/YP domain name")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all([
-                OPT_IP_ADDRESS,
-                OPT_FQDN,
-                OPT_SHORT,
-                OPT_ALL_FQDNS,
-                OPT_ALIAS,
-                OPT_BOOT,
-                OPT_ALL_IP,
-            ]),
-    ];
-
-    Command::new(utility_name)
-        .version(command_version)
-        .about(application_info)
-        .override_usage(usage_description)
-        .infer_long_args(true)
-        .args(&args)
-}
-/**
- * 显示主机名，根据命令行参数的不同，可以显示完整的主机名、短主机名、域名或IP地址。
- *
- * @param matches 命令行参数匹配结果，用于确定要显示哪种信息。
- * @return CTResult<()>，操作成功返回Ok(())，失败返回Err()。
- */
-fn hostname_display(args_match: &ArgMatches) -> CTResult<()> {
-    // 获取当前主机的主机名
-    let hostname = hostname::get()
-        .map_err_context(|| "failed to get hostname".to_owned())?
-        .to_string_lossy()
-        .into_owned();
-
-    if args_match.get_flag(OPT_NIS) {
-        // 如果同时指定了 -F 参数，从指定文件读取 NIS 域名并写入到 /proc/sys/kernel/domainname
-        if let Some(file_path) = args_match.get_one::<OsString>(OPT_FILE) {
-            let nis_domain = std::fs::read_to_string(file_path)
-                .map_err_context(|| "failed to read from file".to_owned())?
-                .trim()
-                .to_string();
-
-            // 将 NIS 域名写入到 /proc/sys/kernel/domainname
-            std::fs::write("/proc/sys/kernel/domainname", &nis_domain)
-                .map_err_context(|| "failed to write to /proc/sys/kernel/domainname".to_owned())?;
-            return Ok(());
-        }
-
-        // 尝试从 /proc/sys/kernel/domainname 文件读取 NIS 域名
-        let nis_domain = std::fs::read_to_string("/proc/sys/kernel/domainname")
-            .map_err_context(|| "failed to read from file".to_owned())?
-            .trim()
-            .to_string();
-
-        if nis_domain == "(none)" {
-            println!("hostname: Local domain name not set");
-        } else {
-            println!("{}", nis_domain.trim());
-        }
-
-        Ok(())
-    } else if args_match.get_flag(OPT_ALL_IP) {
-        // 获取所有网络接口的 IP 地址
-        let addrs = if_addrs::get_if_addrs()
-            .map_err_context(|| "failed to get network interfaces".to_owned())?;
-
-        // 收集所有唯一的 IP 地址
-        let mut ips = HashSet::new();
-        for addr in addrs {
-            // 跳过回环接口
-            if addr.name == "lo" {
-                continue;
-            }
-            let ip = addr.ip();
-            ips.insert(ip);
-        }
-
-        // 输出所有找到的 IP 地址
-        let mut output = String::new();
-        for ip in ips {
-            output.push_str(&ip.to_string());
-            output.push(' ');
-        }
-
-        // 移除最后一个多余的空格并打印
-        if !output.is_empty() {
-            println!("{}", output.trim_end());
-        }
-
-        Ok(())
-    } else if let Some(default_name) = args_match.get_one::<OsString>(OPT_BOOT) {
-        // 如果同时指定了 -F 参数，从指定文件读取主机名
-        if let Some(file_path) = args_match.get_one::<OsString>(OPT_FILE) {
-            let hostname_str = std::fs::read_to_string(file_path)
-                .map_err_context(|| "failed to read from file".to_owned())?
-                .trim()
-                .to_string();
-            hostname::set(&hostname_str)
-                .map_err_context(|| "failed to set hostname from file".to_owned())?;
-            return Ok(());
-        }
-
-        if default_name == "my-host" {
-            let hostname_str = default_name.to_string_lossy().into_owned();
-            let name = hostname::get()
-                .map_err_context(|| "failed to get hostname".to_owned())?
-                .to_string_lossy()
-                .into_owned();
-
-            if name.is_empty() {
-                hostname::set(&hostname_str)
-                    .map_err_context(|| "failed to set default hostname".to_owned())?;
-            } else {
-                println!("{name}");
-            }
-        } else {
-            let hostname_str = default_name.to_string_lossy().into_owned();
-            // 如果提供了默认主机名，则设置默认主机名
-            hostname::set(&hostname_str)
-                .map_err_context(|| "failed to set default hostname".to_owned())?;
-        }
-
-        Ok(())
-    } else if args_match.get_flag(OPT_ALIAS) {
-        // 读取 /etc/hosts 文件获取别名
-        let hosts_content = std::fs::read_to_string("/etc/hosts")
-            .map_err_context(|| "failed to read /etc/hosts".to_owned())?;
-
-        // 解析 hosts 文件，查找当前主机名的别名
-        for line in hosts_content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 2 {
-                continue;
-            }
-
-            // 检查是否包含当前主机名
-            if parts[1..].contains(&hostname.as_str()) {
-                // 输出该行中的所有别名（除了IP地址和主机名本身）
-                let aliases: Vec<&str> = parts[1..]
-                    .iter()
-                    .filter(|&&name| name != hostname)
-                    .copied()
-                    .collect();
-
-                if !aliases.is_empty() {
-                    println!("{}", aliases.join(" "));
-                }
-                break;
-            }
-        }
-        Ok(())
-    } else if let Some(file_path) = args_match.get_one::<OsString>(OPT_FILE) {
-        // 从文件读取主机名
-        let hostname_str = std::fs::read_to_string(file_path)
-            .map_err_context(|| "failed to read from file".to_owned())?
-            .trim()
-            .to_string();
-
-        hostname::set(&hostname_str).map_err_context(|| "failed to set hostname".to_owned())?;
-        Ok(())
-    } else if args_match.get_flag(OPT_ALL_FQDNS) {
-        // 添加一个临时端口以使用 to_socket_addrs
-        let hostname_with_port = format!("{hostname}:1");
-
-        // 解析所有地址
-        let addrs = hostname_with_port
-            .to_socket_addrs()
-            .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
-
-        // 收集所有唯一的 FQDN
-        let mut fqdns = HashSet::new();
-        for addr in addrs {
-            // 使用原始主机名作为 FQDN
-            fqdns.insert(hostname.clone());
-
-            // 尝试通过 IP 地址解析主机名
-            let host = addr.ip();
-            if let Ok(names) = dns_lookup::lookup_addr(&host) {
-                fqdns.insert((names).to_string());
-            }
-        }
-
-        // 输出所有找到的 FQDN
-        let mut output = String::new();
-        for fqdn in fqdns {
-            output.push_str(&fqdn);
-            output.push(' ');
-            println!("{output}");
-        }
-
-        Ok(())
-    } else if args_match.get_flag(OPT_IP_ADDRESS) {
-        // 如果要求显示IP地址，则解析主机名对应的IP地址
-        // 由于to_socket_addrs需要hostname:port格式，因此临时添加一个dummy端口，后续再移除
-        let hostname = hostname + ":1";
-
-        let ip_addrs = hostname
-            .to_socket_addrs()
-            .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
-
-        // 去重，避免输出重复的IP地址
-        let mut hash_set = HashSet::new();
-        let mut out = String::new();
-
-        for addr in ip_addrs {
-            if !hash_set.contains(&addr) {
-                let mut ip = addr.to_string();
-                // 移除之前添加的dummy端口
-                if ip.ends_with(":1") {
-                    let len = ip.len();
-                    ip.truncate(len - 2);
-                }
-                if addr.is_ipv6() {
-                    let ip_str = addr.ip().to_string();
-                    let interface_name = find_ipv6_interface_name(ip_str.clone());
-                    out.push_str(&format!("{ip_str}%{interface_name}"));
-                } else {
-                    out.push_str(&ip);
-                }
-                out.push(' ');
-                hash_set.insert(addr);
-            }
-        }
-        // 输出去重后的IP地址列表
-        let len = out.len();
-        if len > 0 {
-            println!("{}", &out[0..len - 1]);
-        }
-
-        Ok(())
-    } else {
-        // 根据命令行参数显示短主机名或域名
-        if args_match.get_flag(OPT_SHORT) || args_match.get_flag(OPT_DOMAIN) {
-            // 查找并处理主机名中的第一个'.'，以决定要显示的部分
-            let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
-
-            if let Some(ci) = it.next() {
-                if args_match.get_flag(OPT_SHORT) {
-                    // 显示短主机名
-                    println!("{}", &hostname[0..ci.0]);
-                } else {
-                    // 显示域名
-                    println!("{}", &hostname[ci.0 + 1..]);
-                }
-                return Ok(());
-            }
-        }
-
-        // 默认显示完整主机名
-        println!("{hostname}");
-
-        Ok(())
-    }
-}
-
-/**
- * 查找给定IPv6地址对应的网络接口名称
- *
- * 该函数遍历系统的所有网络接口，查找与给定IPv6地址匹配的接口。
- * 它会跳过回环接口和IPv4接口，只关注IPv6接口。
- *
- * # 参数
- * * `ip_str` - 要查找的IPv6地址字符串
- *
- * # 返回值
- * 返回找到的网络接口名称。如果未找到匹配的接口，则返回空字符串。
- *
- * # 注意
- * - 该函数会忽略回环接口（loopback）
- * - 只处理IPv6地址，会跳过IPv4接口
- * - 如果获取网络接口信息失败，函数会panic
- */
-fn find_ipv6_interface_name(ip_str: String) -> String {
-    let if_addrs = nix::ifaddrs::getifaddrs().unwrap();
-
-    for iface in if_addrs {
-        if iface
-            .flags
-            .contains(nix::net::if_::InterfaceFlags::IFF_LOOPBACK)
-        {
-            continue;
-        }
-
-        let sock = if let Some(sock) = iface.netmask {
-            sock
-        } else {
-            continue;
-        };
-
-        if sock.family() == Some(AddressFamily::Inet) {
-            continue;
-        } else if sock.family() == Some(AddressFamily::Inet6) {
-            if let Some(addr_ip) = iface.address {
-                let ip_str_v6 = addr_ip.as_sockaddr_in6().unwrap().ip().to_string();
-                if ip_str == ip_str_v6 {
-                    return iface.interface_name;
-                }
-            } else {
-                continue;
-            };
-        }
-    }
-
-    "".to_string()
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NameType {
+    Default,
+    Dns,
+    Fqdn,
+    Short,
+    Alias,
+    Ip,
+    Nis,
+    NisDef,
+    AllFqdns,
+    AllIps,
 }
 
 #[derive(Default)]
 pub struct Hostname;
+
+fn execute_hostname(args: &[OsString]) -> CTResult<()> {
+    hostname_main(args.iter().cloned())
+}
+
 impl Tool for Hostname {
     fn name(&self) -> &'static str {
         "hostname"
     }
 
     fn command(&self) -> Command {
-        ct_app()
+        hostname_app("hostname")
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        // 直接调用原有的 hostname_main 函数
-        hostname_main(args.iter().cloned())
+        execute_hostname(args)
+    }
+}
+
+#[derive(Default)]
+pub struct Dnsdomainname;
+
+impl Tool for Dnsdomainname {
+    fn name(&self) -> &'static str {
+        "dnsdomainname"
+    }
+
+    fn command(&self) -> Command {
+        hostname_app("dnsdomainname")
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        execute_hostname(args)
+    }
+}
+
+#[derive(Default)]
+pub struct Domainname;
+
+impl Tool for Domainname {
+    fn name(&self) -> &'static str {
+        "domainname"
+    }
+
+    fn command(&self) -> Command {
+        hostname_app("domainname")
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        execute_hostname(args)
+    }
+}
+
+#[derive(Default)]
+pub struct Nisdomainname;
+
+impl Tool for Nisdomainname {
+    fn name(&self) -> &'static str {
+        "nisdomainname"
+    }
+
+    fn command(&self) -> Command {
+        hostname_app("nisdomainname")
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        execute_hostname(args)
+    }
+}
+
+#[derive(Default)]
+pub struct Ypdomainname;
+
+impl Tool for Ypdomainname {
+    fn name(&self) -> &'static str {
+        "ypdomainname"
+    }
+
+    fn command(&self) -> Command {
+        hostname_app("ypdomainname")
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        execute_hostname(args)
+    }
+}
+
+pub fn hostname_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    #[cfg(not(unix))]
+    {
+        let _ = args;
+        return Err(ExitCode(1).into());
+    }
+
+    #[cfg(unix)]
+    {
+        let argv: Vec<OsString> = args.collect();
+        hostname_main_unix(&argv)
+    }
+}
+
+#[cfg(unix)]
+fn hostname_main_unix(argv: &[OsString]) -> CTResult<()> {
+    let progname = program_name(argv);
+    let matches = match hostname_app("hostname").try_get_matches_from(argv.iter().cloned()) {
+        Ok(m) => m,
+        Err(err) => return handle_parse_error(&progname, argv, err),
+    };
+
+    if matches.get_flag(opt_flags::HELP_Q) {
+        let mut cmd = hostname_app("hostname");
+        print!("{}", cmd.render_help());
+        return Ok(());
+    }
+
+    let boot = matches.get_flag(opt_flags::BOOT);
+    let file_arg = matches.get_one::<String>(opt_flags::FILE).cloned();
+    let mut operands: Vec<String> = matches
+        .get_many::<String>(opt_flags::NAME)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+    let name_type = resolve_name_type(default_type(&progname), argv);
+
+    let file_provided = file_arg.is_some();
+    let mut name = if let Some(file) = file_arg {
+        read_name_from_file(&progname, &file, boot)?
+    } else {
+        None
+    };
+
+    if file_provided && boot && name.as_deref().is_none_or(str::is_empty) {
+        let mut local = local_host_name(&progname)?;
+        if local.is_empty() || local == "(none)" {
+            local = "localhost".to_string();
+        }
+        name = Some(local);
+    }
+
+    if !operands.is_empty() {
+        if name.is_some() {
+            return usage(&progname, false);
+        }
+        name = Some(operands.remove(0));
+    }
+    if !operands.is_empty() {
+        return usage(&progname, false);
+    }
+
+    if let Some(value) = name {
+        set_name(&progname, name_type, &value)
+    } else {
+        show_name(&progname, name_type)
+    }
+}
+
+#[cfg(unix)]
+fn handle_parse_error(progname: &str, argv: &[OsString], err: clap::Error) -> CTResult<()> {
+    match err.kind() {
+        clap::error::ErrorKind::DisplayHelp => {
+            print!("{err}");
+            return Err(ExitCode(255).into());
+        }
+        clap::error::ErrorKind::DisplayVersion => {
+            print!("{err}");
+            return Ok(());
+        }
+        _ => {}
+    }
+
+    if emit_getopt_style_error(progname, argv) {
+        return usage(progname, true);
+    }
+
+    eprint!("{err}");
+    Err(ExitCode(255).into())
+}
+
+#[cfg(unix)]
+fn emit_getopt_style_error(progname: &str, argv: &[OsString]) -> bool {
+    let mut i = 1usize;
+    while i < argv.len() {
+        let arg = argv[i].to_string_lossy().into_owned();
+
+        if arg == "--" {
+            return false;
+        }
+
+        if arg.starts_with("--") && arg.len() > 2 {
+            let long = &arg[2..];
+            let (name, inline_val) = match long.split_once('=') {
+                Some((n, v)) => (n, Some(v)),
+                None => (long, None),
+            };
+
+            match name {
+                "domain" | "boot" | "fqdn" | "all-fqdns" | "help" | "long" | "short"
+                | "version" | "alias" | "ip-address" | "all-ip-addresses" | "nis" | "yp" => {
+                    if inline_val.is_some() {
+                        eprintln!(
+                            "{}",
+                            t!(
+                                "hostname.messages.option_no_argument",
+                                progname = progname,
+                                name = name
+                            )
+                        );
+                        return true;
+                    }
+                }
+                "file" => {
+                    if inline_val.is_none() && i + 1 >= argv.len() {
+                        eprintln!(
+                            "{}",
+                            t!(
+                                "hostname.messages.option_file_requires_arg",
+                                progname = progname
+                            )
+                        );
+                        return true;
+                    }
+                    if inline_val.is_none() {
+                        i += 1;
+                    }
+                }
+                _ => {
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "hostname.messages.unrecognized_option",
+                            progname = progname,
+                            name = name
+                        )
+                    );
+                    return true;
+                }
+            }
+
+            i += 1;
+            continue;
+        }
+
+        if arg.starts_with('-') && arg.len() > 1 {
+            let mut chars = arg[1..].chars().peekable();
+            while let Some(ch) = chars.next() {
+                match ch {
+                    'a' | 'A' | 'd' | 'f' | 'b' | 'h' | '?' | 'i' | 'I' | 's' | 'V' | 'y' => {}
+                    'F' => {
+                        let rest: String = chars.collect();
+                        if rest.is_empty() && i + 1 >= argv.len() {
+                            eprintln!(
+                                "{}",
+                                t!(
+                                    "hostname.messages.option_requires_arg_short",
+                                    progname = progname,
+                                    ch = "F"
+                                )
+                            );
+                            return true;
+                        }
+                        if rest.is_empty() {
+                            i += 1;
+                        }
+                        break;
+                    }
+                    _ => {
+                        eprintln!(
+                            "{}",
+                            t!(
+                                "hostname.messages.invalid_option_short",
+                                progname = progname,
+                                ch = ch.to_string()
+                            )
+                        );
+                        return true;
+                    }
+                }
+            }
+
+            i += 1;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    false
+}
+
+#[cfg(unix)]
+fn resolve_name_type(default: NameType, argv: &[OsString]) -> NameType {
+    let mut name_type = default;
+    let mut i = 1usize;
+
+    while i < argv.len() {
+        let arg = argv[i].to_string_lossy().into_owned();
+
+        if arg == "--" {
+            break;
+        }
+
+        if arg.starts_with("--") && arg.len() > 2 {
+            let long = &arg[2..];
+            let (name, inline_val) = match long.split_once('=') {
+                Some((n, _)) => (n, true),
+                None => (long, false),
+            };
+
+            match name {
+                "domain" => name_type = NameType::Dns,
+                "fqdn" | "long" => name_type = NameType::Fqdn,
+                "all-fqdns" => name_type = NameType::AllFqdns,
+                "short" => name_type = NameType::Short,
+                "alias" => name_type = NameType::Alias,
+                "ip-address" => name_type = NameType::Ip,
+                "all-ip-addresses" => name_type = NameType::AllIps,
+                "nis" | "yp" => name_type = NameType::NisDef,
+                "file" if !inline_val => i += 1,
+                _ => {}
+            }
+
+            i += 1;
+            continue;
+        }
+
+        if arg.starts_with('-') && arg.len() > 1 {
+            let mut chars = arg[1..].chars().peekable();
+            while let Some(ch) = chars.next() {
+                match ch {
+                    'd' => name_type = NameType::Dns,
+                    'a' => name_type = NameType::Alias,
+                    'f' => name_type = NameType::Fqdn,
+                    'A' => name_type = NameType::AllFqdns,
+                    'i' => name_type = NameType::Ip,
+                    'I' => name_type = NameType::AllIps,
+                    's' => name_type = NameType::Short,
+                    'y' => name_type = NameType::NisDef,
+                    'F' => {
+                        let rest: String = chars.collect();
+                        if rest.is_empty() && i + 1 < argv.len() {
+                            i += 1;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    name_type
+}
+
+fn hostname_app(name: &'static str) -> Command {
+    let command_version = crate_version!();
+    Command::new(name)
+        .about(t!("hostname.about"))
+        .after_help(t!("hostname.after_help"))
+        .version(command_version)
+        .override_usage(t!("hostname.usage"))
+        .infer_long_args(true)
+        .arg(
+            Arg::new(opt_flags::ALIAS)
+                .short('a')
+                .long(opt_flags::ALIAS)
+                .help(t!("hostname.clap.opt_alias"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::ALL_FQDNS)
+                .short('A')
+                .long(opt_flags::ALL_FQDNS)
+                .help(t!("hostname.clap.opt_all_fqdns"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::BOOT)
+                .short('b')
+                .long(opt_flags::BOOT)
+                .help(t!("hostname.clap.opt_boot"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::DOMAIN)
+                .short('d')
+                .long(opt_flags::DOMAIN)
+                .help(t!("hostname.clap.opt_domain"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::FQDN)
+                .short('f')
+                .long(opt_flags::FQDN)
+                .visible_alias("long")
+                .help(t!("hostname.clap.opt_fqdn"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::FILE)
+                .short('F')
+                .long(opt_flags::FILE)
+                .help(t!("hostname.clap.opt_file")),
+        )
+        .arg(
+            Arg::new(opt_flags::IP_ADDRESS)
+                .short('i')
+                .long(opt_flags::IP_ADDRESS)
+                .help(t!("hostname.clap.opt_ip_address"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::ALL_IP_ADDRESSES)
+                .short('I')
+                .long(opt_flags::ALL_IP_ADDRESSES)
+                .help(t!("hostname.clap.opt_all_ip_addresses"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::SHORT)
+                .short('s')
+                .long(opt_flags::SHORT)
+                .help(t!("hostname.clap.opt_short"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::NIS)
+                .short('y')
+                .long(opt_flags::NIS)
+                .visible_alias("yp")
+                .help(t!("hostname.clap.opt_nis"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::HELP_Q)
+                .short('?')
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(opt_flags::NAME)
+                .hide(true)
+                .action(ArgAction::Append),
+        )
+}
+
+fn usage(_progname: &str, to_stdout: bool) -> CTResult<()> {
+    let mut cmd = hostname_app("hostname");
+    let help = cmd.render_help().to_string();
+    if to_stdout {
+        print!("{help}");
+    } else {
+        eprint!("{help}");
+    }
+    Err(ExitCode(255).into())
+}
+
+fn default_type(progname: &str) -> NameType {
+    match progname {
+        "dnsdomainname" => NameType::Dns,
+        "domainname" => NameType::Nis,
+        "ypdomainname" | "nisdomainname" => NameType::NisDef,
+        _ => NameType::Default,
+    }
+}
+
+fn program_name(argv: &[OsString]) -> String {
+    argv.first()
+        .map(|x| x.to_string_lossy().into_owned())
+        .and_then(|x| x.rsplit('/').next().map(std::string::ToString::to_string))
+        .filter(|x| !x.is_empty())
+        .unwrap_or_else(|| "hostname".to_string())
+}
+
+type CtErrBox = Box<dyn ctcore::ct_error::CTError>;
+
+fn exit_with_code<T>(code: i32) -> Result<T, CtErrBox> {
+    Err(ExitCode(code).into())
+}
+
+fn print_io_error<T>(progname: &str, err: &std::io::Error) -> Result<T, CtErrBox> {
+    let mut msg = err.to_string();
+    if let Some(pos) = msg.find(" (os error ") {
+        msg.truncate(pos);
+    }
+    eprintln!(
+        "{}",
+        t!("hostname.messages.io_error", progname = progname, msg = msg)
+    );
+    exit_with_code(1)
+}
+
+fn c_string(input: &str, progname: &str) -> Result<CString, CtErrBox> {
+    match CString::new(input) {
+        Ok(s) => Ok(s),
+        Err(_) => {
+            eprintln!(
+                "{}",
+                t!(
+                    "hostname.messages.specified_hostname_invalid",
+                    progname = progname
+                )
+            );
+            Err(ExitCode(1).into())
+        }
+    }
+}
+
+fn local_host_name(progname: &str) -> CTResult<String> {
+    let mut size = 128usize;
+    loop {
+        let mut buf = vec![0u8; size];
+        let rc = unsafe { libc::gethostname(buf.as_mut_ptr().cast::<c_char>(), buf.len()) };
+        if rc == 0 {
+            if let Some(pos) = buf.iter().position(|b| *b == 0) {
+                return Ok(String::from_utf8_lossy(&buf[..pos]).into_owned());
+            }
+            size *= 2;
+            continue;
+        }
+
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::ENAMETOOLONG) {
+            size *= 2;
+            continue;
+        }
+        return print_io_error(progname, &err);
+    }
+}
+
+fn local_domain_name(progname: &str) -> CTResult<String> {
+    let mut size = 128usize;
+    loop {
+        let mut buf = vec![0u8; size];
+        let rc = unsafe { libc::getdomainname(buf.as_mut_ptr().cast::<c_char>(), buf.len()) };
+        if rc == 0 {
+            if let Some(pos) = buf.iter().position(|b| *b == 0) {
+                return Ok(String::from_utf8_lossy(&buf[..pos]).into_owned());
+            }
+            size *= 2;
+            continue;
+        }
+
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::ENAMETOOLONG) {
+            size *= 2;
+            continue;
+        }
+        return print_io_error(progname, &err);
+    }
+}
+
+fn local_nis_domain_name(progname: &str) -> CTResult<String> {
+    let domain = local_domain_name(progname)?;
+    if domain == "(none)" {
+        println!(
+            "{}",
+            t!(
+                "hostname.messages.local_domain_not_set",
+                progname = progname
+            )
+        );
+        return exit_with_code(1);
+    }
+    Ok(domain)
+}
+
+fn check_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    if bytes.is_empty() {
+        return false;
+    }
+    if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
+        return false;
+    }
+
+    for (idx, ch) in bytes.iter().enumerate() {
+        let allowed = ch.is_ascii_alphanumeric() || *ch == b'-' || *ch == b'.';
+        if !allowed {
+            return false;
+        }
+        if *ch == b'-' {
+            if idx > 0 && bytes[idx - 1] == b'.' {
+                return false;
+            }
+            if idx + 1 < bytes.len() && bytes[idx + 1] == b'.' {
+                return false;
+            }
+        }
+        if *ch == b'.' && idx > 0 && bytes[idx - 1] == b'.' {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn set_name(progname: &str, name_type: NameType, original_name: &str) -> CTResult<()> {
+    match name_type {
+        NameType::Default => {
+            let trimmed = original_name.trim_matches(char::is_whitespace).to_string();
+            if !check_name(&trimmed) {
+                eprintln!(
+                    "{}",
+                    t!(
+                        "hostname.messages.specified_hostname_invalid",
+                        progname = progname
+                    )
+                );
+                return exit_with_code(1);
+            }
+
+            let raw = c_string(&trimmed, progname)?;
+            let rc = unsafe { libc::sethostname(raw.as_ptr(), trimmed.len()) };
+            if rc != 0 {
+                match std::io::Error::last_os_error().raw_os_error() {
+                    Some(libc::EPERM) => {
+                        eprintln!(
+                            "{}",
+                            t!(
+                                "hostname.messages.must_be_root_change_host",
+                                progname = progname
+                            )
+                        );
+                    }
+                    Some(libc::EINVAL) => {
+                        eprintln!(
+                            "{}",
+                            t!("hostname.messages.name_too_long", progname = progname)
+                        );
+                    }
+                    _ => {}
+                }
+                return exit_with_code(1);
+            }
+            Ok(())
+        }
+        NameType::Nis | NameType::NisDef => {
+            let raw = c_string(original_name, progname)?;
+            let rc = unsafe { libc::setdomainname(raw.as_ptr(), original_name.len()) };
+            if rc != 0 {
+                match std::io::Error::last_os_error().raw_os_error() {
+                    Some(libc::EPERM) => {
+                        eprintln!(
+                            "{}",
+                            t!(
+                                "hostname.messages.must_be_root_change_domain",
+                                progname = progname
+                            )
+                        );
+                    }
+                    Some(libc::EINVAL) => {
+                        eprintln!(
+                            "{}",
+                            t!("hostname.messages.name_too_long", progname = progname)
+                        );
+                    }
+                    _ => {}
+                }
+                return exit_with_code(1);
+            }
+            Ok(())
+        }
+        _ => usage(progname, false),
+    }
+}
+
+fn gai_error(code: i32) -> String {
+    unsafe { CStr::from_ptr(libc::gai_strerror(code)) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn show_all_ifaddrs(progname: &str, as_ips: bool) -> CTResult<()> {
+    let flags = if as_ips {
+        libc::NI_NUMERICHOST
+    } else {
+        libc::NI_NAMEREQD
+    };
+
+    let ifaddrs = match getifaddrs() {
+        Ok(v) => v,
+        Err(e) => {
+            let io_err = std::io::Error::from_raw_os_error(e as i32);
+            return print_io_error(progname, &io_err);
+        }
+    };
+
+    for iface in ifaddrs {
+        let Some(addr) = iface.address else {
+            continue;
+        };
+
+        if iface.flags.contains(InterfaceFlags::IFF_LOOPBACK) {
+            continue;
+        }
+        if !iface.flags.contains(InterfaceFlags::IFF_UP) {
+            continue;
+        }
+
+        let family = addr.family();
+        if family != Some(AddressFamily::Inet) && family != Some(AddressFamily::Inet6) {
+            continue;
+        }
+
+        if let Some(in6) = addr.as_sockaddr_in6() {
+            let ip = in6.ip();
+            let first_seg = ip.segments()[0];
+            let multicast_link_local = (first_seg & 0xff0f) == 0xff02;
+            if ip.is_unicast_link_local() || multicast_link_local {
+                continue;
+            }
+        }
+
+        let mut host = [0 as c_char; libc::NI_MAXHOST as usize];
+        let ret = unsafe {
+            libc::getnameinfo(
+                addr.as_ptr(),
+                addr.len(),
+                host.as_mut_ptr(),
+                host.len() as libc::socklen_t,
+                std::ptr::null_mut(),
+                0,
+                flags,
+            )
+        };
+
+        if ret != 0 {
+            if as_ips && ret != libc::EAI_NONAME {
+                eprintln!(
+                    "{}",
+                    t!(
+                        "hostname.messages.gai_error",
+                        progname = progname,
+                        msg = gai_error(ret)
+                    )
+                );
+                return exit_with_code(1);
+            }
+            continue;
+        }
+
+        let value = unsafe { CStr::from_ptr(host.as_ptr()) }.to_string_lossy();
+        print!("{value} ");
+    }
+
+    println!();
+    Ok(())
+}
+
+fn show_resolved_name(progname: &str, name_type: NameType) -> CTResult<()> {
+    let host = local_host_name(progname)?;
+    let host_c = c_string(&host, progname)?;
+
+    let mut hints: libc::addrinfo = unsafe { std::mem::zeroed() };
+    hints.ai_socktype = libc::SOCK_DGRAM;
+    hints.ai_flags = libc::AI_CANONNAME;
+
+    let mut res: *mut libc::addrinfo = std::ptr::null_mut();
+    let ret = unsafe { libc::getaddrinfo(host_c.as_ptr(), std::ptr::null(), &hints, &mut res) };
+    if ret != 0 {
+        eprintln!(
+            "{}",
+            t!(
+                "hostname.messages.gai_error",
+                progname = progname,
+                msg = gai_error(ret)
+            )
+        );
+        return exit_with_code(1);
+    }
+
+    struct AddrInfoGuard(*mut libc::addrinfo);
+    impl Drop for AddrInfoGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if !self.0.is_null() {
+                    libc::freeaddrinfo(self.0);
+                }
+            }
+        }
+    }
+    let _guard = AddrInfoGuard(res);
+
+    if res.is_null() {
+        return Ok(());
+    }
+
+    let canon = unsafe {
+        if (*res).ai_canonname.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr((*res).ai_canonname)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
+
+    match name_type {
+        NameType::Alias => {
+            let content = match std::fs::read_to_string("/etc/hosts") {
+                Ok(c) => c,
+                Err(e) => return print_io_error(progname, &e),
+            };
+
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                let fields: Vec<&str> = trimmed.split_whitespace().collect();
+                if fields.len() < 2 {
+                    continue;
+                }
+                if !fields[1..].contains(&host.as_str()) {
+                    continue;
+                }
+
+                let aliases: Vec<&str> = fields[1..]
+                    .iter()
+                    .copied()
+                    .filter(|name| *name != host)
+                    .collect();
+                if !aliases.is_empty() {
+                    print!("{}", aliases.join(" "));
+                }
+                println!();
+                return Ok(());
+            }
+
+            println!();
+            Ok(())
+        }
+        NameType::Ip => {
+            let mut first = true;
+            let mut cur = res;
+            while !cur.is_null() {
+                let mut buf = [0 as c_char; 46];
+                let rc = unsafe {
+                    libc::getnameinfo(
+                        (*cur).ai_addr,
+                        (*cur).ai_addrlen,
+                        buf.as_mut_ptr(),
+                        buf.len() as libc::socklen_t,
+                        std::ptr::null_mut(),
+                        0,
+                        libc::NI_NUMERICHOST,
+                    )
+                };
+                if rc != 0 {
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "hostname.messages.gai_error",
+                            progname = progname,
+                            msg = gai_error(rc)
+                        )
+                    );
+                    return exit_with_code(1);
+                }
+                if !first {
+                    print!(" ");
+                }
+                first = false;
+                let value = unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy();
+                print!("{value}");
+                cur = unsafe { (*cur).ai_next };
+            }
+            println!();
+            Ok(())
+        }
+        NameType::Dns => {
+            if let Some(pos) = canon.find('.') {
+                println!("{}", &canon[pos + 1..]);
+            }
+            Ok(())
+        }
+        NameType::Fqdn => {
+            println!("{canon}");
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn show_name(progname: &str, name_type: NameType) -> CTResult<()> {
+    match name_type {
+        NameType::Default => {
+            println!("{}", local_host_name(progname)?);
+            Ok(())
+        }
+        NameType::Short => {
+            let host = local_host_name(progname)?;
+            if let Some(pos) = host.find('.') {
+                println!("{}", &host[..pos]);
+            } else {
+                println!("{host}");
+            }
+            Ok(())
+        }
+        NameType::Nis => {
+            println!("{}", local_domain_name(progname)?);
+            Ok(())
+        }
+        NameType::NisDef => {
+            println!("{}", local_nis_domain_name(progname)?);
+            Ok(())
+        }
+        NameType::AllIps => show_all_ifaddrs(progname, true),
+        NameType::AllFqdns => show_all_ifaddrs(progname, false),
+        NameType::Alias | NameType::Ip | NameType::Dns | NameType::Fqdn => {
+            show_resolved_name(progname, name_type)
+        }
+    }
+}
+
+fn read_name_from_file(progname: &str, path: &str, boot: bool) -> CTResult<Option<String>> {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            if boot {
+                return Ok(None);
+            }
+            return print_io_error(progname, &e);
+        }
+    };
+
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) => return Ok(Some(String::new())),
+            Ok(_) => {
+                if line.starts_with('\n') || line.starts_with('#') {
+                    continue;
+                }
+                if line.ends_with('\n') {
+                    line.pop();
+                }
+                return Ok(Some(line.clone()));
+            }
+            Err(e) => return print_io_error(progname, &e),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::ffi::OsString;
+    use super::{NameType, check_name, default_type};
 
     #[test]
-    fn test_tool_implementation() {
-        let tool = Hostname;
-
-        // 测试 name 方法
-        assert_eq!(tool.name(), "hostname");
-
-        // 测试 command 方法
-        let command = tool.command();
-        assert!(command.get_name().contains("hostname"));
-
-        // 测试 execute 方法
-        let args = vec![OsString::from("hostname"), OsString::from("--version")];
-        assert!(tool.execute(&args).is_err());
+    fn test_check_name() {
+        assert!(check_name("host"));
+        assert!(check_name("host.example"));
+        assert!(check_name("host-1"));
+        assert!(!check_name(""));
+        assert!(!check_name("-host"));
+        assert!(!check_name("host-"));
+        assert!(!check_name("host..example"));
+        assert!(!check_name("host.-example"));
+        assert!(!check_name("host#.example"));
     }
 
-    mod tests_ct_app {
-        use crate::{OPT_DOMAIN, OPT_FQDN, OPT_HOST, OPT_IP_ADDRESS, OPT_SHORT, ct_app};
-        use clap::error::ErrorKind;
-
-        #[test]
-        fn test_ct_app_version() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
-        }
-
-        #[test]
-        fn test_ct_app_v() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
-        }
-
-        #[test]
-        fn test_ct_app_help() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
-        }
-
-        #[test]
-        fn test_ct_app_h() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
-        }
-
-        #[test]
-        fn test_ct_app_domain() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--domain"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_DOMAIN));
-        }
-
-        #[test]
-        fn test_ct_app_d() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-d"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_DOMAIN));
-        }
-
-        #[test]
-        fn test_ct_app_ip_address() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--ip-address"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_IP_ADDRESS));
-        }
-
-        #[test]
-        fn test_ct_app_i() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-i"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_IP_ADDRESS));
-        }
-
-        #[test]
-        fn test_ct_app_fqdn() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--fqdn"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_FQDN));
-        }
-
-        #[test]
-        fn test_ct_app_f() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-f"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_FQDN));
-        }
-
-        #[test]
-        fn test_ct_app_short() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--short"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_SHORT));
-        }
-
-        #[test]
-        fn test_ct_app_s() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-s"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert!(result.unwrap().get_flag(OPT_SHORT));
-        }
-
-        #[test]
-        fn test_ct_app_hostname() {
-            let command = ct_app();
-            let args = vec![ctcore::ct_util_name()];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            assert_eq!(None, result.unwrap().get_one::<String>(OPT_HOST));
-        }
-    }
-
-    mod tests_hostname_main {
-        use crate::hostname_main;
-
-        use std::ffi::OsString;
-        //use std::fs::File;
-        //use std::io::Write;
-        //use tempfile::tempdir;
-
-        #[test]
-        fn test_hostname_main_version() {
-            let args = [ctcore::ct_util_name(), "--version"];
-
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_hostname_main_v() {
-            let args = [ctcore::ct_util_name(), "-V"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_hostname_main_help() {
-            let args = [ctcore::ct_util_name(), "--help"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_hostname_main_h() {
-            let args = [ctcore::ct_util_name(), "-h"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_hostname_main_domain() {
-            let args = [ctcore::ct_util_name(), "--domain"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_d() {
-            let args = [ctcore::ct_util_name(), "-d"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_ip_address() {
-            let args = [ctcore::ct_util_name(), "--ip-address"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_i() {
-            let args = [ctcore::ct_util_name(), "-i"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_fqdn() {
-            let args = [ctcore::ct_util_name(), "--fqdn"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_f() {
-            let args = [ctcore::ct_util_name(), "-f"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_short() {
-            let args = [ctcore::ct_util_name(), "--short"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_s() {
-            let args = [ctcore::ct_util_name(), "-s"];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_hostname() {
-            let args = [ctcore::ct_util_name()];
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_all_fqdns() {
-            let args = [ctcore::ct_util_name(), "--all-fqdns"];
-
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        /*#[test]
-        fn test_hostname_main_all_with_file() {
-            let temp_dir = tempdir().expect("Failed to create temporary directory");
-            let temp_file_path = temp_dir
-                .path()
-                .join("test_read_file_with_permissions_denied.txt");
-            let mut temp_file =
-                File::create(&temp_file_path).expect("Failed to create temporary file");
-            temp_file
-                .write_all(b"test-hostname")
-                .expect("Failed to write to temporary file");
-
-            let args = vec![
-                ctcore::ct_util_name(),
-                "-F",
-                temp_file_path.to_str().unwrap()
-            ];
-
-            let result = hostname_main(args.iter().map(|s| OsString::from(s)));
-
-            assert!(result.is_ok());
-        }*/
-
-        #[test]
-        fn test_hostname_main_alias() {
-            let args = [ctcore::ct_util_name(), "-a"];
-
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_boot() {
-            let args = [ctcore::ct_util_name(), "-b"];
-
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_all_ip_address() {
-            let args = [ctcore::ct_util_name(), "-I"];
-
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_hostname_main_nis() {
-            let args = [ctcore::ct_util_name(), "-y"];
-
-            let result = hostname_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-    }
-
-    mod test_find_ipv6_interface_name {
-        use super::super::find_ipv6_interface_name;
-        use nix::ifaddrs::getifaddrs;
-
-        #[test]
-        fn test_find_ipv6_interface_name_real_interfaces() {
-            // 获取系统实际的网络接口
-            let interfaces = getifaddrs().unwrap();
-
-            // 遍历接口找到第一个IPv6地址
-            for interface in interfaces {
-                if let Some(addr) = interface.address {
-                    if let Some(sock6) = addr.as_sockaddr_in6() {
-                        let ip_str = sock6.ip().to_string();
-                        let result = find_ipv6_interface_name(ip_str.clone());
-
-                        // 如果找到了接口，验证返回的接口名是否正确
-                        if !result.is_empty() {
-                            assert_eq!(result, interface.interface_name);
-                            return;
-                        }
-                    }
-                }
-            }
-        }
+    #[test]
+    fn test_default_type_from_progname() {
+        assert_eq!(default_type("hostname"), NameType::Default);
+        assert_eq!(default_type("dnsdomainname"), NameType::Dns);
+        assert_eq!(default_type("domainname"), NameType::Nis);
+        assert_eq!(default_type("ypdomainname"), NameType::NisDef);
+        assert_eq!(default_type("nisdomainname"), NameType::NisDef);
     }
 }

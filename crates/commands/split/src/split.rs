@@ -48,6 +48,7 @@ static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
+static OPT_UNBUFFERED: &str = "unbuffered";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
 
 static ARG_INPUT: &str = "input";
@@ -73,13 +74,62 @@ pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let (args, obs_lines) = split_handle_obsolete(args);
+
+    // GNU split accepts only `---io-blksize` (hidden option), not `--io-blksize`.
+    // Pre-check to return GNU-compatible diagnostics instead of clap's generic error.
+    if let Some(invalid_opt) = args.iter().find_map(|arg| {
+        let s = arg.to_str()?;
+        if s == "--io-blksize" || s.starts_with("--io-blksize=") {
+            Some(s.to_string())
+        } else {
+            None
+        }
+    }) {
+        let util_name = ctcore::ct_util_name();
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "unrecognized option '{invalid_opt}'\nTry '{util_name} --help' for more information."
+            ),
+        ));
+    }
+
     let args_match = ct_app().try_get_matches_from(args)?;
 
     match SpliceSettings::from(&args_match, &obs_lines) {
-        Ok(settings) => split(&settings),
+        Ok(settings) => {
+            #[cfg(test)]
+            let settings = {
+                let mut settings = settings;
+                if settings.prefix == "x" {
+                    settings.prefix = split_test_prefix();
+                }
+                settings
+            };
+            split(&settings)
+        }
         Err(e) if e.splice_requires_usage() => Err(CTsageError::new(1, format!("{e}"))),
         Err(e) => Err(CtSimpleError::new(1, format!("{e}"))),
     }
+}
+
+#[cfg(test)]
+fn split_test_base_dir() -> std::path::PathBuf {
+    let base = std::env::temp_dir()
+        .join("syskits-split-tests")
+        .join(std::process::id().to_string());
+    let _ = std::fs::create_dir_all(&base);
+    base
+}
+
+#[cfg(test)]
+fn split_test_prefix() -> String {
+    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    split_test_base_dir()
+        .join(format!("test-prefix.{}.{}", std::process::id(), seq))
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
@@ -266,7 +316,8 @@ fn splice_handle_preceding_options(
             || &splice_slice[2..] == OPT_FILTER
             || &splice_slice[2..] == OPT_NUMBER
             || &splice_slice[2..] == OPT_SUFFIX_LENGTH
-            || &splice_slice[2..] == OPT_SEPARATOR;
+            || &splice_slice[2..] == OPT_SEPARATOR
+            || &splice_slice[2..] == OPT_IO_BLKSIZE;
     }
     // 检查当前切片是否为需要值的前置短选项（值通过空格分隔）
     *is_preceding_short_opt_req_value = splice_slice == "-b"
@@ -345,6 +396,11 @@ fn splice_args_init() -> Vec<Arg> {
             .short('e')
             .help(t!("split.clap.opt_elide_empty_files"))
             .action(ArgAction::SetTrue),
+        Arg::new(OPT_UNBUFFERED)
+            .long(OPT_UNBUFFERED)
+            .short('u')
+            .help(t!("split.clap.opt_unbuffered"))
+            .action(ArgAction::SetTrue),
         Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
             .short('d')
             .action(ArgAction::SetTrue)
@@ -407,7 +463,7 @@ fn splice_args_init() -> Vec<Arg> {
             .action(ArgAction::Append)
             .help(t!("split.clap.opt_separator")),
         Arg::new(OPT_IO_BLKSIZE)
-            .long("io-blksize")
+            .long("split-internal-io-blksize")
             .alias(OPT_IO_BLKSIZE)
             .hide(true),
         Arg::new(ARG_INPUT)
@@ -442,6 +498,8 @@ struct SpliceSettings {
     /// chunks. If this is `false`, then empty files will not be
     /// created.
     elide_empty_files: bool,
+    /// Whether to flush output on each round-robin write (`-n r/...`).
+    unbuffered: bool,
     io_blksize: Option<u64>,
 }
 
@@ -560,6 +618,7 @@ impl SpliceSettings {
             verbose: args_match.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
             separator: args_separator,
             elide_empty_files: args_match.get_flag(OPT_ELIDE_EMPTY_FILES),
+            unbuffered: args_match.get_flag(OPT_UNBUFFERED),
             io_blksize,
         };
 
@@ -637,6 +696,22 @@ fn splice_custom_write_all<T: Write>(
         Ok(()) => Ok(true),
         Err(e) if split_ignorable_io_error(&e, splice_settings) => Ok(false),
         Err(e) => Err(e),
+    }
+}
+
+/// Flush output immediately when `--unbuffered` is set for round-robin mode.
+fn split_flush_if_unbuffered<T: Write>(
+    writer: &mut T,
+    splice_settings: &SpliceSettings,
+) -> std::io::Result<()> {
+    if splice_settings.unbuffered {
+        match writer.flush() {
+            Ok(()) => Ok(()),
+            Err(e) if split_ignorable_io_error(&e, splice_settings) => Ok(()),
+            Err(e) => Err(e),
+        }
+    } else {
+        Ok(())
     }
 }
 
@@ -1690,12 +1765,14 @@ where
                 // 在Kth块模式下，根据当前块的编号决定是否将数据写入标准输出。
                 if (size % num_chunks) == (chunk_number - 1) as usize {
                     stdout_writer.write_all(bytes)?;
+                    split_flush_if_unbuffered(&mut stdout_writer, splice_settings)?;
                 }
             }
             None => {
                 // 在N块模式下，根据当前块的编号选择对应的文件写入数据。
                 let writer = output_files.get_writer(size % num_chunks, splice_settings)?;
                 let writer_stdin_open = splice_custom_write_all(bytes, writer, splice_settings)?;
+                split_flush_if_unbuffered(writer, splice_settings)?;
                 if !writer_stdin_open {
                     closed_writers_size += 1;
                 }
@@ -1811,6 +1888,48 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unique_output_filename() -> &'static str {
+        static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Box::leak(format!("output.{}.{}.txt", std::process::id(), seq).into_boxed_str())
+    }
+
+    fn unique_output_prefix() -> String {
+        static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        super::split_test_base_dir()
+            .join(format!("prefix.{}.{}", std::process::id(), seq))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn cleanup_outputs_by_prefix(prefix: &str) {
+        let prefix_path = std::path::Path::new(prefix);
+        let Some(prefix_name) = prefix_path.file_name().and_then(|n| n.to_str()) else {
+            return;
+        };
+        let parent = prefix_path
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| std::env::temp_dir());
+        let Ok(entries) = std::fs::read_dir(parent) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            if !file_path.is_file() {
+                continue;
+            }
+            let Some(file_name) = file_path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if file_name.starts_with(prefix_name) {
+                let _ = std::fs::remove_file(file_path);
+            }
+        }
+    }
 
     mod tests_handle_preceding_options {
         use super::*;
@@ -8050,7 +8169,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8083,7 +8202,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8117,7 +8236,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8151,7 +8270,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8185,7 +8304,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8219,7 +8338,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8253,7 +8372,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8286,7 +8405,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10M"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8320,7 +8439,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8354,7 +8473,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8388,7 +8507,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8422,7 +8541,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8456,7 +8575,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8490,7 +8609,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8524,7 +8643,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8558,7 +8677,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8592,7 +8711,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8626,7 +8745,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8660,7 +8779,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8694,7 +8813,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8728,7 +8847,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8762,7 +8881,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8796,7 +8915,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8829,7 +8948,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--lines", "1000"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8863,7 +8982,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8897,7 +9016,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8931,7 +9050,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -8965,7 +9084,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9004,7 +9123,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9043,7 +9162,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9082,7 +9201,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9116,7 +9235,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9150,7 +9269,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9183,7 +9302,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--filter", "cd"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9216,7 +9335,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--filter", "tail"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9257,7 +9376,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9298,7 +9417,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9338,7 +9457,7 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9381,7 +9500,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9414,7 +9533,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--elide-empty-files"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9448,7 +9567,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9482,7 +9601,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9516,7 +9635,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9551,7 +9670,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9585,7 +9704,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9619,7 +9738,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9653,7 +9772,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9687,7 +9806,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9726,7 +9845,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9759,7 +9878,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--verbose"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9793,7 +9912,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9831,7 +9950,7 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9871,7 +9990,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9906,7 +10025,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9940,7 +10059,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\0"];
             let result = command.try_get_matches_from(args);
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -9975,7 +10094,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -10010,7 +10129,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -10045,7 +10164,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -10087,7 +10206,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -10131,7 +10250,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
+            let filename = super::unique_output_filename();
 
             // Call the `instantiate_current_writer` method and assert the result is `Ok`
             let result = settings.splice_instantiate_current_writer(filename, true);
@@ -10466,9 +10585,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10511,8 +10631,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10555,8 +10677,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-b", "5"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10599,8 +10723,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-b", "15"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10643,8 +10769,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10687,8 +10815,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "100"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10731,8 +10861,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "1000"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10775,8 +10907,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10K"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10818,8 +10952,10 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10M"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10862,8 +10998,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10G"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10906,8 +11044,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10T"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10950,8 +11090,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10P"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -10994,8 +11136,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10E"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11038,8 +11182,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10Z"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11082,8 +11228,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10Y"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11126,8 +11274,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10R"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11170,8 +11320,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10Q"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11214,8 +11366,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-C", "5"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11258,8 +11412,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--line-bytes", "10"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11302,8 +11458,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--line-bytes", "100"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11346,8 +11504,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--line-bytes", "1000"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11390,8 +11550,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-l", "5"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11434,8 +11596,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--lines", "10"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11478,8 +11642,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--lines", "100"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11521,8 +11687,10 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), filename1, "--lines", "1000"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11565,8 +11733,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-n", "5"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11609,8 +11779,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--number", "10"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11653,8 +11825,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--number", "100"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11697,8 +11871,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--number", "1000"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11746,8 +11922,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11795,8 +11973,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11844,8 +12024,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11888,8 +12070,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--filter", "ls"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11932,8 +12116,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--filter", "cat"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -11975,8 +12161,10 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), filename1, "--filter", "cd"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12018,8 +12206,10 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), filename1, "--filter", "tail"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12069,8 +12259,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12120,8 +12312,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12170,8 +12364,10 @@ mod tests {
                 ".txt",
             ];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12223,8 +12419,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12266,8 +12464,10 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), filename1, "--elide-empty-files"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12310,8 +12510,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-e"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12354,8 +12556,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-d", "txt"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12398,8 +12602,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--numeric-suffixes=3"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12443,8 +12649,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-x", "111"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12487,8 +12695,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--hex-suffixes=11"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12531,8 +12741,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-d", "--hex-suffixes=11"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12575,8 +12787,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-a", "11"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12619,8 +12833,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--suffix-length=11"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12668,8 +12884,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12711,8 +12929,10 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), filename1, "--verbose"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12755,8 +12975,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-a", "111", "--verbose"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12803,8 +13025,10 @@ mod tests {
                 "--verbose",
             ];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12853,8 +13077,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12898,8 +13124,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "-t", "\0"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12942,8 +13170,10 @@ mod tests {
 
             let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\0"];
             let result = command.try_get_matches_from(args);
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -12987,8 +13217,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\n"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -13032,8 +13264,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\r"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -13077,8 +13311,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\t"];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -13128,8 +13364,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -13179,8 +13417,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -13231,8 +13471,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -13285,8 +13527,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            let mut settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
+            settings.prefix = super::unique_output_prefix();
             let result = split(&settings);
+            super::cleanup_outputs_by_prefix(&settings.prefix);
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();

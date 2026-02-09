@@ -6,6 +6,7 @@ split:
     opt_number: generate CHUNKS output files; see explanation below
     opt_additional_suffix: additional SUFFIX to append to output file names
     opt_elide_empty_files: do not generate empty output files with '-n'
+    opt_unbuffered: immediately copy input to output with '-n r/...'
     opt_numeric_suffixes_short: use numeric suffixes starting at 0, not alphabetic
     opt_numeric_suffixes: same as -d, but allow setting the start value
     opt_hex_suffixes_short: use hex suffixes starting at 0, not alphabetic

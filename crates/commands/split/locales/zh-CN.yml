@@ -6,6 +6,7 @@ split:
     opt_number: 生成CHUNKS个输出文件；见下面的说明
     opt_additional_suffix: 附加到输出文件名的额外后缀
     opt_elide_empty_files: 使用'-n'时不生成空输出文件
+    opt_unbuffered: 在'-n r/...'模式下立即将输入复制到输出
     opt_numeric_suffixes_short: 使用从0开始的数字后缀，而不是字母
     opt_numeric_suffixes: 与-d相同，但允许设置起始值
     opt_hex_suffixes_short: 使用从0开始的十六进制后缀，而不是字母

@@ -174,6 +174,26 @@ mod tests {
     use std::path::Path;
     use tempfile::Builder;
 
+    fn split_test_base_dir() -> std::path::PathBuf {
+        let base = std::env::temp_dir()
+            .join("syskits-split-tests")
+            .join(std::process::id().to_string());
+        let _ = std::fs::create_dir_all(&base);
+        base
+    }
+
+    fn unique_output_filename() -> &'static str {
+        static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Box::leak(
+            split_test_base_dir()
+                .join(format!("output.{}.{}.txt", std::process::id(), seq))
+                .to_string_lossy()
+                .into_owned()
+                .into_boxed_str(),
+        )
+    }
+
     #[test]
     fn test_same_absolute_paths() {
         let p1 = "/path/to/file.txt";
@@ -278,7 +298,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -311,7 +331,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -345,7 +365,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -379,7 +399,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -413,7 +433,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -447,7 +467,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -481,7 +501,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -514,7 +534,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10M"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -548,7 +568,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -582,7 +602,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -616,7 +636,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -650,7 +670,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -684,7 +704,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -718,7 +738,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -752,7 +772,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -786,7 +806,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -820,7 +840,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -854,7 +874,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -888,7 +908,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -922,7 +942,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -956,7 +976,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -990,7 +1010,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1024,7 +1044,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1057,7 +1077,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--lines", "1000"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1091,7 +1111,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1125,7 +1145,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1159,7 +1179,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1193,7 +1213,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1232,7 +1252,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1271,7 +1291,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1310,7 +1330,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1344,7 +1364,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1378,7 +1398,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1411,7 +1431,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--filter", "cd"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1444,7 +1464,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--filter", "tail"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1485,7 +1505,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1526,7 +1546,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1566,7 +1586,7 @@ mod tests {
         ];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1609,7 +1629,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1642,7 +1662,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--elide-empty-files"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1676,7 +1696,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1710,7 +1730,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1744,7 +1764,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1779,7 +1799,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1813,7 +1833,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1847,7 +1867,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1881,7 +1901,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1915,7 +1935,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1954,7 +1974,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -1987,7 +2007,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--verbose"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2021,7 +2041,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2059,7 +2079,7 @@ mod tests {
         ];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2099,7 +2119,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2134,7 +2154,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2168,7 +2188,7 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\0"];
         let result = command.try_get_matches_from(args);
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2203,7 +2223,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2238,7 +2258,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);
@@ -2273,7 +2293,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-        let filename = "output.txt";
+        let filename = unique_output_filename();
 
         // Call the `instantiate_current_writer` method and assert the result is `Ok`
         let result = instantiate_current_writer(&settings.filter, filename, true);

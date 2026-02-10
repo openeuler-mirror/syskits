@@ -739,6 +739,7 @@ mod tests {
             tstdin: "".to_string(),
             byte_mode: false,
             tty: false,
+            compare_use_bash: false,
             command: command.to_string(),
             description: format!("Test for {command}"),
             args: vec![],

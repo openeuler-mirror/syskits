@@ -527,6 +527,28 @@ mod tests {
     }
 
     #[test]
+    fn test_to_magnitude_and_suffix_human_readable_binary_keeps_point_zero_after_rounding() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(
+                2 * 1024 * 1024 - 7,
+                BlocksSuffixType::HumanReadable(BlocksHumanReadable::Binary)
+            ),
+            "2.0M"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_human_readable_decimal_keeps_point_zero_after_rounding() {
+        assert_eq!(
+            blocks_to_magnitude_and_suffix(
+                1_999_999,
+                BlocksSuffixType::HumanReadable(BlocksHumanReadable::Decimal)
+            ),
+            "2.0M"
+        );
+    }
+
+    #[test]
     fn test_to_magnitude_and_suffix_crossing_next_ten_megabytes_si() {
         assert_eq!(
             blocks_to_magnitude_and_suffix(9_900_001, BlocksSuffixType::Si),

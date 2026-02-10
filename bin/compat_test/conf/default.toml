@@ -92,6 +92,7 @@ default_commands = [
     "fmt",
     "du",
     "ptx",
+    "kill",
 ]
 
 # 测试环境配置

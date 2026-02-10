@@ -2201,6 +2201,26 @@ mod tests {
     }
 
     #[test]
+    fn test_shell_quote() {
+        assert_eq!(shell_quote("abc-1"), "abc-1");
+        assert_eq!(shell_quote(""), "''");
+        assert_eq!(shell_quote("a b"), "'a b'");
+        assert_eq!(shell_quote("x'y"), "'x'\"'\"'y'");
+    }
+
+    #[test]
+    fn test_build_shell_command_line_quotes_args() {
+        let args = vec![
+            "a b".to_string(),
+            "$HOME".to_string(),
+            "x'y".to_string(),
+            "".to_string(),
+        ];
+        let cmdline = CommandExecutor::build_shell_command_line("kill", &args);
+        assert_eq!(cmdline, "kill 'a b' '$HOME' 'x'\"'\"'y' ''");
+    }
+
+    #[test]
     fn test_parallel_test_executor() {
         // 创建测试配置
         let config = TestConfig {

@@ -522,7 +522,10 @@ mod tests {
         use super::*;
         use std::ffi::OsString;
         use std::fs::File;
+        use std::sync::Mutex;
         use tempfile::tempdir;
+
+        static EXIT_CODE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
         #[test]
         fn test_ctmain_version() {
@@ -748,6 +751,9 @@ mod tests {
         fn test_ct_main_mutually_exclusive_b_c_exit_code() {
             // 测试互斥选项-b和-c返回退出码2
             use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+            let _guard = EXIT_CODE_TEST_LOCK
+                .lock()
+                .expect("failed to lock exit code test mutex");
 
             // 重置退出码
             set_ct_exit_code(0);
@@ -769,6 +775,9 @@ mod tests {
         fn test_ct_main_mutually_exclusive_c_b_exit_code() {
             // 测试互斥选项-c和-b返回退出码2（顺序相反）
             use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+            let _guard = EXIT_CODE_TEST_LOCK
+                .lock()
+                .expect("failed to lock exit code test mutex");
 
             // 重置退出码
             set_ct_exit_code(0);

@@ -144,7 +144,15 @@ pub(crate) fn blocks_to_magnitude_and_suffix(
             format!("{blocks_quot}.{tenths_place_size}{blocks_suffix}")
         } else if tenths_place_size + 1 == 10 || blocks_quot >= 10 {
             // 特殊情况处理，如进位或位数过多
-            format!("{}{}", blocks_quot + 1, blocks_suffix)
+            let rounded = blocks_quot + 1;
+            if matches!(blocks_suffix_type, BlocksSuffixType::HumanReadable(_))
+                && size > 0
+                && rounded < 10
+            {
+                format!("{rounded}.0{blocks_suffix}")
+            } else {
+                format!("{rounded}{blocks_suffix}")
+            }
         } else {
             // 一般情况，返回带有两位小数的字符串
             format!("{}.{}{}", blocks_quot, tenths_place_size + 1, blocks_suffix)

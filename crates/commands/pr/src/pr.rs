@@ -4083,29 +4083,59 @@ mod tests {
     mod locale_tests {
         use super::*;
         use std::env;
+        use std::sync::Mutex;
+
+        static LOCALE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+        fn set_or_remove_env(key: &str, val: Option<&str>) {
+            unsafe {
+                match val {
+                    Some(v) => env::set_var(key, v),
+                    None => env::remove_var(key),
+                }
+            }
+        }
+
+        fn save_locale_env() -> (Option<String>, Option<String>, Option<String>) {
+            (
+                env::var("LC_ALL").ok(),
+                env::var("LC_TIME").ok(),
+                env::var("LANG").ok(),
+            )
+        }
+
+        fn restore_locale_env(saved: (Option<String>, Option<String>, Option<String>)) {
+            let (lc_all, lc_time, lang) = saved;
+            set_or_remove_env("LC_ALL", lc_all.as_deref());
+            set_or_remove_env("LC_TIME", lc_time.as_deref());
+            set_or_remove_env("LANG", lang.as_deref());
+        }
 
         #[test]
         fn test_get_pr_date_time_format_c_locale() {
-            // 模拟C locale环境
-            unsafe {
-                env::set_var("LC_TIME", "C");
-            }
+            let _guard = LOCALE_TEST_LOCK
+                .lock()
+                .expect("failed to lock locale test mutex");
+            let saved = save_locale_env();
+            set_or_remove_env("LC_ALL", None);
+            set_or_remove_env("LANG", None);
+            set_or_remove_env("LC_TIME", Some("C"));
 
             // C locale应该使用英文格式
             assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
 
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
+            restore_locale_env(saved);
         }
 
         #[test]
         fn test_get_pr_date_time_format_non_c_locale() {
-            // 模拟非C locale环境
-            unsafe {
-                env::set_var("LC_TIME", "zh_CN.UTF-8");
-            }
+            let _guard = LOCALE_TEST_LOCK
+                .lock()
+                .expect("failed to lock locale test mutex");
+            let saved = save_locale_env();
+            set_or_remove_env("LC_ALL", None);
+            set_or_remove_env("LANG", None);
+            set_or_remove_env("LC_TIME", Some("zh_CN.UTF-8"));
 
             // 非C locale应该使用ISO格式
             let format = get_pr_date_time_format();
@@ -4116,45 +4146,42 @@ mod tests {
                 assert_eq!(format, "%b %d %H:%M %Y");
             }
 
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
+            restore_locale_env(saved);
         }
 
         #[test]
         fn test_get_pr_date_time_format_posix_locale() {
-            // 模拟POSIX locale环境
-            unsafe {
-                env::set_var("LC_TIME", "POSIX");
-            }
+            let _guard = LOCALE_TEST_LOCK
+                .lock()
+                .expect("failed to lock locale test mutex");
+            let saved = save_locale_env();
+            set_or_remove_env("LC_ALL", None);
+            set_or_remove_env("LANG", None);
+            set_or_remove_env("LC_TIME", Some("POSIX"));
 
             // POSIX locale应该使用英文格式
             assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
 
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
+            restore_locale_env(saved);
         }
 
         #[test]
         fn test_hard_locale_time_integration() {
+            let _guard = LOCALE_TEST_LOCK
+                .lock()
+                .expect("failed to lock locale test mutex");
+            let saved = save_locale_env();
+            set_or_remove_env("LC_ALL", None);
+            set_or_remove_env("LANG", None);
+
             // 测试hard_locale_time函数的使用
-            unsafe {
-                env::set_var("LC_TIME", "C");
-            }
+            set_or_remove_env("LC_TIME", Some("C"));
             assert!(!hard_locale_time());
 
-            unsafe {
-                env::set_var("LC_TIME", "en_US.UTF-8");
-            }
+            set_or_remove_env("LC_TIME", Some("en_US.UTF-8"));
             assert!(hard_locale_time());
 
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_TIME");
-            }
+            restore_locale_env(saved);
         }
     }
 }

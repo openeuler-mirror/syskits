@@ -1334,6 +1334,344 @@
             "cleanup_commands": [
                 "rm -f checksum.txt"
             ]
+        },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 测试 --tag (BSD 风格输出)",
+                "args": [
+                    "--tag",
+                    "test_file_tag"
+                ],
+                "setup_commands": [
+                    "echo -n 'Hello, BSD!' > test_file_tag"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_tag"
+                ]
+            },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 测试 -z --zero (NUL 结尾，无转义)",
+                "args": [
+                    "-z",
+                    "test_file_zero"
+                ],
+                "setup_commands": [
+                    "echo -n 'Hello, Zero!' > test_file_zero"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_zero"
+                ]
+            },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 测试校验模式 --ignore-missing (部分文件丢失时不报错)(中英文差异)",
+                "args": [
+                    "-c",
+                    "--ignore-missing",
+                    "checksums.txt"
+                ],
+                "setup_commands": [
+                    "echo 'file1' > test_file_1",
+                    "echo 'file2' > test_file_2",
+                    "sha256sum test_file_1 test_file_2 > checksums.txt",
+                    "rm -f test_file_2"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_1 checksums.txt"
+                ]
+            },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 测试校验模式 --strict (中英文差异)",
+                "args": [
+                    "-c",
+                    "--strict",
+                    "bad_checksums.txt"
+                ],
+                "setup_commands": [
+                    "echo 'hello' > test_file_strict",
+                    "sha256sum test_file_strict > bad_checksums.txt",
+                    "echo 'This is a garbage line' >> bad_checksums.txt"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 1,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_strict bad_checksums.txt"
+                ]
+            },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 测试校验模式(只有中英文差异)",
+                "args": [
+                    "-c",
+                    "bad_checksums_warn.txt"
+                ],
+                "setup_commands": [
+                    "echo 'hello' > test_file_warn",
+                    "sha256sum test_file_warn > bad_checksums_warn.txt",
+                    "echo 'This is a garbage line' >> bad_checksums_warn.txt"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_warn bad_checksums_warn.txt"
+                ]
+            },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 测试校验模式 -w --warn (只有中英文差异)",
+                "args": [
+                    "-c",
+                    "-w",
+                    "bad_checksums_warn.txt"
+                ],
+                "setup_commands": [
+                    "echo 'hello' > test_file_warn",
+                    "sha256sum test_file_warn > bad_checksums_warn.txt",
+                    "echo 'This is a garbage line' >> bad_checksums_warn.txt"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_warn bad_checksums_warn.txt"
+                ]
+            },
+            {
+                "command": "sha256sum",
+                "description": "sha256sum: 组合测试 --tag 和 -z",
+                "args": [
+                    "--tag",
+                    "-z",
+                    "test_file_combo"
+                ],
+                "setup_commands": [
+                    "echo -n 'Combo' > test_file_combo"
+                ],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "ignore_fields": {
+                        "ignore_exit_code": false,
+                        "ignore_stdout": false,
+                        "ignore_stderr": false,
+                        "ignore_function": false
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -f test_file_combo"
+                ]
+            },
+            {
+            "command": "sha256sum",
+            "description": "sha256sum: 文件名包含反斜杠（测试默认转义行为，行首应有反斜杠）",
+            "args": [
+                "test_back\\slash"
+            ],
+            "setup_commands": [
+                "echo -n 'content' > 'test_back\\slash'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\\fd25e362095f9d984cfb7d603222dc3e3a34a9b40097637930962309f53e34b9  test_back\\\\slash\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 'test_back\\slash'"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验包含转义字符的文件（验证反转义逻辑）",
+            "args": [
+                "-c",
+                "escaped_checksum.txt"
+            ],
+            "setup_commands": [
+                "echo -n 'content' > 'test_back\\slash'",
+                "sha256sum 'test_back\\slash' > escaped_checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_back\\slash: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 'test_back\\slash' escaped_checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 测试 -z 禁用文件名转义（即使有特殊字符，行首也不应有反斜杠）",
+            "args": [
+                "-z",
+                "test_back\\slash"
+            ],
+            "setup_commands": [
+                "echo -n 'content' > 'test_back\\slash'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 'test_back\\slash'"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 使用 -- 处理以 - 开头的文件名",
+            "args": [
+                "--",
+                "-c"
+            ],
+            "setup_commands": [
+                "echo -n 'content' > ./-c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "fd25e362095f9d984cfb7d603222dc3e3a34a9b40097637930962309f53e34b9  -c\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ./-c"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 从标准输入读取校验和 (-c -)(中英文差异）",
+            "args": [
+                "-c",
+                "-"
+            ],
+            "tstdin": "7b200dd7bc8b28980b0b5e906b9965ddfbe4a515031b9da6fa34ed9aeef40498  test_file_stdin_check\n",
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_stdin_check"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_stdin_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_stdin_check"
+            ]
         }
     ]
   }

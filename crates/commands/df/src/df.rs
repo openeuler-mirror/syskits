@@ -510,14 +510,20 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     // 从命令行匹配项中解析DfOptions。
     let options = DfOptions::from(&args_match).map_err(DfError::OptionsError)?;
 
-    let filesystem_paths = get_filesystem(args_match, &options)?;
-    if !filesystem_paths.is_empty() {
-        // 打印文件系统信息的表格。
-        println!("{}", Table::new(&options, filesystem_paths));
-    }
+    let filesystem_paths = get_filesystem(args_match, &options);
 
-    // 函数执行成功，返回Ok。
-    Ok(())
+    match filesystem_paths {
+        Ok(filesystems) => {
+            if filesystems.is_empty() {
+                return Ok(());
+            }
+            println!("{}", Table::new(&options, filesystems));
+            Ok(())
+        }
+        Err(err) => {
+            return Err(CtSimpleError::new(1, format!("{}", err)).into())
+        }
+    }
 }
 
 fn normalize_locale(lang_code: &str) -> String {
@@ -564,11 +570,6 @@ fn get_filesystem(
             let filesystem_paths: Vec<_> = paths.collect();
             let filesystem = get_named_filesystems(&filesystem_paths, options)
                 .map_err_context(|| "cannot read table of mounted file systems".into())?;
-
-            // 如果指定路径不存在对应的文件系统信息，则不进行任何操作。
-            if filesystem.is_empty() {
-                return Ok(filesystem);
-            }
 
             filesystem
         }

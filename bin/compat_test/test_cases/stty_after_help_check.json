@@ -1,0 +1,3825 @@
+{
+  "tests": [
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: discard",
+      "args": ["-F", "/dev/tty", "discard", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: eof",
+      "args": ["-F", "/dev/tty", "eof", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: eol",
+      "args": ["-F", "/dev/tty", "eol", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: eol2",
+      "args": ["-F", "/dev/tty", "eol2", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: erase",
+      "args": ["-F", "/dev/tty", "erase", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: intr",
+      "args": ["-F", "/dev/tty", "intr", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: kill",
+      "args": ["-F", "/dev/tty", "kill", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: lnext",
+      "args": ["-F", "/dev/tty", "lnext", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: quit",
+      "args": ["-F", "/dev/tty", "quit", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: rprnt",
+      "args": ["-F", "/dev/tty", "rprnt", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: start",
+      "args": ["-F", "/dev/tty", "start", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: stop",
+      "args": ["-F", "/dev/tty", "stop", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: susp",
+      "args": ["-F", "/dev/tty", "susp", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: swtch",
+      "args": ["-F", "/dev/tty", "swtch", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special char: werase",
+      "args": ["-F", "/dev/tty", "werase", "x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: N(bare speed)",
+      "args": ["-F", "/dev/tty", "9600"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: cols",
+      "args": ["-F", "/dev/tty", "cols", "80"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: columns",
+      "args": ["-F", "/dev/tty", "columns", "80"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: drain with mode",
+      "args": ["-F", "/dev/tty", "drain", "echo"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: -drain with mode",
+      "args": ["-F", "/dev/tty", "-drain", "echo"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: ispeed",
+      "args": ["-F", "/dev/tty", "ispeed", "9600"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: line",
+      "args": ["-F", "/dev/tty", "line", "0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: min",
+      "args": ["-F", "/dev/tty", "min", "1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: ospeed",
+      "args": ["-F", "/dev/tty", "ospeed", "9600"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: rows",
+      "args": ["-F", "/dev/tty", "rows", "40"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: size",
+      "args": ["-F", "/dev/tty", "size"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: speed",
+      "args": ["-F", "/dev/tty", "speed"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help special setting: time",
+      "args": ["-F", "/dev/tty", "time", "1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: clocal",
+      "args": ["-F", "/dev/tty", "clocal"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -clocal",
+      "args": ["-F", "/dev/tty", "-clocal"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: cread",
+      "args": ["-F", "/dev/tty", "cread"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -cread",
+      "args": ["-F", "/dev/tty", "-cread"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: crtscts",
+      "args": ["-F", "/dev/tty", "crtscts"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -crtscts",
+      "args": ["-F", "/dev/tty", "-crtscts"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: cstopb",
+      "args": ["-F", "/dev/tty", "cstopb"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -cstopb",
+      "args": ["-F", "/dev/tty", "-cstopb"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: hup",
+      "args": ["-F", "/dev/tty", "hup"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -hup",
+      "args": ["-F", "/dev/tty", "-hup"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: hupcl",
+      "args": ["-F", "/dev/tty", "hupcl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -hupcl",
+      "args": ["-F", "/dev/tty", "-hupcl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: parenb",
+      "args": ["-F", "/dev/tty", "parenb"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -parenb",
+      "args": ["-F", "/dev/tty", "-parenb"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: parodd",
+      "args": ["-F", "/dev/tty", "parodd"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -parodd",
+      "args": ["-F", "/dev/tty", "-parodd"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: cmspar",
+      "args": ["-F", "/dev/tty", "cmspar"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control: -cmspar",
+      "args": ["-F", "/dev/tty", "-cmspar"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control grouped: cs5",
+      "args": ["-F", "/dev/tty", "cs5"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control grouped: cs6",
+      "args": ["-F", "/dev/tty", "cs6"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control grouped: cs7",
+      "args": ["-F", "/dev/tty", "cs7"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help control grouped: cs8",
+      "args": ["-F", "/dev/tty", "cs8"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: brkint",
+      "args": ["-F", "/dev/tty", "brkint"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -brkint",
+      "args": ["-F", "/dev/tty", "-brkint"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: icrnl",
+      "args": ["-F", "/dev/tty", "icrnl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -icrnl",
+      "args": ["-F", "/dev/tty", "-icrnl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: ignbrk",
+      "args": ["-F", "/dev/tty", "ignbrk"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -ignbrk",
+      "args": ["-F", "/dev/tty", "-ignbrk"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: igncr",
+      "args": ["-F", "/dev/tty", "igncr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -igncr",
+      "args": ["-F", "/dev/tty", "-igncr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: ignpar",
+      "args": ["-F", "/dev/tty", "ignpar"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -ignpar",
+      "args": ["-F", "/dev/tty", "-ignpar"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: imaxbel",
+      "args": ["-F", "/dev/tty", "imaxbel"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -imaxbel",
+      "args": ["-F", "/dev/tty", "-imaxbel"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: inlcr",
+      "args": ["-F", "/dev/tty", "inlcr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -inlcr",
+      "args": ["-F", "/dev/tty", "-inlcr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: inpck",
+      "args": ["-F", "/dev/tty", "inpck"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -inpck",
+      "args": ["-F", "/dev/tty", "-inpck"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: istrip",
+      "args": ["-F", "/dev/tty", "istrip"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -istrip",
+      "args": ["-F", "/dev/tty", "-istrip"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: iutf8",
+      "args": ["-F", "/dev/tty", "iutf8"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -iutf8",
+      "args": ["-F", "/dev/tty", "-iutf8"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: iuclc",
+      "args": ["-F", "/dev/tty", "iuclc"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -iuclc",
+      "args": ["-F", "/dev/tty", "-iuclc"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: ixany",
+      "args": ["-F", "/dev/tty", "ixany"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -ixany",
+      "args": ["-F", "/dev/tty", "-ixany"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: ixoff",
+      "args": ["-F", "/dev/tty", "ixoff"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -ixoff",
+      "args": ["-F", "/dev/tty", "-ixoff"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: ixon",
+      "args": ["-F", "/dev/tty", "ixon"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -ixon",
+      "args": ["-F", "/dev/tty", "-ixon"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: parmrk",
+      "args": ["-F", "/dev/tty", "parmrk"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -parmrk",
+      "args": ["-F", "/dev/tty", "-parmrk"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: tandem",
+      "args": ["-F", "/dev/tty", "tandem"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help input: -tandem",
+      "args": ["-F", "/dev/tty", "-tandem"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: bs0",
+      "args": ["-F", "/dev/tty", "bs0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: bs1",
+      "args": ["-F", "/dev/tty", "bs1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: cr0",
+      "args": ["-F", "/dev/tty", "cr0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: cr1",
+      "args": ["-F", "/dev/tty", "cr1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: cr2",
+      "args": ["-F", "/dev/tty", "cr2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: cr3",
+      "args": ["-F", "/dev/tty", "cr3"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: ff0",
+      "args": ["-F", "/dev/tty", "ff0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: ff1",
+      "args": ["-F", "/dev/tty", "ff1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: nl0",
+      "args": ["-F", "/dev/tty", "nl0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: nl1",
+      "args": ["-F", "/dev/tty", "nl1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: tab0",
+      "args": ["-F", "/dev/tty", "tab0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: tab1",
+      "args": ["-F", "/dev/tty", "tab1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: tab2",
+      "args": ["-F", "/dev/tty", "tab2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: tab3",
+      "args": ["-F", "/dev/tty", "tab3"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: vt0",
+      "args": ["-F", "/dev/tty", "vt0"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output grouped: vt1",
+      "args": ["-F", "/dev/tty", "vt1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: ocrnl",
+      "args": ["-F", "/dev/tty", "ocrnl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -ocrnl",
+      "args": ["-F", "/dev/tty", "-ocrnl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: ofdel",
+      "args": ["-F", "/dev/tty", "ofdel"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -ofdel",
+      "args": ["-F", "/dev/tty", "-ofdel"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: ofill",
+      "args": ["-F", "/dev/tty", "ofill"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -ofill",
+      "args": ["-F", "/dev/tty", "-ofill"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: olcuc",
+      "args": ["-F", "/dev/tty", "olcuc"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -olcuc",
+      "args": ["-F", "/dev/tty", "-olcuc"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: onlcr",
+      "args": ["-F", "/dev/tty", "onlcr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -onlcr",
+      "args": ["-F", "/dev/tty", "-onlcr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: onlret",
+      "args": ["-F", "/dev/tty", "onlret"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -onlret",
+      "args": ["-F", "/dev/tty", "-onlret"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: onocr",
+      "args": ["-F", "/dev/tty", "onocr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -onocr",
+      "args": ["-F", "/dev/tty", "-onocr"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: opost",
+      "args": ["-F", "/dev/tty", "opost"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output: -opost",
+      "args": ["-F", "/dev/tty", "-opost"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output alias: tabs",
+      "args": ["-F", "/dev/tty", "tabs"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help output alias: -tabs",
+      "args": ["-F", "/dev/tty", "-tabs"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: crterase",
+      "args": ["-F", "/dev/tty", "crterase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -crterase",
+      "args": ["-F", "/dev/tty", "-crterase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: ctlecho",
+      "args": ["-F", "/dev/tty", "ctlecho"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -ctlecho",
+      "args": ["-F", "/dev/tty", "-ctlecho"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echo",
+      "args": ["-F", "/dev/tty", "echo"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echo",
+      "args": ["-F", "/dev/tty", "-echo"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echoctl",
+      "args": ["-F", "/dev/tty", "echoctl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echoctl",
+      "args": ["-F", "/dev/tty", "-echoctl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echoe",
+      "args": ["-F", "/dev/tty", "echoe"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echoe",
+      "args": ["-F", "/dev/tty", "-echoe"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echok",
+      "args": ["-F", "/dev/tty", "echok"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echok",
+      "args": ["-F", "/dev/tty", "-echok"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echoke",
+      "args": ["-F", "/dev/tty", "echoke"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echoke",
+      "args": ["-F", "/dev/tty", "-echoke"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echonl",
+      "args": ["-F", "/dev/tty", "echonl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echonl",
+      "args": ["-F", "/dev/tty", "-echonl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: echoprt",
+      "args": ["-F", "/dev/tty", "echoprt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -echoprt",
+      "args": ["-F", "/dev/tty", "-echoprt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: extproc",
+      "args": ["-F", "/dev/tty", "extproc"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -extproc",
+      "args": ["-F", "/dev/tty", "-extproc"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: flusho",
+      "args": ["-F", "/dev/tty", "flusho"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -flusho",
+      "args": ["-F", "/dev/tty", "-flusho"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: icanon",
+      "args": ["-F", "/dev/tty", "icanon"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -icanon",
+      "args": ["-F", "/dev/tty", "-icanon"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: iexten",
+      "args": ["-F", "/dev/tty", "iexten"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -iexten",
+      "args": ["-F", "/dev/tty", "-iexten"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: isig",
+      "args": ["-F", "/dev/tty", "isig"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -isig",
+      "args": ["-F", "/dev/tty", "-isig"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: noflsh",
+      "args": ["-F", "/dev/tty", "noflsh"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -noflsh",
+      "args": ["-F", "/dev/tty", "-noflsh"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: prterase",
+      "args": ["-F", "/dev/tty", "prterase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -prterase",
+      "args": ["-F", "/dev/tty", "-prterase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: tostop",
+      "args": ["-F", "/dev/tty", "tostop"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -tostop",
+      "args": ["-F", "/dev/tty", "-tostop"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: xcase",
+      "args": ["-F", "/dev/tty", "xcase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local: -xcase",
+      "args": ["-F", "/dev/tty", "-xcase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local alias: crtkill",
+      "args": ["-F", "/dev/tty", "crtkill"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help local alias: -crtkill",
+      "args": ["-F", "/dev/tty", "-crtkill"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: LCASE",
+      "args": ["-F", "/dev/tty", "LCASE"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -LCASE",
+      "args": ["-F", "/dev/tty", "-LCASE"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: cbreak",
+      "args": ["-F", "/dev/tty", "cbreak"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -cbreak",
+      "args": ["-F", "/dev/tty", "-cbreak"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: cooked",
+      "args": ["-F", "/dev/tty", "cooked"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -cooked",
+      "args": ["-F", "/dev/tty", "-cooked"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: decctlq",
+      "args": ["-F", "/dev/tty", "decctlq"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -decctlq",
+      "args": ["-F", "/dev/tty", "-decctlq"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: evenp",
+      "args": ["-F", "/dev/tty", "evenp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -evenp",
+      "args": ["-F", "/dev/tty", "-evenp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: lcase",
+      "args": ["-F", "/dev/tty", "lcase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -lcase",
+      "args": ["-F", "/dev/tty", "-lcase"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: litout",
+      "args": ["-F", "/dev/tty", "litout"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -litout",
+      "args": ["-F", "/dev/tty", "-litout"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: nl",
+      "args": ["-F", "/dev/tty", "nl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -nl",
+      "args": ["-F", "/dev/tty", "-nl"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: oddp",
+      "args": ["-F", "/dev/tty", "oddp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -oddp",
+      "args": ["-F", "/dev/tty", "-oddp"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: parity",
+      "args": ["-F", "/dev/tty", "parity"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -parity",
+      "args": ["-F", "/dev/tty", "-parity"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: pass8",
+      "args": ["-F", "/dev/tty", "pass8"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -pass8",
+      "args": ["-F", "/dev/tty", "-pass8"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: raw",
+      "args": ["-F", "/dev/tty", "raw"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination: -raw",
+      "args": ["-F", "/dev/tty", "-raw"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination non-reversible: crt",
+      "args": ["-F", "/dev/tty", "crt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination non-reversible: dec",
+      "args": ["-F", "/dev/tty", "dec"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination non-reversible: ek",
+      "args": ["-F", "/dev/tty", "ek"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+,
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "after_help combination non-reversible: sane",
+      "args": ["-F", "/dev/tty", "sane"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    }
+  ]
+}

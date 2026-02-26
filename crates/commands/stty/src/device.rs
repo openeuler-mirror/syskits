@@ -13,7 +13,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
 #[derive(Debug)]
 pub enum Device {
-    Stdout(std::io::Stdout),
+    Stdin(std::io::Stdin),
     File(std::fs::File),
 }
 
@@ -21,7 +21,7 @@ impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
+            Self::Stdin(stdin) => stdin.as_fd(),
         }
     }
 }
@@ -30,7 +30,7 @@ impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
@@ -39,7 +39,7 @@ impl AsRawFd for Device {
 impl Device {
     pub fn try_clone(&self) -> std::io::Result<Self> {
         match self {
-            Device::Stdout(_) => Ok(Device::Stdout(std::io::stdout())),
+            Device::Stdin(_) => Ok(Device::Stdin(std::io::stdin())),
             Device::File(file) => Ok(Device::File(file.try_clone()?)),
         }
     }
@@ -49,13 +49,13 @@ impl Device {
 mod tests {
     use super::*;
     use std::fs::OpenOptions;
-    use std::io::stdout;
+    use std::io::stdin;
     use std::os::unix::io::AsRawFd;
 
     #[test]
-    fn test_device_stdout() {
-        let device = Device::Stdout(stdout());
-        assert!(device.as_fd().as_raw_fd() > 0);
+    fn test_device_stdin() {
+        let device = Device::Stdin(stdin());
+        assert!(device.as_fd().as_raw_fd() >= 0);
     }
 
     #[test]
@@ -74,9 +74,9 @@ mod tests {
 
     #[test]
     fn test_device_as_raw_fd() {
-        let stdout_device = Device::Stdout(stdout());
-        let stdout_fd = stdout_device.as_raw_fd();
-        assert!(stdout_fd > 0);
+        let stdin_device = Device::Stdin(stdin());
+        let stdin_fd = stdin_device.as_raw_fd();
+        assert!(stdin_fd >= 0);
 
         let file = OpenOptions::new()
             .read(true)
@@ -92,9 +92,9 @@ mod tests {
 
     #[test]
     fn test_device_as_fd() {
-        let stdout_device = Device::Stdout(stdout());
-        let stdout_fd = stdout_device.as_fd().as_raw_fd();
-        assert!(stdout_fd > 0);
+        let stdin_device = Device::Stdin(stdin());
+        let stdin_fd = stdin_device.as_fd().as_raw_fd();
+        assert!(stdin_fd >= 0);
 
         let file = OpenOptions::new()
             .read(true)
@@ -109,10 +109,10 @@ mod tests {
     }
 
     #[test]
-    fn test_device_clone_stdout() {
-        let device = Device::Stdout(stdout());
+    fn test_device_clone_stdin() {
+        let device = Device::Stdin(stdin());
         let cloned = device.try_clone().unwrap();
-        assert!(matches!(cloned, Device::Stdout(_)));
+        assert!(matches!(cloned, Device::Stdin(_)));
     }
 
     #[test]
@@ -131,9 +131,9 @@ mod tests {
 
     #[test]
     fn test_device_debug() {
-        let stdout_device = Device::Stdout(stdout());
-        let debug_str = format!("{stdout_device:?}");
-        assert!(debug_str.contains("Stdout"));
+        let stdin_device = Device::Stdin(stdin());
+        let debug_str = format!("{stdin_device:?}");
+        assert!(debug_str.contains("Stdin"));
 
         let file = OpenOptions::new()
             .read(true)

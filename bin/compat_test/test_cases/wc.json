@@ -238,6 +238,187 @@
             "cleanup_commands": [
                 "rm -f test_wc.txt"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -L 最长行长度",
+            "setup_commands": [
+                "printf 'short\nveryverylongline\nmid\n' > test_wc.txt"
+            ],
+            "args": ["-L", "test_wc.txt"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "16 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_wc.txt"]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: --total=never",
+            "setup_commands": [
+                "echo a > f1",
+                "echo b > f2"
+            ],
+            "args": ["--total=never", "f1", "f2"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1 1 2 f1\n1 1 2 f2\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f f1 f2"]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: --total=only",
+            "setup_commands": [
+                "echo a > f1",
+                "echo bb > f2"
+            ],
+            "args": ["--total=only", "f1", "f2"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "2 2 5\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f f1 f2"]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: --total=always 单文件（仅有中英文差异）",
+            "setup_commands": [
+                "echo hello > f1"
+            ],
+            "args": ["--total=always", "f1"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1 1 6 f1\n1 1 6 total\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f f1"]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: --files0-from(仅有中英文差距)",
+            "setup_commands": [
+                "echo hello > f1",
+                "echo world > f2",
+                "printf 'f1\\0f2\\0' > list"
+            ],
+            "args": ["--files0-from=list"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1 1 6 f1\n1 1 6 f2\n2 2 12 total\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f f1 f2 list"]
+        },
+        {
+            "tstdin": "abc def\n",
+            "command": "wc",
+            "description": "wc: 文件名 '-' 代表 stdin",
+            "setup_commands": [],
+            "args": ["-"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1 2 8 -\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: 同时 -c -m",
+            "setup_commands": [
+                "echo 'é' > f1"
+            ],
+            "args": ["-c", "-m", "f1"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "2 1 f1\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f f1"]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: 仅 -l 不对齐列",
+            "setup_commands": ["echo hi > f1"],
+            "args": ["-l", "f1"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1 f1\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f f1"]
+        },
+        {
+            "tstdin": "abc def\n",
+            "command": "wc",
+            "description": "wc: 不输入任何参数 代表 stdin",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "      1       2       8\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: --help",
+            "setup_commands": [],
+            "args": ["--help"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "      1       2       8\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: --version",
+            "setup_commands": [],
+            "args": ["--version"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "      1       2       8\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

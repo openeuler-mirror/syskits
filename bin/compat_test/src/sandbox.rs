@@ -766,6 +766,8 @@ impl IsolatedSandbox {
         let mut output = Vec::new();
         let start = std::time::Instant::now();
         let mut child_exited = false;
+        let mut child_status = None;
+        let mut child_exit_at = None;
 
         loop {
             if let Some(timeout_secs) = timeout {
@@ -784,9 +786,18 @@ impl IsolatedSandbox {
                 let err = Errno::last();
                 if err == Errno::EAGAIN {
                     if !child_exited {
-                        if let Ok(Some(_)) = child.try_wait() {
+                        if let Ok(Some(status)) = child.try_wait() {
                             child_exited = true;
+                            child_status = Some(status);
+                            child_exit_at = Some(std::time::Instant::now());
                         }
+                    }
+                    if child_exited {
+                        if child_exit_at.is_some_and(|t| t.elapsed() >= Duration::from_millis(50)) {
+                            break;
+                        }
+                        thread::sleep(Duration::from_millis(5));
+                        continue;
                     }
                     thread::sleep(Duration::from_millis(10));
                 } else {
@@ -805,15 +816,19 @@ impl IsolatedSandbox {
             }
         }
 
-        let status = match child.wait() {
-            Ok(status) => status,
-            Err(e) => {
-                let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
-                return Ok(CommandResult {
-                    stdout: String::new(),
-                    stderr,
-                    exit_code: 1,
-                });
+        let status = if let Some(status) = child_status {
+            status
+        } else {
+            match child.wait() {
+                Ok(status) => status,
+                Err(e) => {
+                    let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
+                    return Ok(CommandResult {
+                        stdout: String::new(),
+                        stderr,
+                        exit_code: 1,
+                    });
+                }
             }
         };
 

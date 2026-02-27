@@ -3,7 +3,9 @@
     {
       "command": "stty",
       "description": "stty: 无效参数在访问设备前报错（coreutils stty.sh 对应）",
-      "args": ["-blahblah"],
+      "args": [
+        "-blahblah"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -22,7 +24,9 @@
     {
       "command": "stty",
       "description": "stty: -F 缺少参数返回失败（coreutils stty.sh 对应）",
-      "args": ["-F"],
+      "args": [
+        "-F"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -41,7 +45,10 @@
     {
       "command": "stty",
       "description": "stty: -raw 与 -a 冲突时失败（coreutils stty.sh 对应）",
-      "args": ["-raw", "-a"],
+      "args": [
+        "-raw",
+        "-a"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -61,7 +68,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: eol -F /dev/tty 参数顺序非法（coreutils stty-invalid.sh 对应）",
-      "args": ["eol", "-F", "/dev/tty"],
+      "args": [
+        "eol",
+        "-F",
+        "/dev/tty"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -81,7 +92,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -F /dev/tty eol 缺值失败（coreutils stty-invalid.sh 对应）",
-      "args": ["-F", "/dev/tty", "eol"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "eol"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -101,7 +116,10 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -F/dev/tty eol 缺值失败（coreutils stty-invalid.sh 对应）",
-      "args": ["-F/dev/tty", "eol"],
+      "args": [
+        "-F/dev/tty",
+        "eol"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -121,7 +139,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: eol -F/dev/tty eol 非法组合失败（coreutils stty-invalid.sh 对应）",
-      "args": ["eol", "-F/dev/tty", "eol"],
+      "args": [
+        "eol",
+        "-F/dev/tty",
+        "eol"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -141,7 +163,12 @@
       "tty": true,
       "command": "stty",
       "description": "stty: ispeed 非法值失败（coreutils stty-invalid.sh 对应）",
-      "args": ["-F", "/dev/tty", "ispeed", "420"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "ispeed",
+        "420"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -161,7 +188,12 @@
       "tty": true,
       "command": "stty",
       "description": "stty: erase - 可解析（coreutils stty.sh 对应）",
-      "args": ["-F", "/dev/tty", "erase", "-"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "erase",
+        "-"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -181,7 +213,12 @@
       "tty": true,
       "command": "stty",
       "description": "stty: drain 与 echo 组合（coreutils stty.sh 对应）",
-      "args": ["-F", "/dev/tty", "drain", "echo"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "drain",
+        "echo"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -201,7 +238,12 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -drain 与 echo 组合（coreutils stty.sh 对应）",
-      "args": ["-F", "/dev/tty", "-drain", "echo"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "-drain",
+        "echo"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -222,7 +264,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: drain 单独设置（coreutils stty.sh 对应）",
-      "args": ["2d46", "2f6465762f747479", "647261696e"],
+      "args": [
+        "2d46",
+        "2f6465762f747479",
+        "647261696e"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -243,7 +289,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -drain 单独设置（coreutils stty.sh 对应）",
-      "args": ["2d46", "2f6465762f747479", "2d647261696e"],
+      "args": [
+        "2d46",
+        "2f6465762f747479",
+        "2d647261696e"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -259,12 +309,19 @@
         }
       }
     },
-
     {
       "tty": true,
       "command": "stty",
       "description": "stty: row/col 40x80 后查询 size（coreutils stty-row-col.sh #1）",
-      "args": ["-F", "/dev/tty", "rows", "40", "cols", "80", "size"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "rows",
+        "40",
+        "cols",
+        "80",
+        "size"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -284,7 +341,15 @@
       "tty": true,
       "command": "stty",
       "description": "stty: row/col 1x1 后查询 size（coreutils stty-row-col.sh #2）",
-      "args": ["-F", "/dev/tty", "rows", "1", "columns", "1", "size"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "rows",
+        "1",
+        "columns",
+        "1",
+        "size"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -304,7 +369,13 @@
       "tty": true,
       "command": "stty",
       "description": "stty: rows 1 后查询 size（coreutils stty-row-col.sh #4）",
-      "args": ["-F", "/dev/tty", "rows", "1", "size"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "rows",
+        "1",
+        "size"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -324,7 +395,13 @@
       "tty": true,
       "command": "stty",
       "description": "stty: cols 1 后查询 size（coreutils stty-row-col.sh #5）",
-      "args": ["-F", "/dev/tty", "cols", "1", "size"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "cols",
+        "1",
+        "size"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -344,7 +421,13 @@
       "tty": true,
       "command": "stty",
       "description": "stty: rows 十六进制 0x1E 后查询 size（coreutils stty-row-col.sh #10）",
-      "args": ["-F", "/dev/tty", "rows", "0x1E", "size"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "rows",
+        "0x1E",
+        "size"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -364,7 +447,13 @@
       "tty": true,
       "command": "stty",
       "description": "stty: rows 八进制 036 后查询 size（coreutils stty-row-col.sh #11）",
-      "args": ["-F", "/dev/tty", "rows", "036", "size"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "rows",
+        "036",
+        "size"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -380,15 +469,28 @@
         }
       }
     },
-
     {
       "tty": true,
       "command": "stty",
       "description": "stty: 控制类 flags 兼容（settings CONTROL_SETTINGS）",
       "args": [
-        "-F", "/dev/tty",
-        "parenb", "parodd", "cmspar", "hupcl", "cstopb", "cread", "clocal", "crtscts",
-        "-parenb", "-parodd", "-cmspar", "-hupcl", "-cstopb", "-clocal", "-crtscts"
+        "-F",
+        "/dev/tty",
+        "parenb",
+        "parodd",
+        "cmspar",
+        "hupcl",
+        "cstopb",
+        "cread",
+        "clocal",
+        "crtscts",
+        "-parenb",
+        "-parodd",
+        "-cmspar",
+        "-hupcl",
+        "-cstopb",
+        "-clocal",
+        "-crtscts"
       ],
       "expectation": {
         "execution": {
@@ -409,31 +511,13 @@
       "tty": true,
       "command": "stty",
       "description": "stty: 控制分组 flags 兼容（cs5/cs6/cs7/cs8）",
-      "args": ["-F", "/dev/tty", "cs5", "cs6", "cs7", "cs8"],
-      "expectation": {
-        "execution": {
-          "exit_code": 0,
-          "stdout": "",
-          "stderr": ""
-        },
-        "verifications": [],
-        "ignore_fields": {
-          "ignore_exit_code": false,
-          "ignore_stdout": false,
-          "ignore_stderr": false,
-          "ignore_verifications": false
-        }
-      }
-    },
-
-    {
-      "tty": true,
-      "command": "stty",
-      "description": "stty: 输入类 flags 兼容（settings INPUT_SETTINGS）",
       "args": [
-        "-F", "/dev/tty",
-        "ignbrk", "brkint", "ignpar", "parmrk", "inpck", "istrip", "inlcr", "igncr", "icrnl", "ixoff", "tandem", "ixon", "ixany", "imaxbel", "iutf8",
-        "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr", "-igncr", "-icrnl", "-ixoff", "-tandem", "-ixon", "-ixany", "-imaxbel", "-iutf8"
+        "-F",
+        "/dev/tty",
+        "cs5",
+        "cs6",
+        "cs7",
+        "cs8"
       ],
       "expectation": {
         "execution": {
@@ -450,15 +534,80 @@
         }
       }
     },
-
+    {
+      "tty": true,
+      "command": "stty",
+      "description": "stty: 输入类 flags 兼容（settings INPUT_SETTINGS）",
+      "args": [
+        "-F",
+        "/dev/tty",
+        "ignbrk",
+        "brkint",
+        "ignpar",
+        "parmrk",
+        "inpck",
+        "istrip",
+        "inlcr",
+        "igncr",
+        "icrnl",
+        "ixoff",
+        "tandem",
+        "ixon",
+        "ixany",
+        "imaxbel",
+        "iutf8",
+        "-ignbrk",
+        "-brkint",
+        "-ignpar",
+        "-parmrk",
+        "-inpck",
+        "-istrip",
+        "-inlcr",
+        "-igncr",
+        "-icrnl",
+        "-ixoff",
+        "-tandem",
+        "-ixon",
+        "-ixany",
+        "-imaxbel",
+        "-iutf8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    },
     {
       "tty": true,
       "command": "stty",
       "description": "stty: 输出类 flags 兼容（settings OUTPUT_SETTINGS 非分组）",
       "args": [
-        "-F", "/dev/tty",
-        "opost", "olcuc", "ocrnl", "onlcr", "onocr", "onlret", "ofdel",
-        "-opost", "-olcuc", "-ocrnl", "-onlcr", "-onocr", "-onlret", "-ofdel"
+        "-F",
+        "/dev/tty",
+        "opost",
+        "olcuc",
+        "ocrnl",
+        "onlcr",
+        "onocr",
+        "onlret",
+        "ofdel",
+        "-opost",
+        "-olcuc",
+        "-ocrnl",
+        "-onlcr",
+        "-onocr",
+        "-onlret",
+        "-ofdel"
       ],
       "expectation": {
         "execution": {
@@ -480,8 +629,24 @@
       "command": "stty",
       "description": "stty: 输出分组 flags 兼容（nl/cr/tab/bs/vt/ff）",
       "args": [
-        "-F", "/dev/tty",
-        "nl0", "nl1", "cr0", "cr1", "cr2", "cr3", "tab0", "tab1", "tab2", "tab3", "bs0", "bs1", "vt0", "vt1", "ff0", "ff1"
+        "-F",
+        "/dev/tty",
+        "nl0",
+        "nl1",
+        "cr0",
+        "cr1",
+        "cr2",
+        "cr3",
+        "tab0",
+        "tab1",
+        "tab2",
+        "tab3",
+        "bs0",
+        "bs1",
+        "vt0",
+        "vt1",
+        "ff0",
+        "ff1"
       ],
       "expectation": {
         "execution": {
@@ -498,15 +663,49 @@
         }
       }
     },
-
     {
       "tty": true,
       "command": "stty",
       "description": "stty: 本地类 flags 兼容（settings LOCAL_SETTINGS）",
       "args": [
-        "-F", "/dev/tty",
-        "isig", "icanon", "iexten", "echo", "echoe", "crterase", "echok", "echonl", "noflsh", "tostop", "echoprt", "prterase", "echoctl", "ctlecho", "echoke", "crtkill", "flusho", "extproc",
-        "-isig", "-icanon", "-iexten", "-echo", "-echoe", "-crterase", "-echok", "-echonl", "-noflsh", "-tostop", "-echoprt", "-prterase", "-echoctl", "-ctlecho", "-echoke", "-crtkill", "-flusho", "-extproc"
+        "-F",
+        "/dev/tty",
+        "isig",
+        "icanon",
+        "iexten",
+        "echo",
+        "echoe",
+        "crterase",
+        "echok",
+        "echonl",
+        "noflsh",
+        "tostop",
+        "echoprt",
+        "prterase",
+        "echoctl",
+        "ctlecho",
+        "echoke",
+        "crtkill",
+        "flusho",
+        "extproc",
+        "-isig",
+        "-icanon",
+        "-iexten",
+        "-echo",
+        "-echoe",
+        "-crterase",
+        "-echok",
+        "-echonl",
+        "-noflsh",
+        "-tostop",
+        "-echoprt",
+        "-prterase",
+        "-echoctl",
+        "-ctlecho",
+        "-echoke",
+        "-crtkill",
+        "-flusho",
+        "-extproc"
       ],
       "expectation": {
         "execution": {
@@ -523,18 +722,23 @@
         }
       }
     },
-
     {
       "tty": true,
       "command": "stty",
       "description": "stty: special settings 基础项（speed/size/ispeed/ospeed/min/time/line）",
       "args": [
-        "-F", "/dev/tty",
-        "ispeed", "9600",
-        "ospeed", "9600",
-        "min", "1",
-        "time", "1",
-        "line", "0",
+        "-F",
+        "/dev/tty",
+        "ispeed",
+        "9600",
+        "ospeed",
+        "9600",
+        "min",
+        "1",
+        "time",
+        "1",
+        "line",
+        "0",
         "speed",
         "size"
       ],
@@ -553,28 +757,43 @@
         }
       }
     },
-
     {
       "tty": true,
       "command": "stty",
       "description": "stty: special control chars 兼容（discard/eof/eol/eol2/erase/intr/kill/lnext/quit/rprnt/start/stop/susp/swtch/werase）",
       "args": [
-        "-F", "/dev/tty",
-        "discard", "x",
-        "eof", "x",
-        "eol", "x",
-        "eol2", "x",
-        "erase", "x",
-        "intr", "x",
-        "kill", "x",
-        "lnext", "x",
-        "quit", "x",
-        "rprnt", "x",
-        "start", "x",
-        "stop", "x",
-        "susp", "x",
-        "swtch", "x",
-        "werase", "x"
+        "-F",
+        "/dev/tty",
+        "discard",
+        "x",
+        "eof",
+        "x",
+        "eol",
+        "x",
+        "eol2",
+        "x",
+        "erase",
+        "x",
+        "intr",
+        "x",
+        "kill",
+        "x",
+        "lnext",
+        "x",
+        "quit",
+        "x",
+        "rprnt",
+        "x",
+        "start",
+        "x",
+        "stop",
+        "x",
+        "susp",
+        "x",
+        "swtch",
+        "x",
+        "werase",
+        "x"
       ],
       "expectation": {
         "execution": {
@@ -596,18 +815,30 @@
       "command": "stty",
       "description": "stty: combination flags 可逆项兼容（evenp/parity/oddp/nl/pass8/litout/cbreak/decctlq/tabs/raw/cooked）",
       "args": [
-        "-F", "/dev/tty",
-        "evenp", "-evenp",
-        "parity", "-parity",
-        "oddp", "-oddp",
-        "nl", "-nl",
-        "pass8", "-pass8",
-        "litout", "-litout",
-        "cbreak", "-cbreak",
-        "decctlq", "-decctlq",
-        "tabs", "-tabs",
-        "raw", "-raw",
-        "cooked", "-cooked"
+        "-F",
+        "/dev/tty",
+        "evenp",
+        "-evenp",
+        "parity",
+        "-parity",
+        "oddp",
+        "-oddp",
+        "nl",
+        "-nl",
+        "pass8",
+        "-pass8",
+        "litout",
+        "-litout",
+        "cbreak",
+        "-cbreak",
+        "decctlq",
+        "-decctlq",
+        "tabs",
+        "-tabs",
+        "raw",
+        "-raw",
+        "cooked",
+        "-cooked"
       ],
       "expectation": {
         "execution": {
@@ -628,7 +859,14 @@
       "tty": true,
       "command": "stty",
       "description": "stty: combination flags 非可逆项设置（ek/sane/crt/dec）",
-      "args": ["-F", "/dev/tty", "ek", "sane", "crt", "dec"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "ek",
+        "sane",
+        "crt",
+        "dec"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -648,7 +886,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -ek 为非法（coreutils combination 非可逆）",
-      "args": ["-F", "/dev/tty", "-ek"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "-ek"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -668,7 +910,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -sane 为非法（coreutils combination 非可逆）",
-      "args": ["-F", "/dev/tty", "-sane"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "-sane"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -688,7 +934,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -crt 为非法（coreutils combination 非可逆）",
-      "args": ["-F", "/dev/tty", "-crt"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "-crt"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -708,7 +958,11 @@
       "tty": true,
       "command": "stty",
       "description": "stty: -dec 为非法（coreutils combination 非可逆）",
-      "args": ["-F", "/dev/tty", "-dec"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "-dec"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 1,
@@ -729,13 +983,20 @@
       "command": "stty",
       "description": "stty: 别名与扩展 flags（hup/ofill/iuclc/xcase/lcase/LCASE）",
       "args": [
-        "-F", "/dev/tty",
-        "hup", "-hup",
-        "ofill", "-ofill",
-        "iuclc", "-iuclc",
-        "xcase", "-xcase",
-        "lcase", "-lcase",
-        "LCASE", "-LCASE"
+        "-F",
+        "/dev/tty",
+        "hup",
+        "-hup",
+        "ofill",
+        "-ofill",
+        "iuclc",
+        "-iuclc",
+        "xcase",
+        "-xcase",
+        "lcase",
+        "-lcase",
+        "LCASE",
+        "-LCASE"
       ],
       "expectation": {
         "execution": {
@@ -752,12 +1013,15 @@
         }
       }
     },
-
     {
       "tty": true,
       "command": "stty",
       "description": "stty: save 输出格式可生成（coreutils stty.sh 对应 stty --save）",
-      "args": ["-F", "/dev/tty", "--save"],
+      "args": [
+        "-F",
+        "/dev/tty",
+        "--save"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,

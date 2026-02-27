@@ -459,6 +459,313 @@
             "cleanup_commands": [
                 "rm -f test_dd_1k"
             ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 大写转换 (conv=ucase)",
+            "args": [
+                "if=test_dd_lower",
+                "of=test_dd_upper",
+                "conv=ucase",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'hello' > test_dd_lower"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf 'HELLO' > expected_ucase && cmp test_dd_upper expected_ucase",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_lower test_dd_upper expected_ucase"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 小写转换 (conv=lcase)",
+            "args": [
+                "if=test_dd_upper",
+                "of=test_dd_lower",
+                "conv=lcase",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'HELLO' > test_dd_upper"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf 'hello' > expected_lcase && cmp test_dd_lower expected_lcase",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_lower test_dd_upper expected_lcase"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 交换字节 (conv=swab)",
+            "args": [
+                "if=test_dd_swab_in",
+                "of=test_dd_swab_out",
+                "conv=swab",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '1234' > test_dd_swab_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '2143' > expected_swab && cmp test_dd_swab_out expected_swab",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_swab_in test_dd_swab_out expected_swab"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 同步填充 (conv=sync)",
+            "args": [
+                "if=test_dd_sync_in",
+                "of=test_dd_sync_out",
+                "bs=5",
+                "conv=sync",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '123' > test_dd_sync_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '123\\0\\0' > expected_sync && cmp test_dd_sync_out expected_sync",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_sync_in test_dd_sync_out expected_sync"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 独占创建失败 (conv=excl)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_exist",
+                "conv=excl",
+                "status=none"
+            ],
+            "setup_commands": [
+                "touch test_dd_in test_dd_exist"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_exist"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不创建文件失败 (conv=nocreat)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_not_exist",
+                "conv=nocreat",
+                "status=none"
+            ],
+            "setup_commands": [
+                "touch test_dd_in",
+                "rm -f test_dd_not_exist"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 追加模式 (oflag=append)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_append",
+                "oflag=append",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'A' > test_dd_append",
+                "printf 'B' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf 'AB' > expected_append && cmp test_dd_append expected_append",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_append expected_append"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 字节计数 (iflag=count_bytes)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=count_bytes",
+                "count=3",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '12345' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '123' > expected_count && cmp test_dd_out expected_count",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out expected_count"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 目录标志失败 (iflag=directory)",
+            "args": [
+                "if=test_dd_file",
+                "of=test_dd_out",
+                "iflag=directory",
+                "status=none"
+            ],
+            "setup_commands": [
+                "touch test_dd_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_file test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 块转换 (conv=block)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "conv=block",
+                "cbs=4",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'a\\nb\\n' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 去块转换 (conv=unblock)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "conv=unblock",
+                "cbs=4",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'a   b   ' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_dd_output",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
         }
     ]
 }

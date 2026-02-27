@@ -227,6 +227,347 @@
       "cleanup_commands": [
         "rm -f file"
       ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 sysv",
+      "args": [
+        "-a",
+        "sysv",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "325 1 file\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 bsd",
+      "args": [
+        "-a",
+        "bsd",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "04435     1 file\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 crc (显式)",
+      "args": [
+        "-a",
+        "crc",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "385522758 4 file\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 md5 (默认 tag 格式)",
+      "args": [
+        "-a",
+        "md5",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "MD5 (file) = d3b07384d113edec49eaa6238ad5ff00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 md5 (untagged 格式)",
+      "args": [
+        "-a",
+        "md5",
+        "--untagged",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "d3b07384d113edec49eaa6238ad5ff00  file\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 sha1",
+      "args": [
+        "-a",
+        "sha1",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "SHA1 (file) = f1d2d2f924e986ac86fdf7b36c94bcdf32beec15\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 sha256",
+      "args": [
+        "-a",
+        "sha256",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "SHA256 (file) = b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 blake2b",
+      "args": [
+        "-a",
+        "blake2b",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "BLAKE2b (file) = 2338856637e29976b46d9265413723432a3db283627c3693e577909a560812269061c60489f999719d615c5a673266905249721e9a0794d46815277b19c7267d\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试算法 sm3",
+      "args": [
+        "-a",
+        "sm3",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "SM3 (file) = 66c7f6f4320b52d39d17d66d74d9d910ded10a4583277533037968e982d56374\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 base64 输出",
+      "args": [
+        "-a",
+        "md5",
+        "--base64",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "MD5 (file) = 07BzhNET7exJ6qYjitX/AA==\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 length 参数 (blake2b)",
+      "args": [
+        "-a",
+        "blake2b",
+        "-l",
+        "256",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "BLAKE2b-256 (file) = 04136e24f85d67ef46cf84173997edc3b9131fa2d3f6961d942163aa55201364\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 zero 选项",
+      "args": [
+        "-a",
+        "md5",
+        "--zero",
+        "file"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "MD5 (file) = d3b07384d113edec49eaa6238ad5ff00\u0000",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 help 选项",
+      "args": [
+        "--help"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
+        }
+      }
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 version 选项",
+      "args": [
+        "--version"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
+        }
+      }
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 raw 选项 (多文件错误)",
+      "setup_commands": [
+        "touch f1 f2"
+      ],
+      "args": [
+        "--raw",
+        "f1",
+        "f2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: the --raw option is not supported with multiple files\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f f1 f2"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 目录输入",
+      "setup_commands": [
+        "mkdir test_dir"
+      ],
+      "args": [
+        "test_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: test_dir: Is a directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rmdir test_dir"
+      ]
     }
   ]
 }

@@ -59,6 +59,7 @@ pub mod numfmt_flags {
     pub const NUMFMT_TO_DEFAULT: &str = "none";
     pub const NUMFMT_TO_UNIT: &str = "to-unit";
     pub const NUMFMT_TO_UNIT_DEFAULT: &str = "1";
+    pub const NUMFMT_ZERO_TERMINATED: &str = "zero-terminated";
 }
 
 fn numfmt_handle_args<'a>(
@@ -75,15 +76,32 @@ fn numfmt_handle_buffer<R>(input: R, numfmt_configs: &NumfmtConfigs) -> CTResult
 where
     R: BufRead,
 {
-    for (idx, line_result) in input.lines().by_ref().enumerate() {
-        match line_result {
-            Ok(line) if idx < numfmt_configs.header => {
-                println!("{line}");
-                Ok(())
-            }
-            Ok(line) => numfmt_format_and_handle_validation(line.as_ref(), numfmt_configs),
-            Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
-        }?;
+    if numfmt_configs.zero_terminated {
+        for (idx, line_result) in input.split(0).enumerate() {
+            match line_result {
+                Ok(bytes) => {
+                    let line = String::from_utf8_lossy(&bytes);
+                    if idx < numfmt_configs.header {
+                        print!("{}\0", line);
+                        Ok(())
+                    } else {
+                        numfmt_format_and_handle_validation(&line, numfmt_configs)
+                    }
+                }
+                Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
+            }?;
+        }
+    } else {
+        for (idx, line_result) in input.lines().by_ref().enumerate() {
+            match line_result {
+                Ok(line) if idx < numfmt_configs.header => {
+                    println!("{line}");
+                    Ok(())
+                }
+                Ok(line) => numfmt_format_and_handle_validation(line.as_ref(), numfmt_configs),
+                Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
+            }?;
+        }
     }
     Ok(())
 }
@@ -107,7 +125,11 @@ fn numfmt_format_and_handle_validation(
             }
             NumfmtInvalidModes::Ignore => {}
         };
-        println!("{input_line}");
+        if numfmt_configs.zero_terminated {
+            print!("{input_line}\0");
+        } else {
+            println!("{input_line}");
+        }
     }
 
     Ok(())
@@ -189,6 +211,7 @@ fn numfmt_parse_options(arg_matches: &ArgMatches) -> Result<NumfmtConfigs> {
         suffix: parse_suffix(arg_matches),
         format,
         invalid: parse_invalid(arg_matches),
+        zero_terminated: arg_matches.get_flag(numfmt_flags::NUMFMT_ZERO_TERMINATED),
     })
 }
 
@@ -432,6 +455,11 @@ pub fn ct_app() -> Command {
             .default_value("abort")
             .value_parser(["abort", "fail", "warn", "ignore"])
             .value_name("INVALID"),
+        Arg::new(numfmt_flags::NUMFMT_ZERO_TERMINATED)
+            .short('z')
+            .long(numfmt_flags::NUMFMT_ZERO_TERMINATED)
+            .help(t!("numfmt.clap.numfmt_zero_terminated"))
+            .action(ArgAction::SetTrue),
         Arg::new(numfmt_flags::NUMFMT_NUMBER)
             .hide(true)
             .action(ArgAction::Append),
@@ -519,6 +547,7 @@ mod tests {
             suffix: None,
             format: NumfmtFormatOptions::default(),
             invalid: NumfmtInvalidModes::Abort,
+            zero_terminated: false,
         }
     }
 
@@ -631,6 +660,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -666,6 +696,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -701,6 +732,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -736,6 +768,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -771,6 +804,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -806,6 +840,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -841,6 +876,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -876,6 +912,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -911,6 +948,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -946,6 +984,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -981,6 +1020,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1016,6 +1056,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1064,6 +1105,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1099,6 +1141,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1134,6 +1177,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1169,6 +1213,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1204,6 +1249,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1239,6 +1285,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1274,6 +1321,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1309,6 +1357,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1344,6 +1393,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1379,6 +1429,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1414,6 +1465,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1449,6 +1501,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1484,6 +1537,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1532,6 +1586,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1567,6 +1622,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1602,6 +1658,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1637,6 +1694,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1675,6 +1733,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1713,6 +1772,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1763,6 +1823,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1800,6 +1861,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -1846,6 +1908,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2010,6 +2073,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2139,6 +2203,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2197,6 +2262,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2231,6 +2297,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2265,6 +2332,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2299,6 +2367,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2333,6 +2402,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2367,6 +2437,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2401,6 +2472,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2435,6 +2507,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2469,6 +2542,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2503,6 +2577,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2537,6 +2612,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2571,6 +2647,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2605,6 +2682,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2639,6 +2717,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2673,6 +2752,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2707,6 +2787,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2741,6 +2822,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2775,6 +2857,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2809,6 +2892,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2843,6 +2927,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2877,6 +2962,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2911,6 +2997,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2945,6 +3032,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -2979,6 +3067,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3013,6 +3102,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3047,6 +3137,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3081,6 +3172,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3115,6 +3207,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3161,6 +3254,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3195,6 +3289,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3257,6 +3352,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3291,6 +3387,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3325,6 +3422,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3359,6 +3457,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3393,6 +3492,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3427,6 +3527,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3461,6 +3562,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3495,6 +3597,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3529,6 +3632,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3563,6 +3667,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3597,6 +3702,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3631,6 +3737,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3665,6 +3772,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3699,6 +3807,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3733,6 +3842,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3767,6 +3877,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3801,6 +3912,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3835,6 +3947,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3869,6 +3982,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3903,6 +4017,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3937,6 +4052,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -3971,6 +4087,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4005,6 +4122,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4039,6 +4157,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4073,6 +4192,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4107,6 +4227,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4141,6 +4262,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4175,6 +4297,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4209,6 +4332,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4243,6 +4367,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4277,6 +4402,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4311,6 +4437,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4345,6 +4472,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4379,6 +4507,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4413,6 +4542,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4447,6 +4577,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4481,6 +4612,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4515,6 +4647,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4549,6 +4682,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4583,6 +4717,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4617,6 +4752,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4651,6 +4787,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4685,6 +4822,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4719,6 +4857,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4753,6 +4892,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4787,6 +4927,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4821,6 +4962,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4855,6 +4997,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4889,6 +5032,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4923,6 +5067,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4957,6 +5102,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -4991,6 +5137,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5025,6 +5172,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5059,6 +5207,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5093,6 +5242,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5127,6 +5277,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5161,6 +5312,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5195,6 +5347,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5229,6 +5382,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5263,6 +5417,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5297,6 +5452,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5331,6 +5487,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5365,6 +5522,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5399,6 +5557,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5433,6 +5592,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5467,6 +5627,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5501,6 +5662,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5535,6 +5697,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5569,6 +5732,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5603,6 +5767,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5637,6 +5802,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5671,6 +5837,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5705,6 +5872,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5739,6 +5907,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5773,6 +5942,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5807,6 +5977,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5841,6 +6012,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5875,6 +6047,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5909,6 +6082,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5943,6 +6117,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -5977,6 +6152,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6011,6 +6187,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6045,6 +6222,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6079,6 +6257,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6113,6 +6292,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6147,6 +6327,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6181,6 +6362,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6215,6 +6397,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6249,6 +6432,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6283,6 +6467,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6317,6 +6502,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6351,6 +6537,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6385,6 +6572,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6419,6 +6607,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6453,6 +6642,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6487,6 +6677,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6521,6 +6712,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6555,6 +6747,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6589,6 +6782,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6623,6 +6817,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6657,6 +6852,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6691,6 +6887,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6725,6 +6922,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6759,6 +6957,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6793,6 +6992,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6827,6 +7027,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6861,6 +7062,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6895,6 +7097,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6929,6 +7132,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -6963,6 +7167,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7009,6 +7214,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7043,6 +7249,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7116,6 +7323,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7150,6 +7358,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7196,6 +7405,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7230,6 +7440,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7264,6 +7475,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7310,6 +7522,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7344,6 +7557,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7378,6 +7592,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7436,6 +7651,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7470,6 +7686,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7504,6 +7721,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7538,6 +7756,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7572,6 +7791,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7606,6 +7826,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7640,6 +7861,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7674,6 +7896,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7708,6 +7931,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7742,6 +7966,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7776,6 +8001,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7810,6 +8036,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7844,6 +8071,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7878,6 +8106,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7912,6 +8141,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7946,6 +8176,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -7980,6 +8211,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8014,6 +8246,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8048,6 +8281,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8082,6 +8316,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8116,6 +8351,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8150,6 +8386,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8184,6 +8421,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8218,6 +8456,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Abort,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8252,6 +8491,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Fail,
+                zero_terminated: false,
             };
             assert_eq!(options.unwrap(), expected_options);
         }
@@ -8285,6 +8525,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Warn,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);
@@ -8319,6 +8560,7 @@ mod tests {
                     is_zero_padding: false,
                 },
                 invalid: NumfmtInvalidModes::Ignore,
+                zero_terminated: false,
             };
 
             assert_eq!(options.unwrap(), expected_options);

@@ -406,7 +406,11 @@ fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result
         }
     }
 
-    println!();
+    if options.zero_terminated {
+        print!("\0");
+    } else {
+        println!();
+    }
 
     Ok(())
 }
@@ -442,7 +446,11 @@ fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -
         }
     }
 
-    println!();
+    if numfmt_configs.zero_terminated {
+        print!("\0");
+    } else {
+        println!();
+    }
 
     Ok(())
 }
@@ -480,6 +488,7 @@ mod tests {
             suffix: None,
             format: Default::default(),
             invalid: NumfmtInvalidModes::Abort,
+            zero_terminated: false,
         }
     }
 

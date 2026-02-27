@@ -279,11 +279,6 @@ fn shuf_find_seps(data: &mut Vec<&[u8]>, sep: u8) {
             // 收集所有分隔符的位置
             let mut positions: Vec<_> = memchr_iter(sep, slice).collect();
 
-            // 处理最后一个空字段
-            if positions.last() == Some(&(slice.len() - 1)) {
-                positions.pop();
-            }
-
             // 根据分隔符位置分割数据
             let mut start = 0;
             for &pos in &positions {
@@ -540,7 +535,11 @@ impl ShufWritable for usize {
 fn shuf_exec<T: Shufable>(input: &mut T, settings: ShufSettings) -> CTResult<()> {
     // 检查输入是否为空
     if input.is_empty() {
-        return Err(CtSimpleError::new(1, "no lines to repeat"));
+        if settings.is_repeat {
+            return Err(CtSimpleError::new(1, "no lines to repeat"));
+        }
+        create_output_writer(&settings)?;
+        return Ok(());
     }
 
     // 创建输出写入器

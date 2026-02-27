@@ -20,10 +20,12 @@ use ctcore::Tool;
 use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
-use ctcore::libc::{self, setgid, setgroups, setuid};
+use ctcore::libc::{self, chroot, setgid, setgroups, setuid};
 use std::io::Error;
 use sys_locale::get_locale;
 
+use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process;
@@ -294,37 +296,39 @@ fn chroot_parse_user_spec(user_spec_str: Option<&String>) -> Result<Vec<&str>, C
 }
 
 fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
-    if !is_skip_chdir {
-        std::env::set_current_dir(root_path).unwrap();
-        Ok(())
-    } else {
-        // 获取当前工作目录
-        let current_dir = match std::env::current_dir() {
-            Ok(dir) => dir,
-            Err(e) => panic!("Failed to get current directory: {e}"),
-        };
+    let root_c = CString::new(root_path.as_os_str().as_bytes()).map_err(|e| {
+        ChrootError::CannotEnter(
+            root_path.display().to_string(),
+            Error::new(std::io::ErrorKind::InvalidInput, e),
+        )
+    })?;
 
-        match std::env::set_current_dir(current_dir.clone()) {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                Err(
-                    // 返回一个包含错误信息的错误结果
-                    ChrootError::CannotEnter(
-                        format!("{}", current_dir.display()),
-                        Error::last_os_error(),
-                    )
-                    .into(),
-                )
-            }
-        }
+    let err = unsafe { chroot(root_c.as_ptr()) };
+    if err != 0 {
+        return Err(ChrootError::CannotEnter(
+            root_path.display().to_string(),
+            Error::last_os_error(),
+        )
+        .into());
     }
+
+    if !is_skip_chdir {
+        std::env::set_current_dir("/").map_err(|e| {
+            ChrootError::CannotEnter("/".to_string(), e)
+        })?;
+    }
+    Ok(())
 }
 
 fn chroot_set_main_group(chroot_group: &str) -> CTResult<()> {
     if !chroot_group.is_empty() {
         let group_id = match ct_entries::grp2gid(chroot_group) {
             Ok(g) => g,
-            _ => return Err(ChrootError::NoSuchGroup(chroot_group.to_string()).into()),
+            Err(_) => {
+                chroot_group.parse::<libc::gid_t>().map_err(|_| {
+                    ChrootError::NoSuchGroup(chroot_group.to_string())
+                })?
+            }
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
@@ -347,7 +351,11 @@ fn chroot_set_groups_from_str(groups: &str) -> CTResult<()> {
         for group in groups.split(',') {
             let gid = match ct_entries::grp2gid(group) {
                 Ok(g) => g,
-                Err(_) => return Err(ChrootError::NoSuchGroup(group.to_string()).into()),
+                Err(_) => {
+                    group.parse::<libc::gid_t>().map_err(|_| {
+                        ChrootError::NoSuchGroup(group.to_string())
+                    })?
+                }
             };
             groups_vec.push(gid);
         }
@@ -361,7 +369,14 @@ fn chroot_set_groups_from_str(groups: &str) -> CTResult<()> {
 
 fn chroot_set_user(username: &str) -> CTResult<()> {
     if !username.is_empty() {
-        let user_id = ct_entries::usr2uid(username).unwrap();
+        let user_id = match ct_entries::usr2uid(username) {
+            Ok(u) => u,
+            Err(_) => {
+                username.parse::<libc::uid_t>().map_err(|_| {
+                    ChrootError::NoSuchUser(username.to_string())
+                })?
+            }
+        };
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
             return Err(

@@ -1,6 +1,7 @@
 chown:
   clap:
     help: Print help information.
+    version: Print version information.
     changes: like verbose but report only when a change is made
     preserve: fail to operate recursively on '/'
     no_preserve: do not treat '/' specially (the default)

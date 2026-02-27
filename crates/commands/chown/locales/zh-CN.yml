@@ -1,6 +1,7 @@
 chown:
   clap:
     help: 打印帮助信息。
+    version: 打印版本信息。
     changes: 类似详细模式，但仅在进行更改时报告
     preserve: 对'/'递归操作时失败
     no_preserve: 不特殊对待'/'（默认）

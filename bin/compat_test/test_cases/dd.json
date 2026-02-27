@@ -396,6 +396,69 @@
             "cleanup_commands": [
                 "rm -f test_dd_output test_dd_input"
             ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 帮助信息",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "dd",
+            "description": "dd: 版本信息",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "dd",
+            "description": "dd: 乘数后缀 (bs=1K)",
+            "args": [
+                "if=/dev/zero",
+                "of=test_dd_1k",
+                "bs=1K",
+                "count=1",
+                "status=none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %s test_dd_1k) -eq 1024",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_1k"
+            ]
         }
     ]
 }

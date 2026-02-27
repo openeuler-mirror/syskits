@@ -33,7 +33,7 @@
         },
         "cleanup_commands": [
             "rm -f test_file_chown",
-            "userdel testuser_chown"
+            "userdel -r testuser_chown"
         ],
         "requires_root": true,
         "timeout": 30
@@ -77,7 +77,7 @@
         },
         "cleanup_commands": [
             "rm -f file1_chown.txt file2_chown.txt",
-            "userdel testuser_chown_multi"
+            "userdel -r testuser_chown_multi"
         ],
         "requires_root": true,
         "timeout": 30
@@ -105,7 +105,7 @@
             }
         },
         "cleanup_commands": [
-            "userdel testuser_chown_nonexistent"
+            "userdel -r testuser_chown_nonexistent"
         ],
         "requires_root": true,
         "timeout": 30
@@ -150,7 +150,7 @@
         },
         "cleanup_commands": [
             "rm -f file_exist1.txt file_exist2.txt",
-            "userdel testuser_chown_partial"
+            "userdel -r testuser_chown_partial"
         ],
         "requires_root": true
     },
@@ -206,7 +206,7 @@
         },
         "cleanup_commands": [
             "rm -rf test_dir_chown",
-            "userdel testuser_chown_recursive"
+            "userdel -r testuser_chown_recursive"
         ],
         "requires_root": true
     },
@@ -285,7 +285,7 @@
         },
         "cleanup_commands": [
             "rm -f target_file_chown link_file_chown",
-            "userdel testuser_chown_symlink"
+            "userdel -r testuser_chown_symlink"
         ],
         "requires_root": true
     },
@@ -339,7 +339,7 @@
         },
         "cleanup_commands": [
             "rm -rf loop_dir",
-            "userdel testuser_chown_loop"
+            "userdel -r testuser_chown_loop"
         ],
         "requires_root": true,
         "timeout": 10
@@ -384,7 +384,7 @@
         },
         "cleanup_commands": [
             "rm -f test_file_chown_both",
-            "userdel testuser_chown_both",
+            "userdel -r testuser_chown_both",
             "groupdel testgroup_chown_both"
         ],
         "requires_root": true
@@ -473,7 +473,7 @@
         },
         "cleanup_commands": [
             "rm -f target_file_chown_h link_file_chown_h",
-            "userdel testuser_chown_h"
+            "userdel -r testuser_chown_h"
         ],
         "requires_root": true
     },
@@ -516,7 +516,7 @@
         },
         "cleanup_commands": [
             "rm -f test_file_chown_user_colon",
-            "userdel testuser_chown_user_colon"
+            "userdel -r testuser_chown_user_colon"
         ],
         "requires_root": true
     }

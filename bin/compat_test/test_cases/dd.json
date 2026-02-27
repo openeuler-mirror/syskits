@@ -766,6 +766,317 @@
             "cleanup_commands": [
                 "rm -f test_dd_in test_dd_out"
             ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 状态控制 (status=none)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "status=none"
+            ],
+            "setup_commands": [
+                "echo 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: ibs与obs不同 (ibs=10, obs=20)",
+            "args": [
+                "if=/dev/zero",
+                "of=test_dd_iobs",
+                "ibs=10",
+                "obs=20",
+                "count=2",
+                "status=none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %s test_dd_iobs) -eq 20",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_iobs"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 别名 iseek/oseek",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "bs=1",
+                "iseek=1",
+                "oseek=1",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '123' > test_dd_in",
+                "printf 'abc' > test_dd_out"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf 'a2c' > expected_alias && cmp test_dd_out expected_alias",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out expected_alias"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 状态 noxfer",
+            "args": [
+                "if=/dev/zero",
+                "of=/dev/null",
+                "count=1",
+                "status=noxfer"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "test -z \"$(echo \"$CMD_STDERR\" | grep 'copied')\"",
+                        "expected_exit": 0
+                    }
+                ]
+            }
+        },
+        {
+            "command": "dd",
+            "description": "dd: 字节计数单位 B (count=10B)",
+            "args": [
+                "if=/dev/zero",
+                "of=test_dd_bytes",
+                "count=10B",
+                "status=none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %s test_dd_bytes) -eq 10",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_bytes"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: EBCDIC 转换 (conv=ebcdic)",
+            "args": [
+                "if=test_dd_ascii",
+                "of=test_dd_ebcdic",
+                "conv=ebcdic",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '12' > test_dd_ascii"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '\\361\\362' > expected_ebcdic && cmp test_dd_ebcdic expected_ebcdic",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_ascii test_dd_ebcdic expected_ebcdic"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: ASCII 转换 (conv=ascii)",
+            "args": [
+                "if=test_dd_ebcdic",
+                "of=test_dd_ascii_out",
+                "conv=ascii",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '\\361\\362' > test_dd_ebcdic"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '12' > expected_ascii && cmp test_dd_ascii_out expected_ascii",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_ebcdic test_dd_ascii_out expected_ascii"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不截断输出 (conv=notrunc)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "conv=notrunc",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'AB' > test_dd_in",
+                "printf '12345' > test_dd_out"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf 'AB345' > expected_notrunc && cmp test_dd_out expected_notrunc",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out expected_notrunc"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 稀疏文件 (conv=sparse)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_sparse",
+                "conv=sparse",
+                "bs=4096",
+                "status=none"
+            ],
+            "setup_commands": [
+                "dd if=/dev/zero of=test_dd_in bs=4096 count=1 status=none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %s test_dd_sparse) -eq 4096",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_sparse"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 跳过字节 (iflag=skip_bytes)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=skip_bytes",
+                "skip=2",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '12345' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '345' > expected_skip && cmp test_dd_out expected_skip",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out expected_skip"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 寻址字节 (oflag=seek_bytes)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "oflag=seek_bytes",
+                "seek=2",
+                "conv=notrunc",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'AB' > test_dd_in",
+                "printf '12345' > test_dd_out"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '12AB5' > expected_seek && cmp test_dd_out expected_seek",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out expected_seek"
+            ]
         }
     ]
 }

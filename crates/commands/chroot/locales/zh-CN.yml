@@ -3,5 +3,7 @@ chroot:
     user: 运行程序前切换的用户（ID或名称）
     group: 要切换到的组（ID或名称）
     groups: 要切换到的组的逗号分隔列表
+    help: 打印帮助信息
+    version: 打印版本信息
   usage: chroot [选项]... 新根目录 [命令 [参数]...]
   about: '以新根目录运行命令。'

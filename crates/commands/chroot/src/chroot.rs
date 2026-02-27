@@ -202,12 +202,12 @@ fn args_init() -> Vec<Arg> {
         Arg::new("help")
             .short('h')
             .long("help")
-            .help(t!("chroot.clap.help"))
+            .help(t!("chroot.clap.help", default = "Print help"))
             .action(ArgAction::Help),
         Arg::new("version")
             .short('V')
             .long("version")
-            .help(t!("chroot.clap.version"))
+            .help(t!("chroot.clap.version", default = "Print version"))
             .action(ArgAction::Version),
     ];
     args

@@ -363,6 +363,344 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --help",
+            "args": ["--help"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --version",
+            "args": ["--version"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --format 格式化输出",
+            "args": ["--to=si", "--format=%.2f", "1000"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.00K\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --padding 正数右对齐",
+            "args": ["--padding=6", "100"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "   100\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --padding 负数左对齐",
+            "args": ["--padding=-6", "100"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "100   \n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "Header\n1000\n",
+            "command": "numfmt",
+            "description": "numfmt: --header 跳过首行",
+            "args": ["--header=1", "--to=si"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Header\n1.0K\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --invalid=ignore 忽略无效输入",
+            "args": ["--invalid=ignore", "--to=si", "invalid"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "invalid\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --invalid=fail 遇到无效输入失败",
+            "args": ["--invalid=fail", "--to=si", "invalid"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --round=up 向上舍入",
+            "args": ["--to=si", "--round=up", "1001"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.1K\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --round=down 向下舍入",
+            "args": ["--to=si", "--round=down", "1999"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.9K\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --suffix 添加后缀",
+            "args": ["--to=si", "--suffix=B", "1000"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.0KB\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --from-unit 指定输入单位",
+            "args": ["--from-unit=1024", "--to=iec", "1"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.0Ki\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --to-unit 指定输出单位",
+            "args": ["--to-unit=1024", "1024"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "1000\u0000",
+            "command": "numfmt",
+            "description": "numfmt: -z 以NUL结尾",
+            "args": ["-z", "--to=si"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.0K\u0000",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: 负数处理(GNU不支持，syskits支持，无需修改)",
+            "args": ["--to=si", "-1000"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-1.0K\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --field 范围 N-",
+            "args": ["--field=2-", "--to=si", "ignore 1000 2000"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ignore 1.0K 2.0K\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 } 

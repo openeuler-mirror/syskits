@@ -55,6 +55,222 @@
                 "rm -f check_context.sh"
             ],
             "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 不带参数显示当前上下文",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 指定用户 (-u)",
+            "args": ["-u", "system_u", "./check_context.sh"],
+            "setup_commands": [
+                "echo -e '#!/bin/bash\nid -Z' > check_context.sh",
+                "chmod +x check_context.sh"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f check_context.sh"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 指定角色 (-r)",
+            "args": ["-r", "object_r", "./check_context.sh"],
+            "setup_commands": [
+                "echo -e '#!/bin/bash\nid -Z' > check_context.sh",
+                "chmod +x check_context.sh"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f check_context.sh"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 指定类型 (-t)",
+            "args": ["-t", "unconfined_t", "./check_context.sh"],
+            "setup_commands": [
+                "echo -e '#!/bin/bash\nid -Z' > check_context.sh",
+                "chmod +x check_context.sh"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f check_context.sh"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 指定范围 (-l)",
+            "args": ["-l", "s0", "./check_context.sh"],
+            "setup_commands": [
+                "echo -e '#!/bin/bash\nid -Z' > check_context.sh",
+                "chmod +x check_context.sh"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f check_context.sh"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 计算过渡上下文 (-c)",
+            "args": ["-c", "/usr/bin/id", "-Z"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 命令未找到 (exit 127)",
+            "args": ["system_u:object_r:tmp_t:s0-s0:c0.c1023", "command_not_exists_xyz"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 命令不可执行 (exit 126)",
+            "args": ["system_u:object_r:tmp_t:s0-s0:c0.c1023", "./not_exec_file"],
+            "setup_commands": [
+                "touch not_exec_file",
+                "chmod -x not_exec_file"
+            ],
+            "cleanup_commands": [
+                "rm -f not_exec_file"
+            ],
+            "requires_root": true,
+            "expectation": {
+                "execution": {
+                    "exit_code": 126
+                }
+            }
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 传递命令退出码",
+            "args": ["system_u:object_r:tmp_t:s0-s0:c0.c1023", "sh", "-c", "exit 42"],
+            "requires_root": true,
+            "expectation": {
+                "execution": {
+                    "exit_code": 42
+                }
+            }
         }
     ]
 }

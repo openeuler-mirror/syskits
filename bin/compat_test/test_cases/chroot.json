@@ -2,6 +2,42 @@
     "tests": [
         {
             "command": "chroot",
+            "description": "chroot: --help",
+            "args": ["--help"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: --version",
+            "args": ["--version"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "chroot",
             "description": "chroot: 在新根下执行不带参数的命令",
             "args": ["./chroot_test_dir", "/bin/ls"],
             "setup_commands": [
@@ -89,9 +125,116 @@
                 ],
                 "ignore_fields": {
                 "ignore_exit_code": false,
-                "ignore_stdout": true,
+                "ignore_stdout": false,
                 "ignore_stderr": false,
                 "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 指定 --userspec (使用数字ID)",
+            "args": ["--userspec=2000:2000", "./chroot_test_dir", "/bin/id", "-u"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/id ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libselinux.so.1 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libcap.so.2 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libpcre2-8.so.0 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2000\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 指定 --groups (使用数字ID)",
+            "args": ["--groups=2001,2002", "--userspec=2000:2000", "./chroot_test_dir", "/bin/id", "-G"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/id ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libselinux.so.1 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libcap.so.2 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /usr/lib64/libpcre2-8.so.0 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '2001' && echo \"$CMD_STDOUT\" | grep -q '2002'",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: --skip-chdir 测试",
+            "args": ["--skip-chdir", "./chroot_test_dir", "/bin/pwd"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/{bin,lib64}",
+                "cp /usr/bin/pwd ./chroot_test_dir/bin/",
+                "cp /usr/lib64/libc.so.6 ./chroot_test_dir/lib64/",
+                "cp /lib64/ld-linux-x86-64.so.2 ./chroot_test_dir/lib64/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$CMD_STDOUT\" != \"/\n\"",
+                        "expected_exit": 0,
+                        "expected_stdout": null,
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
             "cleanup_commands": [
@@ -153,7 +296,7 @@
         },
         {
             "command": "chroot",
-            "description": "chroot: 命令存在，但是缺少动态库",
+            "description": "chroot: 命令存在，但是缺少动态库 (应返回 127)",
             "args": ["./chroot_test_dir", "/bin/ls"],
             "setup_commands": [
                 "mkdir -p ./chroot_test_dir/{bin,lib64}",
@@ -161,9 +304,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
+                "exit_code": 127,
                 "stdout": "",
-                "stderr": ""
+                "stderr": null
                 },
                 "verifications": [
                 ],
@@ -172,6 +315,60 @@
                 "ignore_stdout": false,
                 "ignore_stderr": false,
                 "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 退出状态 126 (无法执行)",
+            "args": ["./chroot_test_dir", "/bin/noexec"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/bin",
+                "touch ./chroot_test_dir/bin/noexec",
+                "chmod -x ./chroot_test_dir/bin/noexec"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 126,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf ./chroot_test_dir"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "chroot: 退出状态 127 (命令未找到)",
+            "args": ["./chroot_test_dir", "/bin/nonexistent"],
+            "setup_commands": [
+                "mkdir -p ./chroot_test_dir/bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
             "cleanup_commands": [
@@ -197,7 +394,7 @@
                 "execution": {
                 "exit_code": 125,
                 "stdout": "",
-                "stderr": ""
+                "stderr": null
                 },
                 "verifications": [
                 ],

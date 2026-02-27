@@ -29,6 +29,236 @@
             ]
         },
         {
+            "tstdin": "a1b2c3d4",
+            "command": "tr",
+            "description": "tr: 补集替换 (-c)",
+            "args": [
+                "-c",
+                "0-9",
+                "X"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "X1X2X3X4",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a1b2c3d4",
+            "command": "tr",
+            "description": "tr: 补集删除 (-cd)",
+            "args": [
+                "-cd",
+                "0-9"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1234",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "abcde",
+            "command": "tr",
+            "description": "tr: 截断第一集合 (-t)",
+            "args": [
+                "-t",
+                "abc",
+                "A"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Abcde",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "line1\tline2",
+            "command": "tr",
+            "description": "tr: 转义字符 (\\t 转 \\n)",
+            "args": [
+                "\\t",
+                "\\n"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "abc",
+            "command": "tr",
+            "description": "tr: 八进制转义 (\\141 -> A)",
+            "args": [
+                "\\141",
+                "A"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Abc",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "Hello World",
+            "command": "tr",
+            "description": "tr: 字符类 ([:lower:] -> [:upper:])",
+            "args": [
+                "[:lower:]",
+                "[:upper:]"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "HELLO WORLD",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "abc",
+            "command": "tr",
+            "description": "tr: 集合2中的重复构造 ([c*])",
+            "args": [
+                "abc",
+                "[X*]"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "XXX",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "abba",
+            "command": "tr",
+            "description": "tr: 删除并压缩 (-ds)",
+            "args": [
+                "-ds",
+                "a",
+                "b"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "b",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "12aa34bb",
+            "command": "tr",
+            "description": "tr: 补集压缩 (-cs)",
+            "args": [
+                "-cs",
+                "[:digit:]",
+                "#"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12#34#",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
             "tstdin": "hello,world",
             "command": "tr",
             "description": "tr: 多字符替换",

@@ -85,8 +85,11 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                     println!("{r}");
                     return CTsageError::new(0, String::new());
                 }
-                _ => {}
+                _ => return CTsageError::new(125, format!("{r}")),
             }
+        }
+        if let DefaultError::MissingCommand = r {
+            return CTsageError::new(125, format!("{r}"));
         }
         CTsageError::new(error_exit_status::RUNCON_ANOTHER_ERROR, format!("{r}"))
     })?;

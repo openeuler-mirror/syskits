@@ -1021,6 +1021,350 @@
             "cleanup_commands": [
                 "rm -rf test_p"
             ]
+        },
+        {
+            "command": "dir",
+            "description": "隐藏控制字符 (-q)",
+            "setup_commands": [
+                "mkdir -p test_q",
+                "touch 'test_q/file?'"
+            ],
+            "args": [
+                "-q",
+                "-1",
+                "test_q"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file?",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_q"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "引用名称 (-Q)",
+            "setup_commands": [
+                "mkdir -p test_Q",
+                "touch test_Q/file"
+            ],
+            "args": [
+                "-Q",
+                "-1",
+                "test_Q"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\"file\"",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_Q"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "引用风格 (--quoting-style=shell)",
+            "setup_commands": [
+                "mkdir -p test_qs",
+                "touch 'test_qs/file name'"
+            ],
+            "args": [
+                "--quoting-style=shell",
+                "-1",
+                "test_qs"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'file name'",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_qs"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "显示大小 (-s)",
+            "setup_commands": [
+                "mkdir -p test_s",
+                "touch test_s/file"
+            ],
+            "args": [
+                "-s",
+                "test_s"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_s"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "扩展名排序 (-X)",
+            "setup_commands": [
+                "mkdir -p test_X",
+                "touch test_X/b.txt test_X/a.doc"
+            ],
+            "args": [
+                "-X",
+                "-1",
+                "test_X"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a.doc\nb.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_X"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "时间风格 (--time-style=iso)",
+            "setup_commands": [
+                "mkdir -p test_ts",
+                "touch test_ts/file"
+            ],
+            "args": [
+                "-l",
+                "--time-style=iso",
+                "test_ts"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ts"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "访问时间 (-u)",
+            "setup_commands": [
+                "mkdir -p test_u",
+                "touch test_u/1",
+                "sleep 1",
+                "touch test_u/2",
+                "cat test_u/1 > /dev/null"
+            ],
+            "args": [
+                "-u",
+                "-t",
+                "-1",
+                "test_u"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_u"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "不排序 (-U)",
+            "setup_commands": [
+                "mkdir -p test_U",
+                "touch test_U/a test_U/b"
+            ],
+            "args": [
+                "-U",
+                "test_U"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_U"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "宽度 (-w)",
+            "setup_commands": [
+                "mkdir -p test_w",
+                "touch test_w/1 test_w/2"
+            ],
+            "args": [
+                "-w",
+                "10",
+                "-C",
+                "test_w"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_w"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "跨行排序 (-x)",
+            "setup_commands": [
+                "mkdir -p test_x",
+                "touch test_x/1 test_x/2 test_x/3"
+            ],
+            "args": [
+                "-x",
+                "test_x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_x"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "安全上下文 (-Z)",
+            "setup_commands": [
+                "mkdir -p test_Z",
+                "touch test_Z/file"
+            ],
+            "args": [
+                "-Z",
+                "test_Z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_Z"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "零结尾 (--zero)",
+            "setup_commands": [
+                "mkdir -p test_zero",
+                "touch test_zero/1 test_zero/2"
+            ],
+            "args": [
+                "--zero",
+                "test_zero"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\u00002\u0000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_zero"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "解引用目录符号链接 (--dereference-command-line-symlink-to-dir)",
+            "setup_commands": [
+                "mkdir -p test_dl/target",
+                "ln -s target test_dl/link",
+                "touch test_dl/target/file"
+            ],
+            "args": [
+                "--dereference-command-line-symlink-to-dir",
+                "test_dl/link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dl"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "超链接 (--hyperlink=always)",
+            "setup_commands": [
+                "mkdir -p /test_hyp_dir",
+                "touch /test_hyp_dir/file"
+            ],
+            "args": [
+                "--hyperlink=always",
+                "/test_hyp_dir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf /test_hyp_dir"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "显示控制字符 (--show-control-chars)",
+            "setup_commands": [
+                "mkdir -p test_scc",
+                "touch 'test_scc/file?'"
+            ],
+            "args": [
+                "--show-control-chars",
+                "-1",
+                "test_scc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file?",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_scc"
+            ]
         }
     ]
 }

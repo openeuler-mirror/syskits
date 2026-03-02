@@ -134,10 +134,12 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::DEREFERENCE)
             .long(opt_flags::dereference::DEREFERENCE)
+            .overrides_with(opt_flags::dereference::NO_DEREFERENCE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::NO_DEREFERENCE)
             .short('h')
             .long(opt_flags::dereference::NO_DEREFERENCE)
+            .overrides_with(opt_flags::dereference::DEREFERENCE)
             .help(
                 "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
             )
@@ -163,6 +165,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::traverse::TRAVERSE)
             .short(opt_flags::traverse::TRAVERSE.chars().next().unwrap())
             .help("if a command line argument is a symbolic link to a directory, traverse it")
+            .overrides_with_all([opt_flags::traverse::NO_TRAVERSE, opt_flags::traverse::EVERY])
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::traverse::NO_TRAVERSE)
             .short(opt_flags::traverse::NO_TRAVERSE.chars().next().unwrap())
@@ -172,6 +175,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::traverse::EVERY)
             .short(opt_flags::traverse::EVERY.chars().next().unwrap())
             .help("traverse every symbolic link to a directory encountered")
+            .overrides_with_all([opt_flags::traverse::TRAVERSE, opt_flags::traverse::NO_TRAVERSE])
             .action(ArgAction::SetTrue),
     ];
 

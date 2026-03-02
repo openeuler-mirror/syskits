@@ -353,6 +353,17 @@ enum LsTimeStyle {
     LsFormat(String),
 }
 
+fn is_posix_locale() -> bool {
+    for var in ["LC_ALL", "LC_TIME", "LANG"] {
+        if let Ok(val) = std::env::var(var) {
+            if !val.is_empty() {
+                return val == "C" || val == "POSIX";
+            }
+        }
+    }
+    true
+}
+
 fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsError> {
     let possible_time_styles = vec![
         "full-iso".to_string(),
@@ -376,7 +387,13 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
         {
             Ok(LsTimeStyle::LsFullIso)
         } else {
-            let field_str = field.as_str();
+            let mut field_str = field.as_str();
+            while field_str.starts_with("posix-") {
+                if is_posix_locale() {
+                    return Ok(LsTimeStyle::LsLocale);
+                }
+                field_str = &field_str[6..];
+            }
             if "full-iso" == field_str {
                 Ok(LsTimeStyle::LsFullIso)
             } else if "long-iso" == field_str {
@@ -386,8 +403,8 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
             } else if "locale" == field_str {
                 Ok(LsTimeStyle::LsLocale)
             } else {
-                match field.chars().next().unwrap() {
-                    '+' => Ok(LsTimeStyle::LsFormat(String::from(&field[1..]))),
+                match field_str.chars().next() {
+                    Some('+') => Ok(LsTimeStyle::LsFormat(String::from(&field_str[1..]))),
                     _ => Err(LsError::LsTimeStyleParseError(
                         String::from(field),
                         possible_time_styles,
@@ -588,6 +605,7 @@ fn extract_time(options: &clap::ArgMatches) -> LsTime {
             "ctime" | "status" => LsTime::LsChange,
             "access" | "atime" | "use" => LsTime::LsAccess,
             "birth" | "creation" => LsTime::LsBirth,
+            "mtime" | "modification" => LsTime::LsModification,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid field for --time"),
         }
@@ -1484,12 +1502,13 @@ pub fn ct_app() -> Command {
             .help(
                 "Show time in <field>:\n\
                          \taccess time (-u): atime, access, use;\n\
-                         \tchange time (-t): ctime, status.\n\
+                         \tchange time (-c): ctime, status;\n\
+                         \tmodified time (default): mtime, modification;\n\
                          \tbirth time: birth, creation;",
             )
             .value_name("field")
             .value_parser([
-                "atime", "access", "use", "ctime", "status", "birth", "creation",
+                "atime", "access", "use", "ctime", "status", "birth", "creation", "mtime", "modification",
             ])
             .hide_possible_values(true)
             .require_equals(true)
@@ -1804,12 +1823,11 @@ pub fn ct_app() -> Command {
                 ls_flags::LS_INDICATOR_STYLE,
             ])
             .action(ArgAction::SetTrue),
-        //This still needs support for posix-*
         Arg::new(ls_flags::LS_TIME_STYLE)
             .long(ls_flags::LS_TIME_STYLE)
             .help("time/date format with -l; see LS_TIME_STYLE below")
             .value_name("LS_TIME_STYLE")
-            .env("LS_TIME_STYLE")
+            .env("TIME_STYLE")
             .value_parser(NonEmptyStringValueParser::new())
             .overrides_with_all([ls_flags::LS_TIME_STYLE]),
         Arg::new(ls_flags::LS_FULL_TIME)

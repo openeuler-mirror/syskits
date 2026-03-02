@@ -421,7 +421,7 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
 
 #[allow(clippy::enum_variant_names)]
 #[derive(PartialEq, Debug)]
-enum LsDereference {
+pub enum LsDereference {
     LsNone,
     LsDirArgs,
     LsArgs,
@@ -443,7 +443,7 @@ pub struct LsConfig {
     sort: LsSort,
     is_recursive: bool,
     is_reverse: bool,
-    dereference: LsDereference,
+    pub dereference: LsDereference,
     ignore_patterns: Vec<Pattern>,
     size_format: LsSizeFormat,
     is_directory: bool,
@@ -465,7 +465,7 @@ pub struct LsConfig {
     is_selinux_supported: bool,
     is_group_directories_first: bool,
     line_ending: CtLineEnding,
-    is_dired: bool,
+    pub is_dired: bool,
     is_hyperlink: bool,
     size_suffix: String,
 }
@@ -1972,7 +1972,20 @@ impl PathData {
 
         // 配置了显示安全上下文才给出安全上下文, Long模式需要显示安全上下文标记
         let security_context = if config.is_context || config.format == LsFormat::Long {
-            get_security_context(config, &p_buf, must_dereference)
+            // 在尝试获取安全上下文之前，先检查是否可以访问元数据。
+            // 如果文件不存在，我们不希望打印 SELinux 警告，而是稍后由 ls 主逻辑报告"No such file"。
+            let meta_ok = if must_dereference {
+                p_buf.metadata().is_ok()
+            } else if let Some(ref de) = de {
+                de.metadata().is_ok()
+            } else {
+                p_buf.symlink_metadata().is_ok()
+            };
+            if !meta_ok {
+                "?".to_string()
+            } else {
+                get_security_context(config, &p_buf, must_dereference)
+            }
         } else {
             String::new()
         };
@@ -2086,12 +2099,17 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
     sort_entries(&mut files_vec, config, &mut out);
     sort_entries(&mut dirs_vec, config, &mut out);
 
+    // 计算所有命令行参数（文件和目录）的统一填充宽度
+    let combined_iter = files_vec.iter().chain(dirs_vec.iter());
+    let padding = calculate_padding_collection(combined_iter, config, &mut out);
+
     display_items(
         &files_vec,
         config,
         &mut out,
         &mut dired_output,
         &mut style_manager,
+        Some(padding),
     )?;
 
     for (pos, path_data) in dirs_vec.iter().enumerate() {
@@ -2331,7 +2349,7 @@ fn enter_directory<W: Write>(
         }
     }
 
-    display_items(&entries, config, out, dired, style_manager)?;
+    display_items(&entries, config, out, dired, style_manager, None)?;
 
     if config.is_recursive {
         for e in entries
@@ -2476,8 +2494,14 @@ fn return_total<W: Write>(
         LsSizeFormat::Binary | LsSizeFormat::Decimal => total_size,
         LsSizeFormat::Bytes => (total_size + ls_config.block_size - 1) / ls_config.block_size,
     };
+    let total_str = if rust_i18n::locale().starts_with("zh") {
+        "总计"
+    } else {
+        "total"
+    };
     Ok(format!(
-        "total {}{}",
+        "{} {}{}",
+        total_str,
         display_size(display_total, ls_config),
         ls_config.line_ending
     ))
@@ -2524,6 +2548,7 @@ fn display_items<W: Write>(
     out: &mut W,
     dired: &mut DiredOutput,
     style_manager: &mut StyleManager,
+    padding: Option<LsPaddingCollection>,
 ) -> CTResult<()> {
     // `-Z`, `--context`:
     // 显示 SELinux 安全上下文，如果没有则显示"? 当与 `-l`
@@ -2535,9 +2560,17 @@ fn display_items<W: Write>(
     });
 
     if config.format == LsFormat::Long {
-        display_grid_by_format_long_type(items, config, out, dired, style_manager, quoted)?;
+        display_grid_by_format_long_type(
+            items,
+            config,
+            out,
+            dired,
+            style_manager,
+            quoted,
+            padding,
+        )?;
     } else {
-        display_grid_by_format_other_type(items, config, out, style_manager, quoted)?;
+        display_grid_by_format_other_type(items, config, out, style_manager, quoted, padding)?;
     }
 
     Ok(())
@@ -2549,6 +2582,7 @@ fn display_grid_by_format_other_type<W: Write>(
     out: &mut W,
     style_manager: &mut StyleManager,
     quoted: bool,
+    padding: Option<LsPaddingCollection>,
 ) -> Result<(), Box<dyn CTError>> {
     let mut longest_context_len = 1;
     let prefix_context = if config.is_context {
@@ -2561,7 +2595,8 @@ fn display_grid_by_format_other_type<W: Write>(
         None
     };
 
-    let padding = calculate_padding_collection(items, config, out);
+    let padding =
+        padding.unwrap_or_else(|| calculate_padding_collection(items.iter(), config, out));
 
     let mut names_vec = Vec::new();
     for i in items {
@@ -2618,8 +2653,10 @@ fn display_grid_by_format_long_type<W: Write>(
     dired: &mut DiredOutput,
     style_manager: &mut StyleManager,
     quoted: bool,
+    padding: Option<LsPaddingCollection>,
 ) -> Result<(), Box<dyn CTError>> {
-    let padding_collection = calculate_padding_collection(items, config, out);
+    let padding_collection =
+        padding.unwrap_or_else(|| calculate_padding_collection(items.iter(), config, out));
 
     for item in items {
         #[cfg(unix)]
@@ -3110,13 +3147,18 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                 LsTimeStyle::LsLongIso => time.format("%Y-%m-%d %H:%M"),
                 LsTimeStyle::LsIso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
                 LsTimeStyle::LsLocale => {
-                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
+                    if rust_i18n::locale().starts_with("zh") {
+                        let fmt = if recent { "%_m月%d日 %H:%M" } else { "%Y年%_m月%d日" };
+                        time.format(fmt)
+                    } else {
+                        let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
 
-                    //在这个版本的 chrono 中可以进行翻译。函数是 chrono::datetime::DateTime::format_localized
-                    //然而，目前仍很难获得当前的 pure-rust-locale 语言。
-                    //所以还没有实现
+                        //在这个版本的 chrono 中可以进行翻译。函数是 chrono::datetime::DateTime::format_localized
+                        //然而，目前仍很难获得当前的 pure-rust-locale 语言。
+                        //所以还没有实现
 
-                    time.format(fmt)
+                        time.format(fmt)
+                    }
                 }
                 LsTimeStyle::LsFormat(e) => time.format(e),
             }
@@ -3588,8 +3630,8 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
 }
 
 #[cfg(unix)]
-fn calculate_padding_collection<W: Write>(
-    items: &[PathData],
+fn calculate_padding_collection<'a, W: Write>(
+    items: impl Iterator<Item = &'a PathData>,
     config: &LsConfig,
     out: &mut W,
 ) -> LsPaddingCollection {
@@ -3633,15 +3675,9 @@ fn calculate_padding_collection<W: Write>(
             if config.is_context {
                 padding.context = context_len.max(padding.context);
             }
-            if items.len() == 1usize {
-                padding.size = 0usize;
-                padding.major = 0usize;
-                padding.minor = 0usize;
-            } else {
-                padding.major = major_len.max(padding.major);
-                padding.minor = minor_len.max(padding.minor);
-                padding.size = size_len.max(padding.size).max(padding.major);
-            }
+            padding.major = major_len.max(padding.major);
+            padding.minor = minor_len.max(padding.minor);
+            padding.size = size_len.max(padding.size).max(padding.major);
         }
     }
 
@@ -3649,8 +3685,8 @@ fn calculate_padding_collection<W: Write>(
 }
 
 #[cfg(not(unix))]
-fn calculate_padding_collection<W: Write>(
-    items: &[PathData],
+fn calculate_padding_collection<'a, W: Write>(
+    items: impl Iterator<Item = &'a PathData>,
     config: &LsConfig,
     out: &mut W,
 ) -> LsPaddingCollection {

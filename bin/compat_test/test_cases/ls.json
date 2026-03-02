@@ -1519,6 +1519,256 @@
                 "cleanup_commands": [
                     "rm -rf test_time_access"
                 ]
+            },
+            {
+                "command": "ls",
+                "description": "指示符样式 (--indicator-style=none)",
+                "setup_commands": [
+                    "mkdir -p test_ind_none",
+                    "mkdir test_ind_none/dir"
+                ],
+                "args": ["--indicator-style=none", "test_ind_none"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "dir",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_ind_none"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "引用风格 (--quoting-style=shell-always)",
+                "setup_commands": [
+                    "mkdir -p test_qs_always",
+                    "touch test_qs_always/file"
+                ],
+                "args": ["--quoting-style=shell-always", "test_qs_always"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "'file'",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_qs_always"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "引用风格 (--quoting-style=c)",
+                "setup_commands": [
+                    "mkdir -p test_qs_c",
+                    "touch test_qs_c/file"
+                ],
+                "args": ["--quoting-style=c", "test_qs_c"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "\"file\"",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_qs_c"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "颜色 (--color=never)",
+                "setup_commands": [
+                    "mkdir -p test_color_never",
+                    "touch test_color_never/file",
+                    "chmod +x test_color_never/file"
+                ],
+                "args": ["--color=never", "test_color_never"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "file",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_color_never"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "超链接 (--hyperlink=never)",
+                "setup_commands": [
+                    "mkdir -p test_hyp_never",
+                    "touch test_hyp_never/file"
+                ],
+                "args": ["--hyperlink=never", "test_hyp_never"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "file",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_hyp_never"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "块大小 (--block-size=1K)",
+                "setup_commands": [
+                    "mkdir -p test_bs_1k",
+                    "dd if=/dev/zero of=test_bs_1k/file bs=1024 count=2 2>/dev/null"
+                ],
+                "args": ["-s", "--block-size=1K", "test_bs_1k"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                     "verifications": [
+                        {
+                            "command": "ls -s --block-size=1K test_bs_1k | grep -E '^2 '",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_bs_1k"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "时间风格 (--time-style=long-iso)",
+                "setup_commands": [
+                    "mkdir -p test_ts_long",
+                    "touch test_ts_long/file"
+                ],
+                "args": ["-l", "--time-style=long-iso", "test_ts_long"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                         {
+                            "command": "ls -l --time-style=long-iso test_ts_long | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_ts_long"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "时间风格 (--time-style=+FORMAT)",
+                "setup_commands": [
+                    "mkdir -p test_ts_fmt",
+                    "touch test_ts_fmt/file"
+                ],
+                "args": ["-l", "--time-style=+%Y", "test_ts_fmt"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                         {
+                            "command": "ls -l --time-style=+%Y test_ts_fmt | grep -E ' [0-9]{4} '",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_ts_fmt"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "排序 (--sort=version)",
+                "setup_commands": [
+                    "mkdir -p test_sort_ver",
+                    "touch test_sort_ver/file1 test_sort_ver/file10 test_sort_ver/file2"
+                ],
+                "args": ["--sort=version", "test_sort_ver"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "file1\nfile2\nfile10",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_sort_ver"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "格式化输出 (--format=single-column)",
+                "setup_commands": [
+                    "mkdir -p test_fmt_single",
+                    "touch test_fmt_single/a test_fmt_single/b"
+                ],
+                "args": ["--format=single-column", "test_fmt_single"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "a\nb",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_fmt_single"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "指示符样式 (--indicator-style=classify)",
+                "setup_commands": [
+                    "mkdir -p test_ind_class",
+                    "mkdir test_ind_class/dir",
+                    "touch test_ind_class/file",
+                    "touch test_ind_class/exec",
+                    "chmod +x test_ind_class/exec"
+                ],
+                "args": ["--indicator-style=classify", "test_ind_class"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "dir/\nexec*\nfile",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_ind_class"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "引用风格 (--quoting-style=escape)",
+                "setup_commands": [
+                    "mkdir -p test_qs_esc",
+                    "touch 'test_qs_esc/file\tname'"
+                ],
+                "args": ["--quoting-style=escape", "test_qs_esc"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "file\\tname",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_qs_esc"
+                ]
             }
     ]
 } 

@@ -1365,6 +1365,304 @@
             "cleanup_commands": [
                 "rm -rf test_scc"
             ]
+        },
+        {
+            "command": "dir",
+            "description": "制表符宽度 (-T)",
+            "setup_commands": [
+                "mkdir -p test_T",
+                "touch test_T/file"
+            ],
+            "args": [
+                "-C",
+                "-T",
+                "4",
+                "test_T"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_T"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 按大小排序 (-S)",
+            "setup_commands": [
+                "mkdir -p test_S",
+                "dd if=/dev/zero of=test_S/small bs=1 count=1 2>/dev/null",
+                "dd if=/dev/zero of=test_S/large bs=1024 count=1 2>/dev/null",
+                "dd if=/dev/zero of=test_S/medium bs=100 count=1 2>/dev/null"
+            ],
+            "args": [
+                "-S",
+                "test_S"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "large\nmedium\nsmall",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_S"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 版本排序 (-v)",
+            "setup_commands": [
+                "mkdir -p test_v",
+                "touch test_v/file1 test_v/file10 test_v/file2"
+            ],
+            "args": [
+                "-v",
+                "test_v"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1\nfile2\nfile10",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_v"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 人类可读大小 (-h)",
+            "setup_commands": [
+                "mkdir -p test_h",
+                "dd if=/dev/zero of=test_h/file bs=1024 count=1 2>/dev/null"
+            ],
+            "args": [
+                "-l",
+                "-h",
+                "test_h"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "dir -l -h test_h | grep '1.0K'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_h"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 数字UID/GID (-n)（中英文差异）",
+            "setup_commands": [
+                "mkdir -p test_n",
+                "touch test_n/file"
+            ],
+            "args": [
+                "-n",
+                "test_n"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "dir -n test_n | grep -E ' [0-9]+ [0-9]+ '",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_n"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: Dired模式 (-D)",
+            "setup_commands": [
+                "mkdir -p test_D",
+                "touch test_D/file"
+            ],
+            "args": [
+                "-D",
+                "test_D"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "dir -D test_D | grep '//DIRED//'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_D"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 引用风格 C (--quoting-style=c)",
+            "setup_commands": [
+                "mkdir -p test_qs_c",
+                "touch 'test_qs_c/file name'"
+            ],
+            "args": [
+                "--quoting-style=c",
+                "test_qs_c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\"file name\"",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_qs_c"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 指示符样式 classify (--indicator-style=classify)",
+            "setup_commands": [
+                "mkdir -p test_ind_class",
+                "mkdir test_ind_class/dir",
+                "touch test_ind_class/file",
+                "touch test_ind_class/exec",
+                "chmod +x test_ind_class/exec"
+            ],
+            "args": [
+                "--indicator-style=classify",
+                "test_ind_class"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir/\nexec*\nfile",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ind_class"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 默认转义行为 (implicit -b)",
+            "setup_commands": [
+                "mkdir -p test_default_esc",
+                "touch 'test_default_esc/a b'",
+                "touch 'test_default_esc/a\tb'"
+            ],
+            "args": [
+                "test_default_esc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\\tb\na\\ b",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_default_esc"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 按时间排序 (-t)",
+            "setup_commands": [
+                "mkdir -p test_t",
+                "touch test_t/old",
+                "sleep 1",
+                "touch test_t/new"
+            ],
+            "args": [
+                "-t",
+                "test_t"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "new\nold",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_t"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 宽度排序 (--sort=width)",
+            "setup_commands": [
+                "mkdir -p test_width_sort",
+                "touch test_width_sort/aaaa",
+                "touch test_width_sort/z",
+                "touch test_width_sort/bb"
+            ],
+            "args": [
+                "--sort=width",
+                "test_width_sort"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "aaaa\nbb\nz",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_width_sort"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "dir: 访问时间 (--time=access)",
+            "setup_commands": [
+                "mkdir -p test_time_access",
+                "touch test_time_access/1",
+                "sleep 1",
+                "touch test_time_access/2",
+                "cat test_time_access/1 > /dev/null"
+            ],
+            "args": [
+                "--time=access",
+                "-t",
+                "test_time_access"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_time_access"
+            ]
         }
     ]
 }

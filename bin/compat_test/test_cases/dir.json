@@ -16,9 +16,9 @@
             "args": [],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "a.txt\nb.txt\nc.txt\nsubdir\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "a.txt\nb.txt\nc.txt\nsubdir\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -43,9 +43,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "a.txt\nb.txt\nsubdir\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "a.txt\nb.txt\nsubdir\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -66,9 +66,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "file1.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "file1.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -93,9 +93,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "file1.txt\n\ntest_dir_dir_mix/subdir:\na.txt\nb.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "file1.txt\n\ntest_dir_dir_mix/subdir:\na.txt\nb.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -118,9 +118,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": "dir: cannot access 'test_dir_dir_missing/missing_file.txt': No such file or directory\n"
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dir: cannot access 'test_dir_dir_missing/missing_file.txt': No such file or directory\n"
                 }
             },
             "cleanup_commands": [
@@ -144,9 +144,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": ".\n..\n.hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": ".\n..\n.hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -170,9 +170,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": ".hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": ".hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -198,9 +198,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "rw-r--r-- 1 $USER $USER 0 file1.txt\nrw------- 1 $USER $USER 0 file2.txt\ndrwxr-xr-x 2 $USER $USER 4096 subdir\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "rw-r--r-- 1 $USER $USER 0 file1.txt\nrw------- 1 $USER $USER 0 file2.txt\ndrwxr-xr-x 2 $USER $USER 4096 subdir\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -222,9 +222,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "fileA.txt\nfileB.txt\nfileC.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "fileA.txt\nfileB.txt\nfileC.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -249,9 +249,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "file1.txt\n\ndir1:\nfile2.txt\n\ndir1/dir1_sub:\nfile3.txt\n\ndir2:\nfile4.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "file1.txt\n\ndir1:\nfile2.txt\n\ndir1/dir1_sub:\nfile3.txt\n\ndir2:\nfile4.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -276,9 +276,9 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -307,14 +307,375 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "drwxr-xr-x 2 $USER $USER 4096 subdir2\ndrwxr-xr-x 2 $USER $USER 4096 subdir1\nrw------- 1 $USER $USER 0 fileB.txt\nrw-r--r-- 1 $USER $USER 0 fileA.txt\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "drwxr-xr-x 2 $USER $USER 4096 subdir2\ndrwxr-xr-x 2 $USER $USER 4096 subdir1\nrw------- 1 $USER $USER 0 fileB.txt\nrw-r--r-- 1 $USER $USER 0 fileA.txt\n",
+                    "stderr": ""
                 }
             },
             "cleanup_commands": [
                 "rm -rf test_dir_dir_long_r"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "显示inode编号 (-i)",
+            "setup_commands": [
+                "mkdir -p /test_dir_dir_inode",
+                "touch /test_dir_dir_inode/file.txt"
+            ],
+            "args": [
+                "-i",
+                "-l",
+                "/test_dir_dir_inode/file.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "*file.txt",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "dir -i -1 /test_dir_dir_inode/file.txt | grep -E '^[0-9]+ file.txt'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf /test_dir_dir_inode"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "只显示目录本身 (-d)",
+            "setup_commands": [
+                "mkdir -p test_dir_d",
+                "touch test_dir_d/file.txt"
+            ],
+            "args": [
+                "-d",
+                "test_dir_d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_dir_d",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_d"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "显示扩展信息 (-F)",
+            "setup_commands": [
+                "mkdir -p test_dir_F",
+                "touch test_dir_F/file.txt",
+                "ln -s file.txt test_dir_F/link.txt"
+            ],
+            "args": [
+                "-F",
+                "-1",
+                "test_dir_F"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file.txt\nlink.txt@",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_F"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "一行一个文件 (-1)",
+            "setup_commands": [
+                "mkdir -p test_dir_1",
+                "touch test_dir_1/file1.txt test_dir_1/file2.txt"
+            ],
+            "args": [
+                "-1",
+                "test_dir_1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1.txt\nfile2.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir_1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "dir",
+            "description": "测试 C locale 下的文件名排序（字节比较）",
+            "setup_commands": [
+                "mkdir -p test_locale_dir_C",
+                "touch test_locale_dir_C/Windows",
+                "touch test_locale_dir_C/linux",
+                "touch test_locale_dir_C/windows",
+                "touch test_locale_dir_C/Apple"
+            ],
+            "args": [
+                "-1",
+                "test_locale_dir_C"
+            ],
+            "env": {
+                "LC_COLLATE": "C"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Apple\nWindows\nlinux\nwindows",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_locale_dir_C"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "显示作者 (--author -l)",
+            "setup_commands": [
+                "mkdir -p test_author",
+                "touch test_author/file"
+            ],
+            "args": [
+                "-l",
+                "--author",
+                "test_author"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_author"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "转义字符 (-b)",
+            "setup_commands": [
+                "mkdir -p test_escape",
+                "touch 'test_escape/file with space'",
+                "touch 'test_escape/file\nnewline'"
+            ],
+            "args": [
+                "-b",
+                "-1",
+                "test_escape"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_escape"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "块大小 (--block-size=M -l)",
+            "setup_commands": [
+                "mkdir -p test_bs",
+                "dd if=/dev/zero of=test_bs/file bs=1M count=2 2>/dev/null"
+            ],
+            "args": [
+                "-l",
+                "--block-size=M",
+                "test_bs"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_bs"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "忽略备份文件 (-B)",
+            "setup_commands": [
+                "mkdir -p test_backup",
+                "touch test_backup/file test_backup/file~"
+            ],
+            "args": [
+                "-B",
+                "-1",
+                "test_backup"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_backup"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "按ctime排序 (-c -l)",
+            "setup_commands": [
+                "mkdir -p test_ctime",
+                "touch test_ctime/1",
+                "sleep 1",
+                "touch test_ctime/2"
+            ],
+            "args": [
+                "-c",
+                "-l",
+                "test_ctime"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ctime"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "多列输出 (-C)",
+            "setup_commands": [
+                "mkdir -p test_cols",
+                "touch test_cols/1 test_cols/2 test_cols/3"
+            ],
+            "args": [
+                "-C",
+                "test_cols"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_cols"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "强制颜色 (--color=always)",
+            "setup_commands": [
+                "mkdir -p test_color",
+                "touch test_color/file",
+                "mkdir test_color/dir"
+            ],
+            "args": [
+                "--color=always",
+                "test_color"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_color"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "不排序 (-f)",
+            "setup_commands": [
+                "mkdir -p test_f",
+                "touch test_f/a test_f/b"
+            ],
+            "args": [
+                "-f",
+                "test_f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_f"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "文件类型指示 (--file-type)",
+            "setup_commands": [
+                "mkdir -p test_ft",
+                "touch test_ft/file",
+                "mkdir test_ft/dir"
+            ],
+            "args": [
+                "--file-type",
+                "-1",
+                "test_ft"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir/\nfile",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ft"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "格式化输出 (--format=commas)",
+            "setup_commands": [
+                "mkdir -p test_fmt",
+                "touch test_fmt/1 test_fmt/2"
+            ],
+            "args": [
+                "--format=commas",
+                "test_fmt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1, 2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fmt"
+            ]
         }
     ]
-  }
+}

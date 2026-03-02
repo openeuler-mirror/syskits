@@ -736,6 +736,173 @@
                 "groupdel chgrp_test_ref_sym"
             ],
             "requires_root": true
+        },
+        {
+            "command": "chgrp",
+            "description": "chgrp: 测试 -R 遍历选项优先级 (-H -L -P -> P)",
+            "args": ["-R", "-H", "-L", "-P", "chgrp_test_p_wins", "test_dir"],
+            "setup_commands": [
+                "groupadd chgrp_test_p_wins",
+                "mkdir test_dir",
+                "mkdir other_dir",
+                "touch other_dir/file",
+                "ln -s other_dir test_dir/link",
+                "chgrp -R root test_dir other_dir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%G' other_dir/file",
+                        "expected_exit": 0,
+                        "expected_stdout": "root\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir other_dir",
+                "groupdel chgrp_test_p_wins"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chgrp",
+            "description": "chgrp: 测试 -R 遍历选项优先级 (-P -L -> L)",
+            "args": ["-R", "-P", "-L", "chgrp_test_l_wins", "test_dir"],
+            "setup_commands": [
+                "groupadd chgrp_test_l_wins",
+                "mkdir test_dir",
+                "mkdir other_dir",
+                "touch other_dir/file",
+                "ln -s other_dir test_dir/link",
+                "chgrp -R root test_dir other_dir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%G' other_dir/file",
+                        "expected_exit": 0,
+                        "expected_stdout": "chgrp_test_l_wins\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir other_dir",
+                "groupdel chgrp_test_l_wins"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chgrp",
+            "description": "chgrp: 测试解引用选项优先级 (-h --dereference -> dereference)",
+            "args": ["-h", "--dereference", "chgrp_test_deref_wins", "symlink"],
+            "setup_commands": [
+                "groupadd chgrp_test_deref_wins",
+                "touch target_file",
+                "ln -s target_file symlink",
+                "chgrp root target_file symlink"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%G' target_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "chgrp_test_deref_wins\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f symlink target_file",
+                "groupdel chgrp_test_deref_wins"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chgrp",
+            "description": "chgrp: 测试解引用选项优先级 (--dereference -h -> no-dereference)",
+            "args": ["--dereference", "-h", "chgrp_test_h_wins", "symlink"],
+            "setup_commands": [
+                "groupadd chgrp_test_h_wins",
+                "touch target_file",
+                "ln -s target_file symlink",
+                "chgrp root target_file",
+                "chgrp -h root symlink"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%G' symlink",
+                        "expected_exit": 0,
+                        "expected_stdout": "chgrp_test_h_wins\n"
+                    },
+                    {
+                        "command": "stat -c '%G' target_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "root\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f symlink target_file",
+                "groupdel chgrp_test_h_wins"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "chgrp",
+            "description": "chgrp: 测试 -R -L -h 组合 (应表现为 -P -h)",
+            "args": ["-R", "-L", "-h", "chgrp_test_rlh", "link_to_dir"],
+            "setup_commands": [
+                "groupadd chgrp_test_rlh",
+                "mkdir target_dir",
+                "touch target_dir/file",
+                "ln -s target_dir link_to_dir",
+                "chgrp -R root target_dir",
+                "chgrp -h root link_to_dir"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%G' link_to_dir",
+                        "expected_exit": 0,
+                        "expected_stdout": "chgrp_test_rlh\n"
+                    },
+                    {
+                        "command": "stat -c '%G' target_dir/file",
+                        "expected_exit": 0,
+                        "expected_stdout": "root\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf target_dir link_to_dir",
+                "groupdel chgrp_test_rlh"
+            ],
+            "requires_root": true
         }
   ]
 }

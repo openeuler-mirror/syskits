@@ -1028,6 +1028,339 @@
             "cleanup_commands": [
                 "rm -rf test_vdir_si"
             ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -H (dereference command line)",
+            "setup_commands": [
+                "mkdir -p test_vdir_H/target",
+                "ln -s target test_vdir_H/link",
+                "touch test_vdir_H/target/file"
+            ],
+            "args": ["-H", "test_vdir_H/link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_H"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --hide",
+            "setup_commands": [
+                "mkdir -p test_vdir_hide",
+                "touch test_vdir_hide/keep test_vdir_hide/hide_me"
+            ],
+            "args": ["--hide=*hide*", "test_vdir_hide"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_hide"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --hyperlink=never",
+            "setup_commands": [
+                "mkdir -p test_vdir_hyp",
+                "touch test_vdir_hyp/file"
+            ],
+            "args": ["--hyperlink=never", "test_vdir_hyp"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_hyp"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --indicator-style=slash",
+            "setup_commands": [
+                "mkdir -p test_vdir_ind",
+                "mkdir test_vdir_ind/dir",
+                "touch test_vdir_ind/file"
+            ],
+            "args": ["--indicator-style=slash", "test_vdir_ind"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ind"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -i (inode)",
+            "setup_commands": [
+                "mkdir -p test_vdir_i",
+                "touch test_vdir_i/file"
+            ],
+            "args": ["-i", "test_vdir_i"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_i"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -I (ignore pattern)",
+            "setup_commands": [
+                "mkdir -p test_vdir_I",
+                "touch test_vdir_I/a.txt test_vdir_I/b.log"
+            ],
+            "args": ["-I", "*.log", "test_vdir_I"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_I"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -k (kibibytes)",
+            "setup_commands": [
+                "mkdir -p test_vdir_k",
+                "dd if=/dev/zero of=test_vdir_k/file bs=2048 count=1 2>/dev/null"
+            ],
+            "args": ["-k", "-s", "test_vdir_k/file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_k"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -L (dereference)",
+            "setup_commands": [
+                "mkdir -p test_vdir_L",
+                "touch test_vdir_L/file",
+                "ln -s file test_vdir_L/link"
+            ],
+            "args": ["-L", "test_vdir_L/link"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_L"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -m (commas)",
+            "setup_commands": [
+                "mkdir -p test_vdir_m",
+                "touch test_vdir_m/1 test_vdir_m/2"
+            ],
+            "args": ["-m", "test_vdir_m"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1, 2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_m"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -N (literal)",
+            "setup_commands": [
+                "mkdir -p test_vdir_N",
+                "touch 'test_vdir_N/file name'"
+            ],
+            "args": ["-N", "test_vdir_N"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_N"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -o (no group)",
+            "setup_commands": [
+                "mkdir -p test_vdir_o",
+                "touch test_vdir_o/file"
+            ],
+            "args": ["-o", "test_vdir_o"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_o"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -p (indicator slash)",
+            "setup_commands": [
+                "mkdir -p test_vdir_p/dir",
+                "touch test_vdir_p/file"
+            ],
+            "args": ["-p", "test_vdir_p"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_p"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -q (hide control chars)",
+            "setup_commands": [
+                "mkdir -p test_vdir_q",
+                "touch 'test_vdir_q/file?'"
+            ],
+            "args": ["-q", "test_vdir_q"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_q"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -Q (quote name)",
+            "setup_commands": [
+                "mkdir -p test_vdir_Q",
+                "touch test_vdir_Q/file"
+            ],
+            "args": ["-Q", "test_vdir_Q"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_Q"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --quoting-style=shell",
+            "setup_commands": [
+                "mkdir -p test_vdir_qs",
+                "touch 'test_vdir_qs/file name'"
+            ],
+            "args": ["--quoting-style=shell", "test_vdir_qs"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_qs"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -R (recursive)",
+            "setup_commands": [
+                "mkdir -p test_vdir_R/subdir",
+                "touch test_vdir_R/file test_vdir_R/subdir/subfile"
+            ],
+            "args": ["-R", "test_vdir_R"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_R"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --dereference-command-line-symlink-to-dir",
+            "setup_commands": [
+                "mkdir -p test_vdir_deref_dir/target_dir",
+                "ln -s target_dir test_vdir_deref_dir/link_to_dir",
+                "touch test_vdir_deref_dir/target_dir/file"
+            ],
+            "args": ["--dereference-command-line-symlink-to-dir", "test_vdir_deref_dir/link_to_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "vdir --dereference-command-line-symlink-to-dir test_vdir_deref_dir/link_to_dir | grep 'file'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_deref_dir"
+            ]
         }
     ]
 }

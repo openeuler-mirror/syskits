@@ -1361,6 +1361,294 @@
             "cleanup_commands": [
                 "rm -rf test_vdir_deref_dir"
             ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --format=across",
+            "setup_commands": [
+                "mkdir -p test_vdir_fmt_across",
+                "touch test_vdir_fmt_across/1 test_vdir_fmt_across/2"
+            ],
+            "args": ["--format=across", "test_vdir_fmt_across"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1  2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_fmt_across"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --format=horizontal",
+            "setup_commands": [
+                "mkdir -p test_vdir_fmt_horiz",
+                "touch test_vdir_fmt_horiz/1 test_vdir_fmt_horiz/2"
+            ],
+            "args": ["--format=horizontal", "test_vdir_fmt_horiz"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1  2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_fmt_horiz"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --format=long",
+            "setup_commands": [
+                "mkdir -p test_vdir_fmt_long",
+                "touch test_vdir_fmt_long/file"
+            ],
+            "args": ["--format=long", "test_vdir_fmt_long"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_fmt_long"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --format=single-column",
+            "setup_commands": [
+                "mkdir -p test_vdir_fmt_single",
+                "touch test_vdir_fmt_single/1 test_vdir_fmt_single/2"
+            ],
+            "args": ["--format=single-column", "test_vdir_fmt_single"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_fmt_single"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --format=verbose",
+            "setup_commands": [
+                "mkdir -p test_vdir_fmt_verbose",
+                "touch test_vdir_fmt_verbose/file"
+            ],
+            "args": ["--format=verbose", "test_vdir_fmt_verbose"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_fmt_verbose"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --format=vertical",
+            "setup_commands": [
+                "mkdir -p test_vdir_fmt_vertical",
+                "touch test_vdir_fmt_vertical/1 test_vdir_fmt_vertical/2"
+            ],
+            "args": ["--format=vertical", "test_vdir_fmt_vertical"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1  2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_fmt_vertical"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --hyperlink=always",
+            "setup_commands": [
+                "mkdir -p test_vdir_hyp_always",
+                "touch test_vdir_hyp_always/file"
+            ],
+            "args": ["--hyperlink=always", "test_vdir_hyp_always"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_hyp_always"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --indicator-style=none",
+            "setup_commands": [
+                "mkdir -p test_vdir_ind_none",
+                "mkdir test_vdir_ind_none/dir"
+            ],
+            "args": ["--indicator-style=none", "-1", "test_vdir_ind_none"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ind_none"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --indicator-style=file-type",
+            "setup_commands": [
+                "mkdir -p test_vdir_ind_ft",
+                "mkdir test_vdir_ind_ft/dir",
+                "touch test_vdir_ind_ft/file"
+            ],
+            "args": ["--indicator-style=file-type", "-1", "test_vdir_ind_ft"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir/\nfile\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ind_ft"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --indicator-style=classify",
+            "setup_commands": [
+                "mkdir -p test_vdir_ind_classify",
+                "mkdir test_vdir_ind_classify/dir",
+                "touch test_vdir_ind_classify/exec",
+                "chmod +x test_vdir_ind_classify/exec"
+            ],
+            "args": ["--indicator-style=classify", "-1", "test_vdir_ind_classify"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir/\nexec*\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ind_classify"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --quoting-style=literal",
+            "setup_commands": [
+                "mkdir -p test_vdir_qs_lit",
+                "touch 'test_vdir_qs_lit/file name'"
+            ],
+            "args": ["--quoting-style=literal", "-1", "test_vdir_qs_lit"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file name\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_qs_lit"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --quoting-style=c",
+            "setup_commands": [
+                "mkdir -p test_vdir_qs_c",
+                "touch 'test_vdir_qs_c/file name'"
+            ],
+            "args": ["--quoting-style=c", "-1", "test_vdir_qs_c"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\"file name\"\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_qs_c"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --quoting-style=escape",
+            "setup_commands": [
+                "mkdir -p test_vdir_qs_esc",
+                "touch 'test_vdir_qs_esc/file\tname'"
+            ],
+            "args": ["--quoting-style=escape", "-1", "test_vdir_qs_esc"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file\\tname\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_qs_esc"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --quoting-style=shell-always",
+            "setup_commands": [
+                "mkdir -p test_vdir_qs_shell_always",
+                "touch test_vdir_qs_shell_always/file"
+            ],
+            "args": ["--quoting-style=shell-always", "-1", "test_vdir_qs_shell_always"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'file'\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_qs_shell_always"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --show-control-chars",
+            "setup_commands": [
+                "mkdir -p test_vdir_scc",
+                "touch 'test_vdir_scc/file?'"
+            ],
+            "args": ["--show-control-chars", "-1", "test_vdir_scc"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file?\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_scc"
+            ]
         }
     ]
 }

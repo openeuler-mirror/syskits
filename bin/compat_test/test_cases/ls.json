@@ -47,7 +47,7 @@
         {
             "tstdin": "",
             "command": "ls",
-            "description": "长格式显示",
+            "description": "长格式显示（中英文差异）",
             "setup_commands": [
                 "mkdir -p test_dir",
                 "touch test_dir/file.txt",
@@ -115,7 +115,7 @@
         {
             "tstdin": "",
             "command": "ls",
-            "description": "人类可读的大小格式",
+            "description": "人类可读的大小格式（中英文差异）",
             "setup_commands": [
                 "mkdir -p test_dir",
                 "dd if=/dev/zero of=test_dir/file.bin bs=1M count=1 2>/dev/null"
@@ -143,10 +143,10 @@
             "command": "ls",
             "description": "显示inode编号",
             "setup_commands": [
-                "mkdir -p test_dir",
-                "touch test_dir/file.txt"
+                "mkdir -p /test_dir_ls_inode",
+                "touch /test_dir_ls_inode/file.txt"
             ],
-            "args": ["-i", "test_dir/file.txt"],
+            "args": ["-i", "/test_dir_ls_inode/file.txt"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -155,13 +155,13 @@
                 },
                 "verifications": [
                     {
-                        "command": "ls -i test_dir/file.txt | grep -E '^[0-9]+ file.txt'",
+                        "command": "ls -i /test_dir_ls_inode/file.txt | grep -E '^[0-9]+ file.txt'",
                         "expected_exit": 0
                     }
                 ]
             },
             "cleanup_commands": [
-                "rm -rf test_dir"
+                "rm -rf /test_dir_ls_inode"
             ]
         },
         {
@@ -461,7 +461,7 @@
         },
         {
             "command": "ls",
-            "description": "显示作者 (--author -l)",
+            "description": "显示作者 (--author -l)（中英文差异）",
             "setup_commands": [
                 "mkdir -p test_author",
                 "touch test_author/file"
@@ -500,7 +500,7 @@
         },
         {
             "command": "ls",
-            "description": "块大小 (--block-size=M -l)",
+            "description": "块大小 (--block-size=M -l)（中英文差异）",
             "setup_commands": [
                 "mkdir -p test_bs",
                 "dd if=/dev/zero of=test_bs/file bs=1M count=2 2>/dev/null"
@@ -538,7 +538,7 @@
         },
         {
             "command": "ls",
-            "description": "按ctime排序 (-c -l)",
+            "description": "按ctime排序 (-c -l)(中英文差异）",
             "setup_commands": [
                 "mkdir -p test_ctime",
                 "touch test_ctime/1",

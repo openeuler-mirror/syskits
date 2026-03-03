@@ -519,6 +519,195 @@
                 }
             },
             "cleanup_commands": ["rm -f test_C_fail.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -o 选项 (输出到文件)",
+            "setup_commands": [
+                "echo -e 'c\nb\na' > test_o_in.txt"
+            ],
+            "args": ["-o", "test_o_out.txt", "test_o_in.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat test_o_out.txt",
+                        "expected_stdout": "a\nb\nc\n",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": ["rm -f test_o_in.txt test_o_out.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -m 选项 (归并)",
+            "setup_commands": [
+                "echo -e 'a\nc' > test_m1.txt",
+                "echo -e 'b\nd' > test_m2.txt"
+            ],
+            "args": ["-m", "test_m1.txt", "test_m2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nc\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_m1.txt test_m2.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -z 选项 (以 NUL 结尾)",
+            "setup_commands": [
+                "printf 'b\\0a\\0c\\0' > test_z.txt"
+            ],
+            "args": ["-z", "test_z.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\\0b\\0c\\0",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_z.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --files0-from 选项",
+            "setup_commands": [
+                "echo -e 'c\nb' > file1.txt",
+                "echo -e 'a' > file2.txt",
+                "printf 'file1.txt\\0file2.txt\\0' > files_list.txt"
+            ],
+            "args": ["--files0-from=files_list.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f file1.txt file2.txt files_list.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -s 选项 (稳定排序)",
+            "setup_commands": [
+                "echo -e '1 a\n1 b' > test_s.txt"
+            ],
+            "args": ["-s", "-k", "1,1", "test_s.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a\n1 b\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_s.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -V 选项 (版本排序)",
+            "setup_commands": [
+                "echo -e '1.2\n1.10\n1.1' > test_V.txt"
+            ],
+            "args": ["-V", "test_V.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.1\n1.2\n1.10\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_V.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --sort=general-numeric 别名",
+            "setup_commands": [
+                "echo -e '1.2e3\n100' > test_alias_g.txt"
+            ],
+            "args": ["--sort=general-numeric", "test_alias_g.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "100\n1.2e3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_alias_g.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --batch-size 选项",
+            "setup_commands": [
+                "echo -e 'c' > b1.txt",
+                "echo -e 'b' > b2.txt",
+                "echo -e 'a' > b3.txt"
+            ],
+            "args": ["--batch-size=2", "b1.txt", "b2.txt", "b3.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f b1.txt b2.txt b3.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -S 选项 (缓冲区大小)",
+            "setup_commands": [
+                "echo -e 'a\nb' > test_S.txt"
+            ],
+            "args": ["-S", "1M", "test_S.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_S.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -T 选项 (临时目录)",
+            "setup_commands": [
+                "echo -e 'a\nb' > test_T.txt",
+                "mkdir -p tmp_dir"
+            ],
+            "args": ["-T", "tmp_dir", "test_T.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_T.txt", "rm -rf tmp_dir"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --parallel 选项",
+            "setup_commands": [
+                "echo -e 'a\nb' > test_P.txt"
+            ],
+            "args": ["--parallel=2", "test_P.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_P.txt"]
         }
     ]
 }

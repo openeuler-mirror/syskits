@@ -43,7 +43,6 @@ use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_version_cmp::ct_version_cmp;
 use sys_locale::get_locale;
 
-use custom_str_cmp::custom_cmp_str;
 use ext_sort::ext_sort;
 use numeric_str_cmp::{
     NumInfo, NumInfoParseSettings, num_cmp_human_numeric_str_cmp, numeric_str_cmp,
@@ -1076,6 +1075,9 @@ impl Tool for Sort {
 pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, b"\0".as_ptr() as *const _);
+    }
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(t) => t,
         Err(e) => {
@@ -1611,6 +1613,51 @@ fn sort_by<'a>(
     }
 }
 
+fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
+    if !settings.is_dictionary_order
+        && !settings.is_ignore_non_printing
+        && !settings.is_ignore_case
+    {
+        return strcoll_compare(a.as_bytes(), b.as_bytes(), false);
+    }
+
+    let mut s_a = String::with_capacity(a.len());
+    for c in a.chars() {
+        if settings.is_dictionary_order {
+            if !c.is_alphanumeric() && !c.is_whitespace() {
+                continue;
+            }
+        } else if settings.is_ignore_non_printing && c.is_control() {
+            continue;
+        }
+
+        if settings.is_ignore_case {
+            s_a.extend(c.to_uppercase());
+        } else {
+            s_a.push(c);
+        }
+    }
+
+    let mut s_b = String::with_capacity(b.len());
+    for c in b.chars() {
+        if settings.is_dictionary_order {
+            if !c.is_alphanumeric() && !c.is_whitespace() {
+                continue;
+            }
+        } else if settings.is_ignore_non_printing && c.is_control() {
+            continue;
+        }
+
+        if settings.is_ignore_case {
+            s_b.extend(c.to_uppercase());
+        } else {
+            s_b.push(c);
+        }
+    }
+
+    strcoll_compare(s_a.as_bytes(), s_b.as_bytes(), false)
+}
+
 fn sort_compare_by<'a>(
     a: &SortLine<'a>,
     b: &SortLine<'a>,
@@ -1641,13 +1688,7 @@ fn sort_compare_by<'a>(
         let cmp: Ordering = match settings.mode {
             SortMode::SortRandom => {
                 // check if the two strings are equal
-                if custom_cmp_str(
-                    a_str,
-                    b_str,
-                    settings.is_ignore_non_printing,
-                    settings.is_dictionary_order,
-                    settings.is_ignore_case,
-                ) == Ordering::Equal
+                if sort_default_cmp(a_str, b_str, settings) == Ordering::Equal
                 {
                     Ordering::Equal
                 } else {
@@ -1681,13 +1722,7 @@ fn sort_compare_by<'a>(
             }
             SortMode::SortMonth => sort_month_compare(a_str, b_str),
             SortMode::SortVersion => ct_version_cmp(a_str, b_str),
-            SortMode::SortDefault => custom_cmp_str(
-                a_str,
-                b_str,
-                settings.is_ignore_non_printing,
-                settings.is_dictionary_order,
-                settings.is_ignore_case,
-            ),
+            SortMode::SortDefault => sort_default_cmp(a_str, b_str, settings),
         };
         if cmp != Ordering::Equal {
             return if settings.is_reverse {

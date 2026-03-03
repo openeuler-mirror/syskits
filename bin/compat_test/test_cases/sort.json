@@ -359,6 +359,166 @@
             "cleanup_commands": [
                 "rm -f test.txt"
             ]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --help 选项",
+            "args": ["--help"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "sort",
+            "description": "测试 --version 选项",
+            "args": ["--version"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "sort",
+            "description": "测试 -b 选项 (忽略前导空白)",
+            "setup_commands": [
+                "echo -e ' a\n  b\nc' > test_b.txt"
+            ],
+            "args": ["-b", "test_b.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": " a\n  b\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_b.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -d 选项 (字典序)",
+            "setup_commands": [
+                "echo -e 'a.b\na-c\na d' > test_d.txt"
+            ],
+            "args": ["-d", "test_d.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a.b\na-c\na d\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_d.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -g 选项 (一般数值排序)",
+            "setup_commands": [
+                "echo -e '1.2e3\n100\n-1.0' > test_g.txt"
+            ],
+            "args": ["-g", "test_g.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-1.0\n100\n1.2e3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_g.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -h 选项 (人类可读数值排序)",
+            "setup_commands": [
+                "echo -e '1M\n100K\n1G' > test_h.txt"
+            ],
+            "args": ["-h", "test_h.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "100K\n1M\n1G\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_h.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -i 选项 (忽略不可打印字符)",
+            "setup_commands": [
+                "echo -e 'a\\x01b\na\\x02c' > test_i.txt"
+            ],
+            "args": ["-i", "test_i.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\\x01b\na\\x02c\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_i.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -c 选项 (检查有序 - 成功)",
+            "setup_commands": [
+                "echo -e 'a\nb\nc' > test_c_ok.txt"
+            ],
+            "args": ["-c", "test_c_ok.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_c_ok.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -c 选项 (检查有序 - 失败)",
+            "setup_commands": [
+                "echo -e 'b\na\nc' > test_c_fail.txt"
+            ],
+            "args": ["-c", "test_c_fail.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sort: test_c_fail.txt:2: disorder: a\n"
+                }
+            },
+            "cleanup_commands": ["rm -f test_c_fail.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -C 选项 (静默检查 - 失败)",
+            "setup_commands": [
+                "echo -e 'b\na\nc' > test_C_fail.txt"
+            ],
+            "args": ["-C", "test_C_fail.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_C_fail.txt"]
         }
     ]
 }

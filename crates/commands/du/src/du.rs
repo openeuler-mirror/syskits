@@ -876,7 +876,6 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     // 使用独立线程进行输出打印，以便在计算仍在进行时能打印完成的结果
     let (print_tx, rx) = mpsc::channel::<CTResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || du_stat_printer.du_print_stats(&rx));
-    let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
 
     // 跨顶层参数共享 inode 去重集合，以匹配 GNU du 在多参数下的行为。
     let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();

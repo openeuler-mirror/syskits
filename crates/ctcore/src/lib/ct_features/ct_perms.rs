@@ -347,7 +347,7 @@ impl CtChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        println!("{}", n);
+                        println!("{n}");
                     }
                     0
                 }
@@ -449,7 +449,7 @@ impl CtChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        println!("{}", n);
+                        println!("{n}");
                     }
                     0
                 }

@@ -520,7 +520,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
             println!("{}", Table::new(&options, filesystems));
             Ok(())
         }
-        Err(err) => return Err(CtSimpleError::new(1, format!("{}", err)).into()),
+        Err(err) => Err(CtSimpleError::new(1, format!("{err}"))),
     }
 }
 
@@ -566,10 +566,9 @@ fn get_filesystem(
         // 如果指定了路径，则只获取指定路径相关的文件系统信息。
         Some(paths) => {
             let filesystem_paths: Vec<_> = paths.collect();
-            let filesystem = get_named_filesystems(&filesystem_paths, options)
-                .map_err_context(|| "cannot read table of mounted file systems".into())?;
 
-            filesystem
+            get_named_filesystems(&filesystem_paths, options)
+                .map_err_context(|| "cannot read table of mounted file systems".into())?
         }
     };
     Ok(filesystem_paths)

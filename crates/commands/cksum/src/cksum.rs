@@ -228,19 +228,19 @@ where
                 div_ceil(sz, cksum_opts.output_bits),
                 line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_CRC => print!("{sum} {sz}{}", line_end),
+            CKSUM_ALGORITHM_OPTIONS_CRC => print!("{sum} {sz}{line_end}"),
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
                     print!("BLAKE2b-{} (-) = {sum}{}", length * 8, line_end);
                 } else {
-                    print!("BLAKE2b (-) = {sum}{}", line_end);
+                    print!("BLAKE2b (-) = {sum}{line_end}");
                 }
             }
             _ => {
                 // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
-                    print!("{sum}  -{}", line_end);
+                    print!("{sum}  -{line_end}");
                 } else {
                     print!(
                         "{} (-) = {sum}{}",
@@ -600,8 +600,8 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
                     }
                 },
                 CksumOutputFormat::Base64 => {
-                    let bytes = (opts.output_bits + 7) / 8;
-                    let expected_len = (bytes + 2) / 3 * 4;
+                    let bytes = opts.output_bits.div_ceil(8);
+                    let expected_len = bytes.div_ceil(3) * 4;
                     digest_str.len() == expected_len
                         && digest_str
                             .chars()

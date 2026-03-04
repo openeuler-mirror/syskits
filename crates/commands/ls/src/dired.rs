@@ -140,7 +140,7 @@ pub fn dired_print_dired_output<W: Write>(
             _ => "c",
         },
     };
-    println!("//DIRED-OPTIONS// --quoting-style={}", style_str);
+    println!("//DIRED-OPTIONS// --quoting-style={style_str}");
     Ok(())
 }
 

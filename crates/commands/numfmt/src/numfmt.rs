@@ -82,7 +82,7 @@ where
                 Ok(bytes) => {
                     let line = String::from_utf8_lossy(&bytes);
                     if idx < numfmt_configs.header {
-                        print!("{}\0", line);
+                        print!("{line}\0");
                         Ok(())
                     } else {
                         numfmt_format_and_handle_validation(&line, numfmt_configs)

@@ -97,16 +97,23 @@ fn parse_weekday_expression(
     // 星期几名称映射 (基于GNU coreutils parse-datetime.y)
     let weekdays = [
         ("sunday", Weekday::Sun),
+        ("sun", Weekday::Sun),
         ("monday", Weekday::Mon),
+        ("mon", Weekday::Mon),
         ("tuesday", Weekday::Tue),
+        ("tue", Weekday::Tue),
         ("tues", Weekday::Tue),
         ("wednesday", Weekday::Wed),
+        ("wed", Weekday::Wed),
         ("wednes", Weekday::Wed),
         ("thursday", Weekday::Thu),
+        ("thu", Weekday::Thu),
         ("thur", Weekday::Thu),
         ("thurs", Weekday::Thu),
         ("friday", Weekday::Fri),
+        ("fri", Weekday::Fri),
         ("saturday", Weekday::Sat),
+        ("sat", Weekday::Sat),
     ];
 
     // 查找星期几
@@ -131,8 +138,6 @@ fn parse_weekday_expression(
                 % 7;
             if days == 0 {
                 7 // 如果今天就是目标星期几，下一个是下周
-            } else if days == 1 {
-                7 + 1 // 如果明天是目标星期几，下一个是下周
             } else {
                 days // 如果目标星期几在本周后面几天，就是本周
             }

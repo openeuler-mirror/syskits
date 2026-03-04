@@ -385,7 +385,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 不替换 'f2'\n"
+                    "stderr": "cp: \u4e0d\u66ff\u6362 'f2'\n"
                 },
                 "verifications": [
                     {
@@ -930,7 +930,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 对 'nonexistent_file' 调用 stat 失败: 没有那个文件或目录\n"
+                    "stderr": "cp: \u5bf9 'nonexistent_file' \u8c03\u7528 stat \u5931\u8d25: \u6ca1\u6709\u90a3\u4e2a\u6587\u4ef6\u6216\u76ee\u5f55\n"
                 }
             }
         },
@@ -946,7 +946,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 目标 'f3': 没有那个文件或目录\n"
+                    "stderr": "cp: \u76ee\u6807 'f3': \u6ca1\u6709\u90a3\u4e2a\u6587\u4ef6\u6216\u76ee\u5f55\n"
                 }
             },
             "setup_commands": [
@@ -964,7 +964,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 缺少要操作的文件\n请尝试执行 \"cp --help\" 来获取更多信息。\n"
+                    "stderr": "cp: \u7f3a\u5c11\u8981\u64cd\u4f5c\u7684\u6587\u4ef6\n\u8bf7\u5c1d\u8bd5\u6267\u884c \"cp --help\" \u6765\u83b7\u53d6\u66f4\u591a\u4fe1\u606f\u3002\n"
                 }
             }
         },
@@ -978,7 +978,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 在 'f1' 后缺少要操作的目标文件\n请尝试执行 \"cp --help\" 来获取更多信息。\n"
+                    "stderr": "cp: \u5728 'f1' \u540e\u7f3a\u5c11\u8981\u64cd\u4f5c\u7684\u76ee\u6807\u6587\u4ef6\n\u8bf7\u5c1d\u8bd5\u6267\u884c \"cp --help\" \u6765\u83b7\u53d6\u66f4\u591a\u4fe1\u606f\u3002\n"
                 }
             },
             "setup_commands": [
@@ -1001,7 +1001,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 目标目录 'f3': 不是目录\n"
+                    "stderr": "cp: \u76ee\u6807\u76ee\u5f55 'f3': \u4e0d\u662f\u76ee\u5f55\n"
                 }
             },
             "setup_commands": [
@@ -1022,7 +1022,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "cp: 未指定 -r；略过目录 'd1'\n"
+                    "stderr": "cp: \u672a\u6307\u5b9a -r\uff1b\u7565\u8fc7\u76ee\u5f55 'd1'\n"
                 }
             },
             "setup_commands": [
@@ -1120,6 +1120,295 @@
             ],
             "cleanup_commands": [
                 "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Interactive over no-clobber (-n -i)",
+            "args": [
+                "-n",
+                "-i",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: \u662f\u5426\u8986\u76d6 'f2'\uff1f"
+                }
+            },
+            "setup_commands": [
+                "touch f1",
+                "touch f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "No clobber over interactive (-i -n)",
+            "args": [
+                "-i",
+                "-n",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: \u4e0d\u66ff\u6362 'f2'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "grep -q B f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "echo A > f1",
+                "echo B > f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Update (-u)",
+            "args": [
+                "-u",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "grep -q NEW f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "echo OLD > f2",
+                "echo NEW > f1",
+                "touch -d '2000-01-01' f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Update all (--update=all)",
+            "args": [
+                "--update=all",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "grep -q OLD f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "echo NEW > f2",
+                "echo OLD > f1",
+                "touch -d '2000-01-01' f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Update none (--update=none)",
+            "args": [
+                "--update=none",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "grep -q B f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "echo A > f1",
+                "echo B > f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Create sparse file (--sparse=auto)",
+            "args": [
+                "--sparse=auto",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %b f2) -lt $(stat -c %s f2)",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "dd if=/dev/zero of=f1 bs=1M count=1 2>/dev/null"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Create sparse file (--sparse=never)",
+            "args": [
+                "--sparse=never",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "dd if=/dev/zero of=f1 bs=1M count=1 2>/dev/null"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Reflink never (--reflink=never)",
+            "args": [
+                "--reflink=never",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Reflink always (--reflink=always)",
+            "args": [
+                "--reflink=always",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: \u4ece 'f1' \u514b\u9686\u5230 'f2' \u5931\u8d25: \u4e0d\u652f\u6301\u7684\u64cd\u4f5c\n"
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Backup existing file (--backup=none)",
+            "args": [
+                "--backup=none",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1",
+                "touch f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Backup existing file (--backup=simple)",
+            "args": [
+                "--backup=simple",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f f2~",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f1",
+                "touch f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2 f2~"
             ]
         }
     ]

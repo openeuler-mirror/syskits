@@ -838,6 +838,289 @@
             "cleanup_commands": [
                 "rm -f f1 f2"
             ]
+        },
+        {
+            "command": "cp",
+            "description": "Strip trailing slashes (--strip-trailing-slashes)",
+            "args": [
+                "--strip-trailing-slashes",
+                "-r",
+                "d1/",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d d2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "touch d1/f1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 d2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Create sparse file (--sparse=always)",
+            "args": [
+                "--sparse=always",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %b f2) -lt $(stat -c %s f2)",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "dd if=/dev/zero of=f1 bs=1M count=1 2>/dev/null"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Reflink auto (--reflink=auto)",
+            "args": [
+                "--reflink=auto",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Missing source file",
+            "args": [
+                "nonexistent_file",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: 对 'nonexistent_file' 调用 stat 失败: 没有那个文件或目录\n"
+                }
+            }
+        },
+        {
+            "command": "cp",
+            "description": "Multiple files to non-directory",
+            "args": [
+                "f1",
+                "f2",
+                "f3"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: 目标 'f3': 没有那个文件或目录\n"
+                }
+            },
+            "setup_commands": [
+                "touch f1 f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2 f3"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Missing operand",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: 缺少要操作的文件\n请尝试执行 \"cp --help\" 来获取更多信息。\n"
+                }
+            }
+        },
+        {
+            "command": "cp",
+            "description": "One operand",
+            "args": [
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: 在 'f1' 后缺少要操作的目标文件\n请尝试执行 \"cp --help\" 来获取更多信息。\n"
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Target -t not a directory",
+            "args": [
+                "-t",
+                "f3",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: 目标目录 'f3': 不是目录\n"
+                }
+            },
+            "setup_commands": [
+                "touch f1 f2 f3"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2 f3"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Source is directory without -r",
+            "args": [
+                "d1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "cp: 未指定 -r；略过目录 'd1'\n"
+                }
+            },
+            "setup_commands": [
+                "mkdir d1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "SELinux Context (-Z)",
+            "args": [
+                "-Z",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "SELinux Context Recursive (-Z -r)",
+            "args": [
+                "-Z",
+                "-r",
+                "d1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "touch d1/f1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 d2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "SELinux Custom Context (--context)",
+            "args": [
+                "--context=system_u:object_r:tmp_t:s0",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "SELinux Context Parameter (--context)",
+            "args": [
+                "--context",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
         }
     ]
 }

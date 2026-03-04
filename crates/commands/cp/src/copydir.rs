@@ -163,6 +163,9 @@ struct Entry {
 
     /// Whether the destination is a file.
     target_is_file: bool,
+
+    /// Depth of the direntry from the walkdir traversal root.
+    depth: usize,
 }
 
 impl Entry {
@@ -188,11 +191,13 @@ impl Entry {
 
         let local_to_target = context.target.join(descendant);
         let target_is_file = context.target.is_file();
+        let depth = direntry.depth();
         Ok(Self {
             source_absolute,
             source_relative,
             local_to_target,
             target_is_file,
+            depth,
         })
     }
 }
@@ -226,17 +231,25 @@ fn copy_direntry(
     symlinked_files: &mut HashSet<CtFileInformation>,
     preserve_hard_links: bool,
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
+    source_in_command_line: bool,
 ) -> CopyResult<()> {
     let Entry {
         source_absolute,
         source_relative,
         local_to_target,
         target_is_file,
+        depth,
     } = entry;
+
+    let dereference = if depth == 0 {
+        options.cp_dereference(source_in_command_line)
+    } else {
+        options.dereference
+    };
 
     // If the source is a symbolic link and the options tell us not to
     // dereference the link, then copy the link object itself.
-    if source_absolute.is_symlink() && !options.dereference {
+    if source_absolute.is_symlink() && !dereference {
         return copy_link(&source_absolute, &local_to_target, symlinked_files);
     }
 
@@ -411,6 +424,7 @@ pub(crate) fn copy_directory(
     for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)
         .follow_links(options.dereference)
+        .follow_root_links(options.cp_dereference(source_in_command_line))
     {
         match direntry_result {
             Ok(direntry) => {
@@ -422,6 +436,7 @@ pub(crate) fn copy_directory(
                     symlinked_files,
                     preserve_hard_links,
                     copied_files,
+                    source_in_command_line,
                 )?;
             }
             // Print an error message, but continue traversing the directory.

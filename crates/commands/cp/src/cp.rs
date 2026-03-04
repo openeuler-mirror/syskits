@@ -390,6 +390,7 @@ mod opt_flags {
     pub const TARGET_DIRECTORY: &str = "target-directory";
     pub const DEBUG: &str = "debug";
     pub const VERBOSE: &str = "verbose";
+    pub const Z: &str = "context-default";
 }
 
 #[cfg(unix)]
@@ -645,13 +646,16 @@ fn cp_args_init() -> Vec<Arg> {
             .overrides_with(opt_flags::ATTRIBUTES_ONLY)
             .help(t!("cp.clap.copy_contents"))
             .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::Z)
+            .short('Z')
+            .help("set SELinux security context of destination file to default type")
+            .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CONTEXT)
             .long(opt_flags::CONTEXT)
             .value_name("CTX")
-            .help(
-                "NotImplemented: set SELinux security context of destination file to \
-                     default type",
-            ),
+            .require_equals(true)
+            .num_args(0..=1)
+            .help("like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX"),
         // 'g' 短标志的模式参考自 advcpmv 工具
         Arg::new(opt_flags::PROGRESS_BAR)
             .long(opt_flags::PROGRESS_BAR)
@@ -887,7 +891,6 @@ impl CpOptions {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             opt_flags::ONE_FILE_SYSTEM,
-            opt_flags::CONTEXT,
             #[cfg(windows)]
             opt_flags::FORCE,
         ];

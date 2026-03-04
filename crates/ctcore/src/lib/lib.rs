@@ -15,6 +15,9 @@ pub extern crate libc;
 #[cfg(all(feature = "windows-sys", target_os = "windows"))]
 pub extern crate windows_sys;
 
+extern crate rust_i18n;
+rust_i18n::i18n!("locales", fallback = "en-US");
+
 //## 内部模块
 // 模块结构说明：
 //

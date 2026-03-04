@@ -1,0 +1,9 @@
+ctcore:
+  chown:
+    changed_ownership: "%{file} 的所有者已从 %{old} 更改为 %{new}"
+    retained_ownership: "%{file} 的所有者已保留为 %{old}"
+    failed_change: "更改 %{file} 的所有权失败：从 %{old} 到 %{new}"
+  chgrp:
+    changed_group: "%{file} 的所属组已从 %{old} 更改为 %{new}"
+    retained_group: "%{file} 的所属组已保留为 %{old}"
+    failed_change: "更改 %{file} 的所属组失败：从 %{old} 到 %{new}"

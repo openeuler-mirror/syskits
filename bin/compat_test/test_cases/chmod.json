@@ -740,6 +740,302 @@
       ],
       "requires_root": false,
       "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 多模式逗号分隔组合 (包括=)",
+      "args": [
+        "u=rw,g=r,o=",
+        "test_file_comma"
+      ],
+      "setup_commands": [
+        "touch test_file_comma"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_comma",
+            "expected_exit": 0,
+            "expected_stdout": "640\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_comma"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 符号模式大写 X (文件无执行权限时不添加)",
+      "args": [
+        "a+X",
+        "test_file_cap_x1"
+      ],
+      "setup_commands": [
+        "touch test_file_cap_x1",
+        "chmod 644 test_file_cap_x1"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_cap_x1",
+            "expected_exit": 0,
+            "expected_stdout": "644\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_cap_x1"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 符号模式大写 X (文件已有执行权限时添加)",
+      "args": [
+        "a+X",
+        "test_file_cap_x2"
+      ],
+      "setup_commands": [
+        "touch test_file_cap_x2",
+        "chmod 744 test_file_cap_x2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_cap_x2",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_cap_x2"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 符号模式大写 X (作用于目录时总是添加执行权限)",
+      "args": [
+        "a+X",
+        "test_dir_cap_x"
+      ],
+      "setup_commands": [
+        "mkdir -p test_dir_cap_x",
+        "chmod 644 test_dir_cap_x"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_dir_cap_x",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf test_dir_cap_x"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 设置 setuid, setgid, sticky bit (八进制)",
+      "args": [
+        "7755",
+        "test_file_suid"
+      ],
+      "setup_commands": [
+        "touch test_file_suid",
+        "chmod 644 test_file_suid"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_suid",
+            "expected_exit": 0,
+            "expected_stdout": "7755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_suid"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 设置 setuid, setgid, sticky bit (符号模式)",
+      "args": [
+        "u+s,g+s,+t",
+        "test_file_suid_sym"
+      ],
+      "setup_commands": [
+        "touch test_file_suid_sym",
+        "chmod 755 test_file_suid_sym"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_suid_sym",
+            "expected_exit": 0,
+            "expected_stdout": "6755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_suid_sym"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 复制权限 (u=g)",
+      "args": [
+        "u=g",
+        "test_file_copy_perm"
+      ],
+      "setup_commands": [
+        "touch test_file_copy_perm",
+        "chmod 644 test_file_copy_perm"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_copy_perm",
+            "expected_exit": 0,
+            "expected_stdout": "444\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_copy_perm"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --no-preserve-root 选项正常解析",
+      "args": [
+        "--no-preserve-root",
+        "755",
+        "test_file_no_preserve"
+      ],
+      "setup_commands": [
+        "touch test_file_no_preserve",
+        "chmod 600 test_file_no_preserve"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_no_preserve",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_no_preserve"
+      ],
+      "requires_root": false,
+      "timeout": 30
     }
   ]
 }

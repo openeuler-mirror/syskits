@@ -38,6 +38,7 @@ use crate::pager::{Pager, PagerOptions, PagerResult};
 use crate::tty::TtyInput;
 
 use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 pub mod more_options {
     pub const MORE_SILENT: &str = "silent";
@@ -123,7 +124,7 @@ fn output_file_noninteractive(file: &str, out: &mut impl Write) -> CTResult<()> 
     let path = Path::new(file);
 
     if path.is_dir() {
-        write!(out, "\n*** {file}: directory ***\n\n")?;
+        write!(out, "{}", t!("more.is_directory", file = file))?;
         return Ok(());
     }
 
@@ -220,7 +221,7 @@ fn interactive_mode_stdin(options: PagerOptions) -> CTResult<()> {
 
         // If we started from a pattern match, show the skipping message
         if options.start_pattern.is_some() && pager.current_line() > 0 {
-            writeln!(stdout, "\n...skipping")?;
+            writeln!(stdout, "\n{}", t!("more.skipping"))?;
         }
 
         // Display content from current line with squeeze logic
@@ -246,7 +247,7 @@ fn interactive_mode_stdin(options: PagerOptions) -> CTResult<()> {
 
     // If we started from a pattern match, show the skipping message
     if options.start_pattern.is_some() && pager.current_line() > 0 {
-        writeln!(stdout, "\n...skipping")?;
+        writeln!(stdout, "\n{}", t!("more.skipping"))?;
     }
 
     // Display first page

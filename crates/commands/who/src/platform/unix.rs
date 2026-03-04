@@ -14,6 +14,7 @@ use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use rust_i18n::t;
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt::Write;
@@ -208,6 +209,41 @@ fn cur_tty() -> String {
     }
 }
 
+/// Compute the display width of a string, counting CJK wide characters as 2 columns.
+fn display_width(s: &str) -> usize {
+    s.chars().map(|c| if is_wide_char(c) { 2 } else { 1 }).sum()
+}
+
+/// Check if a character is a CJK wide character (takes 2 display columns).
+fn is_wide_char(c: char) -> bool {
+    let cp = c as u32;
+    (0x4E00..=0x9FFF).contains(&cp)
+        || (0x3400..=0x4DBF).contains(&cp)
+        || (0xF900..=0xFAFF).contains(&cp)
+        || (0xFF01..=0xFF60).contains(&cp)
+        || (0xFFE0..=0xFFE6).contains(&cp)
+        || (0x20000..=0x2A6DF).contains(&cp)
+        || (0xAC00..=0xD7AF).contains(&cp)
+        || (0x2E80..=0x2EFF).contains(&cp)
+        || (0x2F00..=0x2FDF).contains(&cp)
+        || (0x3200..=0x32FF).contains(&cp)
+        || (0x3300..=0x33FF).contains(&cp)
+        || (0x3000..=0x303F).contains(&cp)
+        || (0x3040..=0x309F).contains(&cp)
+        || (0x30A0..=0x30FF).contains(&cp)
+        || (0x3100..=0x312F).contains(&cp)
+}
+
+/// Pad a string to a given display width using spaces.
+fn pad_right(s: &str, target_width: usize) -> String {
+    let w = display_width(s);
+    if w >= target_width {
+        s.to_string()
+    } else {
+        format!("{}{}", s, " ".repeat(target_width - w))
+    }
+}
+
 impl Who {
     #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> CTResult<()> {
@@ -227,7 +263,7 @@ impl Who {
                 .map(|utmpx| utmpx.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
-            println!("# users={}", users.len());
+            println!("{}={}", t!("who.output.users_count"), users.len());
         } else {
             let records = CtUtmpx::iter_all_records_from(f);
 
@@ -277,7 +313,9 @@ impl Who {
         let last_runlevel = (utmpx.pid() / 256) as u8 as char;
         let current_runlevel = (utmpx.pid() % 256) as u8 as char;
         // Creating the run-level string
-        let runlevel_line = format!("run-level {current_runlevel}");
+        // GNU format: "run-level %c" → pad label to 11 display cols then append runlevel char
+        let label = t!("who.output.run_level");
+        let runlevel_line = format!("{}{current_runlevel}", pad_right(&label, 11));
 
         // 生成有关最后运行级别的注释
         let comment = if last_runlevel == 'N' {
@@ -304,7 +342,16 @@ impl Who {
 
     #[inline]
     fn print_clockchange(&self, utmpx: &CtUtmpx) {
-        self.print_line("", ' ', "clock change", &time_string(utmpx), "", "", "", "");
+        self.print_line(
+            "",
+            ' ',
+            &t!("who.output.clock_change"),
+            &time_string(utmpx),
+            "",
+            "",
+            "",
+            "",
+        );
     }
 
     #[inline]
@@ -312,7 +359,7 @@ impl Who {
         let comment = format!("id={}", utmpx.terminal_suffix());
         let pid_str = format!("{}", utmpx.pid());
         self.print_line(
-            "LOGIN",
+            &t!("who.output.login"),
             ' ',
             &utmpx.tty_device(),
             &time_string(utmpx),
@@ -328,7 +375,13 @@ impl Who {
         let comment = format!("id={}", utmpx.terminal_suffix());
         let pid_str = format!("{}", utmpx.pid());
         let e = utmpx.exit_status();
-        let exit_str = format!("term={} exit={}", e.0, e.1);
+        let exit_str = format!(
+            "{}={} {}={}",
+            t!("who.output.term"),
+            e.0,
+            t!("who.output.exit"),
+            e.1
+        );
         self.print_line(
             "",
             ' ',
@@ -359,7 +412,16 @@ impl Who {
 
     #[inline]
     fn print_boottime(&self, utmpx: &CtUtmpx) {
-        self.print_line("", ' ', "system boot", &time_string(utmpx), "", "", "", "");
+        self.print_line(
+            "",
+            ' ',
+            &t!("who.output.system_boot"),
+            &time_string(utmpx),
+            "",
+            "",
+            "",
+            "",
+        );
     }
 
     fn print_user(&self, utmpx: &CtUtmpx) -> CTResult<()> {
@@ -436,11 +498,12 @@ impl Who {
         let mut buffer = String::with_capacity(64);
         let msg = vec![' ', state].into_iter().collect::<String>();
 
-        write!(buffer, "{user:<8}").unwrap();
+        buffer.push_str(&pad_right(user, 8));
         if self.is_include_mesg {
             buffer.push_str(&msg);
         }
-        write!(buffer, " {line:<12}").unwrap();
+        buffer.push(' ');
+        buffer.push_str(&pad_right(line, 12));
 
         // Dynamic time width based on locale (like coreutils)
         let lc_time = std::env::var("LC_TIME").unwrap_or_else(|_| {
@@ -448,25 +511,27 @@ impl Who {
                 .unwrap_or_else(|_| std::env::var("LANG").unwrap_or_else(|_| "C".to_string()))
         });
         let time_size = if lc_time == "C" || lc_time == "POSIX" {
-            // "%b %e %H:%M" width: 3 + 1 + 2 + 1 + 2 + 1 + 2 = 12
             3 + 1 + 2 + 1 + 2 + 1 + 2
         } else {
-            // "%Y-%m-%d %H:%M" width: 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 = 16
             4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2
         };
-        write!(buffer, " {time:<time_size$}").unwrap();
+        buffer.push(' ');
+        buffer.push_str(&pad_right(time, time_size));
 
         if !self.is_short_output {
             if self.is_include_idle {
-                write!(buffer, " {idle:<6}").unwrap();
+                buffer.push(' ');
+                buffer.push_str(&pad_right(idle, 6));
             }
             write!(buffer, " {pid:>10}").unwrap();
         }
 
-        write!(buffer, " {comment:<8}").unwrap();
+        buffer.push(' ');
+        buffer.push_str(&pad_right(comment, 8));
 
         if self.is_include_exit {
-            write!(buffer, " {exit:<12}").unwrap();
+            buffer.push(' ');
+            buffer.push_str(&pad_right(exit, 12));
         }
 
         println!("{}", buffer.trim_end());
@@ -475,7 +540,14 @@ impl Who {
     #[inline]
     fn print_head(&self) {
         self.print_line(
-            "NAME", ' ', "LINE", "TIME", "IDLE", "PID", "COMMENT", "EXIT",
+            &t!("who.output.heading_name"),
+            ' ',
+            &t!("who.output.heading_line"),
+            &t!("who.output.heading_time"),
+            &t!("who.output.heading_idle"),
+            &t!("who.output.heading_pid"),
+            &t!("who.output.heading_comment"),
+            &t!("who.output.heading_exit"),
         );
     }
 }

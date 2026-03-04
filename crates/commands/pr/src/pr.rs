@@ -738,9 +738,9 @@ fn parse_col_sep_for_printing(
         return sep.to_string();
     } else if let Some(sep) = arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
         return sep.to_string();
-    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
-        return "".to_string();
-    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
+    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+        || arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+    {
         return "".to_string();
     }
 
@@ -1301,7 +1301,7 @@ fn pr_write_columns(
 
     let mut balanced_lines = content_lines_per_page;
     if columns > 1 && output_opts.merge_files_print.is_none() && !across_mode {
-        let needed = (lines.len() + columns - 1) / columns;
+        let needed = lines.len().div_ceil(columns);
         if needed < balanced_lines {
             balanced_lines = needed;
         }
@@ -1322,12 +1322,10 @@ fn pr_write_columns(
                         *filled_lines
                             .get(content_lines_per_page * i + a)
                             .unwrap_or(&None)
+                    } else if a >= balanced_lines {
+                        None
                     } else {
-                        if a >= balanced_lines {
-                            None
-                        } else {
-                            lines.get(balanced_lines * i + a)
-                        }
+                        lines.get(balanced_lines * i + a)
                     }
                 })
                 .collect()
@@ -1439,12 +1437,17 @@ fn pr_get_line_for_printing(
 
     let result_line = line_width
         .map(|i| {
-            let sep_len = if (index + 1) != indexes {
-                UnicodeWidthStr::width(sep.as_str())
+            // When is_pad_columns is true, the implicit separator (tab/space) between
+            // columns takes 1 character of width, matching GNU pr's formula:
+            // chars_per_column = (chars_per_line - (columns-1) * col_sep_length) / columns
+            let effective_sep_width = if output_opts.is_pad_columns && columns > 1 && !is_string_sep
+            {
+                1 // implicit tab/space separator
             } else {
-                0
+                UnicodeWidthStr::width(output_opts.col_sep_for_printing.as_str())
             };
-            if i <= (columns - 1) * sep_len {
+
+            if i <= (columns - 1) * effective_sep_width {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Page width too narrow".to_owned(),
@@ -1454,15 +1457,6 @@ fn pr_get_line_for_printing(
             // Should dynamic tab/space padding be generated?
             let should_pad = output_opts.is_pad_columns && index + 1 < indexes;
 
-            // When is_pad_columns is true, the implicit separator (tab/space) between
-            // columns takes 1 character of width, matching GNU pr's formula:
-            // chars_per_column = (chars_per_line - (columns-1) * col_sep_length) / columns
-            let effective_sep_width = if output_opts.is_pad_columns && columns > 1 && !is_string_sep
-            {
-                1 // implicit tab/space separator
-            } else {
-                UnicodeWidthStr::width(sep.as_str())
-            };
             let min_width = i.saturating_sub((columns - 1) * effective_sep_width) / columns;
 
             if should_pad {
@@ -1597,19 +1591,17 @@ fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting:
         if c.is_control() {
             let cp = c as u32;
             if show_nonprinting {
-                result.push_str(&format!("\\{:03o}", cp));
+                result.push_str(&format!("\\{cp:03o}"));
             } else if show_control_chars {
                 if cp < 128 {
                     result.push('^');
                     result.push((cp ^ 0x40) as u8 as char);
                 } else {
-                    result.push_str(&format!("\\{:03o}", cp));
+                    result.push_str(&format!("\\{cp:03o}"));
                 }
             } else {
                 result.push(c);
             }
-        } else if !c.is_ascii() && show_nonprinting {
-            result.push(c);
         } else {
             result.push(c);
         }
@@ -1901,6 +1893,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用pr_handle函数
@@ -1946,6 +1942,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用pr_handle函数
@@ -1985,6 +1985,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用pr_handle函数
@@ -2031,6 +2035,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用pr_handle函数
@@ -2070,6 +2078,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用pr_handle函数
@@ -2105,6 +2117,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用pr_handle函数并传入不存在的文件路径
@@ -2145,6 +2161,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 尝试打开没有权限的文件，应该返回错误
@@ -2179,6 +2199,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 尝试打开目录，应该返回错误
@@ -2237,6 +2261,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2280,6 +2308,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2334,6 +2366,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2376,6 +2412,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2428,6 +2468,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2470,6 +2514,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2511,6 +2559,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用mpr_handle函数
@@ -2560,7 +2612,7 @@ mod tests {
         fn test_pr_split_lines_if_form_feed() {
             // 测试正常内容
             let content = Ok("line1\nline2\nline3".to_string());
-            let result = pr_split_lines_if_form_feed(content);
+            let result = pr_split_lines_if_form_feed(content, false);
 
             assert_eq!(result.len(), 1); // 应为1个元素，因为没有换页符，所有内容在一个元素中
             assert_eq!(
@@ -2570,7 +2622,7 @@ mod tests {
 
             // 测试包含换页符的内容
             let content = Ok("line1\nline2\u{000C}line3\nline4".to_string());
-            let result = pr_split_lines_if_form_feed(content);
+            let result = pr_split_lines_if_form_feed(content, false);
 
             assert_eq!(result.len(), 2); // 应为2个元素，换页符将内容分成两部分
             assert_eq!(result[0].line_content.as_ref().unwrap(), "line1\nline2");
@@ -2611,6 +2663,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用函数
@@ -2641,7 +2697,7 @@ mod tests {
             BufReader::new(reader).read_to_string(&mut content).unwrap();
 
             // 分割含有换页符的内容
-            let file_lines = pr_split_lines_if_form_feed(Ok(content));
+            let file_lines = pr_split_lines_if_form_feed(Ok(content), false);
 
             // 验证结果 - 根据实际实现调整期望
             assert_eq!(file_lines.len(), 2); // 换页符将内容分成两部分
@@ -2683,7 +2739,7 @@ mod tests {
         fn test_pr_split_lines_if_form_feed_with_error() {
             // 测试处理错误情况
             let error_content = Err(std::io::Error::other("测试IO错误"));
-            let result = pr_split_lines_if_form_feed(error_content);
+            let result = pr_split_lines_if_form_feed(error_content, false);
 
             // 应该返回包含错误的PrFileLine
             assert_eq!(result.len(), 1);
@@ -2695,7 +2751,7 @@ mod tests {
             // 测试包含换页符的内容
             let form_feed_content =
                 Ok("line1\nline2\u{000C}line3\u{000C}\u{000C}line4".to_string());
-            let result = pr_split_lines_if_form_feed(form_feed_content);
+            let result = pr_split_lines_if_form_feed(form_feed_content, false);
 
             // 应该正确拆分换页符
             assert_eq!(result.len(), 3);
@@ -2742,6 +2798,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_start_line_number(&output_opts);
@@ -2776,6 +2836,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_start_line_number(&output_opts);
@@ -2807,6 +2871,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_lines_to_read_for_page(&output_opts);
@@ -2835,6 +2903,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_lines_to_read_for_page(&output_opts);
@@ -2870,6 +2942,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_lines_to_read_for_page(&output_opts);
@@ -2901,6 +2977,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_columns(&output_opts);
@@ -2936,6 +3016,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_columns(&output_opts);
@@ -2949,7 +3033,7 @@ mod tests {
             let file_path = file.path().to_str().unwrap();
 
             // 获取最后修改时间
-            let result = pr_file_last_modified_time(file_path);
+            let result = pr_file_last_modified_time(file_path, get_pr_date_time_format());
 
             // 验证结果不为空
             assert!(!result.is_empty());
@@ -2980,6 +3064,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_formatted_line_number(&output_opts, 5, 0);
@@ -3014,6 +3102,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_formatted_line_number(&output_opts, 5, 0);
@@ -3048,6 +3140,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_formatted_line_number(&output_opts, 12345, 0);
@@ -3079,6 +3175,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_header_content(&output_opts, 1);
@@ -3107,11 +3207,18 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_header_content(&output_opts, 1);
             assert_eq!(result.len(), 5);
-            assert_eq!(result[2], "2023-01-01 TEST_HEADER Page 1");
+            assert_eq!(
+                result[2],
+                "2023-01-01                      TEST_HEADER                       Page 1"
+            );
         }
 
         #[test]
@@ -3139,6 +3246,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_trailer_content(&output_opts);
@@ -3167,6 +3278,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_trailer_content(&output_opts);
@@ -3195,6 +3310,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_trailer_content(&output_opts);
@@ -3259,6 +3378,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_formatted_line_number(&options, 1, 0);
@@ -3293,6 +3416,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let result = pr_get_formatted_line_number(&options, 1, 0);
@@ -3327,6 +3454,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用函数
@@ -3378,6 +3509,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用函数
@@ -3416,6 +3551,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 调用函数
@@ -3455,6 +3594,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 准备输出缓冲区
@@ -3501,6 +3644,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 准备输出缓冲区
@@ -3550,6 +3697,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 只确认函数类型的定义是正确的
@@ -3587,6 +3738,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 准备输出缓冲区
@@ -3639,6 +3794,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 准备输出缓冲区
@@ -3686,6 +3845,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 使用无效的行宽（太窄）
@@ -3734,6 +3897,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 准备输出缓冲区
@@ -3943,10 +4110,10 @@ mod tests {
             let result = pr_recreate_arguments(&args);
 
             // 验证结果 - 应该插入默认宽度
-            assert_eq!(result.len(), 4);
+            assert_eq!(result.len(), 3);
             assert_eq!(result[0], "pr");
             assert_eq!(result[1], "-n");
-            assert!(result[2] == "5" || result[2] == "file.txt");
+            assert_eq!(result[2], "file.txt");
 
             // 测试-column参数过滤
             let args = vec![
@@ -4003,7 +4170,7 @@ mod tests {
         #[test]
         fn test_parse_number_invalid_format() {
             // 测试无效的行号格式
-            let args = create_matches_with_args("-nxxx");
+            let args = create_matches_with_args("-n=xxx");
 
             let result = parse_number(&args);
 
@@ -4146,6 +4313,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
@@ -4183,6 +4354,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 测试 mpr_handle 中的错误处理逻辑
@@ -4232,6 +4407,10 @@ mod tests {
                 line_width: None,
                 show_control_chars: false,
                 show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
             };
 
             // 测试当使用明确宽度限制，并且内容长度小于限制时的填充行为
@@ -4351,17 +4530,17 @@ mod tests {
             // 测试 line 646-651 parse_column_separator 函数的功能
 
             // 使用 PR_COLUMN_STRING_SEPARATOR 参数
-            let matches = create_matches_with_args("-S ###");
+            let matches = create_matches_with_args("-S=###");
             let result = parse_column_separator(&matches);
             assert_eq!(result, "###");
 
             // 使用 PR_COLUMN_CHAR_SEPARATOR 参数
-            let matches = create_matches_with_args("-s :");
+            let matches = create_matches_with_args("-s=:");
             let result = parse_column_separator(&matches);
             assert_eq!(result, ":");
 
             // 同时指定两个参数，PR_COLUMN_STRING_SEPARATOR 优先级更高
-            let matches = create_matches_with_args("-S ### -s :");
+            let matches = create_matches_with_args("-S=### -s=:");
             let result = parse_column_separator(&matches);
             assert_eq!(result, "###");
 

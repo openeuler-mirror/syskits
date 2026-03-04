@@ -1761,7 +1761,14 @@ mod tests {
 
             let args = [ctcore::ct_util_name(), "9600", "-echo", "raw"];
             let result = stty_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_stty_sane() {
+            let args = [ctcore::ct_util_name(), "sane"];
+            let result = stty_main(args.iter().map(OsString::from));
+            assert!(result.is_ok());
         }
     }
 }

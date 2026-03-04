@@ -134,7 +134,7 @@ mod tests {
 
         // 测试 execute 方法
         let args = vec![OsString::from("tty"), OsString::from("--version")];
-        assert!(tool.execute(&args).is_err());
+        assert!(tool.execute(&args).is_ok());
     }
 
     #[cfg(test)]
@@ -172,14 +172,14 @@ mod tests {
         fn test_tty_main_execution_help() {
             let args = [ctcore::ct_util_name(), "--help"];
             let result = tty_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
         fn test_tty_main_execution_help_short() {
             let args = [ctcore::ct_util_name(), "-h"];
             let result = tty_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]

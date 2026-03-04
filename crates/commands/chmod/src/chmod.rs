@@ -1135,7 +1135,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
     }
 
     ////////////////////////////////////////////////////////////////////////

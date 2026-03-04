@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, Read, stdin};
@@ -120,8 +120,8 @@ impl TSortGraph {
     }
 
     fn init_node(&mut self, n: String) {
-        self.in_edges.entry(n.clone()).or_insert_with(BTreeSet::new);
-        self.out_edges.entry(n).or_insert_with(Vec::new);
+        self.in_edges.entry(n.clone()).or_default();
+        self.out_edges.entry(n).or_default();
     }
 
     fn add_edge(&mut self, from: String, to: String) {
@@ -164,7 +164,7 @@ impl TSortGraph {
             }
 
             while let Some(n) = queue.pop_front() {
-                println!("{}", n);
+                println!("{n}");
 
                 if let Some(succs) = self.out_edges.remove(&n) {
                     // 模拟 C 语言 successor 链表的 LIFO 行为，必须反向遍历
@@ -271,38 +271,8 @@ impl TSortGraph {
             }
 
             // 如果遍历了一整圈都没找到 cursor，说明逻辑结束 (不应该发生，除非图空了)
-            if cursor.is_none() {
-                return None;
-            }
+            cursor.as_ref()?;
         }
-    }
-
-    fn find_cycle_dfs(
-        &self,
-        curr: &String,
-        path: &mut Vec<String>,
-        visited_in_path: &mut HashSet<String>,
-        break_edge: &mut Option<(String, String)>,
-    ) -> bool {
-        path.push(curr.clone());
-        visited_in_path.insert(curr.clone());
-
-        if let Some(succs) = self.out_edges.get(curr) {
-            // 这里同样使用 LIFO (rev) 顺序，以匹配 GNU 在 detect_loop 中遍历 successor 链表的顺序
-            for next in succs.iter().rev() {
-                if visited_in_path.contains(next) {
-                    *break_edge = Some((curr.clone(), next.clone()));
-                    return true;
-                }
-                if self.find_cycle_dfs(next, path, visited_in_path, break_edge) {
-                    return true;
-                }
-            }
-        }
-
-        visited_in_path.remove(curr);
-        path.pop();
-        false
     }
 }
 

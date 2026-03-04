@@ -1,4 +1,5 @@
 du:
+  total: total
   clap:
     help: Print help information.
     all: write counts for all files, not just directories

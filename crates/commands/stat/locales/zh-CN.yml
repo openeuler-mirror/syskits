@@ -61,3 +61,25 @@ long_usage:
   - `%T`: 文件系统的类型，人类可读形式\n
 
   注意：你的 shell 可能有自己的 stat 版本，通常会覆盖此处描述的版本。请参考你 shell 的文档以获取支持选项的详细信息。"
+
+file_type:
+  regular_empty_file: "普通空文件"
+  regular_file: "普通文件"
+  directory: "目录"
+  symbolic_link: "符号链接"
+  character_special_file: "字符特殊文件"
+  block_special_file: "块特殊文件"
+  fifo: "管道"
+  socket: "套接字"
+  weird_file: "奇特文件"
+
+default_format:
+  fs_terse: "%n %i %l %t %s %S %b %f %a %c %d\n"
+  fs_normal: "  文件：\"%n\"\n    ID: %-8i 文件名长度：%-7l 类型：%T\n块大小：%-10s 基本块大小：%S\n    块：总计：%-10b 空闲：%-10f 可用：%a\nInodes: 总计：%-10c 空闲：%d\n"
+  file_terse: "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o %C\n"
+  file_part1: "  文件：%n\n  大小：%-10s\t块：%-10b IO 块大小：%-6o %F\n"
+  file_part2_dev: "设备：%Hd,%Ld\tInode: %-10i  硬链接：%-5h 设备类型：%Hr,%Lr\n"
+  file_part2_no_dev: "设备：%Hd,%Ld\tInode: %-10i  硬链接：%h\n"
+  file_part3: "权限：(%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\n"
+  file_part_context: "上下文: %C\n"
+  file_part4: "访问时间：%x\n修改时间：%y\n变更时间：%z\n创建时间：%w\n"

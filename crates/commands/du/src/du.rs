@@ -643,7 +643,7 @@ impl DuStatPrinter {
 
         // 如果启用了总结模式，打印总数。
         if self.total {
-            print!("{}\ttotal", self.du_convert_size(grand_total));
+            print!("{}\t{}", self.du_convert_size(grand_total), t!("du.total"));
             print!("{}", self.line_ending);
         }
 
@@ -896,15 +896,14 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
             }
         }
         // 检查参数提供的路径是否存在
-        if let Ok(mut stat) = DuStat::new(&path, &du_traversal_options) {
+        if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
             if let Some(inode) = stat.inode {
-                if seen_inodes.contains(&inode) {
-                    if du_traversal_options.count_links {
-                        stat.inodes += 1;
+                if !du_traversal_options.count_links {
+                    if seen_inodes.contains(&inode) {
+                        continue;
                     }
-                    continue;
+                    seen_inodes.insert(inode);
                 }
-                seen_inodes.insert(inode);
             }
 
             // 从初始路径开始计算磁盘使用情况

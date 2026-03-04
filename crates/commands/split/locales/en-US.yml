@@ -28,3 +28,4 @@ split:
     - l/K/N   output Kth of N to stdout without splitting lines/records
     - r/N     like 'l' but use round robin distribution
     - r/K/N   likewise but only output Kth of N to stdout
+  creating_file: creating file

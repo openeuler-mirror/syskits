@@ -49,6 +49,7 @@ const BASE64_ENCODINGS: &[(&str, Format, &str)] = &[
         Format::Base2Msbf,
         "bit string with most significant bit (msb) first",
     ),
+    ("base58", Format::Base58, "base58 encoding"),
     (
         "z85",
         Format::Z85,
@@ -383,6 +384,36 @@ mod test {
             }
         }
         // 删除文件
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base16_lowercase() {
+        let filename = "test_basenc_decode_base16_lowercase.txt";
+        let content = "546573742020746573745f626173655f636f6d6d6f6e5f68616e646c655f696e7075745f656e636f64655f626173653136";
+        let expected_output = "Test  test_base_common_handle_input_encode_base16";
+
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
+        }
+
+        let args = [ctcore::ct_util_name(), "-d", "--base16", filename];
+        let result = basenc_main(args.iter().map(OsString::from));
+        let mut s = String::new();
+
+        match result {
+            Err(output) => {
+                println!("Error code: {}", output.code());
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
         match base_delete_file(filename) {
             Ok(_) => println!("File '{filename}' deleted successfully."),
             Err(e) => eprintln!("Error deleting file: {e}"),
@@ -2470,6 +2501,65 @@ mod test {
         match base_delete_file(filename) {
             Ok(_) => println!("File '{filename}' deleted successfully."),
             Err(e) => eprintln!("Error deleting file: {e}"),
+        }
+    }
+
+    #[test]
+    fn test_basenc_encode_base58() {
+        let filename = "test_basenc_encode_base58.txt";
+        let content = "Test test_base_common_handle_input_encode_base58";
+        let expected_output = "46ZVcZ5fTn1as9FPhMAQVu9U5dTst58bJjDG3ayCWpbks9iJjvNRq5gQ5FeLoXKz7h";
+
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = [ctcore::ct_util_name(), "--base58", filename];
+        let result = basenc_main(args.iter().map(OsString::from));
+        let mut s = String::new();
+
+        match result {
+            Err(output) => {
+                println!("Error code: {}", output.code());
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
+        }
+        assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_decode_base58() {
+        let filename = "test_basenc_decode_base58.txt";
+        let content = "46ZVcZ5fTn1as9FPhMAQVu9U5dTst58bJjDG3ayCWpbks9iJjvNRq5gQ5FeLoXKz7h";
+        let expected_output = "Test test_base_common_handle_input_encode_base58";
+
+        match base_create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{}' created successfully.", filename),
+            Err(e) => eprintln!("Error creating file: {}", e),
+        }
+
+        let args = [ctcore::ct_util_name(), "-d", "--base58", filename];
+        let result = basenc_main(args.iter().map(OsString::from));
+        let mut s = String::new();
+
+        match result {
+            Err(output) => {
+                println!("Error code: {}", output.code());
+            }
+            Ok(output) => {
+                s = output.to_string();
+            }
+        }
+        match base_delete_file(filename) {
+            Ok(_) => println!("File '{}' deleted successfully.", filename),
+            Err(e) => eprintln!("Error deleting file: {}", e),
         }
         assert_eq!(s, expected_output);
     }

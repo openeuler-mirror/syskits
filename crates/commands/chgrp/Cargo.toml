@@ -18,6 +18,7 @@ path = "src/chgrp.rs"
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["entries", "fs", "perms"] }
 rust-i18n = { workspace = true }
+sys-locale = "0.3.1"
 [[bin]]
 name = "chgrp"
 path = "src/main.rs"

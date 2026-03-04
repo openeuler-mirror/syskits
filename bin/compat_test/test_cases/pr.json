@@ -45,7 +45,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nline1\nline2\nline3\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nline1\nline2\nline3\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -66,7 +66,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -87,7 +87,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 2 页\n\n\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 2 \u9875\n\n\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -109,7 +109,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nline\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nline\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -152,7 +152,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t    l3\nl2\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\t\t\t\t    l3\nl2\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -173,7 +173,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t    l3\nl2\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\t\t\t\t    l3\nl2\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -195,7 +195,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t    l2\nl3\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\t\t\t\t    l2\nl3\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -217,7 +217,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                                                 第 1 页\n\n\ndoc1_1\t\t\t\t    doc2_1\ndoc1_2\t\t\t\t    doc2_2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                                                 \u7b2c 1 \u9875\n\n\ndoc1_1\t\t\t\t    doc2_1\ndoc1_2\t\t\t\t    doc2_2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -239,7 +239,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\n\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\n\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -302,7 +302,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\n    1\tl1\n    2\tl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\n    1\tl1\n    2\tl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -323,7 +323,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\n  1:l1\n  2:l2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\n  1:l1\n  2:l2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -346,7 +346,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\n    5\tl1\n    6\tl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\n    5\tl1\n    6\tl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -368,7 +368,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "     \n\n     2026-02-28 14:28                       f1                        第 1 页\n\n\n     l1\n     l2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "     \n\n     2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\n     l1\n     l2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -391,7 +391,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28 f1 第 1 页\n\n\nthis seco\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28 f1 \u7b2c 1 \u9875\n\n\nthis seco\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -413,7 +413,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28 f1 第 1 页\n\n\nthis is a very \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28 f1 \u7b2c 1 \u9875\n\n\nthis is a very \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -435,7 +435,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1,l3\nl2,l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1,l3\nl2,l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -457,7 +457,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t   --l3\nl2\t\t\t\t   --l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\t\t\t\t   --l3\nl2\t\t\t\t   --l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -478,7 +478,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\f",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\nl2\n\f",
                     "stderr": ""
                 }
             },
@@ -499,7 +499,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\f",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\nl2\n\f",
                     "stderr": ""
                 }
             },
@@ -521,7 +521,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                  CUSTOM_TITLE                   第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                  CUSTOM_TITLE                   \u7b2c 1 \u9875\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -543,7 +543,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28                          f1                           第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28                          f1                           \u7b2c 1 \u9875\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -563,7 +563,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -586,7 +586,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -656,7 +656,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                                                 第 1 页\n\n\nthis is line 1 for f1\tthis is line 1 for f2\nthis is line 2 for f1\tthis is line 2 for f2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                                                 \u7b2c 1 \u9875\n\n\nthis is line 1 for f1\tthis is line 1 for f2\nthis is line 2 for f1\tthis is line 2 for f2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -681,7 +681,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "\n\n2026-02-28 14:28                                                 第 1 页\n\n\ndoc1||doc2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stdout": "\n\n2026-02-28 14:28                                                 \u7b2c 1 \u9875\n\n\ndoc1||doc2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
                     "stderr": ""
                 }
             },
@@ -732,6 +732,489 @@
             },
             "setup_commands": [
                 "echo -ne '\\x07\\x08\\x0b' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "File warning on missing file",
+            "args": [
+                "nonexistent_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pr: nonexistent_file: \u6ca1\u6709\u90a3\u4e2a\u6587\u4ef6\u6216\u76ee\u5f55\n"
+                }
+            }
+        },
+        {
+            "command": "pr",
+            "description": "No file warning (-r)",
+            "args": [
+                "-r",
+                "nonexistent_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "pr",
+            "description": "Standard Input (-)",
+            "args": [
+                "-",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                                                 \u7b2c 1 \u9875\n\n\nstdin content\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n2026-02-28 14:28                       f1                        \u7b2c 1 \u9875\n\n\nfile1 content\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo 'file1 content' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ],
+            "tstdin": "stdin content\n"
+        },
+        {
+            "command": "pr",
+            "description": "Implicit Standard Input",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                                                 \u7b2c 1 \u9875\n\n\nimplicit stdin\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "tstdin": "implicit stdin\n"
+        },
+        {
+            "command": "pr",
+            "description": "Stdin with pagination",
+            "args": [
+                "-l",
+                "20"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                                                 \u7b2c 1 \u9875\n\n\np1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n2026-02-28 14:28                                                 \u7b2c 2 \u9875\n\n\np2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "tstdin": "p1\n\fp2\n"
+        },
+        {
+            "command": "pr",
+            "description": "Empty header (-h empty string)",
+            "args": [
+                "-h",
+                "",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Default separator (-s no arg, -2)",
+            "args": [
+                "-s",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Default string separator (-S no arg, -2)",
+            "args": [
+                "-S",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Expand tabs custom width (-e4)",
+            "args": [
+                "-e4",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'a\tb\tc' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Output tabs custom width (-i4)",
+            "args": [
+                "-i4",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo 'a   b   c' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Join lines with columns (-J -2)",
+            "args": [
+                "-J",
+                "-2",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Page width with join lines no truncation (-W -J)",
+            "args": [
+                "-W",
+                "15",
+                "-J",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo 'this is a very long line that should not be truncated' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Numbered multi-column (-n -2)",
+            "args": [
+                "-n",
+                "-2",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Double space multi-column (-d -2)",
+            "args": [
+                "-d",
+                "-2",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Across with separator (-a -2 -s,)",
+            "args": [
+                "-a",
+                "-2",
+                "-s,",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Multiple files sequential",
+            "args": [
+                "-t",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo 'file1' > f1",
+                "echo 'file2' > f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Offset with width (-o 5 -w 30 -2)",
+            "args": [
+                "-o",
+                "5",
+                "-w",
+                "30",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Start page shorthand (+2)",
+            "args": [
+                "+2",
+                "-l",
+                "10",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "seq 1 30 > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Form feed multi-page (-F with multi-page)",
+            "args": [
+                "-F",
+                "-l",
+                "15",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "seq 1 20 > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "No file warning with valid file (-r)",
+            "args": [
+                "-r",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "setup_commands": [
+                "echo 'hello' > f1"
             ],
             "cleanup_commands": [
                 "rm -f f1"

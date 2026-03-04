@@ -401,6 +401,443 @@
             "cleanup_commands": [
                 "rm -f f1 f2"
             ]
+        },
+        {
+            "command": "cp",
+            "description": "Follow cmdline symlink (-H)",
+            "args": [
+                "-H",
+                "-r",
+                "l1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f d2/f1",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "touch d1/f1",
+                "ln -s d1 l1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 l1 d2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Dereference symlinks (-L) recursive",
+            "args": [
+                "-L",
+                "-r",
+                "d1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -h d2/l1",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "echo data > f1",
+                "ln -s ../f1 d1/l1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 d2 f1"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "No dereference symlinks (-P) recursive",
+            "args": [
+                "-P",
+                "-r",
+                "d1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -h d2/l1",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "echo data > f1",
+                "ln -s ../f1 d1/l1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 d2 f1"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Create hard link (-l)",
+            "args": [
+                "-l",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %i f1) = $(stat -c %i f2)",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Create soft link (-s)",
+            "args": [
+                "-s",
+                "f1",
+                "l1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -h l1",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 l1"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Preserve attributes (-p)",
+            "args": [
+                "-p",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %a f1)\" = \"$(stat -c %a f2)\"",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f1",
+                "chmod 777 f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Preserve specific attributes (--preserve=timestamps)",
+            "args": [
+                "--preserve=timestamps",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y f1)\" = \"$(stat -c %Y f2)\"",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch -d '2000-01-01 00:00:00' f1",
+                "sleep 1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "No preserve (--no-preserve=mode)",
+            "args": [
+                "--no-preserve=mode",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f1",
+                "chmod 777 f1",
+                "umask 022"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Use full source directories (--parents)",
+            "args": [
+                "--parents",
+                "d1/f1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f d2/d1/f1",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir -p d1 d2",
+                "touch d1/f1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 d2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Target directory (-t)",
+            "args": [
+                "-t",
+                "d1",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f d1/f1 -a -f d1/f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "touch f1 f2"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "No target directory (-T)",
+            "args": [
+                "-T",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Update older (--update)",
+            "args": [
+                "--update",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "grep -q NEW f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "echo OLD > f2",
+                "echo NEW > f1",
+                "touch -d '2000-01-01' f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Update older skipped (--update)",
+            "args": [
+                "--update",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "grep -q NEW f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "echo NEW > f2",
+                "echo OLD > f1",
+                "touch -d '2000-01-01' f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "One file system (-x)",
+            "args": [
+                "-x",
+                "-r",
+                "d1",
+                "d2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f d2/f1",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir d1",
+                "touch d1/f1"
+            ],
+            "cleanup_commands": [
+                "rm -rf d1 d2"
+            ]
+        },
+        {
+            "command": "cp",
+            "description": "Remove destination (--remove-destination)",
+            "args": [
+                "--remove-destination",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f f2",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f1 f2",
+                "chmod 0 f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
         }
     ]
 }

@@ -56,7 +56,13 @@ fn uptime_print_uptime(up_secs: i64) -> String {
         std::cmp::Ordering::Greater => {
             format!("up {up_days:1} days, {up_hours:2}:{up_mins:02},  ")
         }
-        _ => format!("up {up_hours:2}:{up_mins:02},  "),
+        _ => {
+            if up_hours == 0 {
+                format!("up {} min,  ", up_mins)
+            } else {
+                format!("up {:2}:{:02},  ", up_hours, up_mins)
+            }
+        },
     }
 }
 
@@ -246,14 +252,14 @@ mod tests {
         fn test_uptime_print_uptime_minutes() {
             let up_secs = 60; // 1 minute
             let result = uptime_print_uptime(up_secs);
-            assert_eq!("up  0:01,  ", result);
+            assert_eq!("up 1 min,  ", result);
         }
 
         #[test]
         fn test_uptime_print_uptime_seconds() {
             let up_secs = 10; // 10 seconds
             let result = uptime_print_uptime(up_secs);
-            assert_eq!("up  0:00,  ", result);
+            assert_eq!("up 0 min,  ", result);
         }
 
         #[test]
@@ -298,7 +304,7 @@ mod tests {
         fn test_uptime_print_uptime_zero() {
             let up_secs = 0;
             let result = uptime_print_uptime(up_secs);
-            assert_eq!("up  0:00,  ", result);
+            assert_eq!("up 0 min,  ", result);
         }
 
         // Test with negative uptime (edge case, though unrealistic)
@@ -309,7 +315,7 @@ mod tests {
             // Depending on how you want to handle negative values, the expected output may vary.
             // Assuming it's treated as zero or has a specific error message.
             // Here we assume it's treated as zero for simplicity.
-            assert_eq!("up  0:00,  ", result);
+            assert_eq!("up 0 min,  ", result);
         }
     }
 

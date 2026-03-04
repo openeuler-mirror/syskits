@@ -12,6 +12,7 @@ wc:
     max_line_length: "Print the maximum display width"
     files0_from: "Read input from the files specified by NUL-terminated names in file F"
     total: "Control when to print totals (never/auto/always/only)"
+  total_row: "total"
   errors:
     system: "System error"
     unknown: "Unknown error"

@@ -21,6 +21,7 @@ chcon [OPTION]... --reference=RFILE FILE..."
     follow_dir_sym_links: "Affect referent of symbolic links for directories"
     no_follow_sym_links: "Do not affect symbolic links"
   errors:
+    changing_context: "changing security context of %{file}"
     invalid_context: "Invalid security context {}"
     getting_context: "Error getting security context"
     too_many_symlinks: "Too many levels of symbolic links"

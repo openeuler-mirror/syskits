@@ -627,9 +627,8 @@ fn chcon_process_file(
     if result.is_ok() {
         if chcon_options.verbose {
             println!(
-                "{}: Changing security context of: {}",
-                ctcore::ct_util_name(),
-                file_path_name.quote()
+                "{}",
+                t!("chcon.errors.changing_context", file = format!("{}", file_path_name.quote()))
             );
         }
 

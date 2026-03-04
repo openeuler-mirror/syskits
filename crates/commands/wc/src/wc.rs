@@ -857,7 +857,8 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
     }
 
     if settings.total_when.is_total_row_visible(num_inputs) {
-        let title = are_stats_visible.then_some("total");
+        let total_text = t!("wc.total_row");
+        let title = are_stats_visible.then_some(total_text.as_str());
         print_stats(settings, &total_word_count, title, number_width).unwrap_or_else(|err| {
             ct_show!(err.map_err_context(|| "failed to print total".into()));
         });
@@ -937,6 +938,8 @@ mod tests {
         set_locale("zh-CN");
         let err = WcError::ZeroLengthFileName;
         assert!(err.to_string().contains("无效的零长度文件名"));
+
+        assert_eq!(rust_i18n::t!("wc.total_row"), "总计");
     }
 
     #[test]

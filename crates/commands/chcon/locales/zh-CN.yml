@@ -21,6 +21,7 @@ chcon [选项]... --reference=参考文件 文件..."
     follow_dir_sym_links: "影响目录的符号链接引用"
     no_follow_sym_links: "不影响任何符号链接"
   errors:
+    changing_context: "正在更改 %{file} 的安全上下文"
     invalid_context: "无效的安全上下文 {}"
     getting_context: "获取安全上下文时出错"
     too_many_symlinks: "符号链接层数过多"

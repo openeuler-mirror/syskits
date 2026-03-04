@@ -1,4 +1,5 @@
 tty:
+  not_a_tty: 不是一个 tty
   clap:
     tty_silent: 不打印任何内容，只返回退出状态
   usage: tty [选项]...

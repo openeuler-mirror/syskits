@@ -94,6 +94,8 @@ impl Tool for Chgrp {
 }
 
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     chown_base(
         ct_app(),
         args,

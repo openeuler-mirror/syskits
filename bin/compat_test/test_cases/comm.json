@@ -190,6 +190,292 @@
             ],
             "requires_root": false,
             "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --check-order - 明确检查顺序并正常通过",
+            "args": [
+                "--check-order",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e '1\\n2' > file1.txt",
+                "echo -e '2\\n3' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "1\n\t\t2\n\t\t3\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --check-order - 输入未排序，应报错",
+            "args": [
+                "--check-order",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e '2\n1' > file1.txt",
+                "echo -e '2\n3' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --nocheck-order - 忽略未排序输入",
+            "args": [
+                "--nocheck-order",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e '2\\n1' > file1.txt",
+                "echo -e '2\\n3' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\t\t2\n1\n\t\t3\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --output-delimiter - 自定义列分隔符",
+            "args": [
+                "--output-delimiter=||",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "a\n||||b\n||||c\n||||d\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --output-delimiter - 空字符串分隔符",
+            "args": [
+                "--output-delimiter=",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb' > file1.txt",
+                "echo -e 'b\\nc' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "a\nb\nc\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --total - 输出统计摘要",
+            "args": [
+                "--total",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\t\tb\n\t\tc\n\t\td\n1\t1\t2\t总计\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --zero-terminated - 以 NUL 分隔",
+            "args": [
+                "-z",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "printf 'a\\0b\\0c\\0' > file1.txt",
+                "printf 'b\\0c\\0d\\0' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "a\u0000\t\tb\u0000\t\tc\u0000\t\td\u0000",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: 从标准输入读取第一个文件",
+            "args": [
+                "-",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "a\n\t\tb\n\t\tc\n\t\td\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30,
+            "tstdin": "a\nb\nc\n"
+        },
+        {
+            "command": "comm",
+            "description": "comm: 从标准输入读取第二个文件",
+            "args": [
+                "file1.txt",
+                "-"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "a\n\t\tb\n\t\tc\n\t\td\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30,
+            "tstdin": "b\nc\nd\n"
         }
     ]
 }

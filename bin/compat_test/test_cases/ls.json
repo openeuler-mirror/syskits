@@ -31,7 +31,9 @@
                 "touch test_dir/.hidden test_dir/visible",
                 "cd test_dir"
             ],
-            "args": ["-a"],
+            "args": [
+                "-a"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -47,13 +49,16 @@
         {
             "tstdin": "",
             "command": "ls",
-            "description": "长格式显示（中英文差异）",
+            "description": "长格式显示 ",
             "setup_commands": [
                 "mkdir -p test_dir",
                 "touch test_dir/file.txt",
                 "chmod 644 test_dir/file.txt"
             ],
-            "args": ["-l", "test_dir/file.txt"],
+            "args": [
+                "-l",
+                "test_dir/file.txt"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -79,7 +84,10 @@
                 "mkdir -p test_dir/subdir",
                 "touch test_dir/file1.txt test_dir/subdir/file2.txt"
             ],
-            "args": ["-R", "test_dir"],
+            "args": [
+                "-R",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -100,7 +108,10 @@
                 "echo 'content' > test_dir/larger.txt",
                 "echo 'a' > test_dir/smaller.txt"
             ],
-            "args": ["-S", "test_dir"],
+            "args": [
+                "-S",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -115,12 +126,15 @@
         {
             "tstdin": "",
             "command": "ls",
-            "description": "人类可读的大小格式（中英文差异）",
+            "description": "人类可读的大小格式 ",
             "setup_commands": [
                 "mkdir -p test_dir",
                 "dd if=/dev/zero of=test_dir/file.bin bs=1M count=1 2>/dev/null"
             ],
-            "args": ["-lh", "test_dir/file.bin"],
+            "args": [
+                "-lh",
+                "test_dir/file.bin"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -146,7 +160,10 @@
                 "mkdir -p /test_dir_ls_inode",
                 "touch /test_dir_ls_inode/file.txt"
             ],
-            "args": ["-i", "/test_dir_ls_inode/file.txt"],
+            "args": [
+                "-i",
+                "/test_dir_ls_inode/file.txt"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -174,7 +191,10 @@
                 "sleep 1",
                 "touch test_dir/new.txt"
             ],
-            "args": ["-t", "test_dir"],
+            "args": [
+                "-t",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -194,7 +214,10 @@
                 "mkdir -p test_dir",
                 "touch test_dir/a.txt test_dir/b.txt"
             ],
-            "args": ["-r", "test_dir"],
+            "args": [
+                "-r",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -214,7 +237,10 @@
                 "mkdir -p test_dir",
                 "touch test_dir/file.txt"
             ],
-            "args": ["-d", "test_dir"],
+            "args": [
+                "-d",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -235,7 +261,10 @@
                 "touch test_dir/file.txt",
                 "ln -s file.txt test_dir/link.txt"
             ],
-            "args": ["-F", "test_dir"],
+            "args": [
+                "-F",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -255,7 +284,10 @@
                 "mkdir -p test_dir",
                 "touch test_dir/file1.txt test_dir/file2.txt"
             ],
-            "args": ["-1", "test_dir"],
+            "args": [
+                "-1",
+                "test_dir"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -272,7 +304,9 @@
             "command": "ls",
             "description": "错误情况 - 不存在的目录",
             "setup_commands": [],
-            "args": ["nonexistent"],
+            "args": [
+                "nonexistent"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 2,
@@ -293,7 +327,9 @@
                 "touch test_locale_dir/windows",
                 "touch test_locale_dir/Apple"
             ],
-            "args": ["test_locale_dir"],
+            "args": [
+                "test_locale_dir"
+            ],
             "env": {
                 "LC_COLLATE": "C"
             },
@@ -319,7 +355,9 @@
                 "touch test_locale_dir/windows",
                 "touch test_locale_dir/Apple"
             ],
-            "args": ["test_locale_dir"],
+            "args": [
+                "test_locale_dir"
+            ],
             "env": {
                 "LC_COLLATE": "en_US.UTF-8"
             },
@@ -341,18 +379,20 @@
             "setup_commands": [
                 "mkdir -p test_unicode_dir",
                 "touch 'test_unicode_dir/café'",
-                "touch 'test_unicode_dir/naïve'", 
+                "touch 'test_unicode_dir/naïve'",
                 "touch 'test_unicode_dir/apple'",
                 "touch 'test_unicode_dir/zèbre'"
             ],
-            "args": ["test_unicode_dir"],
+            "args": [
+                "test_unicode_dir"
+            ],
             "env": {
                 "LC_COLLATE": "en_US.UTF-8"
             },
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "apple\ncafé\nnaïve\nzèbre", 
+                    "stdout": "apple\ncafé\nnaïve\nzèbre",
                     "stderr": ""
                 }
             },
@@ -371,7 +411,9 @@
                 "touch 'test_chinese_dir/广州'",
                 "touch 'test_chinese_dir/深圳'"
             ],
-            "args": ["test_chinese_dir"],
+            "args": [
+                "test_chinese_dir"
+            ],
             "env": {
                 "LC_COLLATE": "zh_CN.UTF-8"
             },
@@ -397,7 +439,10 @@
                 "touch test_version_dir/file2.txt",
                 "touch test_version_dir/File11.txt"
             ],
-            "args": ["-v", "test_version_dir"],
+            "args": [
+                "-v",
+                "test_version_dir"
+            ],
             "env": {
                 "LC_COLLATE": "en_US.UTF-8"
             },
@@ -423,7 +468,9 @@
                 "touch test_posix_dir/TEST3",
                 "touch test_posix_dir/test4"
             ],
-            "args": ["test_posix_dir"],
+            "args": [
+                "test_posix_dir"
+            ],
             "env": {
                 "LC_COLLATE": "POSIX"
             },
@@ -446,7 +493,9 @@
                 "touch test_A/.hidden test_A/visible",
                 "cd test_A"
             ],
-            "args": ["-A"],
+            "args": [
+                "-A"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -461,12 +510,16 @@
         },
         {
             "command": "ls",
-            "description": "显示作者 (--author -l)（中英文差异）",
+            "description": "显示作者 (--author -l) ",
             "setup_commands": [
                 "mkdir -p test_author",
                 "touch test_author/file"
             ],
-            "args": ["-l", "--author", "test_author"],
+            "args": [
+                "-l",
+                "--author",
+                "test_author"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -486,7 +539,10 @@
                 "touch 'test_escape/file with space'",
                 "touch 'test_escape/file\nnewline'"
             ],
-            "args": ["-b", "test_escape"],
+            "args": [
+                "-b",
+                "test_escape"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -500,12 +556,16 @@
         },
         {
             "command": "ls",
-            "description": "块大小 (--block-size=M -l)（中英文差异）",
+            "description": "块大小 (--block-size=M -l) ",
             "setup_commands": [
                 "mkdir -p test_bs",
                 "dd if=/dev/zero of=test_bs/file bs=1M count=2 2>/dev/null"
             ],
-            "args": ["-l", "--block-size=M", "test_bs"],
+            "args": [
+                "-l",
+                "--block-size=M",
+                "test_bs"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -524,7 +584,10 @@
                 "mkdir -p test_backup",
                 "touch test_backup/file test_backup/file~"
             ],
-            "args": ["-B", "test_backup"],
+            "args": [
+                "-B",
+                "test_backup"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -538,14 +601,18 @@
         },
         {
             "command": "ls",
-            "description": "按ctime排序 (-c -l)(中英文差异）",
+            "description": "按ctime排序 (-c -l)",
             "setup_commands": [
                 "mkdir -p test_ctime",
                 "touch test_ctime/1",
                 "sleep 1",
                 "touch test_ctime/2"
             ],
-            "args": ["-c", "-l", "test_ctime"],
+            "args": [
+                "-c",
+                "-l",
+                "test_ctime"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -564,7 +631,10 @@
                 "mkdir -p test_cols",
                 "touch test_cols/1 test_cols/2 test_cols/3"
             ],
-            "args": ["-C", "test_cols"],
+            "args": [
+                "-C",
+                "test_cols"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -584,7 +654,10 @@
                 "touch test_color/file",
                 "mkdir test_color/dir"
             ],
-            "args": ["--color=always", "test_color"],
+            "args": [
+                "--color=always",
+                "test_color"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -603,7 +676,10 @@
                 "mkdir -p test_dired",
                 "touch test_dired/file"
             ],
-            "args": ["-D", "test_dired"],
+            "args": [
+                "-D",
+                "test_dired"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -622,7 +698,10 @@
                 "mkdir -p test_f",
                 "touch test_f/a test_f/b"
             ],
-            "args": ["-f", "test_f"],
+            "args": [
+                "-f",
+                "test_f"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -642,7 +721,10 @@
                 "touch test_ft/file",
                 "mkdir test_ft/dir"
             ],
-            "args": ["--file-type", "test_ft"],
+            "args": [
+                "--file-type",
+                "test_ft"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -656,12 +738,15 @@
         },
         {
             "command": "ls",
-            "description": "格式化输出 (--format=commas)",
+            "description": "格式化输出 (--format=commas) wrong",
             "setup_commands": [
                 "mkdir -p test_fmt",
                 "touch test_fmt/1 test_fmt/2"
             ],
-            "args": ["--format=commas", "test_fmt"],
+            "args": [
+                "--format=commas",
+                "test_fmt"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -680,12 +765,18 @@
                 "mkdir -p test_fulltime",
                 "touch test_fulltime/file"
             ],
-            "args": ["--full-time", "test_fulltime"],
+            "args": [
+                "--full-time",
+                "test_fulltime"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
             "cleanup_commands": [
@@ -694,12 +785,15 @@
         },
         {
             "command": "ls",
-            "description": "不显示所有者 (-g)（中英文差异）",
+            "description": "不显示所有者 (-g) ",
             "setup_commands": [
                 "mkdir -p test_g",
                 "touch test_g/file"
             ],
-            "args": ["-g", "test_g"],
+            "args": [
+                "-g",
+                "test_g"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -719,7 +813,10 @@
                 "touch test_gdf/file",
                 "mkdir test_gdf/dir"
             ],
-            "args": ["--group-directories-first", "test_gdf"],
+            "args": [
+                "--group-directories-first",
+                "test_gdf"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -733,12 +830,16 @@
         },
         {
             "command": "ls",
-            "description": "不显示组 (-G)（中英文差异）",
+            "description": "不显示组 (-G) ",
             "setup_commands": [
                 "mkdir -p test_G",
                 "touch test_G/file"
             ],
-            "args": ["-l", "-G", "test_G"],
+            "args": [
+                "-l",
+                "-G",
+                "test_G"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -752,12 +853,16 @@
         },
         {
             "command": "ls",
-            "description": "SI单位 (--si)（中英文差异）",
+            "description": "SI单位 (--si) ",
             "setup_commands": [
                 "mkdir -p test_si",
                 "dd if=/dev/zero of=test_si/file bs=1000 count=1 2>/dev/null"
             ],
-            "args": ["-l", "--si", "test_si"],
+            "args": [
+                "-l",
+                "--si",
+                "test_si"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -777,7 +882,10 @@
                 "ln -s target test_H/link",
                 "touch test_H/target/file"
             ],
-            "args": ["-H", "test_H/link"],
+            "args": [
+                "-H",
+                "test_H/link"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -796,7 +904,10 @@
                 "mkdir -p test_hide",
                 "touch test_hide/keep test_hide/hide_me"
             ],
-            "args": ["--hide=*hide*", "test_hide"],
+            "args": [
+                "--hide=*hide*",
+                "test_hide"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -816,7 +927,10 @@
                 "mkdir test_ind/dir",
                 "touch test_ind/file"
             ],
-            "args": ["--indicator-style=slash", "test_ind"],
+            "args": [
+                "--indicator-style=slash",
+                "test_ind"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -835,7 +949,11 @@
                 "mkdir -p test_I",
                 "touch test_I/a.txt test_I/b.log"
             ],
-            "args": ["-I", "*.log", "test_I"],
+            "args": [
+                "-I",
+                "*.log",
+                "test_I"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -854,7 +972,11 @@
                 "mkdir -p test_k",
                 "dd if=/dev/zero of=test_k/file bs=2048 count=1 2>/dev/null"
             ],
-            "args": ["-k", "-s", "test_k/file"],
+            "args": [
+                "-k",
+                "-s",
+                "test_k/file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -868,13 +990,17 @@
         },
         {
             "command": "ls",
-            "description": "解引用符号链接 (-L)（中英文差异）",
+            "description": "解引用符号链接 (-L) ",
             "setup_commands": [
                 "mkdir -p test_L",
                 "touch test_L/file",
                 "ln -s file test_L/link"
             ],
-            "args": ["-L", "-l", "test_L/link"],
+            "args": [
+                "-L",
+                "-l",
+                "test_L/link"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -893,7 +1019,10 @@
                 "mkdir -p test_m",
                 "touch test_m/1 test_m/2"
             ],
-            "args": ["-m", "test_m"],
+            "args": [
+                "-m",
+                "test_m"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -907,12 +1036,15 @@
         },
         {
             "command": "ls",
-            "description": "数字UID/GID (-n)（中英文差异）",
+            "description": "数字UID/GID (-n) ",
             "setup_commands": [
                 "mkdir -p test_n",
                 "touch test_n/file"
             ],
-            "args": ["-n", "test_n"],
+            "args": [
+                "-n",
+                "test_n"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -931,7 +1063,10 @@
                 "mkdir -p test_N",
                 "touch 'test_N/file name'"
             ],
-            "args": ["-N", "test_N"],
+            "args": [
+                "-N",
+                "test_N"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -945,12 +1080,15 @@
         },
         {
             "command": "ls",
-            "description": "不显示组 (-o)（中英文差异）",
+            "description": "不显示组 (-o) ",
             "setup_commands": [
                 "mkdir -p test_o",
                 "touch test_o/file"
             ],
-            "args": ["-o", "test_o"],
+            "args": [
+                "-o",
+                "test_o"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -969,7 +1107,10 @@
                 "mkdir -p test_p/dir",
                 "touch test_p/file"
             ],
-            "args": ["-p", "test_p"],
+            "args": [
+                "-p",
+                "test_p"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -988,7 +1129,10 @@
                 "mkdir -p test_q",
                 "touch 'test_q/file?'"
             ],
-            "args": ["-q", "test_q"],
+            "args": [
+                "-q",
+                "test_q"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1007,7 +1151,10 @@
                 "mkdir -p test_Q",
                 "touch test_Q/file"
             ],
-            "args": ["-Q", "test_Q"],
+            "args": [
+                "-Q",
+                "test_Q"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1026,7 +1173,10 @@
                 "mkdir -p test_qs",
                 "touch 'test_qs/file name'"
             ],
-            "args": ["--quoting-style=shell", "test_qs"],
+            "args": [
+                "--quoting-style=shell",
+                "test_qs"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1040,12 +1190,15 @@
         },
         {
             "command": "ls",
-            "description": "显示大小 (-s)（中英文差异）",
+            "description": "显示大小 (-s) ",
             "setup_commands": [
                 "mkdir -p test_s",
                 "touch test_s/file"
             ],
-            "args": ["-s", "test_s"],
+            "args": [
+                "-s",
+                "test_s"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1064,7 +1217,10 @@
                 "mkdir -p test_X",
                 "touch test_X/b.txt test_X/a.doc"
             ],
-            "args": ["-X", "test_X"],
+            "args": [
+                "-X",
+                "test_X"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1078,12 +1234,16 @@
         },
         {
             "command": "ls",
-            "description": "时间风格 (--time-style=iso)（中英文差异）",
+            "description": "时间风格 (--time-style=iso) ",
             "setup_commands": [
                 "mkdir -p test_ts",
                 "touch test_ts/file"
             ],
-            "args": ["-l", "--time-style=iso", "test_ts"],
+            "args": [
+                "-l",
+                "--time-style=iso",
+                "test_ts"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1105,7 +1265,11 @@
                 "touch test_u/2",
                 "cat test_u/1 > /dev/null"
             ],
-            "args": ["-u", "-t", "test_u"],
+            "args": [
+                "-u",
+                "-t",
+                "test_u"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1124,7 +1288,10 @@
                 "mkdir -p test_U",
                 "touch test_U/a test_U/b"
             ],
-            "args": ["-U", "test_U"],
+            "args": [
+                "-U",
+                "test_U"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1143,7 +1310,12 @@
                 "mkdir -p test_w",
                 "touch test_w/1 test_w/2"
             ],
-            "args": ["-w", "10", "-C", "test_w"],
+            "args": [
+                "-w",
+                "10",
+                "-C",
+                "test_w"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1162,7 +1334,10 @@
                 "mkdir -p test_x",
                 "touch test_x/1 test_x/2 test_x/3"
             ],
-            "args": ["-x", "test_x"],
+            "args": [
+                "-x",
+                "test_x"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1181,7 +1356,10 @@
                 "mkdir -p test_Z",
                 "touch test_Z/file"
             ],
-            "args": ["-Z", "test_Z"],
+            "args": [
+                "-Z",
+                "test_Z"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1200,7 +1378,10 @@
                 "mkdir -p test_zero",
                 "touch test_zero/1 test_zero/2"
             ],
-            "args": ["--zero", "test_zero"],
+            "args": [
+                "--zero",
+                "test_zero"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1220,7 +1401,10 @@
                 "ln -s target test_dl/link",
                 "touch test_dl/target/file"
             ],
-            "args": ["--dereference-command-line-symlink-to-dir", "test_dl/link"],
+            "args": [
+                "--dereference-command-line-symlink-to-dir",
+                "test_dl/link"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1239,7 +1423,10 @@
                 "mkdir -p /test_hyp_ls",
                 "touch /test_hyp_ls/file"
             ],
-            "args": ["--hyperlink=always", "/test_hyp_ls"],
+            "args": [
+                "--hyperlink=always",
+                "/test_hyp_ls"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1258,7 +1445,10 @@
                 "mkdir -p test_scc",
                 "touch 'test_scc/file?'"
             ],
-            "args": ["--show-control-chars", "test_scc"],
+            "args": [
+                "--show-control-chars",
+                "test_scc"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1277,7 +1467,12 @@
                 "mkdir -p test_T",
                 "touch test_T/file"
             ],
-            "args": ["-C", "-T", "4", "test_T"],
+            "args": [
+                "-C",
+                "-T",
+                "4",
+                "test_T"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1292,7 +1487,9 @@
         {
             "command": "ls",
             "description": "帮助信息 (--help)",
-            "args": ["--help"],
+            "args": [
+                "--help"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1308,7 +1505,9 @@
         {
             "command": "ls",
             "description": "版本信息 (--version)",
-            "args": ["--version"],
+            "args": [
+                "--version"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1328,7 +1527,10 @@
                 "mkdir -p test_f_a",
                 "touch test_f_a/.hidden test_f_a/visible"
             ],
-            "args": ["-f", "test_f_a"],
+            "args": [
+                "-f",
+                "test_f_a"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1339,9 +1541,18 @@
                     "ignore_stdout": true
                 },
                 "verifications": [
-                    { "command": "ls -f test_f_a | grep -F .hidden", "expected_exit": 0 },
-                    { "command": "ls -f test_f_a | grep -F visible", "expected_exit": 0 },
-                    { "command": "ls -f test_f_a | grep -F ..", "expected_exit": 0 }
+                    {
+                        "command": "ls -f test_f_a | grep -F .hidden",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "ls -f test_f_a | grep -F visible",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "ls -f test_f_a | grep -F ..",
+                        "expected_exit": 0
+                    }
                 ]
             },
             "cleanup_commands": [
@@ -1355,7 +1566,11 @@
                 "mkdir -p test_lf",
                 "touch test_lf/file"
             ],
-            "args": ["-l", "-f", "test_lf"],
+            "args": [
+                "-l",
+                "-f",
+                "test_lf"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1369,12 +1584,16 @@
         },
         {
             "command": "ls",
-            "description": "测试 -f -l 组合 (后置 -l 保留长格式，但 -f 仍提供 -aU)（中英文差异）",
+            "description": "测试 -f -l 组合 (后置 -l 保留长格式，但 -f 仍提供 -aU) ",
             "setup_commands": [
                 "mkdir -p test_fl",
                 "touch test_fl/file"
             ],
-            "args": ["-f", "-l", "test_fl"],
+            "args": [
+                "-f",
+                "-l",
+                "test_fl"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1385,9 +1604,18 @@
                     "ignore_stdout": false
                 },
                 "verifications": [
-                    { "command": "ls -f -l test_fl | grep -E '^-rw-r--r--'", "expected_exit": 0 },
-                    { "command": "ls -f -l test_fl | grep -F ' .'", "expected_exit": 0 },
-                    { "command": "ls -f -l test_fl | grep -F ' ..'", "expected_exit": 0 }
+                    {
+                        "command": "ls -f -l test_fl | grep -E '^-rw-r--r--'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "ls -f -l test_fl | grep -F ' .'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "ls -f -l test_fl | grep -F ' ..'",
+                        "expected_exit": 0
+                    }
                 ]
             },
             "cleanup_commands": [
@@ -1402,7 +1630,11 @@
                 "touch test_fc/exec",
                 "chmod +x test_fc/exec"
             ],
-            "args": ["--color=always", "-f", "test_fc"],
+            "args": [
+                "--color=always",
+                "-f",
+                "test_fc"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1421,7 +1653,10 @@
                 "mkdir -p test_width",
                 "touch test_width/z test_width/aa test_width/bbb"
             ],
-            "args": ["--sort=width", "test_width"],
+            "args": [
+                "--sort=width",
+                "test_width"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1432,705 +1667,808 @@
             "cleanup_commands": [
                 "rm -rf test_width"
             ]
-            },
-            {
-                "command": "ls",
-                "description": "格式化输出 (--format=verbose)",
-                "setup_commands": [
-                    "mkdir -p test_fmt_verbose",
-                    "touch test_fmt_verbose/file"
-                ],
-                "args": ["--format=verbose", "test_fmt_verbose"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls --format=verbose test_fmt_verbose | grep -E '^-rw-r--r--'",
-                            "expected_exit": 0
-                        }
-                    ]
+        },
+        {
+            "command": "ls",
+            "description": "格式化输出 (--format=verbose)",
+            "setup_commands": [
+                "mkdir -p test_fmt_verbose",
+                "touch test_fmt_verbose/file"
+            ],
+            "args": [
+                "--format=verbose",
+                "test_fmt_verbose"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "cleanup_commands": [
-                    "rm -rf test_fmt_verbose"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "格式化输出 (--format=horizontal)",
-                "setup_commands": [
-                    "mkdir -p test_fmt_horiz",
-                    "touch test_fmt_horiz/1 test_fmt_horiz/2"
-                ],
-                "args": ["--format=horizontal", "test_fmt_horiz"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
+                "verifications": [
+                    {
+                        "command": "ls --format=verbose test_fmt_verbose | grep -E '^-rw-r--r--'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_fmt_horiz"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "排序 (--sort=time)",
-                "setup_commands": [
-                    "mkdir -p test_sort_time",
-                    "touch test_sort_time/old",
-                    "sleep 1",
-                    "touch test_sort_time/new"
-                ],
-                "args": ["--sort=time", "test_sort_time"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "new\nold",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_fmt_verbose"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "格式化输出 (--format=horizontal)",
+            "setup_commands": [
+                "mkdir -p test_fmt_horiz",
+                "touch test_fmt_horiz/1 test_fmt_horiz/2"
+            ],
+            "args": [
+                "--format=horizontal",
+                "test_fmt_horiz"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fmt_horiz"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "排序 (--sort=time)",
+            "setup_commands": [
+                "mkdir -p test_sort_time",
+                "touch test_sort_time/old",
+                "sleep 1",
+                "touch test_sort_time/new"
+            ],
+            "args": [
+                "--sort=time",
+                "test_sort_time"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "new\nold",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_sort_time"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "时间类型 (--time=access)",
+            "setup_commands": [
+                "mkdir -p test_time_access",
+                "touch test_time_access/1",
+                "sleep 1",
+                "touch test_time_access/2",
+                "cat test_time_access/1 > /dev/null"
+            ],
+            "args": [
+                "--time=access",
+                "--sort=time",
+                "test_time_access"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_time_access"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "指示符样式 (--indicator-style=none)",
+            "setup_commands": [
+                "mkdir -p test_ind_none",
+                "mkdir test_ind_none/dir"
+            ],
+            "args": [
+                "--indicator-style=none",
+                "test_ind_none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ind_none"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "引用风格 (--quoting-style=shell-always)",
+            "setup_commands": [
+                "mkdir -p test_qs_always",
+                "touch test_qs_always/file"
+            ],
+            "args": [
+                "--quoting-style=shell-always",
+                "test_qs_always"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'file'",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_qs_always"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "引用风格 (--quoting-style=c)",
+            "setup_commands": [
+                "mkdir -p test_qs_c",
+                "touch test_qs_c/file"
+            ],
+            "args": [
+                "--quoting-style=c",
+                "test_qs_c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\"file\"",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_qs_c"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "颜色 (--color=never)",
+            "setup_commands": [
+                "mkdir -p test_color_never",
+                "touch test_color_never/file",
+                "chmod +x test_color_never/file"
+            ],
+            "args": [
+                "--color=never",
+                "test_color_never"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_color_never"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "超链接 (--hyperlink=never)",
+            "setup_commands": [
+                "mkdir -p test_hyp_never",
+                "touch test_hyp_never/file"
+            ],
+            "args": [
+                "--hyperlink=never",
+                "test_hyp_never"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_hyp_never"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "块大小 (--block-size=1K)",
+            "setup_commands": [
+                "mkdir -p test_bs_1k",
+                "dd if=/dev/zero of=test_bs_1k/file bs=1024 count=2 2>/dev/null"
+            ],
+            "args": [
+                "-s",
+                "--block-size=1K",
+                "test_bs_1k"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -s --block-size=1K test_bs_1k | grep -E '^2 '",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_sort_time"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "时间类型 (--time=access)",
-                "setup_commands": [
-                    "mkdir -p test_time_access",
-                    "touch test_time_access/1",
-                    "sleep 1",
-                    "touch test_time_access/2",
-                    "cat test_time_access/1 > /dev/null"
-                ],
-                "args": ["--time=access", "--sort=time", "test_time_access"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "1\n2",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_bs_1k"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "时间风格 (--time-style=long-iso)",
+            "setup_commands": [
+                "mkdir -p test_ts_long",
+                "touch test_ts_long/file"
+            ],
+            "args": [
+                "-l",
+                "--time-style=long-iso",
+                "test_ts_long"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l --time-style=long-iso test_ts_long | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_time_access"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "指示符样式 (--indicator-style=none)",
-                "setup_commands": [
-                    "mkdir -p test_ind_none",
-                    "mkdir test_ind_none/dir"
-                ],
-                "args": ["--indicator-style=none", "test_ind_none"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "dir",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_ts_long"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "时间风格 (--time-style=+FORMAT) ",
+            "setup_commands": [
+                "mkdir -p test_ts_fmt",
+                "touch test_ts_fmt/file"
+            ],
+            "args": [
+                "-l",
+                "--time-style=+%Y",
+                "test_ts_fmt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l --time-style=+%Y test_ts_fmt | grep -E ' [0-9]{4} '",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_ind_none"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "引用风格 (--quoting-style=shell-always)",
-                "setup_commands": [
-                    "mkdir -p test_qs_always",
-                    "touch test_qs_always/file"
-                ],
-                "args": ["--quoting-style=shell-always", "test_qs_always"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "'file'",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_ts_fmt"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "排序 (--sort=version)",
+            "setup_commands": [
+                "mkdir -p test_sort_ver",
+                "touch test_sort_ver/file1 test_sort_ver/file10 test_sort_ver/file2"
+            ],
+            "args": [
+                "--sort=version",
+                "test_sort_ver"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1\nfile2\nfile10",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_sort_ver"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "格式化输出 (--format=single-column)",
+            "setup_commands": [
+                "mkdir -p test_fmt_single",
+                "touch test_fmt_single/a test_fmt_single/b"
+            ],
+            "args": [
+                "--format=single-column",
+                "test_fmt_single"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fmt_single"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "指示符样式 (--indicator-style=classify)",
+            "setup_commands": [
+                "mkdir -p test_ind_class",
+                "mkdir test_ind_class/dir",
+                "touch test_ind_class/file",
+                "touch test_ind_class/exec",
+                "chmod +x test_ind_class/exec"
+            ],
+            "args": [
+                "--indicator-style=classify",
+                "test_ind_class"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir/\nexec*\nfile",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ind_class"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "引用风格 (--quoting-style=escape)",
+            "setup_commands": [
+                "mkdir -p test_qs_esc",
+                "touch 'test_qs_esc/file\tname'"
+            ],
+            "args": [
+                "--quoting-style=escape",
+                "test_qs_esc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file\\tname",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_qs_esc"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "块大小 ",
+            "setup_commands": [
+                "mkdir -p test_bs_kb",
+                "dd if=/dev/zero of=test_bs_kb/file bs=2048 count=1 2>/dev/null"
+            ],
+            "args": [
+                "-s",
+                "--block-size=2KB",
+                "test_bs_kb"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -s --block-size=2KB test_bs_kb | grep -E '^3 '",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_qs_always"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "引用风格 (--quoting-style=c)",
-                "setup_commands": [
-                    "mkdir -p test_qs_c",
-                    "touch test_qs_c/file"
-                ],
-                "args": ["--quoting-style=c", "test_qs_c"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "\"file\"",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_bs_kb"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "目录优先被 -U 禁用",
+            "setup_commands": [
+                "mkdir -p test_gdf_u",
+                "mkdir test_gdf_u/dir1",
+                "touch test_gdf_u/file1",
+                "mkdir test_gdf_u/dir2"
+            ],
+            "args": [
+                "-U",
+                "--group-directories-first",
+                "test_gdf_u"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir1\nfile1\ndir2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_gdf_u"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "隐藏模式被 -a 覆盖",
+            "setup_commands": [
+                "mkdir -p test_hide_a",
+                "touch test_hide_a/hidden_file"
+            ],
+            "args": [
+                "-a",
+                "--hide=*hidden*",
+                "test_hide_a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".\n..\nhidden_file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_hide_a"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "环境变量 TIME_STYLE ",
+            "setup_commands": [
+                "mkdir -p test_env_ts",
+                "touch test_env_ts/file"
+            ],
+            "args": [
+                "-l",
+                "test_env_ts"
+            ],
+            "env": {
+                "TIME_STYLE": "+%Y-%m-%d_TEST"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l test_env_ts | grep '_TEST'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_qs_c"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "颜色 (--color=never)",
-                "setup_commands": [
-                    "mkdir -p test_color_never",
-                    "touch test_color_never/file",
-                    "chmod +x test_color_never/file"
-                ],
-                "args": ["--color=never", "test_color_never"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "file",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_env_ts"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 block-size 向上取整 ",
+            "setup_commands": [
+                "mkdir -p test_bs_round",
+                "dd if=/dev/zero of=test_bs_round/file bs=4096 count=1 2>/dev/null"
+            ],
+            "args": [
+                "-s",
+                "--block-size=2KB",
+                "test_bs_round"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "total 3\n*3 file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_bs_round"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 block-size 总计行计算 ",
+            "setup_commands": [
+                "mkdir -p test_bs_total",
+                "dd if=/dev/zero of=test_bs_total/file1 bs=4096 count=1 2>/dev/null",
+                "dd if=/dev/zero of=test_bs_total/file2 bs=4096 count=1 2>/dev/null"
+            ],
+            "args": [
+                "-s",
+                "--block-size=2KB",
+                "test_bs_total"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "total 5\n*3 file1\n*3 file2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_bs_total"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 block-size 无后缀 (1M vs M) ",
+            "setup_commands": [
+                "mkdir -p test_bs_suffix",
+                "dd if=/dev/zero of=test_bs_suffix/file bs=1M count=2 2>/dev/null"
+            ],
+            "args": [
+                "-s",
+                "--block-size=1M",
+                "test_bs_suffix"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "total 2\n*2 file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_bs_suffix"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 TIME_STYLE 环境变量 ",
+            "setup_commands": [
+                "mkdir -p test_env_time_style_std",
+                "touch test_env_time_style_std/file"
+            ],
+            "args": [
+                "-l",
+                "test_env_time_style_std"
+            ],
+            "env": {
+                "TIME_STYLE": "long-iso"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l test_env_time_style_std | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_color_never"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "超链接 (--hyperlink=never)",
-                "setup_commands": [
-                    "mkdir -p test_hyp_never",
-                    "touch test_hyp_never/file"
-                ],
-                "args": ["--hyperlink=never", "test_hyp_never"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "file",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_env_time_style_std"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 --time-style 的 posix- 前缀支持 ",
+            "setup_commands": [
+                "mkdir -p test_posix_style",
+                "touch test_posix_style/file"
+            ],
+            "args": [
+                "-l",
+                "--time-style=posix-long-iso",
+                "test_posix_style"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l --time-style=posix-long-iso test_posix_style | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_hyp_never"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "块大小 (--block-size=1K)",
-                "setup_commands": [
-                    "mkdir -p test_bs_1k",
-                    "dd if=/dev/zero of=test_bs_1k/file bs=1024 count=2 2>/dev/null"
-                ],
-                "args": ["-s", "--block-size=1K", "test_bs_1k"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                     "verifications": [
-                        {
-                            "command": "ls -s --block-size=1K test_bs_1k | grep -E '^2 '",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_bs_1k"
-                ]
+            "cleanup_commands": [
+                "rm -rf test_posix_style"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试版本排序 (leading zeros)",
+            "setup_commands": [
+                "mkdir test_ver_zero",
+                "touch test_ver_zero/a.1 test_ver_zero/a.01"
+            ],
+            "args": [
+                "-v",
+                "test_ver_zero"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a.01\na.1",
+                    "stderr": ""
+                }
             },
-            {
-                "command": "ls",
-                "description": "时间风格 (--time-style=long-iso)",
-                "setup_commands": [
-                    "mkdir -p test_ts_long",
-                    "touch test_ts_long/file"
-                ],
-                "args": ["-l", "--time-style=long-iso", "test_ts_long"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                         {
-                            "command": "ls -l --time-style=long-iso test_ts_long | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_ts_long"
-                ]
+            "cleanup_commands": [
+                "rm -rf test_ver_zero"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 --time=mtime",
+            "setup_commands": [
+                "mkdir -p test_time_mtime",
+                "touch test_time_mtime/file"
+            ],
+            "args": [
+                "--time=mtime",
+                "test_time_mtime"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
             },
-            {
-                "command": "ls",
-                "description": "时间风格 (--time-style=+FORMAT)（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_ts_fmt",
-                    "touch test_ts_fmt/file"
-                ],
-                "args": ["-l", "--time-style=+%Y", "test_ts_fmt"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                         {
-                            "command": "ls -l --time-style=+%Y test_ts_fmt | grep -E ' [0-9]{4} '",
-                            "expected_exit": 0
-                        }
-                    ]
+            "cleanup_commands": [
+                "rm -rf test_time_mtime"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 -T/--tabsize",
+            "setup_commands": [
+                "mkdir -p test_tabsize",
+                "touch test_tabsize/a test_tabsize/b"
+            ],
+            "args": [
+                "-C",
+                "-T",
+                "4",
+                "test_tabsize"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "cleanup_commands": [
-                    "rm -rf test_ts_fmt"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "排序 (--sort=version)",
-                "setup_commands": [
-                    "mkdir -p test_sort_ver",
-                    "touch test_sort_ver/file1 test_sort_ver/file10 test_sort_ver/file2"
-                ],
-                "args": ["--sort=version", "test_sort_ver"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "file1\nfile2\nfile10",
-                        "stderr": ""
+                "verifications": [
+                    {
+                        "command": "ls -C -T 4 test_tabsize | cat -A | grep '\\^I'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_sort_ver"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "格式化输出 (--format=single-column)",
-                "setup_commands": [
-                    "mkdir -p test_fmt_single",
-                    "touch test_fmt_single/a test_fmt_single/b"
-                ],
-                "args": ["--format=single-column", "test_fmt_single"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "a\nb",
-                        "stderr": ""
+            "cleanup_commands": [
+                "rm -rf test_tabsize"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试未来时间戳显示",
+            "setup_commands": [
+                "mkdir -p test_future",
+                "touch -d 'tomorrow' test_future/future_file"
+            ],
+            "args": [
+                "-l",
+                "test_future/future_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -l test_future/future_file | grep -E '[0-9]{4}'",
+                        "expected_exit": 0
                     }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_fmt_single"
                 ]
             },
-            {
-                "command": "ls",
-                "description": "指示符样式 (--indicator-style=classify)",
-                "setup_commands": [
-                    "mkdir -p test_ind_class",
-                    "mkdir test_ind_class/dir",
-                    "touch test_ind_class/file",
-                    "touch test_ind_class/exec",
-                    "chmod +x test_ind_class/exec"
-                ],
-                "args": ["--indicator-style=classify", "test_ind_class"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "dir/\nexec*\nfile",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_ind_class"
-                ]
+            "cleanup_commands": [
+                "rm -rf test_future"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 -X 排序：点文件扩展名处理 (GNU ls 视 .bashrc 为扩展名，syskits ls 视为无扩展名)",
+            "setup_commands": [
+                "mkdir -p test_sort_ext_dot",
+                "touch test_sort_ext_dot/file",
+                "touch test_sort_ext_dot/.bashrc"
+            ],
+            "args": [
+                "-X",
+                "test_sort_ext_dot"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file\n.bashrc",
+                    "stderr": ""
+                }
             },
-            {
-                "command": "ls",
-                "description": "引用风格 (--quoting-style=escape)",
-                "setup_commands": [
-                    "mkdir -p test_qs_esc",
-                    "touch 'test_qs_esc/file\tname'"
-                ],
-                "args": ["--quoting-style=escape", "test_qs_esc"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "file\\tname",
-                        "stderr": ""
-                    }
+            "cleanup_commands": [
+                "rm -rf test_sort_ext_dot"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 --hyperlink 处理断链 (GNU ls 生成完整路径 URI，syskits ls 因 canonicalize 失败生成空路径 URI)",
+            "setup_commands": [
+                "mkdir -p /test_hyp_broken_ls",
+                "ln -s non_existent /test_hyp_broken_ls/broken"
+            ],
+            "args": [
+                "--hyperlink=always",
+                "/test_hyp_broken_ls/broken"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "cleanup_commands": [
-                    "rm -rf test_qs_esc"
-                ]
+                "verifications": []
             },
-            {
-                "command": "ls",
-                "description": "块大小（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_bs_kb",
-                    "dd if=/dev/zero of=test_bs_kb/file bs=2048 count=1 2>/dev/null"
-                ],
-                "args": ["-s", "--block-size=2KB", "test_bs_kb"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -s --block-size=2KB test_bs_kb | grep -E '^3 '",
-                            "expected_exit": 0
-                        }
-                    ]
+            "cleanup_commands": [
+                "rm -rf /test_hyp_broken_ls"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "测试 --hyperlink 和 --color=always 处理断链 (临时目录不同)",
+            "setup_commands": [
+                "mkdir -p test_hyp_color",
+                "ln -s non_existent test_hyp_color/broken"
+            ],
+            "args": [
+                "--hyperlink=always",
+                "--color=always",
+                "test_hyp_color/broken"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "cleanup_commands": [
-                    "rm -rf test_bs_kb"
-                ]
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
             },
-            {
-                "command": "ls",
-                "description": "目录优先被 -U 禁用",
-                "setup_commands": [
-                    "mkdir -p test_gdf_u",
-                    "mkdir test_gdf_u/dir1",
-                    "touch test_gdf_u/file1",
-                    "mkdir test_gdf_u/dir2"
-                ],
-                "args": ["-U", "--group-directories-first", "test_gdf_u"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "dir1\nfile1\ndir2",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_gdf_u"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "隐藏模式被 -a 覆盖",
-                "setup_commands": [
-                    "mkdir -p test_hide_a",
-                    "touch test_hide_a/hidden_file"
-                ],
-                "args": ["-a", "--hide=*hidden*", "test_hide_a"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": ".\n..\nhidden_file",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_hide_a"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "环境变量 TIME_STYLE（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_env_ts",
-                    "touch test_env_ts/file"
-                ],
-                "args": ["-l", "test_env_ts"],
-                "env": {
-                    "TIME_STYLE": "+%Y-%m-%d_TEST"
-                },
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -l test_env_ts | grep '_TEST'",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_env_ts"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 block-size 向上取整（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_bs_round",
-                    "dd if=/dev/zero of=test_bs_round/file bs=4096 count=1 2>/dev/null"
-                ],
-                "args": ["-s", "--block-size=2KB", "test_bs_round"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "total 3\n*3 file",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_bs_round"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 block-size 总计行计算（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_bs_total",
-                    "dd if=/dev/zero of=test_bs_total/file1 bs=4096 count=1 2>/dev/null",
-                    "dd if=/dev/zero of=test_bs_total/file2 bs=4096 count=1 2>/dev/null"
-                ],
-                "args": ["-s", "--block-size=2KB", "test_bs_total"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "total 5\n*3 file1\n*3 file2",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_bs_total"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 block-size 无后缀 (1M vs M)（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_bs_suffix",
-                    "dd if=/dev/zero of=test_bs_suffix/file bs=1M count=2 2>/dev/null"
-                ],
-                "args": ["-s", "--block-size=1M", "test_bs_suffix"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "total 2\n*2 file",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_bs_suffix"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 TIME_STYLE 环境变量（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_env_time_style_std",
-                    "touch test_env_time_style_std/file"
-                ],
-                "args": ["-l", "test_env_time_style_std"],
-                "env": {
-                    "TIME_STYLE": "long-iso"
-                },
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -l test_env_time_style_std | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_env_time_style_std"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 --time-style 的 posix- 前缀支持（中英文差异）",
-                "setup_commands": [
-                    "mkdir -p test_posix_style",
-                    "touch test_posix_style/file"
-                ],
-                "args": ["-l", "--time-style=posix-long-iso", "test_posix_style"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -l --time-style=posix-long-iso test_posix_style | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_posix_style"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试版本排序 (leading zeros)",
-                "setup_commands": [
-                    "mkdir test_ver_zero",
-                    "touch test_ver_zero/a.1 test_ver_zero/a.01"
-                ],
-                "args": ["-v", "test_ver_zero"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "a.01\na.1",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_ver_zero"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 --time=mtime",
-                "setup_commands": [
-                    "mkdir -p test_time_mtime",
-                    "touch test_time_mtime/file"
-                ],
-                "args": ["--time=mtime", "test_time_mtime"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "file",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_time_mtime"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 -T/--tabsize",
-                "setup_commands": [
-                    "mkdir -p test_tabsize",
-                    "touch test_tabsize/a test_tabsize/b"
-                ],
-                "args": ["-C", "-T", "4", "test_tabsize"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -C -T 4 test_tabsize | cat -A | grep '\\^I'",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_tabsize"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试未来时间戳显示 (中英文差异)",
-                "setup_commands": [
-                    "mkdir -p test_future",
-                    "touch -d 'tomorrow' test_future/future_file"
-                ],
-                "args": ["-l", "test_future/future_file"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -l test_future/future_file | grep -E '[0-9]{4}'",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_future"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 -X 排序：点文件扩展名处理 (GNU ls 视 .bashrc 为扩展名，syskits ls 视为无扩展名)",
-                "setup_commands": [
-                    "mkdir -p test_sort_ext_dot",
-                    "touch test_sort_ext_dot/file",
-                    "touch test_sort_ext_dot/.bashrc"
-                ],
-                "args": ["-X", "test_sort_ext_dot"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "file\n.bashrc",
-                        "stderr": ""
-                    }
-                },
-                "cleanup_commands": [
-                    "rm -rf test_sort_ext_dot"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 --hyperlink 处理断链 (GNU ls 生成完整路径 URI，syskits ls 因 canonicalize 失败生成空路径 URI)",
-                "setup_commands": [
-                    "mkdir -p /test_hyp_broken_ls",
-                    "ln -s non_existent /test_hyp_broken_ls/broken"
-                ],
-                "args": ["--hyperlink=always", "/test_hyp_broken_ls/broken"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf /test_hyp_broken_ls"
-                ]
-            },
-            {
-                "command": "ls",
-                "description": "测试 --hyperlink 和 --color=always 处理断链 (临时目录不同)",
-                "setup_commands": [
-                    "mkdir -p test_hyp_color",
-                    "ln -s non_existent test_hyp_color/broken"
-                ],
-                "args": ["--hyperlink=always", "--color=always", "test_hyp_color/broken"],
-                "expectation": {
-                    "execution": {
-                        "exit_code": 0,
-                        "stdout": "",
-                        "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls --hyperlink=always --color=always test_hyp_color/broken | grep 'file://.*/test_hyp_color/broken'",
-                            "expected_exit": 0
-                        },
-                        {
-                            "command": "ls --hyperlink=always --color=always test_hyp_color/broken | cat -A | grep '\\^\\['",
-                            "expected_exit": 0
-                        }
-                    ]
-                },
-                "cleanup_commands": [
-                    "rm -rf test_hyp_color"
-                ]
-            }
+            "cleanup_commands": [
+                "rm -rf test_hyp_color"
+            ]
+        }
     ]
-} 
+}

@@ -13,3 +13,13 @@ hashsum:
     no-names: 在输出中省略文件名（此选项不存在于GNU/Coreutils中）
   usage: hashsum [选项] [文件]...
   about: '计算和检查消息摘要。'
+  check:
+    ok: "成功"
+    failed: "失败"
+    failed_open_or_read: "打开或读取失败"
+    line_improperly_formatted: "%{count} 行的格式不正确"
+    lines_improperly_formatted: "%{count} 行的格式不正确"
+    checksum_did_not_match: "%{count} 个校验和不匹配"
+    checksums_did_not_match: "%{count} 个校验和不匹配"
+    file_could_not_be_read: "%{count} 个列出的文件无法读取"
+    files_could_not_be_read: "%{count} 个列出的文件无法读取"

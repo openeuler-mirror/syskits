@@ -245,6 +245,11 @@ fn chmod_args_init() -> Vec<Arg> {
             .long("help")
             .help(t!("chmod.clap.help"))
             .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("chmod.clap.version"))
+            .action(ArgAction::Version),
     ];
     args
 }
@@ -421,10 +426,13 @@ impl Chmoder {
         if file_perms == mode {
             if self.verbose && !self.changes {
                 println!(
-                    "mode of {} retained as {:04o} ({})",
-                    file_path.quote(),
-                    file_perms,
-                    display_permissions_unix(file_perms as mode_t, false),
+                    "{}",
+                    t!(
+                        "chmod.messages.retained",
+                        file = file_path.quote().to_string(),
+                        mode = format!("{:04o}", file_perms),
+                        str = display_permissions_unix(file_perms as mode_t, false)
+                    )
                 );
             }
             Ok(())
@@ -434,24 +442,30 @@ impl Chmoder {
             }
             if self.verbose {
                 println!(
-                    "failed to change mode of file {} from {:04o} ({}) to {:04o} ({})",
-                    file_path.quote(),
-                    file_perms,
-                    display_permissions_unix(file_perms as mode_t, false),
-                    mode,
-                    display_permissions_unix(mode as mode_t, false)
+                    "{}",
+                    t!(
+                        "chmod.messages.failed",
+                        file = file_path.quote().to_string(),
+                        mode1 = format!("{:04o}", file_perms),
+                        str1 = display_permissions_unix(file_perms as mode_t, false),
+                        mode2 = format!("{:04o}", mode),
+                        str2 = display_permissions_unix(mode as mode_t, false)
+                    )
                 );
             }
             Err(1)
         } else {
             if self.verbose || self.changes {
                 println!(
-                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
-                    file_path.quote(),
-                    file_perms,
-                    display_permissions_unix(file_perms as mode_t, false),
-                    mode,
-                    display_permissions_unix(mode as mode_t, false)
+                    "{}",
+                    t!(
+                        "chmod.messages.changed",
+                        file = file_path.quote().to_string(),
+                        mode1 = format!("{:04o}", file_perms),
+                        str1 = display_permissions_unix(file_perms as mode_t, false),
+                        mode2 = format!("{:04o}", mode),
+                        str2 = display_permissions_unix(mode as mode_t, false)
+                    )
                 );
             }
             Ok(())

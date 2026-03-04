@@ -1,5 +1,7 @@
 chmod:
   clap:
+    help: Display this help message and exit
+    version: Display version information and exit
     changes: like verbose but report only when a change is made
     quiet: suppress most error messages
     verbose: output a diagnostic for every file processed
@@ -15,3 +17,7 @@ chmod:
     Change the mode of each FILE to MODE.
     With --reference, change the mode of each FILE to that of RFILE.
   after_help: Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
+  messages:
+    retained: "mode of %{file} retained as %{mode} (%{str})"
+    failed: "failed to change mode of file %{file} from %{mode1} (%{str1}) to %{mode2} (%{str2})"
+    changed: "mode of %{file} changed from %{mode1} (%{str1}) to %{mode2} (%{str2})"

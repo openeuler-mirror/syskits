@@ -1,5 +1,7 @@
 date:
   clap:
+    help: Print or set the system date and time
+    version: Display version information
     date_opt_date: display time described by STRING, not 'now'
     date_opt_file: like --date; once for each line of DATEFILE
     date_opt_debug: annotate the parsed date, and warn about questionable usage to stderr

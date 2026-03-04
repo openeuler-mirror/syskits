@@ -255,6 +255,7 @@ fn strcoll_compare_with_locale(s1: &[u8], s2: &[u8], ignore_case: bool) -> Order
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::sync::Mutex;
 
     /// 测试用的环境变量模拟器
     fn make_env_getter(
@@ -438,8 +439,29 @@ mod tests {
         assert!(hard_locale_for_test(LcCategory::LcCollate, env_getter));
     }
 
+    static LOCALE_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn test_strcoll_compare_c_locale() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let key = "LC_ALL";
+        let original = env::var(key);
+        unsafe { env::set_var(key, "C") };
+
+        struct RestoreEnv {
+            key: &'static str,
+            val: Result<String, env::VarError>,
+        }
+        impl Drop for RestoreEnv {
+            fn drop(&mut self) {
+                match &self.val {
+                    Ok(v) => unsafe { env::set_var(self.key, v) },
+                    Err(_) => unsafe { env::remove_var(self.key) },
+                }
+            }
+        }
+        let _restore = RestoreEnv { key, val: original };
+
         // 在测试中模拟C locale环境
         // 在C locale下，应该使用字节比较
         // "Windows" < "linux" (字节比较，W=87, l=108)

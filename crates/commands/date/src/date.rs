@@ -10,10 +10,9 @@
  */
 
 extern crate rust_i18n;
-use chrono::format::StrftimeItems;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use chrono::{DateTime, Datelike, FixedOffset, Local, Offset, TimeDelta, Timelike, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Local, Offset, Timelike, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::FromIo;
@@ -103,7 +102,6 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
-    Human(TimeDelta),
     Resolution,
     Reference(PathBuf),
 }
@@ -178,7 +176,7 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     #[cfg(target_os = "linux")]
     unsafe {
-        setlocale(LC_ALL, b"\0".as_ptr() as *const c_char);
+        setlocale(LC_ALL, c"".as_ptr() as *const c_char);
     }
     // 从命令行参数中解析匹配项
     let args_match = ct_app().try_get_matches_from(args)?;
@@ -230,7 +228,7 @@ fn date_processing(
     #[cfg(target_os = "linux")]
     if matches!(date_set.format, DateFormat::Rfc5322) {
         unsafe {
-            libc::setlocale(libc::LC_TIME, b"C\0".as_ptr() as *const libc::c_char);
+            libc::setlocale(libc::LC_TIME, c"C".as_ptr() as *const libc::c_char);
         }
     }
 
@@ -266,21 +264,6 @@ fn date_processing(
                 }
                 let iter = std::iter::once(date);
                 Box::new(iter)
-            }
-            DateSource::Human(relative_time) => {
-                let current_time = DateTime::<FixedOffset>::from(Local::now());
-                match current_time.checked_add_signed(relative_time) {
-                    Some(date) => {
-                        let iter = std::iter::once(Ok(date));
-                        Box::new(iter)
-                    }
-                    None => {
-                        return Err(CtSimpleError::new(
-                            1,
-                            format!("invalid date {relative_time}"),
-                        ));
-                    }
-                }
             }
             DateSource::File(ref path) => {
                 if path.is_dir() {
@@ -342,7 +325,7 @@ fn date_processing(
                     #[cfg(target_os = "linux")]
                     {
                         let s = format_using_strftime(&date, &format_string)?;
-                        println!("{}", s);
+                        println!("{s}");
                     }
                     #[cfg(not(target_os = "linux"))]
                     {
@@ -595,14 +578,14 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
     let seconds = abs_secs % 60;
     let sign = if offset_secs < 0 { "-" } else { "+" };
 
-    let tz_colon = format!("{}{:02}:{:02}", sign, hours, minutes);
-    let tz_double_colon = format!("{}{:02}:{:02}:{:02}", sign, hours, minutes, seconds);
+    let tz_colon = format!("{sign}{hours:02}:{minutes:02}");
+    let tz_double_colon = format!("{sign}{hours:02}:{minutes:02}:{seconds:02}");
     let tz_triple_colon = if seconds == 0 && minutes == 0 {
-        format!("{}{:02}", sign, hours)
+        format!("{sign}{hours:02}")
     } else if seconds == 0 {
-        format!("{}{:02}:{:02}", sign, hours, minutes)
+        format!("{sign}{hours:02}:{minutes:02}")
     } else {
-        format!("{}{:02}:{:02}:{:02}", sign, hours, minutes, seconds)
+        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
     };
 
     // Pre-process format string to handle %-WIDTH conversion (remove width)
@@ -650,17 +633,17 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
     // Try localtime if offset matches
     unsafe {
         let mut tmp_tm: tm = mem::zeroed();
-        if localtime_r(&ts, &mut tmp_tm) != std::ptr::null_mut() {
-            if tmp_tm.tm_gmtoff as i32 == dt.offset().local_minus_utc() {
-                tm_val = tmp_tm;
-                use_tm = true;
-            }
+        if !localtime_r(&ts, &mut tmp_tm).is_null()
+            && tmp_tm.tm_gmtoff as i32 == dt.offset().local_minus_utc()
+        {
+            tm_val = tmp_tm;
+            use_tm = true;
         }
     }
 
     if !use_tm && dt.offset().local_minus_utc() == 0 {
         unsafe {
-            if gmtime_r(&ts, &mut tm_val) != std::ptr::null_mut() {
+            if !gmtime_r(&ts, &mut tm_val).is_null() {
                 use_tm = true;
             }
         }
@@ -672,7 +655,7 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
         tm_val.tm_hour = dt.hour() as i32;
         tm_val.tm_mday = dt.day() as i32;
         tm_val.tm_mon = dt.month0() as i32;
-        tm_val.tm_year = dt.year() as i32 - 1900;
+        tm_val.tm_year = dt.year() - 1900;
         tm_val.tm_wday = dt.weekday().num_days_from_sunday() as i32;
         tm_val.tm_yday = dt.ordinal0() as i32;
         tm_val.tm_isdst = -1;
@@ -726,7 +709,7 @@ fn get_clock_resolution() -> (i64, i64) {
         tv_nsec: 0,
     };
     if unsafe { clock_getres(CLOCK_REALTIME, &mut ts) } == 0 {
-        (ts.tv_sec as i64, ts.tv_nsec as i64)
+        (ts.tv_sec, ts.tv_nsec)
     } else {
         (0, 1)
     }

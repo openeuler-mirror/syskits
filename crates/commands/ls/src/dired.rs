@@ -125,7 +125,11 @@ pub fn dired_print_dired_output<W: Write>(
     }
     let style_str = match &ls_config.quoting_style {
         CtQuotingStyle::Literal { .. } => "literal",
-        CtQuotingStyle::Shell { escape, always_quote, .. } => match (escape, always_quote) {
+        CtQuotingStyle::Shell {
+            escape,
+            always_quote,
+            ..
+        } => match (escape, always_quote) {
             (false, false) => "shell",
             (false, true) => "shell-always",
             (true, false) => "shell-escape",
@@ -136,10 +140,7 @@ pub fn dired_print_dired_output<W: Write>(
             _ => "c",
         },
     };
-    println!(
-        "//DIRED-OPTIONS// --quoting-style={}",
-        style_str
-    );
+    println!("//DIRED-OPTIONS// --quoting-style={}", style_str);
     Ok(())
 }
 

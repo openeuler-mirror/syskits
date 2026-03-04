@@ -520,9 +520,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
             println!("{}", Table::new(&options, filesystems));
             Ok(())
         }
-        Err(err) => {
-            return Err(CtSimpleError::new(1, format!("{}", err)).into())
-        }
+        Err(err) => return Err(CtSimpleError::new(1, format!("{}", err)).into()),
     }
 }
 

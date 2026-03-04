@@ -29,8 +29,8 @@ use quick_error::quick_error;
 use regex::Regex;
 use std::ffi::OsString;
 use sys_locale::get_locale;
-use unicode_width::UnicodeWidthStr;
 use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthStr;
 
 const PR_TAB: char = '\t';
 const PR_LINES_PER_PAGE: usize = 66;
@@ -575,7 +575,8 @@ fn pr_build_options(
 
     let column_mode_options = parse_column_mode_options(arg_matches, args)?;
     let merge_files_print = parse_merge_files_print(arg_matches, paths);
-    let col_sep_for_printing = parse_col_sep_for_printing(arg_matches, merge_files_print, &column_mode_options);
+    let col_sep_for_printing =
+        parse_col_sep_for_printing(arg_matches, merge_files_print, &column_mode_options);
     let columns_to_print = parse_columns_to_print(merge_files_print, &column_mode_options);
 
     let is_join_lines = arg_matches.get_flag(pr_flags::PR_JOIN_LINES);
@@ -590,8 +591,8 @@ fn pr_build_options(
     let is_double_space = arg_matches.get_flag(pr_flags::PR_DOUBLE_SPACE);
     let is_merge_mode = parse_merge_mode(arg_matches)?;
 
-    let is_pad_columns = !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
-                      && !is_join_lines;
+    let is_pad_columns =
+        !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) && !is_join_lines;
 
     Ok(PrOutputOptions {
         number,
@@ -599,7 +600,10 @@ fn pr_build_options(
         is_double_space,
         content_line_separator: parse_content_line_separator(is_double_space),
         last_modified_time: {
-            let fmt = arg_matches.get_one::<String>("date-format").map(|s| s.as_str()).unwrap_or_else(|| get_pr_date_time_format());
+            let fmt = arg_matches
+                .get_one::<String>("date-format")
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| get_pr_date_time_format());
             parse_last_modified_time(fmt, paths, is_merge_mode)
         },
         start_page,
@@ -647,11 +651,13 @@ fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Option<(char, usize)>
 }
 
 fn parse_content_lines_per_page(arg_matches: &ArgMatches, page_length: usize) -> (bool, usize) {
-    let is_page_length_le_ht = page_length <= (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE);
+    let is_page_length_le_ht =
+        page_length <= (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE);
 
     let is_omit_pagination = arg_matches.get_flag("omit-pagination");
-    let is_display_header_and_trailer =
-        !is_page_length_le_ht && !arg_matches.get_flag(pr_flags::PR_OMIT_HEADER) && !is_omit_pagination;
+    let is_display_header_and_trailer = !is_page_length_le_ht
+        && !arg_matches.get_flag(pr_flags::PR_OMIT_HEADER)
+        && !is_omit_pagination;
 
     let content_lines_per_page = if is_page_length_le_ht || is_omit_pagination {
         page_length
@@ -726,7 +732,7 @@ fn parse_col_sep_for_printing(
             .map(|_k| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
             .unwrap_or_default()
     };
-    
+
     // First try the column separator explicitly
     if let Some(sep) = arg_matches.get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
         return sep.to_string();
@@ -938,7 +944,10 @@ fn parse_number(arg_matches: &ArgMatches) -> Result<Option<PrNumberingMode>, PrE
         })
         .or_else(
             || match arg_matches.contains_id(pr_flags::PR_NUMBER_LINES) {
-                true => Some(PrNumberingMode { first_number, ..PrNumberingMode::default() }),
+                true => Some(PrNumberingMode {
+                    first_number,
+                    ..PrNumberingMode::default()
+                }),
                 false => None,
             },
         ))
@@ -1418,8 +1427,8 @@ fn pr_get_line_for_printing(
 
     let display_length = UnicodeWidthStr::width(complete_line.as_str()) + (tab_count * 7);
 
-    let is_string_sep = !output_opts.col_sep_for_printing.is_empty() 
-        && output_opts.col_sep_for_printing != "\t" 
+    let is_string_sep = !output_opts.col_sep_for_printing.is_empty()
+        && output_opts.col_sep_for_printing != "\t"
         && output_opts.col_sep_for_printing != " ";
 
     let sep = if (!output_opts.is_pad_columns || is_string_sep) && (index + 1) != indexes {
@@ -1430,22 +1439,27 @@ fn pr_get_line_for_printing(
 
     let result_line = line_width
         .map(|i| {
-            let sep_len = if (index + 1) != indexes { UnicodeWidthStr::width(sep.as_str()) } else { 0 };
+            let sep_len = if (index + 1) != indexes {
+                UnicodeWidthStr::width(sep.as_str())
+            } else {
+                0
+            };
             if i <= (columns - 1) * sep_len {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Page width too narrow".to_owned(),
                 ));
             }
-            
+
             // Should dynamic tab/space padding be generated?
             let should_pad = output_opts.is_pad_columns && index + 1 < indexes;
 
             // When is_pad_columns is true, the implicit separator (tab/space) between
             // columns takes 1 character of width, matching GNU pr's formula:
             // chars_per_column = (chars_per_line - (columns-1) * col_sep_length) / columns
-            let effective_sep_width = if output_opts.is_pad_columns && columns > 1 && !is_string_sep {
-                1  // implicit tab/space separator
+            let effective_sep_width = if output_opts.is_pad_columns && columns > 1 && !is_string_sep
+            {
+                1 // implicit tab/space separator
             } else {
                 UnicodeWidthStr::width(sep.as_str())
             };
@@ -1454,11 +1468,15 @@ fn pr_get_line_for_printing(
             if should_pad {
                 // For implicit separators (default tab/space), pad includes +1 for separator.
                 // For explicit string separators (-S), the separator is appended via `sep`, so no +1.
-                let pad_target = if is_string_sep { min_width } else { min_width + 1 };
+                let pad_target = if is_string_sep {
+                    min_width
+                } else {
+                    min_width + 1
+                };
                 if display_length < pad_target {
                     let mut extended_line = complete_line.clone();
                     let mut current_len = display_length;
-                    
+
                     while (current_len / 8 + 1) * 8 <= pad_target {
                         extended_line.push('\t');
                         current_len = (current_len / 8 + 1) * 8;
@@ -1482,11 +1500,11 @@ fn pr_get_line_for_printing(
         .unwrap_or_else(|| Ok(complete_line.clone()));
 
     let mut final_out = result_line.map(|line| format!("{offset_spaces}{line}{sep}"))?;
-    
+
     if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
         final_out = replace_spaces_with_tabs(&final_out, tab_ch, tab_width);
     }
-    
+
     Ok(final_out)
 }
 
@@ -1516,7 +1534,7 @@ fn replace_spaces_with_tabs(s: &str, tab_char: char, tab_width: usize) -> String
     let mut res = String::new();
     let mut current_col = 0;
     let mut space_count = 0;
-    
+
     for c in s.chars() {
         if c == ' ' {
             space_count += 1;
@@ -1609,16 +1627,16 @@ fn pr_header_content(output_opts: &PrOutputOptions, page: usize) -> Vec<String> 
         let page_width = UnicodeWidthStr::width(page_text.as_str());
 
         let chars_per_line = output_opts.line_width.unwrap_or(output_opts.page_width);
-        
+
         let header_width_available = chars_per_line
             .saturating_sub(date_width)
             .saturating_sub(file_width);
-            
+
         let available_width = header_width_available.saturating_sub(page_width);
-        
+
         let lhs_spaces = available_width / 2;
         let rhs_spaces = available_width - lhs_spaces;
-        
+
         let first_line = format!(
             "{}{}{:lhs$}{}{:rhs$}{}",
             output_opts.offset_spaces,

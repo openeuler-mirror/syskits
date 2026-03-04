@@ -1614,9 +1614,7 @@ fn sort_by<'a>(
 }
 
 fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
-    if !settings.is_dictionary_order
-        && !settings.is_ignore_non_printing
-        && !settings.is_ignore_case
+    if !settings.is_dictionary_order && !settings.is_ignore_non_printing && !settings.is_ignore_case
     {
         return strcoll_compare(a.as_bytes(), b.as_bytes(), false);
     }
@@ -1688,8 +1686,7 @@ fn sort_compare_by<'a>(
         let cmp: Ordering = match settings.mode {
             SortMode::SortRandom => {
                 // check if the two strings are equal
-                if sort_default_cmp(a_str, b_str, settings) == Ordering::Equal
-                {
+                if sort_default_cmp(a_str, b_str, settings) == Ordering::Equal {
                     Ordering::Equal
                 } else {
                     // Only if they are not equal compare by the hash

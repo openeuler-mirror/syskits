@@ -1,11 +1,15 @@
 comm:
   clap:
+    help: display this help and exit
+    version: show version information and exit
     column_1: suppress column 1 (lines unique to FILE1)
     column_2: suppress column 2 (lines unique to FILE2)
     column_3: suppress column 3 (lines that appear in both files)
     delimiter: separate columns with STR
     zero_terminated: line delimiter is NUL, not newline
     total: output a summary
+    check_order: check that the input is correctly sorted, even if all input lines are pairable
+    nocheck_order: do not check that the input is correctly sorted
   usage: comm [OPTION]... FILE1 FILE2
   about: |-
     Compare two sorted files line by line.
@@ -15,3 +19,8 @@ comm:
     With no options, produce three-column output. Column one contains
     lines unique to FILE1, column two contains lines unique to FILE2,
     and column three contains lines common to both files.
+  messages:
+    total: total
+    both_stdin: both files cannot be standard input
+    not_sorted: file %{file_num} is not in sorted order
+    input_not_sorted: input is not in sorted order

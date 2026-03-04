@@ -14,7 +14,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -24,7 +24,9 @@
             "command": "who",
             "description": "-a 参数测试 - 显示所有信息",
             "setup_commands": [],
-            "args": ["-a"],
+            "args": [
+                "-a"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -33,7 +35,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -43,7 +45,9 @@
             "command": "who",
             "description": "-b 参数测试 - 显示系统启动时间",
             "setup_commands": [],
-            "args": ["-b"],
+            "args": [
+                "-b"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -52,7 +56,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -62,7 +66,9 @@
             "command": "who",
             "description": "-d 参数测试 - 显示死进程",
             "setup_commands": [],
-            "args": ["-d"],
+            "args": [
+                "-d"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -71,7 +77,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -81,7 +87,9 @@
             "command": "who",
             "description": "-H 参数测试 - 显示列标题",
             "setup_commands": [],
-            "args": ["-H"],
+            "args": [
+                "-H"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -90,7 +98,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -100,7 +108,9 @@
             "command": "who",
             "description": "-l 参数测试 - 显示系统登录进程",
             "setup_commands": [],
-            "args": ["-l"],
+            "args": [
+                "-l"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -116,7 +126,9 @@
             "command": "who",
             "description": "--lookup 参数测试 - DNS规范化主机名",
             "setup_commands": [],
-            "args": ["--lookup"],
+            "args": [
+                "--lookup"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -125,7 +137,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -135,7 +147,9 @@
             "command": "who",
             "description": "-m 参数测试 - 只显示stdin相关信息",
             "setup_commands": [],
-            "args": ["-m"],
+            "args": [
+                "-m"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -151,7 +165,9 @@
             "command": "who",
             "description": "-p 参数测试 - 显示init启动的活动进程",
             "setup_commands": [],
-            "args": ["-p"],
+            "args": [
+                "-p"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -167,7 +183,9 @@
             "command": "who",
             "description": "-q 参数测试 - 显示登录名和用户数",
             "setup_commands": [],
-            "args": ["-q"],
+            "args": [
+                "-q"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -176,7 +194,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -186,7 +204,9 @@
             "command": "who",
             "description": "-r 参数测试 - 显示当前运行级别",
             "setup_commands": [],
-            "args": ["-r"],
+            "args": [
+                "-r"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -195,7 +215,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -205,7 +225,9 @@
             "command": "who",
             "description": "-s 参数测试 - 显示名称、行和时间",
             "setup_commands": [],
-            "args": ["-s"],
+            "args": [
+                "-s"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -214,7 +236,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -224,7 +246,9 @@
             "command": "who",
             "description": "-t 参数测试 - 显示最后系统时钟更改",
             "setup_commands": [],
-            "args": ["-t"],
+            "args": [
+                "-t"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -240,7 +264,9 @@
             "command": "who",
             "description": "-T 参数测试 - 显示用户消息状态",
             "setup_commands": [],
-            "args": ["-T"],
+            "args": [
+                "-T"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -249,7 +275,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -259,7 +285,9 @@
             "command": "who",
             "description": "-u 参数测试 - 列出已登录用户",
             "setup_commands": [],
-            "args": ["-u"],
+            "args": [
+                "-u"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -268,7 +296,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -278,7 +306,9 @@
             "command": "who",
             "description": "指定文件测试 - /var/run/utmp",
             "setup_commands": [],
-            "args": ["/var/run/utmp"],
+            "args": [
+                "/var/run/utmp"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -287,7 +317,7 @@
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
             "cleanup_commands": []
@@ -297,7 +327,10 @@
             "command": "who",
             "description": "am i 测试",
             "setup_commands": [],
-            "args": ["am", "i"],
+            "args": [
+                "am",
+                "i"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -312,7 +345,9 @@
             "tstdin": "",
             "command": "who",
             "description": "LC_TIME=C locale 测试 - 英文月份格式",
-            "setup_commands": ["export LC_TIME=C"],
+            "setup_commands": [
+                "export LC_TIME=C"
+            ],
             "args": [],
             "expectation": {
                 "execution": {
@@ -327,16 +362,20 @@
                     }
                 ],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
-            "cleanup_commands": ["unset LC_TIME"]
+            "cleanup_commands": [
+                "unset LC_TIME"
+            ]
         },
         {
             "tstdin": "",
             "command": "who",
             "description": "LC_TIME=en_US.UTF-8 locale 测试 - ISO日期格式",
-            "setup_commands": ["export LC_TIME=en_US.UTF-8"],
+            "setup_commands": [
+                "export LC_TIME=en_US.UTF-8"
+            ],
             "args": [],
             "expectation": {
                 "execution": {
@@ -351,16 +390,20 @@
                     }
                 ],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
-            "cleanup_commands": ["unset LC_TIME"]
+            "cleanup_commands": [
+                "unset LC_TIME"
+            ]
         },
         {
             "tstdin": "",
             "command": "who",
             "description": "LC_TIME=zh_CN.UTF-8 locale 测试 - ISO日期格式",
-            "setup_commands": ["export LC_TIME=zh_CN.UTF-8"],
+            "setup_commands": [
+                "export LC_TIME=zh_CN.UTF-8"
+            ],
             "args": [],
             "expectation": {
                 "execution": {
@@ -375,16 +418,20 @@
                     }
                 ],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
-            "cleanup_commands": ["unset LC_TIME"]
+            "cleanup_commands": [
+                "unset LC_TIME"
+            ]
         },
         {
             "tstdin": "",
             "command": "who",
             "description": "LC_ALL=C locale 测试 - 英文月份格式",
-            "setup_commands": ["export LC_ALL=C"],
+            "setup_commands": [
+                "export LC_ALL=C"
+            ],
             "args": [],
             "expectation": {
                 "execution": {
@@ -399,16 +446,20 @@
                     }
                 ],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
-            "cleanup_commands": ["unset LC_ALL"]
+            "cleanup_commands": [
+                "unset LC_ALL"
+            ]
         },
         {
             "tstdin": "",
             "command": "who",
             "description": "LC_TIME=POSIX locale 测试 - 英文月份格式",
-            "setup_commands": ["export LC_TIME=POSIX"],
+            "setup_commands": [
+                "export LC_TIME=POSIX"
+            ],
             "args": [],
             "expectation": {
                 "execution": {
@@ -423,10 +474,12 @@
                     }
                 ],
                 "ignore_fields": {
-                    "ignore_stdout": true
+                    "ignore_stdout": false
                 }
             },
-            "cleanup_commands": ["unset LC_TIME"]
+            "cleanup_commands": [
+                "unset LC_TIME"
+            ]
         }
     ]
-} 
+}

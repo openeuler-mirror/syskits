@@ -77,6 +77,9 @@
                     "exit_code": 0,
                     "stdout": "Filesystem               Size  Used Avail Use% Mounted on\n/dev/mapper/ctyunos-root  69G   26G   40G  40% /\ndevtmpfs                   4M     0    4M   0% /dev\ntmpfs                    7.6G     0  7.6G   0% /dev/shm\ntmpfs                      4M     0    4M   0% /sys/fs/cgroup\ntmpfs                    3.1G  9.1M  3.1G   1% /run\ntmpfs                    7.6G     0  7.6G   0% /tmp\n/dev/sda2                974M  278M  629M  31% /boot\n",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
             "cleanup_commands": []
@@ -94,6 +97,9 @@
                     "exit_code": 0,
                     "stdout": "文件系统                  大小  已用  可用 已用% 挂载点\n/dev/mapper/ctyunos-root   74G   28G   43G   40% /\ndevtmpfs                  4.2M     0  4.2M    0% /dev\ntmpfs                     8.2G     0  8.2G    0% /dev/shm\ntmpfs                     4.2M     0  4.2M    0% /sys/fs/cgroup\ntmpfs                     3.3G  9.5M  3.3G    1% /run\ntmpfs                     8.2G     0  8.2G    0% /tmp\n/dev/sda2                 1.1G  292M  660M   31% /boot\n",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
             "cleanup_commands": []

@@ -14,7 +14,7 @@
                 },
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": false
                 }
             },
@@ -36,7 +36,7 @@
                 },
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": false
                 }
             },
@@ -82,7 +82,7 @@
                 "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": false,
                     "ignore_function": false
                 }

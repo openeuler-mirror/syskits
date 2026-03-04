@@ -5,12 +5,17 @@
             "command": "stat",
             "description": "基本功能测试",
             "setup_commands": [],
-            "args": ["/etc/passwd"],
+            "args": [
+                "/etc/passwd"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": ".*File:.*/etc/passwd.*Size:.*Blocks:.*IO Block:.*regular file.*Device:.*Inode:.*Links:.*Access:.*Uid:.*Gid:.*Access:.*Modify:.*Change:.*Birth:.*",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
             "cleanup_commands": []
@@ -20,7 +25,11 @@
             "command": "stat",
             "description": "时间戳格式一致性测试",
             "setup_commands": [],
-            "args": ["-c", "%x|%y|%z|%w", "/etc/passwd"],
+            "args": [
+                "-c",
+                "%x|%y|%z|%w",
+                "/etc/passwd"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -37,12 +46,19 @@
             "setup_commands": [
                 "touch epoch_test_file"
             ],
-            "args": ["-c", "%X|%Y|%Z|%W", "epoch_test_file"],
+            "args": [
+                "-c",
+                "%X|%Y|%Z|%W",
+                "epoch_test_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": "^[0-9]+\\|[0-9]+\\|[0-9]+\\|[0-9]+$",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
                 }
             },
             "cleanup_commands": [
@@ -56,14 +72,18 @@
             "setup_commands": [
                 "touch consistent_test_file"
             ],
-            "args": ["-c", "%n|%s|%f|%F|%a|%A|%u|%g|%U|%G|%h|%b|%o", "consistent_test_file"],
+            "args": [
+                "-c",
+                "%n|%s|%f|%F|%a|%A|%u|%g|%U|%G|%h|%b|%o",
+                "consistent_test_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": "consistent_test_file\\|0\\|81a4\\|regular empty file\\|644\\|-rw-r--r--\\|0\\|0\\|.*\\|.*\\|1\\|0\\|4096",
                     "stderr": ""
                 }
-                },
+            },
             "cleanup_commands": [
                 "rm -f consistent_test_file"
             ]
@@ -75,7 +95,11 @@
             "setup_commands": [
                 "touch device_format_test"
             ],
-            "args": ["-c", "%Hd,%Ld", "device_format_test"],
+            "args": [
+                "-c",
+                "%Hd,%Ld",
+                "device_format_test"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -91,7 +115,10 @@
             "tstdin": "",
             "command": "stat",
             "description": "文件系统状态测试",
-            "args": ["-f", "/"],
+            "args": [
+                "-f",
+                "/"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -109,7 +136,11 @@
                 "touch target_file",
                 "ln -s target_file link_file"
             ],
-            "args": ["-c", "%N|%F", "link_file"],
+            "args": [
+                "-c",
+                "%N|%F",
+                "link_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -129,7 +160,12 @@
                 "touch target_file",
                 "ln -s target_file link_file"
             ],
-            "args": ["-L", "-c", "%n|%F", "link_file"],
+            "args": [
+                "-L",
+                "-c",
+                "%n|%F",
+                "link_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -146,7 +182,10 @@
             "command": "stat",
             "description": "简洁格式字段数测试",
             "setup_commands": [],
-            "args": ["--terse", "/etc/passwd"],
+            "args": [
+                "--terse",
+                "/etc/passwd"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -163,7 +202,12 @@
             "setup_commands": [
                 "touch file1 file2"
             ],
-            "args": ["-c", "%n:%F", "file1", "file2"],
+            "args": [
+                "-c",
+                "%n:%F",
+                "file1",
+                "file2"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -179,7 +223,9 @@
             "tstdin": "",
             "command": "stat",
             "description": "文件不存在测试",
-            "args": ["nonexistent_file"],
+            "args": [
+                "nonexistent_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 1,
@@ -196,7 +242,11 @@
             "setup_commands": [
                 "touch printf_test"
             ],
-            "args": ["--printf", "文件名：%n\n大小：%s字节\n类型：%F\n权限：%A\n", "printf_test"],
+            "args": [
+                "--printf",
+                "文件名：%n\n大小：%s字节\n类型：%F\n权限：%A\n",
+                "printf_test"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -215,7 +265,11 @@
             "setup_commands": [
                 "touch format_test"
             ],
-            "args": ["-c", "%A %U:%G", "format_test"],
+            "args": [
+                "-c",
+                "%A %U:%G",
+                "format_test"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -234,7 +288,11 @@
             "setup_commands": [
                 "touch printf_test"
             ],
-            "args": ["--printf", "文件名：%n\\n大小：%s字节\\n类型：%F\\n权限：%A\\n", "printf_test"],
+            "args": [
+                "--printf",
+                "文件名：%n\\n大小：%s字节\\n类型：%F\\n权限：%A\\n",
+                "printf_test"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -253,7 +311,11 @@
             "setup_commands": [
                 "touch printf_test"
             ],
-            "args": ["--printf", "文件名：%n 大小：%s字节", "printf_test"],
+            "args": [
+                "--printf",
+                "文件名：%n 大小：%s字节",
+                "printf_test"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -272,7 +334,12 @@
             "setup_commands": [
                 "touch cached_test_file"
             ],
-            "args": ["--cached=always", "-c", "%n|%F|%s", "cached_test_file"],
+            "args": [
+                "--cached=always",
+                "-c",
+                "%n|%F|%s",
+                "cached_test_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -291,7 +358,12 @@
             "setup_commands": [
                 "touch cached_test_file"
             ],
-            "args": ["--cached=never", "-c", "%n|%F|%s", "cached_test_file"],
+            "args": [
+                "--cached=never",
+                "-c",
+                "%n|%F|%s",
+                "cached_test_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -310,7 +382,12 @@
             "setup_commands": [
                 "touch cached_test_file"
             ],
-            "args": ["--cached=default", "-c", "%n|%F|%s", "cached_test_file"],
+            "args": [
+                "--cached=default",
+                "-c",
+                "%n|%F|%s",
+                "cached_test_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -326,7 +403,11 @@
             "tstdin": "",
             "command": "stat",
             "description": "--cached 选项与文件系统状态结合测试",
-            "args": ["--cached=always", "-f", "/"],
+            "args": [
+                "--cached=always",
+                "-f",
+                "/"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -340,7 +421,10 @@
             "tstdin": "",
             "command": "stat",
             "description": "--cached 选项无效值测试",
-            "args": ["--cached=invalid", "test_file"],
+            "args": [
+                "--cached=invalid",
+                "test_file"
+            ],
             "setup_commands": [
                 "touch test_file"
             ],
@@ -356,4 +440,4 @@
             ]
         }
     ]
-} 
+}

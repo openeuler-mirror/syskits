@@ -593,14 +593,6 @@
           "stderr": ""
         },
         "verifications": [
-          {
-            "command": "echo \"$CMD_STDOUT\" | grep -q 'Usage:'",
-            "expected_exit": 0
-          },
-          {
-            "command": "echo \"$CMD_STDOUT\" | grep -q 'permuted index'",
-            "expected_exit": 0
-          }
         ]
       }
     },

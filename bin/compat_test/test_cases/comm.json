@@ -476,6 +476,394 @@
             "requires_root": false,
             "timeout": 30,
             "tstdin": "b\nc\nd\n"
+        },
+        {
+            "command": "comm",
+            "description": "comm: 缺少操作数",
+            "args": [
+                "file1.txt"
+            ],
+            "setup_commands": [
+                "touch file1.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: 两个文件不能同为标准输入",
+            "args": [
+                "-",
+                "-"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [],
+            "requires_root": false,
+            "timeout": 30,
+            "tstdin": "a\n"
+        },
+        {
+            "command": "comm",
+            "description": "comm: 文件不存在",
+            "args": [
+                "not_exist.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "touch file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: 两个空文件",
+            "args": [
+                "empty1",
+                "empty2"
+            ],
+            "setup_commands": [
+                "touch empty1 empty2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f empty1 empty2"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --version",
+            "args": [
+                "--version"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --help",
+            "args": [
+                "--help"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: -13 - 不输出第一列和第三列（仅输出文件2特有行）",
+            "args": [
+                "-13",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: -23 - 不输出第二列和第三列（仅输出文件1特有行）",
+            "args": [
+                "-23",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: 默认检查顺序 (无 --check-order) 有未排序记录",
+            "args": [
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e '2\n1' > file1.txt",
+                "echo -e '2\n3' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --total 与列抑制选项结合 (-12)",
+            "args": [
+                "-12",
+                "--total",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: --zero-terminated (长选项)",
+            "args": [
+                "--zero-terminated",
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "printf 'a\\0b\\0c\\0' > file1.txt",
+                "printf 'b\\0c\\0d\\0' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: 空文件与非空文件比较",
+            "args": [
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "touch file1.txt",
+                "echo -e 'a\\nb' > file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
+        },
+        {
+            "command": "comm",
+            "description": "comm: 非空文件与空文件比较",
+            "args": [
+                "file1.txt",
+                "file2.txt"
+            ],
+            "setup_commands": [
+                "echo -e 'a\\nb' > file1.txt",
+                "touch file2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ],
+            "requires_root": false,
+            "timeout": 30
         }
     ]
 }

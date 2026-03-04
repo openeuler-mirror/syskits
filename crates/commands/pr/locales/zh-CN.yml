@@ -1,4 +1,5 @@
 pr:
+  page: "第 %{page} 页"
   clap:
     pr_pages: 从页面FIRST_PAGE[:LAST_PAGE]开始和停止打印
     pr_first_line_number: 在打印的第一页的第一行从NUMBER开始计数

@@ -29,6 +29,8 @@ use quick_error::quick_error;
 use regex::Regex;
 use std::ffi::OsString;
 use sys_locale::get_locale;
+use unicode_width::UnicodeWidthStr;
+use unicode_width::UnicodeWidthChar;
 
 const PR_TAB: char = '\t';
 const PR_LINES_PER_PAGE: usize = 66;
@@ -71,6 +73,8 @@ mod pr_flags {
     pub const PR_JOIN_LINES: &str = "join-lines";
     pub const PR_HELP: &str = "help";
     pub const PR_FILES: &str = "files";
+    pub const PR_SHOW_CONTROL_CHARS: &str = "show-control-chars";
+    pub const PR_SHOW_NONPRINTING: &str = "show-nonprinting";
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,7 +97,14 @@ struct PrOutputOptions {
     is_form_feed_used: bool,
     is_join_lines: bool,
     col_sep_for_printing: String,
+    page_width: usize,
     line_width: Option<usize>,
+    show_control_chars: bool,
+    show_nonprinting: bool,
+    is_omit_pagination: bool,
+    is_pad_columns: bool,
+    expand_tabs: Option<(char, usize)>,
+    output_tabs: Option<(char, usize)>,
 }
 
 #[derive(Debug)]
@@ -240,6 +251,8 @@ pub fn ct_app() -> Command {
                  Line numbers longer than width columns are truncated.",
             )
             .allow_hyphen_values(true)
+            .num_args(0..=1)
+            .require_equals(true)
             .value_name("[char][width]"),
         Arg::new(pr_flags::PR_FIRST_LINE_NUMBER)
             .short('N')
@@ -311,6 +324,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pr_flags::PR_COLUMN)
             .long(pr_flags::PR_COLUMN)
+            .alias("columns")
             .help(
                 "Produce multi-column output that is arranged in column columns \
                  (the default shall be 1) and is written down each column  in  the order in which \
@@ -328,6 +342,8 @@ pub fn ct_app() -> Command {
                 "Separate text columns by the single character char instead of by the \
                  appropriate number of <space>s (default for char is the <tab> character).",
             )
+            .num_args(0..=1)
+            .require_equals(true)
             .value_name("char"),
         Arg::new(pr_flags::PR_COLUMN_STRING_SEPARATOR)
             .short('S')
@@ -337,6 +353,8 @@ pub fn ct_app() -> Command {
                  without -S: Default separator <TAB> with -J and <space> \
                  otherwise (same as -S\" \"), no effect on column options",
             )
+            .num_args(0..=1)
+            .require_equals(true)
             .value_name("string"),
         Arg::new(pr_flags::PR_MERGE)
             .short('m')
@@ -368,6 +386,38 @@ pub fn ct_app() -> Command {
             .long(pr_flags::PR_HELP)
             .help(t!("pr.clap.pr_help"))
             .action(ArgAction::Help),
+        Arg::new(pr_flags::PR_SHOW_CONTROL_CHARS)
+            .short('c')
+            .long(pr_flags::PR_SHOW_CONTROL_CHARS)
+            .help("use hat notation (^G) and octal backslash notation")
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_SHOW_NONPRINTING)
+            .short('v')
+            .long(pr_flags::PR_SHOW_NONPRINTING)
+            .help("use octal backslash notation")
+            .action(ArgAction::SetTrue),
+        Arg::new("date-format")
+            .short('D')
+            .long("date-format")
+            .help("use FORMAT for the header date")
+            .value_name("format"),
+        Arg::new("expand-tabs")
+            .short('e')
+            .long("expand-tabs")
+            .help("expand input CHARs (TABs) to space WIDTH (8)")
+            .num_args(0..=1)
+            .require_equals(true),
+        Arg::new("output-tabs")
+            .short('i')
+            .long("output-tabs")
+            .help("replace spaces with CHARs (TABs) to space WIDTH (8)")
+            .num_args(0..=1)
+            .require_equals(true),
+        Arg::new("omit-pagination")
+            .short('T')
+            .long("omit-pagination")
+            .help("omit page headers and trailers, eliminate any pagination by form feeds set in input files")
+            .action(ArgAction::SetTrue),
         Arg::new(pr_flags::PR_FILES)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::FilePath),
@@ -467,23 +517,24 @@ pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
 /// * `args` - 命令行参数
 fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option_regex = Regex::new(r"^[-+]\d+.*").unwrap();
-    let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
-    let mut arguments = args.to_owned();
-    let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option {
-        if let Some(num_val_opt) = args.get(pos + 1) {
-            if !num_regex.is_match(num_val_opt) {
-                let could_be_file = arguments.remove(pos + 1);
-                arguments.insert(pos + 1, format!("{}", PrNumberingMode::default().width));
-                arguments.insert(pos + 2, could_be_file);
-            }
-        }
-    }
 
-    arguments
-        .into_iter()
-        .filter(|i| !column_page_option_regex.is_match(i))
+    args.iter()
+        .filter(|&i| !column_page_option_regex.is_match(i))
+        .map(|arg| {
+            if arg.starts_with("-n") && arg.len() > 2 && !arg.starts_with("-n=") {
+                format!("-n={}", &arg[2..])
+            } else if arg.starts_with("-s") && arg.len() > 2 && !arg.starts_with("-s=") {
+                format!("-s={}", &arg[2..])
+            } else if arg.starts_with("-S") && arg.len() > 2 && !arg.starts_with("-S=") {
+                format!("-S={}", &arg[2..])
+            } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e=") {
+                format!("-e={}", &arg[2..])
+            } else if arg.starts_with("-i") && arg.len() > 2 && !arg.starts_with("-i=") {
+                format!("-i={}", &arg[2..])
+            } else {
+                arg.clone()
+            }
+        })
         .collect()
 }
 
@@ -524,7 +575,7 @@ fn pr_build_options(
 
     let column_mode_options = parse_column_mode_options(arg_matches, args)?;
     let merge_files_print = parse_merge_files_print(arg_matches, paths);
-    let col_sep_for_printing = parse_col_sep_for_printing(merge_files_print, &column_mode_options);
+    let col_sep_for_printing = parse_col_sep_for_printing(arg_matches, merge_files_print, &column_mode_options);
     let columns_to_print = parse_columns_to_print(merge_files_print, &column_mode_options);
 
     let is_join_lines = arg_matches.get_flag(pr_flags::PR_JOIN_LINES);
@@ -538,13 +589,19 @@ fn pr_build_options(
 
     let is_double_space = arg_matches.get_flag(pr_flags::PR_DOUBLE_SPACE);
     let is_merge_mode = parse_merge_mode(arg_matches)?;
+
+    let is_pad_columns = !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+                      && !is_join_lines;
+
     Ok(PrOutputOptions {
         number,
         header: parse_header(arg_matches, paths, is_merge_mode),
         is_double_space,
-        line_separator: "\n".to_string(),
         content_line_separator: parse_content_line_separator(is_double_space),
-        last_modified_time: parse_last_modified_time(paths, is_merge_mode),
+        last_modified_time: {
+            let fmt = arg_matches.get_one::<String>("date-format").map(|s| s.as_str()).unwrap_or_else(|| get_pr_date_time_format());
+            parse_last_modified_time(fmt, paths, is_merge_mode)
+        },
         start_page,
         end_page,
         is_display_header_and_trailer,
@@ -556,17 +613,47 @@ fn pr_build_options(
         is_form_feed_used,
         is_join_lines,
         col_sep_for_printing,
+        page_width: pr_parse_usize(arg_matches, pr_flags::PR_PAGE_WIDTH).unwrap_or(Ok(72))?,
         line_width,
+        show_control_chars: arg_matches.get_flag(pr_flags::PR_SHOW_CONTROL_CHARS),
+        show_nonprinting: arg_matches.get_flag(pr_flags::PR_SHOW_NONPRINTING),
+        is_omit_pagination: arg_matches.get_flag("omit-pagination"),
+        is_pad_columns,
+        line_separator: "\n".to_string(),
+        expand_tabs: parse_tab_args(arg_matches, "expand-tabs"),
+        output_tabs: parse_tab_args(arg_matches, "output-tabs"),
     })
 }
 
+fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Option<(char, usize)> {
+    if !arg_matches.contains_id(name) {
+        return None;
+    }
+    match arg_matches.get_one::<String>(name) {
+        None => Some(('\t', 8)),
+        Some(val) => {
+            let mut ch = '\t';
+            let mut width_str = val.as_str();
+            if let Some(first) = val.chars().next() {
+                if !first.is_ascii_digit() {
+                    ch = first;
+                    width_str = &val[first.len_utf8()..];
+                }
+            }
+            let w = width_str.parse::<usize>().unwrap_or(8);
+            Some((ch, w))
+        }
+    }
+}
+
 fn parse_content_lines_per_page(arg_matches: &ArgMatches, page_length: usize) -> (bool, usize) {
-    let is_page_length_le_ht = page_length < (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE);
+    let is_page_length_le_ht = page_length <= (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE);
 
+    let is_omit_pagination = arg_matches.get_flag("omit-pagination");
     let is_display_header_and_trailer =
-        !(is_page_length_le_ht) && !arg_matches.get_flag(pr_flags::PR_OMIT_HEADER);
+        !is_page_length_le_ht && !arg_matches.get_flag(pr_flags::PR_OMIT_HEADER) && !is_omit_pagination;
 
-    let content_lines_per_page = if is_page_length_le_ht {
+    let content_lines_per_page = if is_page_length_le_ht || is_omit_pagination {
         page_length
     } else {
         page_length - (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE)
@@ -630,17 +717,31 @@ fn parse_columns_to_print(
 }
 
 fn parse_col_sep_for_printing(
+    arg_matches: &ArgMatches,
     merge_files_print: Option<usize>,
     column_mode_options: &Option<PrColumnModeOptions>,
 ) -> String {
+    let fallback = || {
+        merge_files_print
+            .map(|_k| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
+            .unwrap_or_default()
+    };
+    
+    // First try the column separator explicitly
+    if let Some(sep) = arg_matches.get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
+        return sep.to_string();
+    } else if let Some(sep) = arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
+        return sep.to_string();
+    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
+        return "".to_string();
+    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
+        return "".to_string();
+    }
+
     column_mode_options
         .as_ref()
         .map(|i| i.column_separator.clone())
-        .unwrap_or_else(|| {
-            merge_files_print
-                .map(|_k| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
-                .unwrap_or_default()
-        })
+        .unwrap_or_else(fallback)
 }
 
 fn parse_column_mode_options(
@@ -793,12 +894,12 @@ fn parse_start_end_page(
     Ok((start_page, end_page))
 }
 
-fn parse_last_modified_time(paths: &[&str], is_merge_mode: bool) -> String {
+fn parse_last_modified_time(fmt: &str, paths: &[&str], is_merge_mode: bool) -> String {
     if is_merge_mode || paths[0].eq(PR_FILE_STDIN) {
         let date_time = Local::now();
-        date_time.format(get_pr_date_time_format()).to_string()
+        date_time.format(fmt).to_string()
     } else {
-        pr_file_last_modified_time(paths.first().unwrap())
+        pr_file_last_modified_time(paths.first().unwrap(), fmt)
     }
 }
 
@@ -837,7 +938,7 @@ fn parse_number(arg_matches: &ArgMatches) -> Result<Option<PrNumberingMode>, PrE
         })
         .or_else(
             || match arg_matches.contains_id(pr_flags::PR_NUMBER_LINES) {
-                true => Some(PrNumberingMode::default()),
+                true => Some(PrNumberingMode { first_number, ..PrNumberingMode::default() }),
                 false => None,
             },
         ))
@@ -907,15 +1008,21 @@ fn pr_open(path: &str) -> Result<Box<dyn Read>, PrError> {
         .unwrap_or_else(|_| Err(PrError::NotExists(path.to_string())))
 }
 
-fn pr_split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec<PrFileLine> {
+fn pr_split_lines_if_form_feed(
+    file_content: Result<String, std::io::Error>,
+    is_omit_pagination: bool,
+) -> Vec<PrFileLine> {
     file_content
         .map(|content| {
             let mut lines = Vec::new();
             let mut f_occurred = 0;
             let mut chunk = Vec::new();
             for byte in content.as_bytes() {
-                if byte == &PR_FF {
+                if byte == &PR_FF && !is_omit_pagination {
                     f_occurred += 1;
+                } else if byte == &PR_FF && is_omit_pagination {
+                    // 忽略换页符
+                    continue;
                 } else {
                     if f_occurred != 0 {
                         // 扫描中首次出现字节
@@ -970,10 +1077,11 @@ fn pr_read_stream_and_create_pages(
     let start_line_number = pr_get_start_line_number(output_opts);
     let last_page = output_opts.end_page;
     let lines_needed_per_page = pr_lines_to_read_for_page(output_opts);
+    let is_omit_pagination = output_opts.is_omit_pagination;
 
     Box::new(
         lines
-            .flat_map(pr_split_lines_if_form_feed)
+            .flat_map(move |l| pr_split_lines_if_form_feed(l, is_omit_pagination))
             .enumerate()
             .map(move |(i, line)| PrFileLine {
                 line_number: i + start_line_number,
@@ -986,6 +1094,10 @@ fn pr_read_stream_and_create_pages(
                 for line in it {
                     let form_feeds_after = line.form_feeds_after;
                     first_page.push(line);
+
+                    if is_omit_pagination {
+                        continue;
+                    }
 
                     if form_feeds_after > 1 {
                         // 插入空页面
@@ -1121,7 +1233,9 @@ fn pr_output_page(
             out.write_all(line_separator)?;
         }
     }
-    out.write_all(page_separator)?;
+    if output_opts.is_display_header_and_trailer {
+        out.write_all(page_separator)?;
+    }
     out.flush()?;
     Ok(lines_written)
 }
@@ -1176,18 +1290,35 @@ fn pr_write_columns(
         }
     }
 
+    let mut balanced_lines = content_lines_per_page;
+    if columns > 1 && output_opts.merge_files_print.is_none() && !across_mode {
+        let needed = (lines.len() + columns - 1) / columns;
+        if needed < balanced_lines {
+            balanced_lines = needed;
+        }
+    }
+
     let table: Vec<Vec<_>> = (0..content_lines_per_page)
         .map(move |a| {
             (0..columns)
                 .map(|i| {
                     if across_mode {
-                        lines.get(a * columns + i)
+                        let idx = a * columns + i;
+                        if idx >= lines.len() {
+                            None
+                        } else {
+                            lines.get(idx)
+                        }
                     } else if output_opts.merge_files_print.is_some() {
                         *filled_lines
                             .get(content_lines_per_page * i + a)
                             .unwrap_or(&None)
                     } else {
-                        lines.get(content_lines_per_page * i + a)
+                        if a >= balanced_lines {
+                            None
+                        } else {
+                            lines.get(balanced_lines * i + a)
+                        }
                     }
                 })
                 .collect()
@@ -1197,6 +1328,14 @@ fn pr_write_columns(
     let blank_line = PrFileLine::default();
     for row in table {
         let indexes = row.len();
+        if output_opts.merge_files_print.is_some() && row.iter().all(|c| c.is_none()) {
+            if feed_line_present || !output_opts.is_display_header_and_trailer {
+                break;
+            } else {
+                out.write_all(line_separator)?;
+                continue;
+            }
+        }
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && output_opts.merge_files_print.is_some() {
                 out.write_all(
@@ -1230,7 +1369,7 @@ fn pr_write_columns(
                 lines_printed += 1;
             }
         }
-        if not_found_break && feed_line_present {
+        if not_found_break && (feed_line_present || !output_opts.is_display_header_and_trailer) {
             break;
         } else {
             out.write_all(line_separator)?;
@@ -1252,11 +1391,24 @@ fn pr_get_line_for_printing(
     let formatted_line_number =
         pr_get_formatted_line_number(output_opts, file_line.line_number, index);
 
-    // 处理 line_content 可能为 Err 的情况
-    let content = match &file_line.line_content {
-        Ok(content) => content.clone(),
+    let mut content = match &file_line.line_content {
+        Ok(content) => {
+            if let Some((tab_ch, tab_width)) = output_opts.expand_tabs {
+                expand_tabs_to_spaces(content, tab_ch, tab_width)
+            } else {
+                content.clone()
+            }
+        }
         Err(e) => return Err(std::io::Error::new(e.kind(), e.to_string())),
     };
+
+    if output_opts.show_control_chars || output_opts.show_nonprinting {
+        content = escape_control_chars(
+            &content,
+            output_opts.show_control_chars,
+            output_opts.show_nonprinting,
+        );
+    }
 
     let complete_line = format!("{formatted_line_number}{content}");
 
@@ -1264,9 +1416,13 @@ fn pr_get_line_for_printing(
 
     let tab_count = complete_line.chars().filter(|i| i == &PR_TAB).count();
 
-    let display_length = complete_line.len() + (tab_count * 7);
+    let display_length = UnicodeWidthStr::width(complete_line.as_str()) + (tab_count * 7);
 
-    let sep = if (index + 1) != indexes && !output_opts.is_join_lines {
+    let is_string_sep = !output_opts.col_sep_for_printing.is_empty() 
+        && output_opts.col_sep_for_printing != "\t" 
+        && output_opts.col_sep_for_printing != " ";
+
+    let sep = if (!output_opts.is_pad_columns || is_string_sep) && (index + 1) != indexes {
         &output_opts.col_sep_for_printing
     } else {
         &blank_line
@@ -1274,28 +1430,116 @@ fn pr_get_line_for_printing(
 
     let result_line = line_width
         .map(|i| {
-            if i <= (columns - 1) {
+            let sep_len = if (index + 1) != indexes { UnicodeWidthStr::width(sep.as_str()) } else { 0 };
+            if i <= (columns - 1) * sep_len {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Page width too narrow".to_owned(),
                 ));
             }
-            let min_width = (i - (columns - 1)) / columns;
-            if display_length < min_width {
-                let mut extended_line = complete_line.clone();
-                for _ in 0..(min_width - display_length) {
-                    extended_line.push(' ');
+            
+            // Should dynamic tab/space padding be generated?
+            let should_pad = output_opts.is_pad_columns && index + 1 < indexes;
+
+            // When is_pad_columns is true, the implicit separator (tab/space) between
+            // columns takes 1 character of width, matching GNU pr's formula:
+            // chars_per_column = (chars_per_line - (columns-1) * col_sep_length) / columns
+            let effective_sep_width = if output_opts.is_pad_columns && columns > 1 && !is_string_sep {
+                1  // implicit tab/space separator
+            } else {
+                UnicodeWidthStr::width(sep.as_str())
+            };
+            let min_width = i.saturating_sub((columns - 1) * effective_sep_width) / columns;
+
+            if should_pad {
+                // For implicit separators (default tab/space), pad includes +1 for separator.
+                // For explicit string separators (-S), the separator is appended via `sep`, so no +1.
+                let pad_target = if is_string_sep { min_width } else { min_width + 1 };
+                if display_length < pad_target {
+                    let mut extended_line = complete_line.clone();
+                    let mut current_len = display_length;
+                    
+                    while (current_len / 8 + 1) * 8 <= pad_target {
+                        extended_line.push('\t');
+                        current_len = (current_len / 8 + 1) * 8;
+                    }
+                    while current_len < pad_target {
+                        extended_line.push(' ');
+                        current_len += 1;
+                    }
+                    Ok(extended_line.chars().take(pad_target).collect::<String>())
+                } else {
+                    let mut truncated: String = complete_line.chars().take(min_width).collect();
+                    if !is_string_sep {
+                        truncated.push(' ');
+                    }
+                    Ok(truncated)
                 }
-                Ok(extended_line.chars().take(min_width).collect::<String>())
             } else {
                 Ok(complete_line.chars().take(min_width).collect::<String>())
             }
         })
         .unwrap_or_else(|| Ok(complete_line.clone()));
 
-    result_line.map(|line| format!("{offset_spaces}{line}{sep}"))
+    let mut final_out = result_line.map(|line| format!("{offset_spaces}{line}{sep}"))?;
+    
+    if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
+        final_out = replace_spaces_with_tabs(&final_out, tab_ch, tab_width);
+    }
+    
+    Ok(final_out)
 }
 
+fn expand_tabs_to_spaces(s: &str, tab_char: char, tab_width: usize) -> String {
+    if tab_width == 0 {
+        return s.to_string();
+    }
+    let mut res = String::new();
+    let mut current_col = 0;
+    for c in s.chars() {
+        if c == tab_char {
+            let spaces = tab_width - (current_col % tab_width);
+            res.push_str(&" ".repeat(spaces));
+            current_col += spaces;
+        } else {
+            res.push(c);
+            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+        }
+    }
+    res
+}
+
+fn replace_spaces_with_tabs(s: &str, tab_char: char, tab_width: usize) -> String {
+    if tab_width == 0 {
+        return s.to_string();
+    }
+    let mut res = String::new();
+    let mut current_col = 0;
+    let mut space_count = 0;
+    
+    for c in s.chars() {
+        if c == ' ' {
+            space_count += 1;
+            if (current_col + space_count) % tab_width == 0 {
+                res.push(tab_char);
+                current_col += space_count;
+                space_count = 0;
+            }
+        } else {
+            if space_count > 0 {
+                res.push_str(&" ".repeat(space_count));
+                current_col += space_count;
+                space_count = 0;
+            }
+            res.push(c);
+            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+        }
+    }
+    if space_count > 0 {
+        res.push_str(&" ".repeat(space_count));
+    }
+    res
+}
 fn pr_get_formatted_line_number(
     output_opts: &PrOutputOptions,
     line_number: usize,
@@ -1322,16 +1566,78 @@ fn pr_get_formatted_line_number(
     }
 }
 
+fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting: bool) -> String {
+    if !show_control_chars && !show_nonprinting {
+        return input.to_string();
+    }
+    let mut result = String::with_capacity(input.len());
+    for c in input.chars() {
+        if c == '\t' || c == '\n' || c == '\x0C' || c == ' ' {
+            result.push(c);
+            continue;
+        }
+        if c.is_control() {
+            let cp = c as u32;
+            if show_nonprinting {
+                result.push_str(&format!("\\{:03o}", cp));
+            } else if show_control_chars {
+                if cp < 128 {
+                    result.push('^');
+                    result.push((cp ^ 0x40) as u8 as char);
+                } else {
+                    result.push_str(&format!("\\{:03o}", cp));
+                }
+            } else {
+                result.push(c);
+            }
+        } else if !c.is_ascii() && show_nonprinting {
+            result.push(c);
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 /// 如果没有使用 `NO_HEADER_TRAILER_OPTION` 选项禁止显示页眉，则返回五行页眉内容。
 /// 使用 "NO_HEADER_TRAILER_OPTION "选项。
 fn pr_header_content(output_opts: &PrOutputOptions, page: usize) -> Vec<String> {
     if output_opts.is_display_header_and_trailer {
+        let date_width = UnicodeWidthStr::width(output_opts.last_modified_time.as_str());
+        let file_width = UnicodeWidthStr::width(output_opts.header.as_str());
+        let page_text = t!("pr.page", page = page);
+        let page_width = UnicodeWidthStr::width(page_text.as_str());
+
+        let chars_per_line = output_opts.line_width.unwrap_or(output_opts.page_width);
+        
+        let header_width_available = chars_per_line
+            .saturating_sub(date_width)
+            .saturating_sub(file_width);
+            
+        let available_width = header_width_available.saturating_sub(page_width);
+        
+        let lhs_spaces = available_width / 2;
+        let rhs_spaces = available_width - lhs_spaces;
+        
         let first_line = format!(
-            "{} {} Page {}",
-            output_opts.last_modified_time, output_opts.header, page
+            "{}{}{:lhs$}{}{:rhs$}{}",
+            output_opts.offset_spaces,
+            output_opts.last_modified_time,
+            " ",
+            output_opts.header,
+            " ",
+            page_text,
+            lhs = lhs_spaces.max(1),
+            rhs = rhs_spaces.max(1)
         );
+
+        let blank = if output_opts.offset_spaces.is_empty() {
+            String::new()
+        } else {
+            output_opts.offset_spaces.clone()
+        };
         vec![
-            String::new(),
+            blank.clone(),
             String::new(),
             first_line,
             String::new(),
@@ -1342,13 +1648,13 @@ fn pr_header_content(output_opts: &PrOutputOptions, page: usize) -> Vec<String> 
     }
 }
 
-fn pr_file_last_modified_time(path: &str) -> String {
+fn pr_file_last_modified_time(path: &str, fmt: &str) -> String {
     metadata(path)
         .map(|i| {
             i.modified()
                 .map(|x| {
                     let date_time: DateTime<Local> = x.into();
-                    date_time.format(get_pr_date_time_format()).to_string()
+                    date_time.format(fmt).to_string()
                 })
                 .unwrap_or_default()
         })
@@ -1573,7 +1879,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用pr_handle函数
@@ -1615,7 +1924,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用pr_handle函数
@@ -1651,7 +1963,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用pr_handle函数
@@ -1694,7 +2009,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用pr_handle函数
@@ -1730,7 +2048,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用pr_handle函数
@@ -1762,7 +2083,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用pr_handle函数并传入不存在的文件路径
@@ -1799,7 +2123,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 尝试打开没有权限的文件，应该返回错误
@@ -1830,7 +2157,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 尝试打开目录，应该返回错误
@@ -1885,7 +2215,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -1925,7 +2258,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -1976,7 +2312,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -2015,7 +2354,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -2064,7 +2406,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -2103,7 +2448,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -2141,7 +2489,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用mpr_handle函数
@@ -2238,7 +2589,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用函数
@@ -2283,14 +2637,15 @@ mod tests {
             let file_path = file.path().to_str().unwrap();
 
             // 测试单个文件
+            let fmt = get_pr_date_time_format();
             let paths = &[file_path];
-            let result = parse_last_modified_time(paths, false);
+            let result = parse_last_modified_time(fmt, paths, false);
 
             // 验证结果不为空 - 实际实现会返回日期时间字符串
             assert!(!result.is_empty());
 
             // 测试合并模式
-            let result = parse_last_modified_time(paths, true);
+            let result = parse_last_modified_time(fmt, paths, true);
             // 在合并模式下，函数仍然会返回当前时间，而不是空字符串
             assert!(!result.is_empty());
         }
@@ -2365,7 +2720,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_start_line_number(&output_opts);
@@ -2396,7 +2754,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_start_line_number(&output_opts);
@@ -2424,7 +2785,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_lines_to_read_for_page(&output_opts);
@@ -2449,7 +2813,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_lines_to_read_for_page(&output_opts);
@@ -2481,7 +2848,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_lines_to_read_for_page(&output_opts);
@@ -2509,7 +2879,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_columns(&output_opts);
@@ -2541,7 +2914,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_columns(&output_opts);
@@ -2582,7 +2958,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_formatted_line_number(&output_opts, 5, 0);
@@ -2613,7 +2992,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_formatted_line_number(&output_opts, 5, 0);
@@ -2644,7 +3026,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_formatted_line_number(&output_opts, 12345, 0);
@@ -2672,7 +3057,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_header_content(&output_opts, 1);
@@ -2697,7 +3085,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_header_content(&output_opts, 1);
@@ -2726,7 +3117,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_trailer_content(&output_opts);
@@ -2751,7 +3145,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_trailer_content(&output_opts);
@@ -2776,7 +3173,10 @@ mod tests {
                 is_form_feed_used: true,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_trailer_content(&output_opts);
@@ -2837,7 +3237,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_formatted_line_number(&options, 1, 0);
@@ -2868,7 +3271,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let result = pr_get_formatted_line_number(&options, 1, 0);
@@ -2899,7 +3305,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用函数
@@ -2947,7 +3356,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用函数
@@ -2982,7 +3394,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 调用函数
@@ -3018,7 +3433,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 准备输出缓冲区
@@ -3061,7 +3479,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 准备输出缓冲区
@@ -3107,7 +3528,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 只确认函数类型的定义是正确的
@@ -3141,7 +3565,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 准备输出缓冲区
@@ -3190,7 +3617,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 准备输出缓冲区
@@ -3234,7 +3664,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 使用无效的行宽（太窄）
@@ -3279,7 +3712,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 准备输出缓冲区
@@ -3688,7 +4124,10 @@ mod tests {
                 is_form_feed_used: true,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
@@ -3722,7 +4161,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 测试 mpr_handle 中的错误处理逻辑
@@ -3768,7 +4210,10 @@ mod tests {
                 is_form_feed_used: false,
                 is_join_lines: false,
                 col_sep_for_printing: "".to_string(),
+                page_width: 72,
                 line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
             };
 
             // 测试当使用明确宽度限制，并且内容长度小于限制时的填充行为

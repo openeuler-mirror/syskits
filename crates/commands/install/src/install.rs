@@ -1218,7 +1218,12 @@ fn create_leading_dirs(path: &Path, verbose: bool) -> Result<(), std::io::Error>
         }
         fs::create_dir(&cur)?;
         if verbose {
-            println!("install: creating directory {}", cur.quote());
+            println!(
+                "{}: {} {}",
+                ctcore::ct_util_name(),
+                t!("install.verbose_creating_dir"),
+                cur.quote()
+            );
         }
     }
     Ok(())
@@ -1247,7 +1252,7 @@ fn create_leading_dirs(path: &Path, verbose: bool) -> Result<(), std::io::Error>
 fn perform_backup(to: &Path, b: &Installer) -> CTResult<Option<PathBuf>> {
     if to.exists() {
         if b.verbose {
-            println!("removed {}", to.quote());
+            println!("{} {}", t!("install.verbose_removed"), to.quote());
         }
         let backup_path = ct_backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {

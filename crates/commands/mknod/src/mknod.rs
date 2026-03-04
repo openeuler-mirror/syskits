@@ -139,36 +139,33 @@ fn set_security_context(
             //   3. 设置为新文件系统对象的创建上下文
 
             // 创建文件上下文标签器（等价于GNU的selabel_open）
-            let labeler = Labeler::<FileBackEnd>::restorecon_default(false).map_err(|e| {
-                // 如果无法创建labeler，发出警告但继续（与GNU行为一致）
-                eprintln!("mknod: warning: cannot create SELinux labeler: {e}");
-                String::new()
-            })?;
+            let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("mknod: warning: cannot create SELinux labeler: {e}");
+                    return Ok(());
+                }
+            };
 
             // 将mode_t转换为FileAccessMode
             let file_access_mode = mode_to_file_access_mode(file_mode);
 
             // 查询路径的默认SELinux上下文（等价于GNU的selabel_lookup）
             let path = Path::new(file_path);
-            let default_context = labeler
-                .look_up_by_path(path, Some(file_access_mode))
-                .map_err(|e| {
-                    // 如果查询失败，发出警告但继续（与GNU行为一致）
-                    // GNU会在ENOENT时映射为ENODATA
+            let default_context = match labeler.look_up_by_path(path, Some(file_access_mode)) {
+                Ok(ctx) => ctx,
+                Err(e) => {
                     eprintln!(
                         "mknod: warning: cannot look up default SELinux context for {file_path}: {e}"
                     );
-                    String::new()
-                })?;
+                    return Ok(());
+                }
+            };
 
             // 设置为新文件系统对象的创建上下文（等价于GNU的setfscreatecon）
-            default_context
-                .set_for_new_file_system_objects(false)
-                .map_err(|e| {
-                    // 如果设置失败，发出警告但继续（与GNU行为一致）
-                    eprintln!("mknod: warning: cannot set default file creation context: {e}");
-                    String::new()
-                })?;
+            if let Err(e) = default_context.set_for_new_file_system_objects(false) {
+                eprintln!("mknod: warning: cannot set default file creation context: {e}");
+            }
 
             Ok(())
         }

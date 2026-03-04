@@ -8,4 +8,4 @@ mkdir:
   usage: mkdir [OPTION]... DIRECTORY...
   about: Create the DIRECTORY(ies), if they do not already exist.
   after_help: Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
-
+  verbose_created: "created directory"

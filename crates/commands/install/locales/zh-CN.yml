@@ -13,5 +13,6 @@ install:
     install_context: 设置文件和目录的安全上下文
   usage: install [选项]... [文件]...
   about: |-
-    将SOURCE复制到DEST或将多个SOURCE复制到现有的
     DIRECTORY，同时设置权限模式和所有者/组
+  verbose_creating_dir: "正在创建目录"
+  verbose_removed: "已删除"

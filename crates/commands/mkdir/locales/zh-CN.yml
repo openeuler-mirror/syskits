@@ -7,4 +7,5 @@ mkdir:
     verbose: 为每个创建的目录打印消息
   usage: mkdir [选项]... 目录...
   about: '如果目录不存在,则创建目录。'
-  after_help: '每个模式的格式为''[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+''.'
+  after_help: "每个模式的格式为'[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
+  verbose_created: "已创建目录"

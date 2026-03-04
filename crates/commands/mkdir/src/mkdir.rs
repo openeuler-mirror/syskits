@@ -361,6 +361,15 @@ fn mkdir_create_dir(
         }
     }
 
+    if set_context {
+        #[cfg(target_os = "linux")]
+        {
+            if let Err(e) = mkdir_set_security_context(context, path, mode, warn_on_unsupported) {
+                return Err(CtSimpleError::new(1, e));
+            }
+        }
+    }
+
     if let Err(e) = std::fs::create_dir(path) {
         if path.is_dir() {
             Ok(())
@@ -369,19 +378,11 @@ fn mkdir_create_dir(
             Err(CtSimpleError::new(1, msg))
         }
     } else {
-        if set_context {
-            #[cfg(target_os = "linux")]
-            {
-                if let Err(e) = mkdir_set_security_context(context, path, mode, warn_on_unsupported)
-                {
-                    return Err(CtSimpleError::new(1, e));
-                }
-            }
-        }
         if is_verbose {
             println!(
-                "{}: created directory {}",
+                "{}: {} {}",
                 ctcore::ct_util_name(),
+                t!("mkdir.verbose_created"),
                 path.quote()
             );
         }
@@ -426,22 +427,30 @@ fn mkdir_set_security_context(
             let file_mode = libc::S_IFDIR | mode;
             let file_access_mode =
                 selinux::FileAccessMode::new(file_mode).expect("mode should be non-zero");
-            let default_context = labeler
-                .look_up_by_path(path, Some(file_access_mode))
-                .map_err(|e| {
+
+            let abs_path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                std::env::current_dir()
+                    .map(|p| p.join(path))
+                    .unwrap_or(path.to_path_buf())
+            };
+
+            match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
+                Ok(default_context) => default_context
+                    .set_for_new_file_system_objects(false)
+                    .map_err(|e| {
+                        eprintln!("mkdir: warning: cannot set default file creation context: {e}");
+                        String::new()
+                    }),
+                Err(e) => {
                     eprintln!(
                         "mkdir: warning: cannot look up default SELinux context for {}: {e}",
                         path.display()
                     );
-                    String::new()
-                })?;
-            default_context
-                .set_for_new_file_system_objects(false)
-                .map_err(|e| {
-                    eprintln!("mkdir: warning: cannot set default file creation context: {e}");
-                    String::new()
-                })?;
-            Ok(())
+                    Ok(())
+                }
+            }
         }
     }
 }

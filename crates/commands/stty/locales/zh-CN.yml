@@ -1,4 +1,7 @@
 stty:
+  errors:
+    unable_to_perform: "无法执行所有请求的操作"
+    unable_to_perform_file: "%{file}: 无法执行所有请求的操作"
   clap:
     stty_all: 以人类可读形式打印所有当前设置
     stty_save: 以stty可读形式打印所有当前设置

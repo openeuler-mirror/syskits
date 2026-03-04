@@ -369,8 +369,10 @@ fn stty(opts: &SttyFlags) -> CTResult<()> {
                 tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             if !termios_equal(&termios, &current) {
                 let msg = match &opts.file_name {
-                    Some(file) => format!("{file}: unable to perform all requested operations"),
-                    None => "unable to perform all requested operations".to_string(),
+                    Some(file) => {
+                        t!("stty.errors.unable_to_perform_file", file = file.as_str()).to_string()
+                    }
+                    None => t!("stty.errors.unable_to_perform").to_string(),
                 };
                 return Err(CtSimpleError::new(1, msg));
             }

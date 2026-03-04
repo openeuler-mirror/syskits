@@ -1,4 +1,7 @@
 stty:
+  errors:
+    unable_to_perform: "unable to perform all requested operations"
+    unable_to_perform_file: "%{file}: unable to perform all requested operations"
   clap:
     stty_all: print all current settings in human-readable form
     stty_save: print all current settings in a stty-readable form

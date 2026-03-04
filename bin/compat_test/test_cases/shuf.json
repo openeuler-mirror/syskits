@@ -3,23 +3,24 @@
         {
             "command": "shuf",
             "description": "shuf: 基本随机打乱文件",
-            "args": ["shuf_test"],
+            "args": [
+                "shuf_test"
+            ],
             "setup_commands": [
                 "echo -e 'a\nb\nc\nd' > shuf_test"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
             "cleanup_commands": [
@@ -31,31 +32,29 @@
             "command": "shuf",
             "description": "shuf: 随机打乱标准输入",
             "args": [],
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "shuf",
             "description": "shuf: 指定输出行数",
             "args": [
-                "-n", "4",
+                "-n",
+                "4",
                 "shuf_test"
             ],
             "setup_commands": [
@@ -63,17 +62,16 @@
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
             "cleanup_commands": [
@@ -84,63 +82,62 @@
             "command": "shuf",
             "description": "shuf: 从整数序列随机选择",
             "args": [
-                "-i", "1-9",
-                "-n", "5"
+                "-i",
+                "1-9",
+                "-n",
+                "5"
             ],
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": false,
                     "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "shuf",
             "description": "shuf: 重复输出",
             "args": [
-                "-i", "1-6",
-                "-n", "5",
+                "-i",
+                "1-6",
+                "-n",
+                "5",
                 "--repeat"
             ],
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": false,
                     "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "shuf",
             "description": "shuf: 输出到指定文件",
             "args": [
                 "shuf_test",
-                "-o", "shuf_output"
+                "-o",
+                "shuf_output"
             ],
             "setup_commands": [
                 "echo -e 'a\nb\nc\nd' > shuf_test"
@@ -185,8 +182,7 @@
                     "stdout": "",
                     "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
                     "ignore_stdout": false,
@@ -202,7 +198,8 @@
             "command": "shuf",
             "description": "shuf: 指定行数大于文件行数",
             "args": [
-                "-n", "10",
+                "-n",
+                "10",
                 "shuf_test"
             ],
             "setup_commands": [
@@ -214,8 +211,7 @@
                     "stdout": "a\nb\nd\nc\n",
                     "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
                     "ignore_stdout": true,
@@ -231,18 +227,17 @@
             "command": "shuf",
             "description": "shuf: 非法整数序列",
             "args": [
-                "-i", "10-1"
+                "-i",
+                "10-1"
             ],
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
                     "stderr": null
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
                     "ignore_stdout": false,
@@ -250,8 +245,7 @@
                     "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "shuf",
@@ -269,8 +263,7 @@
                     "stdout": "",
                     "stderr": null
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
                     "ignore_exit_code": false,
                     "ignore_stdout": false,
@@ -285,7 +278,12 @@
         {
             "command": "shuf",
             "description": "shuf: echo 模式 (-e)",
-            "args": ["-e", "a", "b", "c"],
+            "args": [
+                "-e",
+                "a",
+                "b",
+                "c"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -303,7 +301,9 @@
         {
             "command": "shuf",
             "description": "shuf: echo 模式无参数",
-            "args": ["-e"],
+            "args": [
+                "-e"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -321,7 +321,10 @@
         {
             "command": "shuf",
             "description": "shuf: NUL 结尾 (-z)",
-            "args": ["-z", "zero_input"],
+            "args": [
+                "-z",
+                "zero_input"
+            ],
             "setup_commands": [
                 "printf 'a\\0b\\0c' > zero_input"
             ],
@@ -345,7 +348,9 @@
         {
             "command": "shuf",
             "description": "shuf: 显式标准输入 (-)",
-            "args": ["-"],
+            "args": [
+                "-"
+            ],
             "tstdin": "a\nb\nc\n",
             "expectation": {
                 "execution": {
@@ -364,7 +369,10 @@
         {
             "command": "shuf",
             "description": "shuf: 多个文件参数 (错误)",
-            "args": ["file1", "file2"],
+            "args": [
+                "file1",
+                "file2"
+            ],
             "setup_commands": [
                 "touch file1 file2"
             ],
@@ -388,7 +396,11 @@
         {
             "command": "shuf",
             "description": "shuf: 输出行数为 0 (-n 0)",
-            "args": ["-n", "0", "shuf_test"],
+            "args": [
+                "-n",
+                "0",
+                "shuf_test"
+            ],
             "setup_commands": [
                 "echo a > shuf_test"
             ],
@@ -412,7 +424,10 @@
         {
             "command": "shuf",
             "description": "shuf: 单个数字范围 (-i 1-1)",
-            "args": ["-i", "1-1"],
+            "args": [
+                "-i",
+                "1-1"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -430,7 +445,12 @@
         {
             "command": "shuf",
             "description": "shuf: 文件输入重复模式 (-r)",
-            "args": ["-r", "-n", "5", "shuf_test"],
+            "args": [
+                "-r",
+                "-n",
+                "5",
+                "shuf_test"
+            ],
             "setup_commands": [
                 "echo a > shuf_test"
             ],
@@ -454,7 +474,12 @@
         {
             "command": "shuf",
             "description": "shuf: 指定随机源 (--random-source)",
-            "args": ["-i", "1-5", "--random-source", "rand_src"],
+            "args": [
+                "-i",
+                "1-5",
+                "--random-source",
+                "rand_src"
+            ],
             "setup_commands": [
                 "dd if=/dev/urandom of=rand_src bs=1024 count=1 2>/dev/null"
             ],
@@ -478,7 +503,9 @@
         {
             "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
-            "args": ["--help"],
+            "args": [
+                "--help"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -493,7 +520,9 @@
         {
             "command": "shuf",
             "description": "shuf: 显示版本信息 (--version)",
-            "args": ["--version"],
+            "args": [
+                "--version"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,

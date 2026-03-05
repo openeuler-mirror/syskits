@@ -39,11 +39,11 @@ impl Tool for Base32 {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        base32_main(args.iter().cloned()).map(|_| ())
+        base32_main(args.iter().cloned(), &mut std::io::stdout().lock())
     }
 }
 
-pub fn base32_main(args: impl ctcore::Args) -> CTResult<String> {
+pub fn base32_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let format_mod = Format::Base32;
@@ -58,6 +58,7 @@ pub fn base32_main(args: impl ctcore::Args) -> CTResult<String> {
 
     base_common::handle_base_input(
         &mut input_info,
+        &mut writer,
         format_mod,
         config_info.base_wrap_cols,
         config_info.base_ignore_garbage,
@@ -161,7 +162,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), filename];
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         let expected_output = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE===";
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -172,8 +174,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
                 //assert_eq!(s,expected_output);
@@ -199,7 +202,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "--wrap=8", filename];
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         let expected_output = "KRSXG5BAMRSWG33EMUQGEYLTMUZTEICUMVZXIIDEMVRW6ZDFEBRGC43FGMZA====";
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -210,8 +214,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
                 //assert_eq!(s,expected_output);
@@ -239,7 +244,8 @@ mod test {
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), filename];
 
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         let expected_output = ""; // 预期输出结果为空
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -250,8 +256,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
                 //assert_eq!(s,expected_output);
@@ -279,7 +286,8 @@ mod test {
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "--wrap=8", filename];
 
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         let expected_output = ""; // 预期输出结果为空
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -290,8 +298,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
                 //assert_eq!(s,expected_output);
@@ -318,7 +327,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), filename];
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         let expected_output = "JNJFGWCHGVBECTKSKNLUOMZTIVGVKUKHIVMUYVCNKVNFIRJ5HU6Q====";
         let mut s = String::new();
         // 使用模式匹配提取字段值
@@ -329,8 +339,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
                 //assert_eq!(s,expected_output);
@@ -357,7 +368,8 @@ mod test {
 
         let args = [ctcore::ct_util_name(), "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         let expected_output = "Test decode base32";
         // 使用模式匹配提取字段值
@@ -368,8 +380,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
 
@@ -395,7 +408,8 @@ mod test {
 
         let args = [ctcore::ct_util_name(), "--decode", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         let expected_output = "Test decode base32";
         // 使用模式匹配提取字段值
@@ -406,8 +420,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
 
@@ -433,7 +448,8 @@ mod test {
 
         let args = [ctcore::ct_util_name(), "--wrap=64", "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         let expected_output = "Test decode base32";
         // 使用模式匹配提取字段值
@@ -444,8 +460,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
 
@@ -471,7 +488,8 @@ mod test {
 
         let args = [ctcore::ct_util_name(), " --ignore-garbage", "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         let expected_output = "";
         // 使用模式匹配提取字段值
@@ -482,8 +500,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
 
@@ -509,7 +528,8 @@ mod test {
 
         let args = [ctcore::ct_util_name(), " -i", "-d", filename];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         let expected_output = "";
         // 使用模式匹配提取字段值
@@ -520,8 +540,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
 
@@ -553,7 +574,8 @@ mod test {
             filename,
         ];
         //let args = ["--wrap", ""];
-        let result: CTResult<String> = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         let expected_output = "";
         // 使用模式匹配提取字段值
@@ -564,8 +586,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
 
@@ -591,7 +614,8 @@ mod test {
 
         let args = [ctcore::ct_util_name(), "--wrap=64", filename];
         //let args = ["--wrap", ""];
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         assert!(result.is_ok());
         // 删除文件
         match delete_file(filename) {
@@ -603,7 +627,8 @@ mod test {
     fn test_i_ctmain() {
         // 测试用例1：
         let args = ["--ignore-garbage", ""];
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         assert!(result.is_err());
 
         let filename = "test_i_ctmain.txt";
@@ -622,7 +647,8 @@ mod test {
             filename,
         ];
         //let args = ["--wrap", ""];
-        let result = base32_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = base32_main(args.iter().map(OsString::from), &mut output);
         assert!(result.is_ok());
 
         // 删除文件
@@ -636,7 +662,8 @@ mod test {
     fn test_h_ctmain() {
         {
             let args = ["--help", ""];
-            let result = base32_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = base32_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
         {
@@ -653,7 +680,8 @@ mod test {
     fn test_hh_ctmain() {
         {
             let args = ["-h", ""];
-            let result = base32_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = base32_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
 
@@ -672,7 +700,8 @@ mod test {
     fn test_v_ctmain() {
         {
             let args = ["--version", ""];
-            let result = base32_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = base32_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
         {
@@ -690,7 +719,8 @@ mod test {
     fn test_vv_ctmain() {
         {
             let args = ["-V", ""];
-            let result = base32_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = base32_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
         {

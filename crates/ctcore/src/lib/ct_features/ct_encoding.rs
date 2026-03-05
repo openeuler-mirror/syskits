@@ -147,28 +147,184 @@ impl<R: Read> Data<R> {
         self
     }
 
-    pub fn decode(&mut self) -> DecodeResult {
-        let mut buf = vec![];
-        self.input.read_to_end(&mut buf)?;
-        if self.ignore_garbage {
-            buf.retain(|c| self.alphabet.contains(c));
-        } else {
-            buf.retain(|&c| c != b'\r' && c != b'\n');
+    pub fn decode<W: Write>(&mut self, mut writer: W) -> Result<(), CtDecodeError> {
+        let chunk_size = match self.format {
+            Format::Base58 | Format::Z85 => 0, // Fallback to read_to_end
+            _ => 30000,
         };
-        match self.format {
-            Base16 | Base32 | Base32Hex => buf.make_ascii_uppercase(),
-            _ => {}
+
+        if chunk_size == 0 {
+            let mut buf = vec![];
+            self.input.read_to_end(&mut buf)?;
+            if self.ignore_garbage {
+                buf.retain(|c| self.alphabet.contains(c));
+            } else {
+                buf.retain(|&c| c != b'\r' && c != b'\n');
+            };
+            match self.format {
+                Base16 | Base32 | Base32Hex => buf.make_ascii_uppercase(),
+                _ => {}
+            }
+            let decoded = decode(self.format, &buf)?;
+            writer.write_all(&decoded)?;
+            Ok(())
+        } else {
+            let mut read_buf = [0; 8192];
+            let mut char_buf = Vec::with_capacity(chunk_size + 1024);
+
+            loop {
+                let n = match self.input.read(&mut read_buf) {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e.into()),
+                };
+
+                for &c in &read_buf[..n] {
+                    if self.ignore_garbage {
+                        if self.alphabet.contains(&c) {
+                            char_buf.push(c);
+                        }
+                    } else {
+                        if c != b'\r' && c != b'\n' {
+                            char_buf.push(c);
+                        }
+                    }
+                }
+
+                while char_buf.len() >= chunk_size {
+                    match self.format {
+                        Base16 | Base32 | Base32Hex => char_buf.make_ascii_uppercase(),
+                        _ => {}
+                    }
+
+                    let process_len = match self.format {
+                        Format::Base16 => char_buf.len() - (char_buf.len() % 2),
+                        Format::Base32
+                        | Format::Base32Hex
+                        | Format::Base2Lsbf
+                        | Format::Base2Msbf => char_buf.len() - (char_buf.len() % 8),
+                        Format::Base64 | Format::Base64Url => char_buf.len() - (char_buf.len() % 4),
+                        _ => char_buf.len(),
+                    };
+
+                    if process_len > 0 {
+                        let chunk = &char_buf[..process_len];
+                        let decoded = decode(self.format, chunk)?;
+                        writer.write_all(&decoded)?;
+                        char_buf.drain(..process_len);
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if !char_buf.is_empty() {
+                match self.format {
+                    Base16 | Base32 | Base32Hex => char_buf.make_ascii_uppercase(),
+                    _ => {}
+                }
+                let decoded = decode(self.format, &char_buf)?;
+                writer.write_all(&decoded)?;
+            }
+            Ok(())
         }
-        decode(self.format, &buf)
     }
 
-    pub fn encode(&mut self) -> Result<String, CtEncodeError> {
-        let mut buf: Vec<u8> = vec![];
-        match self.input.read_to_end(&mut buf) {
-            Ok(_) => encode(self.format, buf.as_slice()),
-            Err(_) => Err(CtEncodeError::InvalidInput),
+    pub fn encode<W: Write>(&mut self, mut writer: W) -> Result<(), CtEncodeError> {
+        let chunk_size = match self.format {
+            Format::Base58 => 0, // Fallback
+            _ => 30000,
+        };
+
+        if chunk_size == 0 {
+            let mut buf: Vec<u8> = vec![];
+            match self.input.read_to_end(&mut buf) {
+                Ok(_) => {
+                    let encoded = encode(self.format, buf.as_slice())?;
+                    let _ = wrap_write_stream(&mut writer, self.line_wrap, &encoded, 0);
+                    if self.line_wrap > 0 && !encoded.is_empty() && (!encoded.ends_with('\n')) {
+                        let _ = writeln!(writer);
+                    } else if self.line_wrap == 0
+                        && self.format as u8 != Format::Base64 as u8
+                        && self.format as u8 != Format::Base32 as u8
+                    {
+                        // For coreutils compliance, when no line wrapping is applied, we might need no trailing newline or trailing newline.
+                        // Actually I'll let calling code omit newline for stream output parity, so no trailing newline for wrap=0 here unless wrap is enabled.
+                    }
+                    Ok(())
+                }
+                Err(_) => Err(CtEncodeError::InvalidInput),
+            }
+        } else {
+            let mut buf = vec![0; chunk_size + 1024];
+            let mut buf_len = 0;
+            let mut current_col = 0;
+
+            loop {
+                let n = match self.input.read(&mut buf[buf_len..]) {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => return Err(CtEncodeError::InvalidInput),
+                };
+                buf_len += n;
+
+                while buf_len >= chunk_size {
+                    let process_len = match self.format {
+                        Format::Z85 => buf_len - (buf_len % 4),
+                        Format::Base32 | Format::Base32Hex => buf_len - (buf_len % 5),
+                        Format::Base64 | Format::Base64Url => buf_len - (buf_len % 3),
+                        _ => buf_len,
+                    };
+
+                    if process_len > 0 {
+                        let encoded = encode(self.format, &buf[..process_len])?;
+                        current_col =
+                            wrap_write_stream(&mut writer, self.line_wrap, &encoded, current_col)
+                                .map_err(|_| CtEncodeError::InvalidInput)?;
+                        buf.copy_within(process_len..buf_len, 0);
+                        buf_len -= process_len;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            if buf_len > 0 {
+                let encoded = encode(self.format, &buf[..buf_len])?;
+                current_col = wrap_write_stream(&mut writer, self.line_wrap, &encoded, current_col)
+                    .map_err(|_| CtEncodeError::InvalidInput)?;
+            }
+            if current_col > 0 && self.line_wrap > 0 {
+                let _ = writeln!(writer);
+            }
+            Ok(())
         }
     }
+}
+
+pub fn wrap_write_stream<W: Write>(
+    mut writer: W,
+    line_wrap: usize,
+    res: &str,
+    mut current_col: usize,
+) -> io::Result<usize> {
+    if line_wrap == 0 {
+        write!(writer, "{}", res)?;
+        return Ok(0);
+    }
+    let mut start = 0;
+    while start < res.len() {
+        let chunk_len = std::cmp::min(line_wrap - current_col, res.len() - start);
+        write!(writer, "{}", &res[start..start + chunk_len])?;
+        current_col += chunk_len;
+        if current_col >= line_wrap {
+            writeln!(writer)?;
+            current_col = 0;
+        }
+        start += chunk_len;
+    }
+    Ok(current_col)
 }
 
 // 注意：这将在某个时候被淘汰

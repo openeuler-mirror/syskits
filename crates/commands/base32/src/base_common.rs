@@ -168,51 +168,27 @@ pub fn get_base_input<'a>(
     }
 }
 
-pub fn handle_base_input<R: Read>(
+pub fn handle_base_input<R: Read, W: Write>(
     ct_input: &mut R,
+    mut writer: W,
     ct_format: Format,
     ct_line_wrap: Option<usize>,
     ct_ignore_garbage: bool,
     ct_decode: bool,
-) -> CTResult<String> {
+) -> CTResult<()> {
     let mut input_data = Data::new(ct_input, ct_format).ignore_garbage(ct_ignore_garbage);
     if let Some(wrap) = ct_line_wrap {
         input_data = input_data.line_wrap(wrap);
     }
 
     if ct_decode {
-        // println!("--------------- decode ----------------");
-        match input_data.decode() {
-            Ok(s) => {
-                // 抑制此警告，因为我们希望显示错误消息
-                #[allow(clippy::question_mark)]
-                if stdout().write_all(&s).is_err() {
-                    // 在Windows控制台中，尝试写出无效UTF-8编码会引发错误
-                    return Err(CtSimpleError::new(1, "error: cannot write non-utf8 data"));
-                }
-
-                fn convert_vec_to_string_lossy(vec: Vec<u8>) -> String {
-                    String::from_utf8_lossy(&vec).into_owned()
-                }
-
-                // // 示例
-                // let bytes: Vec<u8> = vec![72, 101, 108, 108, 111, 239]; // 含有无效字节
-                let string = convert_vec_to_string_lossy(s);
-                // // println!("Converted string (lossy): {}", string);
-                // let ss = String::new();
-                // let ss = "test";
-
-                Ok(string)
-            }
+        match input_data.decode(&mut writer) {
+            Ok(_) => Ok(()),
             Err(_) => Err(CtSimpleError::new(1, "error: invalid input")),
         }
     } else {
-        // println!("--------------- encode ----------------");
-        match input_data.encode() {
-            Ok(s) => {
-                wrap_print(&input_data, &s);
-                Ok(s)
-            }
+        match input_data.encode(&mut writer) {
+            Ok(_) => Ok(()),
             Err(CtEncodeError::InvalidInput) => Err(CtSimpleError::new(1, "error: invalid input")),
             Err(_) => Err(CtSimpleError::new(
                 1,
@@ -277,8 +253,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -294,8 +272,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -333,8 +312,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -351,8 +332,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -389,8 +371,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -406,8 +390,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -445,8 +430,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -462,8 +449,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -500,8 +488,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -518,8 +508,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -556,8 +547,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -573,8 +566,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -611,8 +605,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -628,8 +624,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -668,8 +665,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -685,8 +684,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -725,8 +725,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -742,8 +744,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -781,8 +784,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -798,8 +803,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -838,8 +844,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -855,8 +863,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -894,8 +903,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -911,8 +922,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -950,8 +962,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -967,8 +981,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1007,8 +1022,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1024,8 +1041,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1064,8 +1082,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1081,8 +1101,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1121,8 +1142,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1138,8 +1161,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1178,8 +1202,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1195,8 +1221,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1235,8 +1262,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1252,8 +1281,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1292,8 +1322,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1309,8 +1341,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1349,8 +1382,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1366,8 +1401,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1406,8 +1442,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1423,8 +1461,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1463,8 +1502,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1480,8 +1521,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1520,8 +1562,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1537,8 +1581,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1577,8 +1622,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1594,8 +1641,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1634,8 +1682,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1651,8 +1701,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1691,8 +1742,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1708,8 +1761,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1748,8 +1802,10 @@ mod test {
         let mut input: Box<dyn Read> =
             base_common::get_base_input(&config, &stdin_raw).expect("get_input Failed");
 
+        let mut output = Vec::new();
         let result = base_common::handle_base_input(
             &mut input,
+            &mut output,
             format,
             config.base_wrap_cols,
             config.base_ignore_garbage,
@@ -1765,8 +1821,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }

@@ -354,10 +354,6 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # Slightly different error message
 "${SED}" -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
 
-# upstream doesn't having the program name in the error message
-# but we do. We should keep it that way.
-"${SED}" -i 's/echo "changing security context/echo "chcon: changing security context/' tests/chcon/chcon.sh
-
 # Disable this test, it is not relevant for us:
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
@@ -378,3 +374,7 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # 因此，我们将期望的半成品字符串替换为空字符串。
 "${SED}" -i -e '/b32h_[56]/ s/OUT=>\$base32_in/OUT=>""/' tests/basenc/basenc.pl
 "${SED}" -i -e '/b32_baddecode[12]/ s/OUT=>"abcde"/OUT=>""/' tests/basenc/basenc.pl
+
+### chcon tests
+# 删除 chcon.sh 里的 print_ver_ 检查，防止 GNU 框架误判跳过
+"${SED}" -i '/^print_ver_ chcon/d' tests/chcon/chcon.sh

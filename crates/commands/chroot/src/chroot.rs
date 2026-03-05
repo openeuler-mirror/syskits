@@ -15,12 +15,12 @@ mod error;
 use crate::error::ChrootError;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::Tool;
-use ctcore::ct_entries;
-use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
-use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
+use clap::{crate_version, Arg, ArgAction, Command};
+use ctcore::ct_entries::{self, CtPasswd, Locate}; // [修改] 引入 CtPasswd 和 Locate 用于查户口
+use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, UClapError};
+use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
 use ctcore::libc::{self, chroot, setgid, setgroups, setuid};
+use ctcore::Tool;
 use std::io::Error;
 use sys_locale::get_locale;
 
@@ -177,6 +177,7 @@ fn args_init() -> Vec<Arg> {
             .short('G')
             .long(opt_flags::GROUPS)
             .help(t!("chroot.clap.groups"))
+            .action(ArgAction::Append)
             .value_name("GROUP1,GROUP2..."),
         Arg::new(opt_flags::USERSPEC)
             .long(opt_flags::USERSPEC)
@@ -224,20 +225,17 @@ fn args_init() -> Vec<Arg> {
  * @return CTResult<()> 如果成功，返回一个空的Ok()结果；如果有错误，返回包含错误信息的Err()结果。
  */
 fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTResult<()> {
-    // 从命令行参数中解析用户和组信息
     let user_spec_str = args_option.get_one::<String>(opt_flags::USERSPEC);
-    let user_str = args_option
+    let arg_user = args_option
         .get_one::<String>(opt_flags::USER)
-        .map(|s| s.as_str())
-        .unwrap_or_default();
-    let group_str = args_option
+        .map(|s| s.as_str());
+    let arg_group = args_option
         .get_one::<String>(opt_flags::GROUP)
-        .map(|s| s.as_str())
-        .unwrap_or_default();
-    let groups_str = args_option
-        .get_one::<String>(opt_flags::GROUPS)
-        .map(|s| s.as_str())
-        .unwrap_or_default();
+        .map(|s| s.as_str());
+    let arg_groups = args_option
+        .get_many::<String>(opt_flags::GROUPS)
+        .and_then(|mut vals| vals.next_back())
+        .map(|s| s.as_str());
 
     let skip_chdir = args_option.get_flag(opt_flags::SKIP_CHDIR);
 
@@ -247,21 +245,67 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
         Err(value) => return value, // 如果解析失败，直接返回错误
     };
 
-    // 根据用户规范决定使用哪个用户和组
-    let (user, group) = if user_spec.is_empty() {
-        (user_str, group_str)
-    } else {
-        (user_spec[0], user_spec[1])
-    };
+    let final_user = user_spec.0.or(arg_user);
+    let final_group = user_spec.1.or(arg_group);
 
     // 进入新的根目录（如果配置中允许）
     chroot_enter(root_path, skip_chdir)?;
 
-    // 设置补充组和主组
-    chroot_set_groups_from_str(groups_str)?;
-    chroot_set_main_group(group)?;
-    // 设置有效用户
-    chroot_set_user(user)?;
+    let mut lookup_pwd = None;
+    if let Some(u) = final_user {
+        // 剥离 '+' 号去进行系统查询，因为 '+' 代表纯数字跳过 NSS，但在补全组时我们依然尝试查询
+        let lookup_name = u.strip_prefix('+').unwrap_or(u);
+        lookup_pwd = ctcore::ct_entries::CtPasswd::locate(lookup_name).ok();
+    }
+
+    if let Some(groups_str) = arg_groups {
+        // 如果显式传入了 --groups 参数（即便是空字符串代表清空），则直接设置
+        chroot_set_groups_from_str(groups_str)?;
+    } else if let Some(_) = final_user {
+        // 如果没传 --groups 参数，但指定了用户，我们需要尝试自动补全
+        if let Some(pwd) = lookup_pwd.as_ref() {
+            // 查到了用户，自动补全其所属的所有附加组
+            let groups = pwd.belongs_to();
+            let err = chroot_set_groups(&groups);
+            if err != 0 {
+                return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
+            }
+        } else if final_group.is_some() {
+            // 这是 GNU 的潜规则：没查到用户，但用户显式指定了主组（如 +12342:+5678）
+            // 此时由于没有查到用户的附加组信息，它会默认“清空”附加组。
+            let err = chroot_set_groups(&[]);
+            if err != 0 {
+                return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
+            }
+        }
+        // 如果没查到用户，且没指定主组，我们先跳过，它会在下一步报错
+    }
+
+    if let Some(g) = final_group {
+        // 用户显式指定了主组，直接设置
+        chroot_set_main_group(g)?;
+    } else if let Some(u) = final_user {
+        // 用户没有指定主组，需要自动补全
+        if let Some(pwd) = lookup_pwd.as_ref() {
+            // 查到了用户，自动补全其主 GID
+            let err = unsafe { setgid(pwd.gid as libc::gid_t) };
+            if err != 0 {
+                return Err(
+                    ChrootError::SetGidFailed(pwd.gid.to_string(), Error::last_os_error()).into(),
+                );
+            }
+        } else {
+            // 指定了用户，没指定组，系统里又查不到这个人！
+            // 此时既不知道主组是什么，又不能随便猜，必须报错 125！
+            return Err(ChrootError::InvalidUserspec(u.to_string()).into());
+        }
+    }
+
+    // 3. 设置有效用户 (Effective User)
+    if let Some(u) = final_user {
+        chroot_set_user(u)?;
+    }
+
     Ok(())
 }
 
@@ -275,24 +319,43 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
  *
  * @param user_spec_str 可选的用户规格字符串。格式应为`username:uid`。
  * @return Result<Vec<&str>, CTResult<()>> 如果解析成功，返回一个包含用户名和用户ID的字符串切片向量；
- *                                        如果解析失败，返回一个包含错误信息的错误结果。
+ * 如果解析失败，返回一个包含错误信息的错误结果。
  */
-fn chroot_parse_user_spec(user_spec_str: Option<&String>) -> Result<Vec<&str>, CTResult<()>> {
-    // 根据输入的用户规格字符串进行处理
-    let user_spec = match user_spec_str {
+fn chroot_parse_user_spec(
+    user_spec_str: Option<&String>,
+) -> Result<(Option<&str>, Option<&str>), CTResult<()>> {
+    match user_spec_str {
         Some(u) => {
-            // 将用户规格字符串按':'分割成两部分
-            let s: Vec<&str> = u.split(':').collect();
-            // 检查分割后的向量是否包含两部分且两部分都不为空
-            if s.len() != 2 || s.iter().any(|&spec| spec.is_empty()) {
-                // 如果格式不正确，返回错误
-                return Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()));
-            };
-            s
+            if let Some((user_part, group_part)) = u.split_once(':') {
+                let user = if user_part.is_empty() {
+                    None
+                } else {
+                    Some(user_part)
+                };
+                let group = if group_part.is_empty() {
+                    None
+                } else {
+                    Some(group_part)
+                };
+
+                if user.is_none() && group.is_none() {
+                    // ":" is invalid (both empty)
+                    Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()))
+                } else {
+                    Ok((user, group))
+                }
+            } else {
+                // No colon means only user was provided
+                let user = if u.is_empty() { None } else { Some(u.as_str()) };
+                if user.is_none() {
+                    Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()))
+                } else {
+                    Ok((user, None))
+                }
+            }
         }
-        None => Vec::new(), // 如果输入为None，返回空向量
-    };
-    Ok(user_spec)
+        None => Ok((None, None)), // If input is None, return all Nones
+    }
 }
 
 fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
@@ -320,11 +383,17 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
 
 fn chroot_set_main_group(chroot_group: &str) -> CTResult<()> {
     if !chroot_group.is_empty() {
-        let group_id = match ct_entries::grp2gid(chroot_group) {
-            Ok(g) => g,
-            Err(_) => chroot_group
+        let group_id = if let Some(id_str) = chroot_group.strip_prefix('+') {
+            id_str
                 .parse::<libc::gid_t>()
-                .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()))?,
+                .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()))?
+        } else {
+            match ct_entries::grp2gid(chroot_group) {
+                Ok(g) => g,
+                Err(_) => chroot_group
+                    .parse::<libc::gid_t>()
+                    .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()))?,
+            }
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
@@ -342,32 +411,74 @@ fn chroot_set_groups(groups: &[libc::gid_t]) -> libc::c_int {
 }
 
 fn chroot_set_groups_from_str(groups: &str) -> CTResult<()> {
-    if !groups.is_empty() {
-        let mut groups_vec = vec![];
-        for group in groups.split(',') {
-            let gid = match ct_entries::grp2gid(group) {
+    // Rule 1: An explicitly empty string means "clear all supplemental groups".
+    if groups.is_empty() {
+        let err = chroot_set_groups(&[]);
+        if err != 0 {
+            return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
+        }
+        return Ok(());
+    }
+
+    // Rule 2 pipeline: split → trim → skip empty → parse.
+    let mut groups_vec = vec![];
+    let mut first_bad_raw: Option<&str> = None;
+
+    for raw_group in groups.split(',') {
+        let group = raw_group.trim();
+        if group.is_empty() {
+            // Remember the first empty/whitespace-only token for a potential error
+            // message, but don't error yet – consecutive commas are allowed by GNU.
+            if first_bad_raw.is_none() {
+                first_bad_raw = Some(raw_group);
+            }
+            continue;
+        }
+        // Reset bad-token sentinel: we found at least one real token.
+        first_bad_raw = None;
+        let gid = if let Some(id_str) = group.strip_prefix('+') {
+            // '+' prefix forces strict numeric-ID resolution, bypassing NSS.
+            id_str
+                .parse::<libc::gid_t>()
+                .map_err(|_| ChrootError::NoSuchGroup(group.to_string()))?
+        } else {
+            match ct_entries::grp2gid(group) {
                 Ok(g) => g,
                 Err(_) => group
                     .parse::<libc::gid_t>()
                     .map_err(|_| ChrootError::NoSuchGroup(group.to_string()))?,
-            };
-            groups_vec.push(gid);
-        }
-        let err = chroot_set_groups(&groups_vec);
-        if err != 0 {
-            return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
-        }
+            }
+        };
+        groups_vec.push(gid);
+    }
+
+    // Rule 3: if the non-empty input produced zero valid groups, the entire
+    // value was whitespace or bare commas – report the first offending token.
+    if groups_vec.is_empty() {
+        let bad = first_bad_raw.unwrap_or(groups);
+        return Err(ChrootError::NoSuchGroup(bad.to_string()).into());
+    }
+
+    let err = chroot_set_groups(&groups_vec);
+    if err != 0 {
+        return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
     }
     Ok(())
 }
 
 fn chroot_set_user(username: &str) -> CTResult<()> {
     if !username.is_empty() {
-        let user_id = match ct_entries::usr2uid(username) {
-            Ok(u) => u,
-            Err(_) => username
+        let user_id = if let Some(id_str) = username.strip_prefix('+') {
+            id_str
                 .parse::<libc::uid_t>()
-                .map_err(|_| ChrootError::NoSuchUser(username.to_string()))?,
+                .map_err(|_| ChrootError::NoSuchUser(username.to_string()))?
+        } else {
+            match ct_entries::usr2uid(username) {
+                Ok(u) => u,
+                Err(_) => username
+                    .parse::<libc::uid_t>()
+                    .map_err(|_| ChrootError::NoSuchUser(username.to_string()))?,
+            }
         };
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
@@ -652,8 +763,7 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -673,8 +783,7 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -709,8 +818,7 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.is_ok());
         }
 
         #[test]

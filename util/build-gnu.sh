@@ -21,7 +21,7 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 : ${PROFILE:=debug}
 export PROFILE
 # 用来传递cargo features
-CARGO_FEATURE_FLAGS=""
+CARGO_FEATURE_FLAGS="unix"
 
 # SYSKITS和GNU coreutils分别的路径
 path_SYSKITS=${path_SYSKITS:-${REPO_main_dir}}

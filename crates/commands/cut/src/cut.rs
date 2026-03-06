@@ -479,6 +479,81 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
+fn cut_fields_as_single_record<R: Read>(
+    reader: R,
+    ranges: &[CtRange],
+    opts: &CutOptions,
+    newline_char: u8,
+) -> CTResult<()> {
+    let mut buffer_in = BufReader::new(reader);
+    let mut out_writer = cut_stdout_writer();
+    let mut field_idx = 1;
+    let mut print_delim = false;
+
+    let default_out_delim = [newline_char];
+    let out_d = opts.out_delimiter.unwrap_or(&default_out_delim);
+
+    let only_delim = opts.field_opts.as_ref().unwrap().only_delimited;
+
+    let mut output_buffer = Vec::new();
+    let mut has_delimiter = false;
+
+    let result = buffer_in.for_byte_record_with_terminator(newline_char, |line| {
+        let is_terminated = line.ends_with(&[newline_char]);
+        if is_terminated {
+            has_delimiter = true;
+        }
+
+        let field = if is_terminated {
+            &line[..line.len() - 1]
+        } else {
+            line
+        };
+
+        let in_range = ranges
+            .iter()
+            .any(|r| r.low <= field_idx && field_idx <= r.high);
+
+        if in_range {
+            if has_delimiter || !only_delim {
+                if !output_buffer.is_empty() {
+                    out_writer.write_all(&output_buffer)?;
+                    output_buffer.clear();
+                }
+                if print_delim {
+                    out_writer.write_all(out_d)?;
+                } else {
+                    print_delim = true;
+                }
+                out_writer.write_all(field)?;
+            } else {
+                if print_delim {
+                    output_buffer.extend_from_slice(out_d);
+                } else {
+                    print_delim = true;
+                }
+                output_buffer.extend_from_slice(field);
+            }
+        }
+
+        field_idx += 1;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(CtSimpleError::new(1, e.to_string()));
+    }
+
+    if (!only_delim || has_delimiter) && print_delim {
+        if !output_buffer.is_empty() {
+            out_writer.write_all(&output_buffer)?;
+        }
+        out_writer.write_all(&[newline_char])?;
+    }
+
+    Ok(())
+}
+
 /**
  * 从给定的读取器中按照指定的字段范围和选项切割字段。
  *
@@ -489,11 +564,17 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
  */
 fn cut_fields<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTResult<()> {
     let newline_char = opts.line_ending.into(); // 将行结束符选项转换为具体的字符
-    let field_opts = opts.field_opts.as_ref().unwrap(); // 获取字段选项，此处unwrap安全，因为field_opts在cut_fields调用时总是Some
+    let field_opts = opts.field_opts.as_ref().unwrap(); // 获取字段选项
 
     // 根据字段分隔符类型进行不同的切割逻辑
     match field_opts.delimiter {
         CutDelimiter::Slice(delim) => {
+            // 【新增拦截】：如果分隔符恰好是换行符，启用单记录超级模式
+            let delim_byte = delim[0];
+            if delim.len() == 1 && delim_byte == newline_char {
+                return cut_fields_as_single_record(reader, ranges, opts, newline_char);
+            }
+
             // 使用精确匹配器，用于按照指定字符切割
             let matcher = ExactMatcher::new(delim);
             // 根据是否指定了输出字段分隔符，选择不同的切割函数
@@ -516,16 +597,14 @@ fn cut_fields<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRe
             }
         }
         CutDelimiter::Whitespace => {
-            // 使用空白符匹配器，用于按照空白字符切割
             let matcher = WhitespaceMatcher {};
-            // 由于空白符切割默认没有输出分隔符，这里直接调用相应的函数
             cut_fields_explicit_out_delim(
                 reader,
                 &matcher,
                 ranges,
                 field_opts.only_delimited,
                 newline_char,
-                opts.out_delimiter.unwrap_or(b"\t"), // 若未指定输出分隔符，则默认使用制表符
+                opts.out_delimiter.unwrap_or(b"\t"),
             )
         }
     }

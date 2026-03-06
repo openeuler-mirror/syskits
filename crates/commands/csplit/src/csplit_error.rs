@@ -41,8 +41,8 @@ pub enum CsplitError {
     SuffixFormatIncorrect,
     #[error("too many % conversion specifications in suffix")]
     SuffixFormatTooManyPercents,
-    #[error("{} is not a regular file", ._0.quote())]
-    NotRegularFile(String),
+    // #[error("{} is not a regular file", ._0.quote())]
+    // NotRegularFile(String),
 }
 
 impl From<io::Error> for CsplitError {

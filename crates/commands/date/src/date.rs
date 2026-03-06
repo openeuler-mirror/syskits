@@ -604,71 +604,194 @@ fn get_default_format() -> String {
 
 #[cfg(target_os = "linux")]
 fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<String> {
-    // Handle %N by replacing it with nanoseconds
-    // Also handle %f which might be used internally in make_format_string
-    let nanos = format!("{:09}", dt.nanosecond());
-    let quarter = (dt.month0() / 3) + 1;
+    // 检测当前环境语言
+    let lang = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_TIME"))
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default();
+    
+    // 是否启用地方历法
+    let use_thai_era = lang.starts_with("th_");
+    let use_iran_era = lang.starts_with("fa_");
+    let use_ethiopia_era = lang.starts_with("am_") || lang.ends_with("_ET");    
+    let use_alt_era = use_thai_era || use_iran_era || use_ethiopia_era;
 
-    let offset_secs = dt.offset().local_minus_utc();
-    let abs_secs = offset_secs.abs();
-    let hours = abs_secs / 3600;
-    let minutes = (abs_secs % 3600) / 60;
-    let seconds = abs_secs % 60;
-    let sign = if offset_secs < 0 { "-" } else { "+" };
-
-    let tz_colon = format!("{sign}{hours:02}:{minutes:02}");
-    let tz_double_colon = format!("{sign}{hours:02}:{minutes:02}:{seconds:02}");
-    let tz_triple_colon = if seconds == 0 && minutes == 0 {
-        format!("{sign}{hours:02}")
-    } else if seconds == 0 {
-        format!("{sign}{hours:02}:{minutes:02}")
-    } else {
-        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
-    };
-
-    // Pre-process format string to handle %-WIDTH conversion (remove width)
-    // This is to match GNU date behavior where - flag disables padding, effectively ignoring width.
     let mut fmt_adjusted = String::with_capacity(fmt.len());
     let mut chars = fmt.chars().peekable();
+    
+    // 真正的格式化串解析器
     while let Some(c) = chars.next() {
-        fmt_adjusted.push(c);
         if c == '%' {
-            if let Some(&next) = chars.peek() {
+            let mut has_minus = false;
+            let mut colons = 0;
+            let mut flags_str = String::new();
+            let mut width_str = String::new();
+
+            // 1. 提取所有 Flag
+            while let Some(&next) = chars.peek() {
                 if next == '-' {
-                    chars.next(); // consume '-'
-                    fmt_adjusted.push('-');
-                    // Skip digits following '-'
-                    while let Some(&d) = chars.peek() {
-                        if d.is_ascii_digit() {
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                } else if next == '%' {
+                    has_minus = true;
+                    flags_str.push(next);
                     chars.next();
-                    fmt_adjusted.push('%');
+                } else if next == '_' || next == '0' || next == '^' || next == '#' {
+                    flags_str.push(next);
+                    chars.next();
+                } else if next == ':' {
+                    colons += 1;
+                    flags_str.push(next);
+                    chars.next();
+                } else {
+                    break;
                 }
             }
+
+            // 2. 提取指定宽度
+            while let Some(&next) = chars.peek() {
+                if next.is_ascii_digit() {
+                    width_str.push(next);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            // 3. 提取修饰符 (E 或 O)
+            let mut modifier = None;
+            if let Some(&m) = chars.peek() {
+                if m == 'E' || m == 'O' {
+                    modifier = Some(m);
+                    chars.next();
+                }
+            }
+
+            // 4. 提取指令符
+            if let Some(spec) = chars.next() {
+                match spec {
+                    'N' | 'f' => {
+                        let ns = dt.nanosecond();
+                        let mut ns_str = format!("{ns:09}");
+                        let width = if !width_str.is_empty() {
+                            width_str.parse::<usize>().unwrap_or(9).min(9)
+                        } else if has_minus {
+                            let (_, res_nsec) = get_clock_resolution();
+                            let mut w = 9;
+                            let mut temp = res_nsec;
+                            while temp > 0 && temp % 10 == 0 && w > 1 {
+                                temp /= 10;
+                                w -= 1;
+                            }
+                            w
+                        } else {
+                            9
+                        };
+                        ns_str.truncate(width);
+                        fmt_adjusted.push_str(&ns_str);
+                    }
+                    'z' => {
+                        let offset_secs = dt.offset().local_minus_utc();
+                        let abs_secs = offset_secs.abs();
+                        let hours = abs_secs / 3600;
+                        let minutes = (abs_secs % 3600) / 60;
+                        let seconds = abs_secs % 60;
+                        let sign = if offset_secs < 0 { "-" } else { "+" };
+
+                        let tz_str = if colons == 1 {
+                            format!("{sign}{hours:02}:{minutes:02}")
+                        } else if colons == 2 {
+                            format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
+                        } else if colons >= 3 {
+                            if seconds == 0 && minutes == 0 {
+                                format!("{sign}{hours:02}")
+                            } else if seconds == 0 {
+                                format!("{sign}{hours:02}:{minutes:02}")
+                            } else {
+                                format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
+                            }
+                        } else {
+                            format!("{sign}{hours:02}{minutes:02}")
+                        };
+                        fmt_adjusted.push_str(&tz_str);
+                    }
+                    'q' => {
+                        let quarter = (dt.month0() / 3) + 1;
+                        fmt_adjusted.push_str(&quarter.to_string());
+                    }
+                    'Y' | 'y' if use_alt_era => {
+                        // 【核心修复】：手动计算泰国佛历、波斯历和埃塞俄比亚历，绕过 glibc 文字污染！
+                        let mut year = dt.year();
+                        if use_thai_era {
+                            year += 543; // 泰国佛历 = 公历 + 543
+                        } else if use_iran_era {
+                            let month = dt.month();
+                            let day = dt.day();
+                            // 简易波斯历推导 (伊朗新年诺鲁孜节约在 3月20日)
+                            if month < 3 || (month == 3 && day <= 20) {
+                                year -= 622;
+                            } else {
+                                year -= 621;
+                            }
+                        } else if use_ethiopia_era {
+                            let month = dt.month();
+                            let day = dt.day();
+                            // 埃塞俄比亚历 (新年在 9月11日 或 9月12日)
+                            if month < 9 || (month == 9 && day <= 10) {
+                                year -= 8;
+                            } else {
+                                year -= 7;
+                            }
+                        }
+
+                        let mut s = if spec == 'Y' {
+                            format!("{year:04}")
+                        } else {
+                            format!("{:02}", (year % 100).abs())
+                        };
+
+                        // 处理格式填充
+                        let w = width_str.parse::<usize>().unwrap_or(0);
+                        if w > s.len() && !has_minus {
+                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
+                            s = format!("{}{}", pad_char.to_string().repeat(w - s.len()), s);
+                        }
+
+                        fmt_adjusted.push_str(&s);
+                    }
+                    _ => {
+                        // 标准 C 语言 strftime 占位符
+                        fmt_adjusted.push('%');
+                        fmt_adjusted.push_str(&flags_str);
+                        if !has_minus {
+                            fmt_adjusted.push_str(&width_str);
+                        }
+                        if let Some(m) = modifier {
+                            fmt_adjusted.push(m);
+                        } else if use_alt_era && matches!(spec, 'c' | 'x' | 'X') {
+                            // 对于 %c, %x 仍然允许底层调用带 E 的格式
+                            fmt_adjusted.push('E');
+                        }
+                        fmt_adjusted.push(spec);
+                    }
+                }
+            } else {
+                fmt_adjusted.push('%');
+                fmt_adjusted.push_str(&flags_str);
+                fmt_adjusted.push_str(&width_str);
+                if let Some(m) = modifier {
+                    fmt_adjusted.push(m);
+                }
+            }
+        } else {
+            fmt_adjusted.push(c);
         }
     }
 
-    let fmt_final = fmt_adjusted
-        .replace("%N", &nanos)
-        .replace("%f", &nanos)
-        .replace("%q", &quarter.to_string())
-        .replace("%:::z", &tz_triple_colon)
-        .replace("%::z", &tz_double_colon)
-        .replace("%:z", &tz_colon);
-
-    let c_fmt =
-        CString::new(fmt_final).map_err(|_| CtSimpleError::new(1, "Invalid format string"))?;
+    let c_fmt = CString::new(fmt_adjusted)
+        .map_err(|_| CtSimpleError::new(1, "Invalid format string"))?;
 
     let ts = dt.timestamp();
     let mut tm_val: tm = unsafe { mem::zeroed() };
     let mut use_tm = false;
 
-    // Try localtime if offset matches
     unsafe {
         let mut tmp_tm: tm = mem::zeroed();
         if !localtime_r(&ts, &mut tmp_tm).is_null()

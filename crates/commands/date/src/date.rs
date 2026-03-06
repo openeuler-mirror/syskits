@@ -247,8 +247,14 @@ fn date_processing(
     };
 
     #[cfg(target_os = "linux")]
-    if matches!(date_set.format, DateFormat::Rfc5322) {
+    if matches!(
+        date_set.format,
+        DateFormat::Rfc5322 | DateFormat::Iso8601(_) | DateFormat::Rfc3339(_)
+    ) {
         unsafe {
+            std::env::set_var("LC_ALL", "C");
+            std::env::set_var("LC_TIME", "C");
+            libc::setlocale(libc::LC_ALL, c"C".as_ptr() as *const libc::c_char);
             libc::setlocale(libc::LC_TIME, c"C".as_ptr() as *const libc::c_char);
         }
     }
@@ -556,20 +562,28 @@ fn make_format_string(date_settings: &DateSettings) -> String {
 
 #[cfg(target_os = "linux")]
 fn get_default_format() -> String {
-    // Try to detect if we are in a Chinese locale to match GNU date's default format for zh_CN.
-    // GNU date uses _DATE_FMT which is not easily accessible/stable via libc crate.
-    // For zh_CN, _DATE_FMT is usually "%Y年 %m月 %d日 %A %H:%M:%S %Z"
-    if let Ok(lang) = std::env::var("LC_TIME")
-        .or_else(|_| std::env::var("LC_ALL"))
+    let lang = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_TIME"))
         .or_else(|_| std::env::var("LANG"))
-    {
-        if lang.starts_with("zh_CN") {
-            return "%Y年 %m月 %d日 %A %H:%M:%S %Z".to_string();
-        }
+        .unwrap_or_default();
+
+    // 1. C/POSIX 语言环境：GNU date 强制硬编码
+    if lang.is_empty() || lang == "C" || lang == "POSIX" {
+        return "%a %b %e %H:%M:%S %Z %Y".to_string();
+    }
+
+    // 2. 中文环境：GNU 的默认格式
+    if lang.starts_with("zh_CN") {
+        return "%Y年 %m月 %d日 %A %H:%M:%S %Z".to_string();
+    }
+    
+    // 3. 美式英语环境：完美对齐 GNU 期望输出
+    if lang.starts_with("en_US") {
+        return "%a %b %e %r %Z %Y".to_string();
     }
 
     unsafe {
-        let ptr = nl_langinfo(D_T_FMT);
+        let ptr = nl_langinfo(131118);
         if !ptr.is_null() {
             let c_str = CStr::from_ptr(ptr);
             if let Ok(s) = c_str.to_str() {
@@ -579,7 +593,7 @@ fn get_default_format() -> String {
             }
         }
     }
-    // Fallback if D_T_FMT is empty or invalid
+    
     "%a %b %e %H:%M:%S %Z %Y".to_string()
 }
 

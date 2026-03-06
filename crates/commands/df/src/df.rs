@@ -16,24 +16,26 @@ mod table;
 
 use blocks::BlocksHumanReadable;
 use rust_i18n::t;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::ArgAction;
 use clap::builder::ValueParser;
+use clap::ArgAction;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
-use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::read_fs_list;
+use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::ct_show;
 
+use clap::crate_version;
+use clap::parser::ValueSource;
 use clap::Arg;
 use clap::ArgMatches;
 use clap::Command;
-use clap::crate_version;
-use clap::parser::ValueSource;
 use ctcore::Tool;
 use std::error::Error;
 use std::ffi::OsString;
@@ -42,8 +44,8 @@ use std::path::Path;
 use sys_locale::get_locale;
 use table::TableHeaderMode;
 
-use crate::blocks::BlockSize;
 use crate::blocks::block_size_read;
+use crate::blocks::BlockSize;
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -401,26 +403,74 @@ fn get_named_filesystems<P>(
 where
     P: AsRef<Path>,
 {
-    // 所有挂载的文件系统的列表。
-    // 排除被标记为“dummy”的文件系统和类型为"lofs"的文件系统。"lofs"是一种循环回路文件系统，存在于Solaris和FreeBSD系统中。它类似于符号链接。
-    let mounts: Vec<CtMountInfo> = filter_mount_list(read_fs_list()?, options)
+    // 先读取完整的、按时间顺序排列的挂载表（用于覆盖挂载检测）
+    let full_mounts = read_fs_list()?;
+
+    // 过滤掉 dummy 等不合法的文件系统，用于常规信息获取
+    let mounts: Vec<CtMountInfo> = filter_mount_list(full_mounts.clone(), options)
         .into_iter()
         .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
         .collect();
 
     let mut result = vec![];
 
-    // 如果没有可用的文件系统类型，则显示错误信息。
     if mounts.is_empty() {
         ct_show!(CtSimpleError::new(1, "no file systems processed"));
         return Ok(result);
     }
 
-    // 将每个路径转换为包含挂载信息和使用信息的`Filesystem`。
     for path in file_paths {
+        let path_str = path.as_ref().to_string_lossy().to_string();
+
+        // 挂载点遮蔽 (Over-mount) 探测机制
+        #[cfg(unix)]
+        {
+            if let Ok(meta) = std::fs::metadata(path.as_ref()) {
+                // 只有明确查询的是块设备，才进行遮蔽检测
+                if meta.file_type().is_block_device() {
+                    let mut totally_overmounted = false;
+
+                    // 遍历所有该设备曾经挂载的记录
+                    for m in &full_mounts {
+                        if m.dev_name == path_str {
+                            // 找到该挂载点的最后一个(最新)挂载项
+                            let top_mount = full_mounts
+                                .iter()
+                                .filter(|x| x.mount_dir == m.mount_dir)
+                                .last();
+
+                            // 如果最新挂载项的设备名与我们查询的设备名不同，说明被覆盖了
+                            let overmounted =
+                                top_mount.map(|x| x.dev_name != path_str).unwrap_or(false);
+
+                            // 只要有一个挂载点没有被覆盖，就认为是可以访问的
+                            if !overmounted {
+                                totally_overmounted = false;
+                                break;
+                            } else {
+                                totally_overmounted = true;
+                            }
+                        }
+                    }
+
+                    if totally_overmounted {
+                        ct_show!(CtSimpleError::new(
+                            1,
+                            format!(
+                                "cannot access '{}': over-mounted by another device",
+                                path_str
+                            )
+                        ));
+                        continue; // 跳过此设备，不抛出致命异常，对齐 GNU 行为
+                    }
+                }
+            }
+        }
+
         let effective_path = if options.direct {
             path.as_ref()
                 .canonicalize()
+                // 如果指定的文件系统类型与文件的实际文件系统类型不匹配，显示错误信息。
                 .unwrap_or(path.as_ref().to_path_buf())
         } else {
             path.as_ref().to_path_buf()
@@ -434,7 +484,7 @@ where
                 result.push(fs)
             }
             None => {
-                // 如果指定的文件系统类型与文件的实际文件系统类型不匹配，显示错误信息。
+                // 如果找不到文件系统映射信息
                 if path.as_ref().exists() {
                     ct_show!(CtSimpleError::new(1, "no file systems processed"));
                 } else {
@@ -448,6 +498,7 @@ where
     }
     Ok(result)
 }
+
 // DfError定义了在执行df命令时可能遇到的错误类型。
 #[derive(Debug)]
 enum DfError {
@@ -749,10 +800,10 @@ mod tests {
 
     mod tests_ct_app {
         use crate::{
-            DF_OPT_ALL, DF_OPT_BLOCKSIZE, DF_OPT_EXCLUDE_TYPE, DF_OPT_HUMAN_READABLE_BINARY,
-            DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_INODES, DF_OPT_LOCAL, DF_OPT_NO_SYNC,
-            DF_OPT_OUTPUT, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE, DF_OPT_SYNC, DF_OPT_TOTAL,
-            DF_OPT_TYPE, ct_app,
+            ct_app, DF_OPT_ALL, DF_OPT_BLOCKSIZE, DF_OPT_EXCLUDE_TYPE,
+            DF_OPT_HUMAN_READABLE_BINARY, DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_INODES,
+            DF_OPT_LOCAL, DF_OPT_NO_SYNC, DF_OPT_OUTPUT, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE,
+            DF_OPT_SYNC, DF_OPT_TOTAL, DF_OPT_TYPE,
         };
         use clap::error::ErrorKind;
         use std::ffi::OsString;
@@ -8774,7 +8825,7 @@ mod tests {
     */
 
     mod is_included {
-        use crate::{DfOptions, is_included};
+        use crate::{is_included, DfOptions};
         use ctcore::ct_fsext::CtMountInfo;
 
         /// Instantiate a [`CtMountInfo`] with the given fields.
@@ -8919,7 +8970,7 @@ mod tests {
     }
 
     mod filter_mount_list {
-        use crate::{DfOptions, filter_mount_list};
+        use crate::{filter_mount_list, DfOptions};
 
         #[test]
         fn test_empty() {
@@ -8930,10 +8981,10 @@ mod tests {
     }
 
     mod tests_ct_get_filesystem {
-        use crate::DfError;
-        use crate::DfOptions;
         use crate::ct_app;
         use crate::get_all_filesystems;
+        use crate::DfError;
+        use crate::DfOptions;
 
         use crate::get_filesystem;
         use std::fs;

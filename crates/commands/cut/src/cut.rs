@@ -14,17 +14,17 @@ use bstr::io::BufReadExt;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use self::searcher::Searcher;
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
-use ctcore::Tool;
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_ranges::CtRange;
+use ctcore::Tool;
 use ctcore::{ct_show_error, ct_show_if_err};
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -107,16 +107,36 @@ fn parse_position_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, S
     let mut ct_ranges = Vec::new();
 
     for item in list.split(&[',', ' ']) {
-        let range_item = std::str::FromStr::from_str(item)
+        let range_item: CtRange = std::str::FromStr::from_str(item)
             .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
         ct_ranges.push(range_item);
     }
 
-    // 对于字符和字节模式，仅排序不合并，以保持与GNU cut的output-delimiter兼容性
     ct_ranges.sort();
 
     let result = if complement {
-        Ok(ctcore::ct_ranges::complement(&ct_ranges))
+        // 先合并再求补集，防止互补运算出现重叠/非法缝隙
+        let mut merged = Vec::new();
+        if !ct_ranges.is_empty() {
+            merged.push(CtRange {
+                low: ct_ranges[0].low,
+                high: ct_ranges[0].high,
+            });
+
+            for r in &ct_ranges[1..] {
+                let last = merged.last_mut().unwrap();
+                // 如果相交或相邻，则合并（例如 1-2 和 3-4 合并为 1-4）
+                if r.low <= last.high.saturating_add(1) {
+                    last.high = last.high.max(r.high);
+                } else {
+                    merged.push(CtRange {
+                        low: r.low,
+                        high: r.high,
+                    });
+                }
+            }
+        }
+        Ok(ctcore::ct_ranges::complement(&merged))
     } else {
         Ok(ct_ranges)
     };

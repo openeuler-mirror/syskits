@@ -653,17 +653,15 @@ fn cut_files(mut filenames: Vec<String>, mode: &CutMode) {
             }
 
             // 尝试打开文件，并根据模式对文件内容进行切割
-            ct_show_if_err!(
-                File::open(path)
-                    .map_err_context(|| filename.maybe_quote().to_string())
-                    .and_then(|file| {
-                        match &mode {
-                            CutMode::Bytes(ranges, opts) => cut_bytes(file, ranges, opts),
-                            CutMode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
-                            CutMode::Characters(ranges, opts) => cut_characters(file, ranges, opts),
-                        }
-                    })
-            );
+            ct_show_if_err!(File::open(path)
+                .map_err_context(|| filename.maybe_quote().to_string())
+                .and_then(|file| {
+                    match &mode {
+                        CutMode::Bytes(ranges, opts) => cut_bytes(file, ranges, opts),
+                        CutMode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
+                        CutMode::Characters(ranges, opts) => cut_characters(file, ranges, opts),
+                    }
+                }));
         }
     }
 }
@@ -923,7 +921,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 检查是否使用了等号形式的分隔符参数。
     let delimiter_is_equal = args.contains(&OsString::from("-d=")); // 特殊情况处理
-    // 使用 clap 库解析命令行参数。
+                                                                    // 使用 clap 库解析命令行参数。
     let args_match = ct_app().try_get_matches_from(args)?;
 
     // 获取命令行指定的额外选项。
@@ -1069,85 +1067,65 @@ fn cut_mode_parse<'a>(
 
 /// 从输入流中按字符位置切割数据
 fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTResult<()> {
+    let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
     let mut out = cut_stdout_writer();
-    let mut input_buffer = [0; 1024 * 31]; // 使用固定大小的缓冲区
+    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
-    while let Ok(n) = buf_in.read(&mut input_buffer) {
-        if n == 0 {
-            break;
-        }
+    let result = buf_in.for_byte_record(newline_char, |line| {
+        let line_str = String::from_utf8_lossy(line);
+        let graphemes: Vec<&str> = line_str.graphemes(true).collect();
 
-        let mut position = 0;
-        while position < n {
-            // 获取当前位置到缓冲区末尾的切片
-            let current_slice = &input_buffer[position..n];
-            // 查找下一个换行符
-            let next_newline = current_slice.iter().position(|&b| b == b'\n');
-            // 计算当前行的长度
-            let line_length = next_newline.unwrap_or(current_slice.len());
-            let line = &current_slice[..line_length];
-            // 使用 from_utf8_lossy 处理当前行
-            let line_str = String::from_utf8_lossy(line);
-            // 使用 graphemes 处理 Unicode 字符
-            let graphemes: Vec<&str> = line_str.graphemes(true).collect();
-            // 处理每个范围 - 修复output-delimiter逻辑以与GNU coreutils兼容
-            // 需要智能合并重叠范围，但保持相邻范围分离
-            let mut merged_segments = Vec::new();
-            let mut current_start = None;
-            let mut current_end = None;
+        let mut merged_segments = Vec::new();
+        let mut current_start = None;
+        let mut current_end = None;
 
-            for &CtRange { low, high } in ranges {
-                let start = low.saturating_sub(1);
-                let end = high.min(graphemes.len());
+        for &CtRange { low, high } in ranges {
+            let start = low.saturating_sub(1);
+            let end = high.min(graphemes.len());
 
-                if start >= graphemes.len() {
-                    continue;
+            if start >= graphemes.len() {
+                continue;
+            }
+
+            match (current_start, current_end) {
+                (None, None) => {
+                    current_start = Some(start);
+                    current_end = Some(end);
                 }
-
-                match (current_start, current_end) {
-                    (None, None) => {
-                        // 第一个范围
+                (Some(cur_start), Some(cur_end)) => {
+                    if start < cur_end {
+                        // overlap
+                        current_end = Some(cur_end.max(end));
+                    } else {
+                        // separate or abut
+                        merged_segments.push((cur_start, cur_end));
                         current_start = Some(start);
                         current_end = Some(end);
                     }
-                    (Some(cur_start), Some(cur_end)) => {
-                        if start < cur_end {
-                            // 真正重叠，合并
-                            current_end = Some(cur_end.max(end));
-                        } else {
-                            // 分离或相邻，保存当前段并开始新段
-                            merged_segments.push((cur_start, cur_end));
-                            current_start = Some(start);
-                            current_end = Some(end);
-                        }
-                    }
-                    _ => unreachable!(),
                 }
-                // 不在这里输出，等待后面统一输出
+                _ => unreachable!(),
             }
-
-            // 添加最后一个段
-            if let (Some(start), Some(end)) = (current_start, current_end) {
-                merged_segments.push((start, end));
-            }
-
-            // 输出各段，在分离的段之间添加分隔符
-            for (i, &(start, end)) in merged_segments.iter().enumerate() {
-                if i > 0 && opts.out_delimiter.is_some() {
-                    out.write_all(opts.out_delimiter.unwrap_or(b"\t"))?;
-                }
-
-                let selected = graphemes[start..end].join("");
-                out.write_all(selected.as_bytes())?;
-            }
-            // 写入换行符（如果原本有换行符）
-            if next_newline.is_some() {
-                out.write_all(b"\n")?;
-            }
-            // 更新位置
-            position += line_length + next_newline.map_or(0, |_| 1);
         }
+
+        if let (Some(start), Some(end)) = (current_start, current_end) {
+            merged_segments.push((start, end));
+        }
+
+        for (i, &(start, end)) in merged_segments.iter().enumerate() {
+            if i > 0 && opts.out_delimiter.is_some() {
+                out.write_all(out_delim)?;
+            }
+            let selected = graphemes[start..end].join("");
+            out.write_all(selected.as_bytes())?;
+        }
+        // 核心修复：无条件补齐换行符/终结符
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(CtSimpleError::new(1, e.to_string()));
     }
     Ok(())
 }
@@ -2078,8 +2056,8 @@ mod tests {
 
     mod tests_cut_functions {
         use crate::{
-            CutDelimiter, ct_app, cut_get_delimiters, cut_mode_param_parse, cut_mode_parse,
-            opt_flags,
+            ct_app, cut_get_delimiters, cut_mode_param_parse, cut_mode_parse, opt_flags,
+            CutDelimiter,
         };
         use ctcore::ct_line_ending::CtLineEnding;
         use std::fs;

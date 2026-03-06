@@ -425,7 +425,7 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         let form = form[1..].to_string();
         DateFormat::Custom(form)
     } else if args_match.contains_id(DATE_OPT_ISO_8601) {
-        // 【核心修复】：使用 contains_id + get_one，完美兼容 --iso-8601 和 --iso-8601=hours
+        // 使用 contains_id + get_one，完美兼容 --iso-8601 和 --iso-8601=hours
         let fmt = args_match
             .get_one::<String>(DATE_OPT_ISO_8601)
             .map(|s| s.as_str())
@@ -717,7 +717,7 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                         fmt_adjusted.push_str(&quarter.to_string());
                     }
                     'Y' | 'y' if use_alt_era => {
-                        // 【核心修复】：手动计算泰国佛历、波斯历和埃塞俄比亚历，绕过 glibc 文字污染！
+                        // 手动计算泰国佛历、波斯历和埃塞俄比亚历，绕过 glibc 文字污染！
                         let mut year = dt.year();
                         if use_thai_era {
                             year += 543; // 泰国佛历 = 公历 + 543

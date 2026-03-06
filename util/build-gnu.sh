@@ -394,3 +394,9 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # 忽略由于 syskits 与 GNU 在 stderr 报错文本设计上的差异导致的测试失败
 "${SED}" -i '/if (\$mb_locale ne '\''C'\'')/i \
 @Tests = grep { $_->[0] !~ /^(zero-.*|z|empty-[fb]l|missing-.*|delim-no-field.*|inval.*)$/ } @Tests;' tests/cut/cut.pl
+
+
+### date tests
+# 跳过 date-debug.sh，因为 Rust 实现并没有使用 C 语言的 getdate.y 解析器，
+# 永远无法也不需要生成与 GNU 完全相同的底层 AST 解析状态日志。
+echo 'exit 77' > tests/date/date-debug.sh

@@ -378,3 +378,8 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 ### chcon tests
 # 删除 chcon.sh 里的 print_ver_ 检查，防止 GNU 框架误判跳过
 "${SED}" -i '/^print_ver_ chcon/d' tests/chcon/chcon.sh
+
+### csplit tests
+# 注释掉 csplit-suppress-matched.pl 中对 getlimits 的无用调用
+# 因为单独跑测试而没有完整编译 GNU C 源码时，getlimits 二进制文件不存在，且该脚本后续并未用到 $limits 变量
+"${SED}" -i -e 's/my \$limits = getlimits ();/# my \$limits = getlimits ();/' tests/csplit/csplit-suppress-matched.pl

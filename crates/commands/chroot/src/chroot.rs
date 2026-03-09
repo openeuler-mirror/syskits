@@ -16,7 +16,7 @@ use crate::error::ChrootError;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{crate_version, Arg, ArgAction, Command};
-use ctcore::ct_entries::{self, CtPasswd, Locate}; // [修改] 引入 CtPasswd 和 Locate 用于查户口
+use ctcore::ct_entries::{self, CtPasswd, Locate};
 use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, UClapError};
 use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
 use ctcore::libc::{self, chroot, setgid, setgroups, setuid};
@@ -226,9 +226,7 @@ fn args_init() -> Vec<Arg> {
  */
 fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTResult<()> {
     let user_spec_str = args_option.get_one::<String>(opt_flags::USERSPEC);
-    let arg_user = args_option
-        .get_one::<String>(opt_flags::USER)
-        .map(|s| s.as_str());
+    let arg_user = args_option.get_one::<String>(opt_flags::USER);
     let arg_group = args_option
         .get_one::<String>(opt_flags::GROUP)
         .map(|s| s.as_str());
@@ -239,14 +237,21 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
 
     let skip_chdir = args_option.get_flag(opt_flags::SKIP_CHDIR);
 
-    // 解析用户规范字符串
+    // 解析 --userspec
     let user_spec = match chroot_parse_user_spec(user_spec_str) {
         Ok(value) => value,
         Err(value) => return value, // 如果解析失败，直接返回错误
     };
 
-    let final_user = user_spec.0.or(arg_user);
-    let final_group = user_spec.1.or(arg_group);
+    // 解析 --user，在 GNU 中 --user 同样支持 USER:GROUP 的语法
+    let user_arg_spec = match chroot_parse_user_spec(arg_user) {
+        Ok(value) => value,
+        Err(value) => return value,
+    };
+
+    // 智能合并解析结果：优先级 --userspec > --user > --group
+    let final_user = user_spec.0.or(user_arg_spec.0);
+    let final_group = user_spec.1.or(user_arg_spec.1).or(arg_group);
 
     // 进入新的根目录（如果配置中允许）
     chroot_enter(root_path, skip_chdir)?;

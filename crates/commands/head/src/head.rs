@@ -395,103 +395,62 @@ fn read_but_last_n_lines(
     Ok(())
 }
 
-/// Return the index in `input` just after the `n`th line from the end.
-///
-/// If `n` exceeds the number of lines in this file, then return 0.
-///
-/// The cursor must be at the start of the seekable input before
-/// calling this function. This function rewinds the cursor to the
-/// beginning of the input just before returning unless there is an
-/// I/O error.
-///
-/// If `zeroed` is `false`, interpret the newline character `b'\n'` as
-/// a line ending. If `zeroed` is `true`, interpret the null character
-/// `b'\0'` as a line ending instead.
-///
-/// # Errors
-///
-/// This function returns an error if there is a problem seeking
-/// through or reading the input.
-///
-/// # Examples
-///
-/// The function returns the index of the byte immediately following
-/// the line ending character of the `n`th line from the end of the
-/// input:
-///
-/// ```rust,ignore
-/// let mut input = Cursor::new("x\ny\nz\n");
-/// assert_eq!(find_nth_line_from_end(&mut input, 0, false).unwrap(), 6);
-/// assert_eq!(find_nth_line_from_end(&mut input, 1, false).unwrap(), 4);
-/// assert_eq!(find_nth_line_from_end(&mut input, 2, false).unwrap(), 2);
-/// ```
-///
-/// If `n` exceeds the number of lines in the file, always return 0:
-///
-/// ```rust,ignore
-/// let mut input = Cursor::new("x\ny\nz\n");
-/// assert_eq!(find_nth_line_from_end(&mut input, 3, false).unwrap(), 0);
-/// assert_eq!(find_nth_line_from_end(&mut input, 4, false).unwrap(), 0);
-/// assert_eq!(find_nth_line_from_end(&mut input, 1000, false).unwrap(), 0);
-/// ```
+fn write_error(e: std::io::Error) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!("error writing 'standard output': {}", e),
+    )
+}
+
 fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::Result<u64>
 where
     R: Read + Seek,
 {
-    // 获取文件总大小并检查空文件
-    let size = input.seek(SeekFrom::End(0))?;
+    let start_pos = input.stream_position()?;
+    let end_pos = input.seek(SeekFrom::End(0))?;
+    let size = end_pos - start_pos;
     if size == 0 {
-        input.rewind()?;
-        return Ok(0);
+        return Ok(start_pos);
     }
 
-    // 使用较大的缓冲区以减少 I/O 操作
-    const OPTIMAL_BUF_SIZE: usize = 8192; // 8KB buffer
+    input.seek(SeekFrom::Start(start_pos + size - 1))?;
+    let mut last_byte = [0u8; 1];
+    input.read_exact(&mut last_byte)?;
+    let ends_with_sep = last_byte[0] == separator;
+
+    let target_newlines = if ends_with_sep { n + 1 } else { n };
+    if target_newlines == 0 {
+        return Ok(start_pos + size);
+    }
+
+    const OPTIMAL_BUF_SIZE: usize = 8192;
     let mut buffer = vec![0u8; OPTIMAL_BUF_SIZE.min(size as usize)];
-    let mut lines_found = 0;
+    let mut newlines_found = 0;
     let mut position = size;
-    let mut last_separator_pos = size;
 
-    // 从文件末尾开始向前搜索
     while position > 0 {
-        // 计算当前块的大小和起始位置
         let chunk_size = OPTIMAL_BUF_SIZE.min(position as usize);
-        let start_pos = position - chunk_size as u64;
+        let start_read = position - chunk_size as u64;
 
-        // 读取当前块
-        input.seek(SeekFrom::Start(start_pos))?;
+        input.seek(SeekFrom::Start(start_pos + start_read))?;
         let read_buf = &mut buffer[..chunk_size];
         input.read_exact(read_buf)?;
 
-        // 从后向前查找分隔符
         for (i, &byte) in read_buf.iter().rev().enumerate() {
             if byte == separator {
-                if lines_found == 0 {
-                    last_separator_pos = position - i as u64;
-                }
-                lines_found += 1;
-                if lines_found > n {
-                    input.rewind()?;
-                    return Ok(position - i as u64);
+                newlines_found += 1;
+                if newlines_found == target_newlines {
+                    let cut_point = start_read + chunk_size as u64 - i as u64;
+                    input.seek(SeekFrom::Start(start_pos))?;
+                    return Ok(start_pos + cut_point);
                 }
             }
         }
-
-        position = start_pos;
+        position = start_read;
     }
 
-    // 如果没有找到足够的分隔符
-    input.rewind()?;
-    if lines_found == 0 {
-        // 如果没有找到任何分隔符，返回0
-        Ok(0)
-    } else if n >= lines_found {
-        // 如果请求的行数超过了实际的行数，返回0
-        Ok(0)
-    } else {
-        // 如果是请求最后一个分隔符之后的位置（n=0），返回文件大小
-        Ok(last_separator_pos)
-    }
+    input.seek(SeekFrom::Start(start_pos))?;
+    Ok(start_pos)
 }
 
 fn is_seekable(input: &mut std::fs::File) -> bool {
@@ -502,11 +461,62 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    let st = input.metadata()?;
-    let seekable = is_seekable(input);
-    let blksize_limit = ctcore::ct_fs::sane_blksize::sane_blksize_from_metadata(&st);
-    if !seekable || st.len() <= blksize_limit {
+    let seekable = !options.presume_input_pipe && is_seekable(input);
+
+    if !seekable {
         return head_backwards_without_seek_file(input, options);
+    }
+
+    let st = input.metadata()?;
+
+    if st.len() <= 65536 {
+        let start_pos = input.stream_position()?;
+        let mut data = Vec::new();
+        input.read_to_end(&mut data)?;
+        let true_size = data.len();
+
+        let stdout = std::io::stdout();
+        let mut stdout_lock = stdout.lock();
+
+        match options.mode {
+            Mode::AllButLastBytes(n) => {
+                let print_len = (true_size as u64).saturating_sub(n) as usize;
+                stdout_lock
+                    .write_all(&data[..print_len])
+                    .map_err(write_error)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + print_len as u64));
+            }
+            Mode::AllButLastLines(n) => {
+                let separator: u8 = options.line_ending.into();
+                let mut newline_positions = Vec::new();
+                for (i, &b) in data.iter().enumerate() {
+                    if b == separator {
+                        newline_positions.push(i);
+                    }
+                }
+
+                let mut total_lines = newline_positions.len() as u64;
+                if !data.is_empty() && *data.last().unwrap() != separator {
+                    total_lines += 1;
+                }
+
+                let lines_to_keep = total_lines.saturating_sub(n);
+                let print_len = if lines_to_keep == 0 {
+                    0
+                } else if (lines_to_keep as usize) <= newline_positions.len() {
+                    newline_positions[(lines_to_keep - 1) as usize] + 1
+                } else {
+                    true_size
+                };
+
+                stdout_lock
+                    .write_all(&data[..print_len])
+                    .map_err(write_error)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + print_len as u64));
+            }
+            _ => unreachable!(),
+        }
+        return Ok(());
     }
 
     head_backwards_on_seekable_file(input, options)
@@ -516,7 +526,7 @@ fn head_backwards_without_seek_file(
     input: &mut std::fs::File,
     options: &HeadOptions,
 ) -> std::io::Result<()> {
-    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, &*input);
+    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, input);
 
     match options.mode {
         Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n, None)?,
@@ -533,26 +543,26 @@ fn head_backwards_on_seekable_file(
     input: &mut std::fs::File,
     options: &HeadOptions,
 ) -> std::io::Result<()> {
+    let start_pos = input.stream_position()?;
     match options.mode {
         Mode::AllButLastBytes(n) => {
             let size = input.metadata()?.len();
             if n >= size {
                 return Ok(());
             } else {
-                read_n_bytes(
-                    &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
-                    size - n,
-                    None,
-                )?;
+                let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+                let written = read_n_bytes(&mut reader, size - n, None)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
             }
         }
         Mode::AllButLastLines(n) => {
-            let found = find_nth_line_from_end(input, n, options.line_ending.into())?;
-            read_n_bytes(
-                &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
-                found,
-                None,
-            )?;
+            let target_pos = find_nth_line_from_end(input, n, options.line_ending.into())?;
+            let current_pos = input.stream_position()?;
+            if target_pos > current_pos {
+                let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+                let written = read_n_bytes(&mut reader, target_pos - current_pos, None)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
         }
         _ => unreachable!(),
     }

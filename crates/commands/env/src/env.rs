@@ -335,8 +335,7 @@ impl EnvAppData {
                     _ => {
                         let s = format!("{e}");
                         if !s.is_empty() {
-                            let s = s.trim_end();
-                            ctcore::ct_show_error!("{}", s);
+                            eprintln!("{}", s.trim_end());
                         }
                         ctcore::ct_error::ExitCode::new(125)
                     }
@@ -571,9 +570,15 @@ fn env_apply_change_directory(options: &EnvOptions<'_>) -> Result<(), Box<dyn CT
         match env::set_current_dir(d) {
             Ok(()) => d,
             Err(error) => {
+                let err_msg = if error.kind() == std::io::ErrorKind::NotFound {
+                    "No such file or directory".to_string()
+                } else {
+                    error.to_string()
+                };
+
                 return Err(CtSimpleError::new(
                     125,
-                    format!("cannot change directory to {}: {error}", d.quote()),
+                    format!("cannot change directory to {}: {}", d.quote(), err_msg),
                 ));
             }
         };

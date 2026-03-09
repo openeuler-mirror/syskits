@@ -13,13 +13,13 @@ extern crate rust_i18n;
 use chrono::{DateTime, Local};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::Tool;
-use ctcore::ct_display::{Quotable, ct_print_verbatim};
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use ctcore::ct_display::{ct_print_verbatim, Quotable};
+use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_glob;
-use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::Tool;
 use ctcore::{ct_show, ct_show_error, ct_show_warning};
 use glob::Pattern;
 use std::collections::HashSet;
@@ -47,8 +47,8 @@ use sys_locale::get_locale;
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
+    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
+    FILE_STANDARD_INFO,
 };
 mod opt_flags {
     pub const HELP: &str = "help";
@@ -397,7 +397,7 @@ fn du(
                             }
 
                             // 默认模式下避免重复统计同一 inode；--count-links 时不过滤。
-                            if !du_opts.count_links {
+                            if !du_opts.count_links || this_stat.is_dir {
                                 if let Some(inode) = this_stat.inode {
                                     if du_seen_inodes.contains(&inode) {
                                         continue;
@@ -655,11 +655,9 @@ impl DuStatPrinter {
      *
      */
     fn du_convert_size(&self, size: u64) -> String {
-        // 如果当前设置为显示iNode大小，则直接返回字节大小的字符串形式
-        if self.inodes {
-            return size.to_string();
-        }
-        // 根据大小格式化选项进行不同的大小转换
+        // 删除了原本粗暴的 `if self.inodes { return size.to_string(); }`
+        // 因为 --inodes 同样需要支持 -h 和 --si 的人类可读格式
+
         match self.size_format {
             DuSizeFormat::Human(multiplier) => {
                 // 如果大小为0，直接返回"0"
@@ -676,15 +674,33 @@ impl DuStatPrinter {
                         } else {
                             unit
                         };
-                        return format!("{:.1}{}", (size as f64) / (limit as f64), print_unit);
+
+                        // GNU du 规则 1：为了避免低估空间，Human Readable 强制向上取整
+                        let val = (size as f64) / (limit as f64);
+                        let val_ceiled = (val * 10.0).ceil() / 10.0;
+
+                        // GNU du 规则 2：如果数值 >= 10，不再保留小数位
+                        if val_ceiled >= 10.0 {
+                            return format!("{:.0}{}", val_ceiled, print_unit);
+                        } else {
+                            return format!("{:.1}{}", val_ceiled, print_unit);
+                        }
                     }
                 }
-                // 如果没有超过任何已知单位的上限，就以字节为单位显示
-                format!("{size}B")
+                // 如果没有超过任何已知单位的上限
+                if self.inodes {
+                    size.to_string() // inode 模式下不加 'B' 后缀
+                } else {
+                    format!("{size}B")
+                }
             }
             DuSizeFormat::BlockSize(block_size) => {
-                // 根据块大小格式化选项，将大小转换为对应的块数，并返回块数的字符串形式
-                du_div_ceil(size, block_size).to_string()
+                // 根据块大小格式化选项，将大小转换为对应的块数
+                if self.inodes {
+                    size.to_string() // inode 模式下不受 block_size 除法影响
+                } else {
+                    du_div_ceil(size, block_size).to_string()
+                }
             }
         }
     }
@@ -771,8 +787,19 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             ct_show_error!("{filename}:{line_number}: invalid zero-length file name");
             set_ct_exit_code(1);
         } else {
+            let path_str = String::from_utf8_lossy(&path).to_string();
+
+            // 【核心修复】：拦截在从 stdin 读取列表时，列表内容出现 "-" 的套娃情况
+            if filename == "-" && path_str == "-" {
+                ct_show_error!(
+                    "when reading file names from standard input, no file name of '-' allowed"
+                );
+                set_ct_exit_code(1);
+                continue; // 拒绝将 '-' 加入执行队列，避免后续报 cannot access 的错
+            }
+
             // 添加非空路径到结果向量，忽略重复的路径。
-            let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
+            let p = PathBuf::from(path_str);
             if !paths_buf.contains(&p) {
                 paths_buf.push(p);
             }
@@ -898,7 +925,8 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         // 检查参数提供的路径是否存在
         if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
             if let Some(inode) = stat.inode {
-                if !du_traversal_options.count_links {
+                // 【核心修复】：顶层入口也一样，目录必须始终过滤防重
+                if !du_traversal_options.count_links || stat.is_dir {
                     if seen_inodes.contains(&inode) {
                         continue;
                     }

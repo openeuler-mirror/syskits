@@ -389,13 +389,18 @@ impl Line {
                 }
                 last_end = i + 1;
             }
+            if last_end < string.len() {
+                field_ranges.push((last_end, string.len()));
+            }
         } else if let Sep::Char(sep) = separator {
             for i in memchr_iter(sep, &string) {
                 field_ranges.push((last_end, i));
                 last_end = i + 1;
             }
+            field_ranges.push((last_end, string.len()));
+        } else {
+            field_ranges.push((0, string.len()));
         }
-        field_ranges.push((last_end, string.len()));
 
         Self {
             field_ranges,
@@ -1001,10 +1006,23 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功
-fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
+fn join_exec(file1: &str, file2: &str, mut settings: JoinSettings) -> CTResult<()> {
     let stdin = stdin(); // Move stdin here to extend its lifetime
-    let (mut state1, mut state2, input, repr, mut writer) =
-        init_join_states(file1, file2, &settings, &stdin)?;
+    let stdout = stdout(); // Move stdout here to manage lifetime
+    let mut writer = BufWriter::new(stdout.lock());
+
+    let (mut state1, mut state2, input) =
+        init_join_states(file1, file2, &mut settings, &stdin)?;
+
+    let repr = JoinRepr::new(
+        settings.line_ending,
+        match settings.separator {
+            Sep::Char(sep) => sep,
+            _ => b' ',
+        },
+        &settings.format,
+        &settings.empty,
+    );
 
     // 处理标题行
     if settings.is_headers {
@@ -1027,19 +1045,13 @@ fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
     Ok(())
 }
 
-/// 初始化连接操作的状态和输出
+/// 初始化连接操作的状态
 fn init_join_states<'a>(
     file1: &'a str,
     file2: &'a str,
-    settings: &'a JoinSettings,
+    settings: &mut JoinSettings,
     stdin: &'a Stdin, // Add stdin parameter
-) -> CTResult<(
-    JoinState<'a>,
-    JoinState<'a>,
-    JoinInput,
-    JoinRepr<'a>,
-    BufWriter<std::io::StdoutLock<'a>>,
-)> {
+) -> CTResult<(JoinState<'a>, JoinState<'a>, JoinInput)> {
     // 初始化文件状态
     let mut state1 = JoinState::new(
         FileNum::File1,
@@ -1067,23 +1079,9 @@ fn init_join_states<'a>(
     );
 
     // 准备输出格式
-    let _ = prepare_format(&mut state1, &mut state2, settings);
+    settings.format = prepare_format(&mut state1, &mut state2, settings);
 
-    let repr = JoinRepr::new(
-        settings.line_ending,
-        match settings.separator {
-            Sep::Char(sep) => sep,
-            _ => b' ',
-        },
-        &settings.format, // Reference format from settings
-        &settings.empty,
-    );
-
-    // 准备输出缓冲
-    let stdout = stdout();
-    let writer = BufWriter::new(stdout.lock());
-
-    Ok((state1, state2, input, repr, writer))
+    Ok((state1, state2, input))
 }
 
 /// 准备输出格式

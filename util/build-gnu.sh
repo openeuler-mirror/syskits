@@ -400,7 +400,7 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 echo 'exit 77' > tests/date/date-debug.sh
 
 
-# df tests
+### df tests
 # 跳过 no-mtab-status.sh
 # 现代 Linux 环境下 /proc 挂载表丢失属于极端致命故障。
 # Rust 实现无需为了兼容这种上世纪的 mtab 遗留机制而重构核心解析逻辑。
@@ -412,7 +412,7 @@ sed -i '/mutually exclusive with -i/,/used once for the --output/ s/compare exp 
 # 2. 剔除多调用二进制 (syskits) 导致的帮助信息路径差异：在比对前删掉 "Try ... for more information."
 sed -i 's/compare exp out || fail=1/sed -i "\/^Try .* for more information.\/d" exp out\ncompare exp out || fail=1/g' tests/df/df-output.sh
 
-## du tests
+### du tests
 # 跳过 long-from-unreadable.sh
 # 这个测试构造了一个长度超过一万字符(>PATH_MAX)的极端相对路径
 # GNU 依赖其 C 语言魔改版的 fts 库和 openat() 绕过此限制
@@ -420,7 +420,7 @@ sed -i 's/compare exp out || fail=1/sed -i "\/^Try .* for more information.\/d" 
 echo 'exit 77' > tests/du/long-from-unreadable.sh
 
 
-## env tests
+### env tests
 # 1. 移除依赖 GNU getopt 遗留机制处理 `--` 占位符的测试块 (clap 会自动消费 --)
 sed -i '/# Use -- to end options/,/# No way to directly invoke/ { /# No way to directly invoke/!d }' tests/env/env.sh
 # 2. 移除 --argv0 的测试块，因为我们的应用暂不支持该偏门扩展选项
@@ -431,3 +431,10 @@ sed -i '/my \$save_temps =/i \
 # 修复 env-signal-handler.sh 里的 Baseline 测试
 # 因为我们的 seq 在管道断裂时优雅静默退出，不会输出 GNU 强制的 'seq: write error: Broken pipe'
 sed -i 's/compare exp-err1 err1 || framework_failure_/echo "seq: write error:" > err1\ncompare exp-err1 err1 || framework_failure_/g' tests/env/env-signal-handler.sh
+
+
+### expr tests
+# 注释掉 expr-multibyte.pl 中毫无用处且会导致环境依赖报错的 getlimits 调用
+sed -i -e 's/my \$limits = getlimits ();/# my \$limits = getlimits ();/' \
+       -e 's/my \$UINTMAX_OFLOW = \$limits->{UINTMAX_OFLOW};/# my \$UINTMAX_OFLOW = \$limits->{UINTMAX_OFLOW};/' \
+       tests/expr/expr-multibyte.pl

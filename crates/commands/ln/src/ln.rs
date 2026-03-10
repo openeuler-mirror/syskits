@@ -31,17 +31,17 @@ extern crate rust_i18n;
 /// - `ln_exec()`: 执行链接操作
 /// - `ln_link()`: 创建单个链接
 /// - `link_files_in_dir()`: 在目录中创建多个链接
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_fs::make_path_relative_to;
-use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
+use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
 use ctcore::libc;
+use ctcore::Tool;
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -50,7 +50,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 #[cfg(unix)]
-use std::os::unix::fs::symlink;
+use std::os::unix::fs::{symlink, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
@@ -107,9 +107,10 @@ enum LnError {
     /// 提供了多余的操作数
     /// 参数: 多余的操作数
     ExtraOperand(OsString),
-
     ///非root用户权限
     NonRootPermission,
+    /// 源文件和目标文件是同一个文件
+    SameFile(PathBuf, PathBuf),
 }
 
 impl Display for LnError {
@@ -119,9 +120,9 @@ impl Display for LnError {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
 
             // 源文件和目标文件是同一个文件时的错误信息
-            //Self::SameFile(s, d) => {
-            //    write!(f, "{} and {} are the same file", s.quote(), d.quote())
-            //}
+            Self::SameFile(s, d) => {
+                write!(f, "{} and {} are the same file", s.quote(), d.quote())
+            }
 
             // 部分链接创建失败时返回空字符串(错误信息已在其他地方处理)
             Self::SomeLinksFailed => Ok(()),
@@ -470,6 +471,59 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
+/// 检查两个路径是否指向同一个物理文件
+fn is_same_file(path1: &Path, path2: &Path, settings: &LnSettings) -> bool {
+    let meta2 = match fs::symlink_metadata(path2) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+
+    let meta1 = if settings.is_symbolic || settings.is_logical {
+        match fs::metadata(path1) {
+            Ok(m) => m,
+            Err(_) => return false,
+        }
+    } else {
+        match fs::symlink_metadata(path1) {
+            Ok(m) => m,
+            Err(_) => return false,
+        }
+    };
+
+    let is_same_inode = {
+        #[cfg(unix)]
+        {
+            meta1.dev() == meta2.dev() && meta1.ino() == meta2.ino()
+        }
+        #[cfg(not(unix))]
+        {
+            if let (Ok(c1), Ok(c2)) = (fs::canonicalize(path1), fs::canonicalize(path2)) {
+                c1 == c2
+            } else {
+                false
+            }
+        }
+    };
+
+    if is_same_inode {
+        let will_replace = settings.overwrite == OverwriteMode::Force
+            || settings.overwrite == OverwriteMode::Interactive
+            || settings.backup != CtBackupMode::NoBackup;
+
+        if !will_replace {
+            return true;
+        }
+
+        if let (Ok(c1), Ok(c2)) = (fs::canonicalize(path1), fs::canonicalize(path2)) {
+            return c1 == c2;
+        }
+
+        return true;
+    }
+
+    false
+}
+
 /// 创建链接（符号链接或硬链接）。
 ///
 /// # 参数
@@ -479,6 +533,10 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
 fn ln_link(src: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
     // 1. 解析源路径
     let source = resolve_source_path(src, dst, settings)?;
+
+    if is_same_file(&source, dst, settings) {
+        return Err(LnError::SameFile(source.into_owned(), dst.to_path_buf()).into());
+    }
 
     // 2. 处理备份和覆盖，并检查目标文件的备份是否存在，如果存在则删除备份文件
     let backup_path = handle_backup_and_overwrite(src, dst, settings)?;
@@ -511,13 +569,13 @@ fn handle_backup_and_overwrite(
     dst: &Path,
     settings: &LnSettings,
 ) -> CTResult<Option<PathBuf>> {
-    if !dst.is_symlink() && !dst.exists() {
+    if fs::symlink_metadata(dst).is_err() {
         return Ok(None);
     }
 
     let backup_path = generate_backup_path(dst, settings)?;
     if let Some(ref backup) = backup_path {
-        if backup.exists() {
+        if fs::symlink_metadata(backup).is_ok() {
             let _ = fs::remove_file(backup);
         }
         rename_backup(dst, backup)?;
@@ -550,12 +608,22 @@ fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTRe
             if !ct_prompt_yes!("replace {}?", dst.quote()) {
                 return Err(LnError::SomeLinksFailed.into());
             }
-            let _ = fs::remove_file(dst);
+            if let Ok(meta) = fs::symlink_metadata(dst) {
+                if meta.is_dir() {
+                    let _ = fs::remove_dir(dst);
+                } else {
+                    let _ = fs::remove_file(dst);
+                }
+            }
             Ok(())
         }
         OverwriteMode::Force => {
-            if dst.exists() {
-                let _ = fs::remove_file(dst);
+            if let Ok(meta) = fs::symlink_metadata(dst) {
+                if meta.is_dir() {
+                    let _ = fs::remove_dir(dst);
+                } else {
+                    let _ = fs::remove_file(dst);
+                }
             }
             Ok(())
         }

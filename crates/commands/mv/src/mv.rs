@@ -972,6 +972,7 @@ fn mv_rename_with_fallback(
                 );
                 return Err(io::Error::other(message));
             }
+
             if options.debug {
                 let message = format!("copying directory {} to {}", from.quote(), to.quote());
                 match multi_progress {
@@ -2309,7 +2310,7 @@ mod tests {
     }
     #[cfg(test)]
     mod tests_mv_fun {
-        use crate::{MvOpts, MvOverwriteMode, mv, mv_parse_paths};
+        use crate::{mv, mv_parse_paths, MvOpts, MvOverwriteMode};
         use ctcore::ct_backup_control::CtBackupMode;
         use ctcore::ct_update_control::CtUpdateMode;
 

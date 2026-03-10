@@ -751,70 +751,73 @@ fn mv_rename(
 ) -> io::Result<()> {
     let mut backup_path = None;
 
+    // 生成剥离了尾部斜杠的干净路径，用于安全地生成备份名和后续的原子重命名
+    let clean_to_os = strip_trailing_slashes(to_path.as_os_str());
+    let clean_to_path = Path::new(&clean_to_os);
+
     // 如果目标路径已存在，根据更新和覆盖选项进行处理
     if to_path.exists() {
-        // 根据更新模式判断是否应该跳过重命名
         if options.update == CtUpdateMode::ReplaceIfOlder
             && options.overwrite == MvOverwriteMode::Interactive
         {
-            // 当目标文件存在且更新模式为ReplaceIfOlder和交互式覆盖时，不进行任何操作
             return Ok(());
         }
 
         if options.update == CtUpdateMode::ReplaceNone {
-            // 如果设置为不替换，直接返回成功
             return Ok(());
         }
 
-        // 检查文件是否更旧，如果是，则不进行操作
         if (options.update == CtUpdateMode::ReplaceIfOlder)
             && fs::metadata(from_path)?.modified()? <= fs::metadata(to_path)?.modified()?
         {
             return Ok(());
         }
 
-        // 根据覆盖模式处理目标文件已存在的情况
         match options.overwrite {
             MvOverwriteMode::NoClobber => {
-                // 如果设置为不覆盖,返回错误码
                 let err_msg = format!("not replacing {}", to_path.quote());
                 return Err(io::Error::other(err_msg));
             }
             MvOverwriteMode::Interactive => {
-                // 如果设置为交互式覆盖，询问用户是否覆盖
                 if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
                     return Err(io::Error::other(""));
                 }
             }
-            MvOverwriteMode::Force => {
-                // 如果设置为强制覆盖，不进行额外操作
-                {}
-            }
+            MvOverwriteMode::Force => {}
         };
 
-        // 获取备份路径
-        backup_path = ct_backup_control::get_backup_path(options.backup, to_path, &options.suffix);
-        if let Some(ref backup_path) = backup_path {
-            // 如果存在备份路径，则将目标文件重命名为备份路径
-            mv_rename_with_fallback(to_path, backup_path, options, multi_progress)?;
+        // 这样 "E/" 就会生成正确的备份名 "E.~1~"，而不是非法的 "E/.~1~"
+        backup_path =
+            ct_backup_control::get_backup_path(options.backup, clean_to_path, &options.suffix);
+        if let Some(ref bp) = backup_path {
+            // 将旧的目标文件重命名为备份文件
+            mv_rename_with_fallback(to_path, bp, options, multi_progress)?;
         }
     }
 
-    // 处理目标路径是目录的情况
-    if to_path.exists() && to_path.is_dir() {
-        // 如果源路径也是目录，且目标目录非空，则返回错误
+    // 决定最终用于 rename 系统调用的 target。
+    // 如果目标是一个现存的文件，但用户执意输入了 "file/"，我们必须保留斜杠，让操作系统报错 ENOTDIR。
+    // 如果目标不存在（或是刚被成功备份移走），我们可以安全地去掉斜杠，实现极速的原子 rename！
+    let final_target = if !clean_to_path.exists() || clean_to_path.is_dir() {
+        clean_to_path
+    } else {
+        to_path
+    };
+
+    if final_target.exists() && final_target.is_dir() {
         if from_path.is_dir() {
-            if is_empty_dir(to_path) {
-                fs::remove_dir(to_path)?;
+            if is_empty_dir(final_target) {
+                fs::remove_dir(final_target)?;
             } else {
                 return Err(io::Error::other("Directory not empty"));
             }
         }
     }
-    // 执行重命名操作
-    mv_rename_with_fallback(from_path, to_path, options, multi_progress)?;
 
-    // 如果设置了详细模式，输出重命名信息
+    // 执行重命名操作 (使用智能计算出的 final_target)
+    mv_rename_with_fallback(from_path, final_target, options, multi_progress)?;
+
+    // 如果设置了详细模式，输出重命名信息 (为了符合 GNU 格式，UI 打印必须保留用户最初输入的 to_path)
     if options.verbose {
         let message = match backup_path {
             Some(path) => format!(
@@ -826,7 +829,6 @@ fn mv_rename(
             None => format!("renamed {} -> {}", from_path.quote(), to_path.quote()),
         };
 
-        // 根据是否提供了多进度条实例，选择合适的输出方式
         match multi_progress {
             Some(pb) => pb.suspend(|| {
                 println!("{message}");
@@ -838,7 +840,7 @@ fn mv_rename(
     // 如果启用了 context 选项，设置目标文件的 SELinux 上下文
     #[cfg(target_os = "linux")]
     if options.set_context {
-        if let Err(e) = set_default_context(to_path) {
+        if let Err(e) = set_default_context(final_target) {
             eprintln!(
                 "warning: failed to set security context for {}: {}",
                 to_path.quote(),

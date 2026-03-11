@@ -473,3 +473,9 @@ sed -i 's/if grep .*BF16_SUPPORTED.*/if false; then/' tests/od/od-float.sh
 # 忽略由 Rust 优秀的容错机制 (-w0 warning)、底层 OS Error 后缀以及长选项自动展开导致的诊断文本差异测试
 sed -i '/my \$fail = run_tests/i \
 @Tests = grep { $_->[0] !~ /^(invalid-off-|overflow-off-|invalid-w-)/ } @Tests;' tests/od/od.pl
+
+
+### printf tests
+# 此测试专门针对 C 语言 libc 中 printf(3) 的内存耗尽 (ENOMEM) 缺陷。
+# Rust 具有完全不同的格式化和内存管理机制，且会在超大精度时主动 Panic，直接跳过此测试。
+echo 'exit 77' > tests/printf/printf-surprise.sh

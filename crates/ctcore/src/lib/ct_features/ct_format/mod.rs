@@ -160,7 +160,8 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(Ok(FormatItem::Char(parse_escape_code(&mut current))))
+            // 格式化字符串传入 false
+            Some(parse_escape_code(&mut current, false).map(FormatItem::Char))
         }
         [c, rest @ ..] => {
             current = rest;
@@ -194,17 +195,20 @@ pub fn parse_spec_only(
     })
 }
 
-pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
+pub fn parse_escape_only(
+    fmt: &[u8],
+) -> impl Iterator<Item = Result<EscapedChar, FormatError>> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(parse_escape_code(&mut current))
+            // %b 内部字符串传入 true
+            Some(parse_escape_code(&mut current, true))
         }
         [c, rest @ ..] => {
             current = rest;
-            Some(EscapedChar::Byte(*c))
+            Some(Ok(EscapedChar::Byte(*c)))
         }
     })
 }

@@ -284,12 +284,12 @@ impl IndexedSpec {
     ) -> Result<(), FormatError> {
         match &self.spec {
             Spec::Char { width, align_left } => {
-                let width = resolve_asterisk(*width, self.width_index, cursor)?.unwrap_or(0);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
                 write_padded(
                     writer,
                     &[cursor.get_char(self.arg_index)],
-                    width,
-                    *align_left,
+                    w.unwrap_or(0),
+                    *align_left || dyn_left,
                 )
             }
             Spec::String {
@@ -297,20 +297,25 @@ impl IndexedSpec {
                 align_left,
                 precision,
             } => {
-                let width = resolve_asterisk(*width, self.width_index, cursor)?.unwrap_or(0);
-                let precision = resolve_asterisk(*precision, self.precision_index, cursor)?;
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
+                let p = resolve_precision(*precision, self.precision_index, cursor);
                 let s = cursor.get_str(self.arg_index);
-                let truncated = match precision {
-                    Some(p) if p < s.len() => &s[..p],
+                let truncated = match p {
+                    Some(prec) if prec < s.len() => &s[..prec],
                     _ => s,
                 };
-                write_padded(writer, truncated.as_bytes(), width, *align_left)
+                write_padded(
+                    writer,
+                    truncated.as_bytes(),
+                    w.unwrap_or(0),
+                    *align_left || dyn_left,
+                )
             }
             Spec::EscapedString => {
                 let s = cursor.get_str(self.arg_index);
                 let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes()) {
-                    match c.write(&mut parsed)? {
+                for res in parse_escape_only(s.as_bytes()) {
+                    match res?.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => break,
                     };
@@ -319,19 +324,23 @@ impl IndexedSpec {
             }
             Spec::QuotedString => {
                 let s = cursor.get_str(self.arg_index);
-                writer
-                    .write_all(
-                        escape_name(
-                            OsStr::new(s),
-                            &CtQuotingStyle::Shell {
-                                escape: true,
-                                always_quote: false,
-                                show_control: false,
-                            },
+                if s.is_empty() {
+                    writer.write_all(b"''").map_err(FormatError::IoError)
+                } else {
+                    writer
+                        .write_all(
+                            escape_name(
+                                OsStr::new(s),
+                                &CtQuotingStyle::Shell {
+                                    escape: true,
+                                    always_quote: false,
+                                    show_control: true,
+                                },
+                            )
+                            .as_bytes(),
                         )
-                        .as_bytes(),
-                    )
-                    .map_err(FormatError::IoError)
+                        .map_err(FormatError::IoError)
+                }
             }
             Spec::SignedInt {
                 width,
@@ -339,15 +348,19 @@ impl IndexedSpec {
                 positive_sign,
                 alignment,
             } => {
-                let width = resolve_asterisk(*width, self.width_index, cursor)?.unwrap_or(0);
-                let precision =
-                    resolve_asterisk(*precision, self.precision_index, cursor)?.unwrap_or(0);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
+                let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(0);
+                let align = if dyn_left {
+                    NumberAlignment::Left
+                } else {
+                    *alignment
+                };
                 let i = cursor.get_i64(self.arg_index);
                 num_format::SignedInt {
-                    width,
-                    precision,
+                    width: w.unwrap_or(0),
+                    precision: p,
                     positive_sign: *positive_sign,
-                    alignment: *alignment,
+                    alignment: align,
                 }
                 .fmt(writer, i)
                 .map_err(FormatError::IoError)
@@ -358,15 +371,19 @@ impl IndexedSpec {
                 precision,
                 alignment,
             } => {
-                let width = resolve_asterisk(*width, self.width_index, cursor)?.unwrap_or(0);
-                let precision =
-                    resolve_asterisk(*precision, self.precision_index, cursor)?.unwrap_or(0);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
+                let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(0);
+                let align = if dyn_left {
+                    NumberAlignment::Left
+                } else {
+                    *alignment
+                };
                 let i = cursor.get_u64(self.arg_index);
                 num_format::UnsignedInt {
                     variant: *variant,
-                    precision,
-                    width,
-                    alignment: *alignment,
+                    precision: p,
+                    width: w.unwrap_or(0),
+                    alignment: align,
                 }
                 .fmt(writer, i)
                 .map_err(FormatError::IoError)
@@ -380,18 +397,22 @@ impl IndexedSpec {
                 alignment,
                 precision,
             } => {
-                let width = resolve_asterisk(*width, self.width_index, cursor)?.unwrap_or(0);
-                let precision =
-                    resolve_asterisk(*precision, self.precision_index, cursor)?.unwrap_or(6);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
+                let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(6);
+                let align = if dyn_left {
+                    NumberAlignment::Left
+                } else {
+                    *alignment
+                };
                 let f = cursor.get_f64(self.arg_index);
                 num_format::Float {
-                    width,
-                    precision,
+                    width: w.unwrap_or(0),
+                    precision: p,
                     variant: *variant,
                     case: *case,
                     force_decimal: *force_decimal,
                     positive_sign: *positive_sign,
-                    alignment: *alignment,
+                    alignment: align,
                 }
                 .fmt(writer, f)
                 .map_err(FormatError::IoError)
@@ -449,6 +470,45 @@ fn resolve_asterisk<'a>(
         Some(CanAsterisk::Asterisk) => Some(usize::try_from(cursor.get_u64(idx)).ok().unwrap_or(0)),
         Some(CanAsterisk::Fixed(w)) => Some(w),
     })
+}
+
+fn resolve_width<'a>(
+    option: Option<CanAsterisk<usize>>,
+    idx: Option<usize>,
+    cursor: &mut ArgCursor<'a>,
+) -> (Option<usize>, bool) {
+    match option {
+        None => (None, false),
+        Some(CanAsterisk::Asterisk) => {
+            let v = cursor.get_i64(idx);
+            if v < 0 {
+                (Some(v.unsigned_abs() as usize), true)
+            } else {
+                (Some(v as usize), false)
+            }
+        }
+        Some(CanAsterisk::Fixed(w)) => (Some(w), false),
+    }
+}
+
+// 精度如果接收到负数，直接当作被忽略 (None) 处理
+fn resolve_precision<'a>(
+    option: Option<CanAsterisk<usize>>,
+    idx: Option<usize>,
+    cursor: &mut ArgCursor<'a>,
+) -> Option<usize> {
+    match option {
+        None => None,
+        Some(CanAsterisk::Asterisk) => {
+            let v = cursor.get_i64(idx);
+            if v < 0 {
+                None
+            } else {
+                Some(v as usize)
+            }
+        }
+        Some(CanAsterisk::Fixed(p)) => Some(p),
+    }
 }
 
 fn write_padded(
@@ -511,8 +571,7 @@ fn eat_asterisk_or_number(
  */
 fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
     match rest[*index..].iter().position(|b| !b.is_ascii_digit()) {
-        Some(0) => None,
-        None => None,
+        Some(0) | None => None,
         Some(i) => {
             let slice = &rest[*index..(*index + i)];
             match std::str::from_utf8(slice) {

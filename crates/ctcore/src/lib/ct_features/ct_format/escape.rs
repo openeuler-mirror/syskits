@@ -130,51 +130,62 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
     char::from_u32(ret)
 }
 
+use super::FormatError;
+
 // parse_escape_code 将字节片段（&mut [u8]）的可变引用作为输入，并返回一个 EscapedChar 枚举。
 // 该函数负责解析字符串中的转义序列。
-pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
+pub fn parse_escape_code(rest: &mut &[u8], is_b_format: bool) -> Result<EscapedChar, FormatError> {
     if let [c, new_rest @ ..] = rest {
-        // 这是为了八进制序列的\NNN语法。 注意，'0'是故意省略的，因为那是\0NNN语法。
-        if let b'1'..=b'7' = c {
-            let parse_value = parse_code(rest, Base::Oct);
-            if let Some(parsed) = parse_value {
-                return EscapedChar::Byte(parsed);
+        if is_b_format && *c == b'0' {
+            // 对于 %b，\0 后面最多跟 3 位八进制数字
+            *rest = new_rest;
+            match parse_code(rest, Base::Oct) {
+                Some(val) => return Ok(EscapedChar::Byte(val)),
+                None => return Ok(EscapedChar::Byte(b'\0')),
+            }
+        } else if let b'0'..=b'7' = c {
+            // 普通格式化字符串，\NNN 包括首位在内最多 3 位
+            if let Some(parsed) = parse_code(rest, Base::Oct) {
+                return Ok(EscapedChar::Byte(parsed));
             }
         }
 
         *rest = new_rest;
         match c {
-            b'\\' => EscapedChar::Byte(b'\\'),
-            b'"' => EscapedChar::Byte(b'"'),
-            b'a' => EscapedChar::Byte(b'\x07'),
-            b'b' => EscapedChar::Byte(b'\x08'),
-            b'c' => EscapedChar::End,
-            b'e' => EscapedChar::Byte(b'\x1b'),
-            b'f' => EscapedChar::Byte(b'\x0c'),
-            b'n' => EscapedChar::Byte(b'\n'),
-            b'r' => EscapedChar::Byte(b'\r'),
-            b't' => EscapedChar::Byte(b'\t'),
-            b'v' => EscapedChar::Byte(b'\x0b'),
+            b'\\' => Ok(EscapedChar::Byte(b'\\')),
+            b'"' => Ok(EscapedChar::Byte(b'"')),
+            b'a' => Ok(EscapedChar::Byte(b'\x07')),
+            b'b' => Ok(EscapedChar::Byte(b'\x08')),
+            b'c' => Ok(EscapedChar::End),
+            b'e' => Ok(EscapedChar::Byte(b'\x1b')),
+            b'f' => Ok(EscapedChar::Byte(b'\x0c')),
+            b'n' => Ok(EscapedChar::Byte(b'\n')),
+            b'r' => Ok(EscapedChar::Byte(b'\r')),
+            b't' => Ok(EscapedChar::Byte(b'\t')),
+            b'v' => Ok(EscapedChar::Byte(b'\x0b')),
             b'x' => match parse_code(rest, Base::Hex) {
-                Some(c) => EscapedChar::Byte(c),
-                None => EscapedChar::Backslash(b'x'),
-            },
-            b'0' => match parse_code(rest, Base::Oct) {
-                Some(c) => EscapedChar::Byte(c),
-                None => EscapedChar::Byte(b'\0'),
+                Some(c) => Ok(EscapedChar::Byte(c)),
+                None => {
+                    // 应对 POSIX 测试：如果不含数字，严格模式直接报错
+                    if std::env::var_os("POSIXLY_CORRECT").is_some() {
+                        Err(FormatError::SpecError(b"\\x".to_vec()))
+                    } else {
+                        Ok(EscapedChar::Backslash(b'x'))
+                    }
+                }
             },
             b'u' => match parse_unicode(rest, 4) {
-                Some(c) => EscapedChar::Char(c),
-                None => EscapedChar::Char('\0'),
+                Some(c) => Ok(EscapedChar::Char(c)),
+                None => Ok(EscapedChar::Backslash(b'u')),
             },
             b'U' => match parse_unicode(rest, 8) {
-                Some(c) => EscapedChar::Char(c),
-                None => EscapedChar::Char('\0'),
+                Some(c) => Ok(EscapedChar::Char(c)),
+                None => Ok(EscapedChar::Backslash(b'U')),
             },
-            c => EscapedChar::Backslash(*c),
+            c => Ok(EscapedChar::Backslash(*c)),
         }
     } else {
-        EscapedChar::Byte(b'\\')
+        Ok(EscapedChar::Byte(b'\\'))
     }
 }
 

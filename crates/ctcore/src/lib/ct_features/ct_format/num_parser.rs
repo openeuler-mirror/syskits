@@ -205,8 +205,8 @@ impl ParsedNumber {
 
     #[allow(clippy::cognitive_complexity)]
     fn parse(input: &str, integral_only: bool) -> Result<Self, ParseError<'_, Self>> {
-        // 分别解析“'”前缀
-        match input.strip_prefix('\'') {
+        // 分别解析“'”或“"”前缀，以支持 POSIX 取首字符 ASCII 码的怪异特性
+        match input.strip_prefix('\'').or_else(|| input.strip_prefix('"')) {
             Some(rest) => {
                 let mut chars = rest.char_indices().fuse();
                 let v = chars.next().map(|(_, c)| Self {

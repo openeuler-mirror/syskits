@@ -35,13 +35,15 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_error::{CTResult, CTsageError};
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use sys_locale::get_locale;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::{io, ptr};
 
 mod errors;
@@ -103,13 +105,14 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
 
         // 使用指定的上下文运行命令
         RunconCommandLineMode::PlainContext { context, command } => {
+            let resolved_cmd = resolve_command(command); // 1. 解析绝对路径
             get_plain_context(context)
                 .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(|e: DefaultError| match e {
                     DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
-            runcon_exec(command, &settings.arguments)
+            runcon_exec(&resolved_cmd, &settings.arguments) // 2. 传递绝对路径
         }
 
         // 使用自定义上下文运行命令
@@ -123,20 +126,21 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
         } => match command {
             // 有命令时，设置上下文并执行
             Some(command) => {
+                let resolved_cmd = resolve_command(command); // 1. 解析绝对路径
                 get_custom_context(
                     *compute_transition_context,
                     user.as_deref(),
                     role.as_deref(),
                     the_type.as_deref(),
                     range.as_deref(),
-                    command,
+                    &resolved_cmd, // 2. 传递绝对路径计算上下文
                 )
                 .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(|e| match e {
                     DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
-                runcon_exec(command, &settings.arguments)
+                runcon_exec(&resolved_cmd, &settings.arguments) // 3. 传递绝对路径执行
             }
             // 无命令时，仅打印当前上下文
             None => print_current_context().map_err(|e| RunconError::new(e).into()),
@@ -576,6 +580,30 @@ fn runcon_exec(command: &OsStr, arguments: &[OsString]) -> CTResult<()> {
 fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
     CString::new(s.as_bytes())
         .map_err(|_r| DefaultError::from_io("CString::new()", io::ErrorKind::InvalidInput.into()))
+}
+
+/// 在 PATH 中解析命令的绝对路径（对齐 GNU runcon 的 find_in_path 逻辑）
+fn resolve_command(command: &OsStr) -> OsString {
+    let path = Path::new(command);
+    // 如果命令已经包含斜杠（绝对路径或相对路径），直接返回
+    if path.is_absolute() || command.to_string_lossy().contains('/') {
+        return command.to_os_string();
+    }
+    // 否则在 PATH 环境变量中搜索可执行文件
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let full_path = dir.join(command);
+            if full_path.is_file() {
+                if let Ok(meta) = std::fs::metadata(&full_path) {
+                    // 检查是否具有可执行权限
+                    if meta.permissions().mode() & 0o111 != 0 {
+                        return full_path.into_os_string();
+                    }
+                }
+            }
+        }
+    }
+    command.to_os_string()
 }
 
 #[derive(Default)]

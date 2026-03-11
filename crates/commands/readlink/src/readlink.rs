@@ -12,18 +12,18 @@
 //! readlink命令是Linux中用于读取符号链接（symlink）并显示其指向的文件或目录的命令。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
+use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_show_error;
+use ctcore::Tool;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -65,7 +65,8 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_use_zero = arg_matches.get_flag(readlink_flags::READLINK_ZERO);
     let is_silent = arg_matches.get_flag(readlink_flags::READLINK_SILENT)
         || arg_matches.get_flag(readlink_flags::READLINK_QUIET);
-    let is_verbose = arg_matches.get_flag(readlink_flags::READLINK_VERBOSE);
+
+    let mut is_verbose = arg_matches.get_flag(readlink_flags::READLINK_VERBOSE);
 
     let resovle_mode = if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE)
         || arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_EXISTING)
@@ -75,6 +76,15 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
     } else {
         ResolveMode::None
     };
+
+    // 如果处于严格 POSIX 模式，并且没有使用规范化选项，则强制开启错误提示
+    if std::env::var_os("POSIXLY_CORRECT").is_some() && resovle_mode == ResolveMode::None {
+        is_verbose = true;
+    }
+    // 显式的 -q / -s 参数具有最高优先级，可以压制 verbose
+    if is_silent {
+        is_verbose = false;
+    }
 
     let miss_handle = if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_EXISTING) {
         MissingHandling::Existing
@@ -115,12 +125,14 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
             }
             Err(err) => {
                 if is_verbose {
+                    // verbose 模式下正常抛出带有文件上下文的错误
                     return Err(CtSimpleError::new(
                         1,
                         err.map_err_context(move || f.maybe_quote().to_string())
                             .to_string(),
                     ));
                 } else {
+                    // 非 verbose 模式下静默返回错误码 1
                     return Err(1.into());
                 }
             }

@@ -63,6 +63,7 @@ use rust_i18n::t;
 use std::cmp;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fmt::Write;
+use std::io::Read; // <--- 新增引用
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatteriteminfo::OdFormatWriter;
@@ -70,18 +71,18 @@ use crate::inputdecoder::{OdInputDecoder, OdMemoryDecoder};
 use crate::inputoffset::{OdInputOffset, OdRadix};
 use crate::multifilereader::{HasError, OdInputSource, OdMultifileReader};
 use crate::output_info::{OutputInfo, SpacedFormatterItemInfo};
-use crate::parse_formats::{ParsedFormatterItemInfo, od_parse_format_flags};
-use crate::parse_inputs::{CommandLineInputs, od_parse_inputs};
+use crate::parse_formats::{od_parse_format_flags, ParsedFormatterItemInfo};
+use crate::parse_inputs::{od_parse_inputs, CommandLineInputs};
 use crate::parse_nrofbytes::od_parse_number_of_bytes;
 use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_format::format_ascii_dump;
 use clap::ArgAction;
-use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
-use ctcore::Tool;
+use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
+use ctcore::Tool;
 use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -113,19 +114,11 @@ struct OdSettings {
     line_bytes: usize,                     // 每行显示的字节数
     output_duplicates: bool,               // 是否输出重复行
     radix: OdRadix,                        // 地址的显示进制
+    strings_min_len: Option<usize>,        // <--- 新增: -S 字符串最小长度
 }
 
 impl OdSettings {
-    /// 从命令行参数创建新的 OdSettings 实例
-    ///
-    /// # Arguments
-    /// * `matches` - 命令行参数匹配结果
-    /// * `args` - 原始命令行参数
-    ///
-    /// # Returns
-    /// * `CTResult<Self>` - 成功则返回 OdSettings 实例，失败则返回错误
     fn new(matches: &ArgMatches, args: &[String]) -> CTResult<Self> {
-        // 解析字节序参数
         let byte_order = if let Some(s) = matches.get_one::<String>(od_options::OD_ENDIAN) {
             match s.as_str() {
                 "little" => ByteOrder::Little,
@@ -141,7 +134,6 @@ impl OdSettings {
             ByteOrder::Native
         };
 
-        // 解析跳过字节数
         let mut skip_bytes = match matches.get_one::<String>(od_options::OD_SKIP_BYTES) {
             None => 0,
             Some(s) => od_parse_number_of_bytes(s).map_err(|e| {
@@ -151,7 +143,6 @@ impl OdSettings {
 
         let mut label: Option<u64> = None;
 
-        // 解析输入文件
         let parsed_input = od_parse_inputs(matches)
             .map_err(|e| CtSimpleError::new(1, format!("Invalid inputs: {e}")))?;
         let input_strings = match parsed_input {
@@ -163,10 +154,8 @@ impl OdSettings {
             }
         };
 
-        // 解析格式化参数
         let formats = od_parse_format_flags(args).map_err(|e| CtSimpleError::new(1, e))?;
 
-        // 解析并验证行宽度
         let mut line_bytes = Self::parse_line_width(matches)?;
         let min_bytes = formats.iter().fold(1, |max, next| {
             cmp::max(max, next.formatter_item_info.byte_size)
@@ -177,10 +166,19 @@ impl OdSettings {
             line_bytes = min_bytes;
         }
 
-        // 解析其他选项
         let output_duplicates = matches.get_flag(od_options::OD_OUTPUT_DUPLICATES);
         let read_bytes = Self::parse_read_bytes(matches)?;
         let radix = Self::parse_radix(matches)?;
+
+        // --- 解析 -S (--strings) 参数 ---
+        let strings_min_len = matches
+            .get_one::<String>(od_options::OD_STRINGS)
+            .map(|s| {
+                s.parse::<usize>().map_err(|_| {
+                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
+                })
+            })
+            .transpose()?;
 
         Ok(Self {
             byte_order,
@@ -192,10 +190,10 @@ impl OdSettings {
             line_bytes,
             output_duplicates,
             radix,
+            strings_min_len,
         })
     }
 
-    // 辅助方法，解析行宽度
     fn parse_line_width(matches: &ArgMatches) -> CTResult<usize> {
         match matches.get_one::<String>(od_options::OD_WIDTH) {
             None => Ok(16),
@@ -219,7 +217,6 @@ impl OdSettings {
         }
     }
 
-    // 辅助方法，解析读取字节数
     fn parse_read_bytes(matches: &ArgMatches) -> CTResult<Option<u64>> {
         match matches.get_one::<String>(od_options::OD_READ_BYTES) {
             None => Ok(None),
@@ -229,7 +226,6 @@ impl OdSettings {
         }
     }
 
-    // 辅助方法，解析基数
     fn parse_radix(matches: &ArgMatches) -> CTResult<OdRadix> {
         match matches.get_one::<String>(od_options::OD_ADDRESS_RADIX) {
             None => Ok(OdRadix::Octal),
@@ -266,6 +262,18 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         od_settings.skip_bytes,
         od_settings.read_bytes,
     );
+
+    // 如果指定了 -S，进入专用的严格字符串扫描模式
+    if let Some(min_len) = od_settings.strings_min_len {
+        return odexec_strings(
+            &mut input,
+            od_settings.radix,
+            od_settings.skip_bytes,
+            od_settings.read_bytes, // 把 -N 的限制传进去用于精确判断
+            min_len,
+        );
+    }
+
     let mut input_decoder = OdInputDecoder::new(
         &mut input,
         od_settings.line_bytes,
@@ -280,6 +288,81 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     );
 
     odexec(&mut input_offset, &mut input_decoder, &output_info)
+}
+
+// --- 专门用于处理 -S (--strings) 的执行循环 ---
+fn odexec_strings<R: Read>(
+    input: &mut R,
+    radix: OdRadix,
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
+    min_len: usize,
+) -> CTResult<()> {
+    let mut buffer = Vec::new();
+    let mut current_offset = skip_bytes;
+    let mut string_start = current_offset;
+    let mut chunk = [0u8; 8192];
+    let mut bytes_read_total = 0u64;
+
+    loop {
+        let n = match input.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                ct_show_error!("read error: {}", e);
+                return Err(1.into());
+            }
+        };
+
+        for &b in &chunk[..n] {
+            bytes_read_total += 1;
+            // 筛选可打印的 ASCII 图形字符 (0x20 空格 到 0x7E 波浪号)
+            if (0x20..=0x7E).contains(&b) {
+                if buffer.is_empty() {
+                    string_start = current_offset;
+                }
+                buffer.push(b);
+            } else {
+                // GNU 规范：字符串必须以 NUL (\0) 字节结尾才算合法！
+                if buffer.len() >= min_len && b == 0 {
+                    print_string_record(string_start, radix, &buffer);
+                }
+                buffer.clear();
+            }
+            current_offset += 1;
+        }
+    }
+
+    // 文件流结尾时的特殊处理：
+    // 如果是因为触碰到了 -N 的限制而强行截断的流，即使没有 \0 结尾也要打印；
+    // 如果是正常的 EOF 结尾并且没有 \0，则根据 GNU 规范直接丢弃忽略。
+    if buffer.len() >= min_len {
+        if let Some(limit) = read_bytes {
+            if bytes_read_total == limit {
+                print_string_record(string_start, radix, &buffer);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) {
+    let address = match radix {
+        OdRadix::Octal => format!("{:07o}", offset),
+        OdRadix::Decimal => format!("{:07}", offset),
+        OdRadix::Hexadecimal => format!("{:06x}", offset),
+        OdRadix::NoPrefix => String::new(),
+    };
+
+    // 因为我们已经提前过滤了 0x20..=0x7E，它必定是合法的 UTF-8
+    let s = unsafe { std::str::from_utf8_unchecked(buffer) };
+
+    if address.is_empty() {
+        println!("{}", s);
+    } else {
+        println!("{} {}", address, s);
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -311,88 +394,28 @@ pub fn ct_app() -> Command {
         Arg::new(od_options::OD_STRINGS)
             .short('S')
             .long(od_options::OD_STRINGS)
-            .help(
-                "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
-                    BYTES is not specified.",
-            )
+            .help("output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.")
             .default_missing_value("3")
             .value_name("BYTES"),
-        Arg::new("a")
-            .short('a')
-            .help(t!("od.clap.a"))
-            .action(ArgAction::SetTrue),
-        Arg::new("b")
-            .short('b')
-            .help(t!("od.clap.b"))
-            .action(ArgAction::SetTrue),
-        Arg::new("c")
-            .short('c')
-            .help(t!("od.clap.c"))
-            .action(ArgAction::SetTrue),
-        Arg::new("d")
-            .short('d')
-            .help(t!("od.clap.d"))
-            .action(ArgAction::SetTrue),
-        Arg::new("D")
-            .short('D')
-            .help(t!("od.clap.d"))
-            .action(ArgAction::SetTrue),
-        Arg::new("o")
-            .short('o')
-            .help(t!("od.clap.o"))
-            .action(ArgAction::SetTrue),
-        Arg::new("I")
-            .short('I')
-            .help(t!("od.clap.i"))
-            .action(ArgAction::SetTrue),
-        Arg::new("L")
-            .short('L')
-            .help(t!("od.clap.l"))
-            .action(ArgAction::SetTrue),
-        Arg::new("i")
-            .short('i')
-            .help(t!("od.clap.i"))
-            .action(ArgAction::SetTrue),
-        Arg::new("l")
-            .short('l')
-            .help(t!("od.clap.l"))
-            .action(ArgAction::SetTrue),
-        Arg::new("x")
-            .short('x')
-            .help(t!("od.clap.x"))
-            .action(ArgAction::SetTrue),
-        Arg::new("h")
-            .short('h')
-            .help(t!("od.clap.h"))
-            .action(ArgAction::SetTrue),
-        Arg::new("O")
-            .short('O')
-            .help(t!("od.clap.o"))
-            .action(ArgAction::SetTrue),
-        Arg::new("s")
-            .short('s')
-            .help(t!("od.clap.s"))
-            .action(ArgAction::SetTrue),
-        Arg::new("X")
-            .short('X')
-            .help(t!("od.clap.x"))
-            .action(ArgAction::SetTrue),
-        Arg::new("H")
-            .short('H')
-            .help(t!("od.clap.h"))
-            .action(ArgAction::SetTrue),
-        Arg::new("e")
-            .short('e')
-            .help(t!("od.clap.e"))
-            .action(ArgAction::SetTrue),
-        Arg::new("f")
-            .short('f')
-            .help(t!("od.clap.f"))
-            .action(ArgAction::SetTrue),
-        Arg::new("F")
-            .short('F')
-            .help(t!("od.clap.f"))
-            .action(ArgAction::SetTrue),
+        Arg::new("a").short('a').help(t!("od.clap.a")).action(ArgAction::SetTrue),
+        Arg::new("b").short('b').help(t!("od.clap.b")).action(ArgAction::SetTrue),
+        Arg::new("c").short('c').help(t!("od.clap.c")).action(ArgAction::SetTrue),
+        Arg::new("d").short('d').help(t!("od.clap.d")).action(ArgAction::SetTrue),
+        Arg::new("D").short('D').help(t!("od.clap.d")).action(ArgAction::SetTrue),
+        Arg::new("o").short('o').help(t!("od.clap.o")).action(ArgAction::SetTrue),
+        Arg::new("I").short('I').help(t!("od.clap.i")).action(ArgAction::SetTrue),
+        Arg::new("L").short('L').help(t!("od.clap.l")).action(ArgAction::SetTrue),
+        Arg::new("i").short('i').help(t!("od.clap.i")).action(ArgAction::SetTrue),
+        Arg::new("l").short('l').help(t!("od.clap.l")).action(ArgAction::SetTrue),
+        Arg::new("x").short('x').help(t!("od.clap.x")).action(ArgAction::SetTrue),
+        Arg::new("h").short('h').help(t!("od.clap.h")).action(ArgAction::SetTrue),
+        Arg::new("O").short('O').help(t!("od.clap.o")).action(ArgAction::SetTrue),
+        Arg::new("s").short('s').help(t!("od.clap.s")).action(ArgAction::SetTrue),
+        Arg::new("X").short('X').help(t!("od.clap.x")).action(ArgAction::SetTrue),
+        Arg::new("H").short('H').help(t!("od.clap.h")).action(ArgAction::SetTrue),
+        Arg::new("e").short('e').help(t!("od.clap.e")).action(ArgAction::SetTrue),
+        Arg::new("f").short('f').help(t!("od.clap.f")).action(ArgAction::SetTrue),
+        Arg::new("F").short('F').help(t!("od.clap.f")).action(ArgAction::SetTrue),
         Arg::new(od_options::OD_FORMAT)
             .short('t')
             .long("format")
@@ -408,10 +431,7 @@ pub fn ct_app() -> Command {
         Arg::new(od_options::OD_WIDTH)
             .short('w')
             .long(od_options::OD_WIDTH)
-            .help(
-                "output BYTES bytes per output line. 32 is implied when BYTES is not \
-                    specified.",
-            )
+            .help("output BYTES bytes per output line. 32 is implied when BYTES is not specified.")
             .default_missing_value("32")
             .value_name("BYTES")
             .num_args(..=1),
@@ -438,12 +458,6 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
-/// 执行OD命令的主要处理函数
-///
-/// # Arguments
-/// * `input_offset` - 输入偏移量管理器
-/// * `input_decoder` - 输入解码器
-/// * `output_info` - 输出格式信息
 fn odexec<I>(
     input_offset: &mut OdInputOffset,
     input_decoder: &mut OdInputDecoder<I>,
@@ -468,14 +482,12 @@ where
     }
 }
 
-/// 用于跟踪重复行状态的结构体
 struct DuplicateState {
-    is_duplicate: bool,      // 标记当前是否处于重复行状态
-    previous_bytes: Vec<u8>, // 存储上一行的内容用于比较
+    is_duplicate: bool,
+    previous_bytes: Vec<u8>,
 }
 
 impl DuplicateState {
-    /// 创建新的重复行状态跟踪器
     fn new() -> Self {
         Self {
             is_duplicate: false,
@@ -484,32 +496,21 @@ impl DuplicateState {
     }
 }
 
-/// 行处理的结果枚举
 enum LineProcessResult {
-    EndOfFile, // 到达文件末尾
-    Continue,  // 继续处理下一行
+    EndOfFile,
+    Continue,
 }
 
-/// 处理输入流的下一行数据
-///
-/// # Arguments
-/// * `input_offset` - 输入偏移量管理器
-/// * `input_decoder` - 输入解码器
-/// * `output_info` - 输出格式信息
-/// * `state` - 重复行状态跟踪器
 fn od_process_next_line<I: PeekRead + HasError>(
     input_offset: &mut OdInputOffset,
     input_decoder: &mut OdInputDecoder<I>,
     output_info: &OutputInfo,
     state: &mut DuplicateState,
 ) -> CTResult<LineProcessResult> {
-    // 尝试读取下一行数据
     match input_decoder.od_peek_read() {
         Ok(mut memory_decoder) => {
-            // 获取实际读取的字节数
             let length = memory_decoder.length();
 
-            // 如果没有读到数据，说明到达文件末尾
             if length == 0 {
                 if !input_decoder.has_error() {
                     input_offset.print_final_offset();
@@ -528,7 +529,6 @@ fn od_process_next_line<I: PeekRead + HasError>(
 
             Ok(LineProcessResult::Continue)
         }
-        // 处理读取错误
         Err(e) => {
             ct_show_error!("{}", e);
             input_offset.print_final_offset();
@@ -537,34 +537,17 @@ fn od_process_next_line<I: PeekRead + HasError>(
     }
 }
 
-/// 处理不完整的行数据
-///
-/// # Arguments
-/// * `memory_decoder` - 内存解码器
-/// * `length` - 实际读取的字节数
-/// * `output_info` - 输出格式信息
 fn od_handle_incomplete_line(
     memory_decoder: &mut OdMemoryDecoder,
     length: usize,
     output_info: &OutputInfo,
 ) {
-    // 处理最后一行不完整的情况
     if length != output_info.byte_size_line {
-        // 计算需要填充零的范围
         let max_used = (length + output_info.byte_size_block).min(output_info.byte_size_line);
-        // 将未填满的部分用零填充
         memory_decoder.zero_out_buffer(length, max_used);
     }
 }
 
-/// 处理行内容
-///
-/// # Arguments
-/// * `input_offset` - 输入偏移量管理器
-/// * `memory_decoder` - 内存解码器
-/// * `output_info` - 输出格式信息
-/// * `state` - 重复行状态跟踪器
-/// * `length` - 当前行的字节数
 fn od_process_line_content(
     input_offset: &mut OdInputOffset,
     memory_decoder: &mut OdMemoryDecoder,
@@ -572,32 +555,25 @@ fn od_process_line_content(
     state: &mut DuplicateState,
     length: usize,
 ) {
-    // 检查是否是重复行且不需要输出重复内容
     if is_duplicate_line(memory_decoder, output_info, state, length) {
-        // 第一次遇到重复行时打印 *
         if !state.is_duplicate {
             state.is_duplicate = true;
             println!("*");
         }
     } else {
-        // 不是重复行，重置标记
         state.is_duplicate = false;
-        // 如果是完整行，保存内容用于后续比较
         if length == output_info.byte_size_line {
             memory_decoder.clone_buffer(&mut state.previous_bytes);
         }
-        // 打印当前行
         od_print_bytes(
             &input_offset.format_byte_offset(),
             memory_decoder,
             output_info,
         );
     }
-    // 更新偏移量
     input_offset.increase_position(length as u64);
 }
 
-/// 检查是否是重复行
 fn is_duplicate_line(
     memory_decoder: &OdMemoryDecoder,
     output_info: &OutputInfo,
@@ -609,7 +585,6 @@ fn is_duplicate_line(
         && memory_decoder.get_buffer(0) == &state.previous_bytes[..]
 }
 
-/// 格式化一行数据
 fn od_format_line(
     input_decoder: &OdMemoryDecoder,
     formatter: &SpacedFormatterItemInfo,
@@ -618,14 +593,12 @@ fn od_format_line(
     let mut output_text = String::new();
     let mut byte_pos = 0;
 
-    // 处理当前行的所有字节
     while byte_pos < input_decoder.length() {
         od_add_spacing(&mut output_text, formatter, byte_pos, output_info);
         od_format_bytes(&mut output_text, input_decoder, formatter, byte_pos);
         byte_pos += formatter.formatter_item_info.byte_size;
     }
 
-    // 添加ASCII转储（如果需要）
     if formatter.add_ascii_dump {
         od_add_ascii_dump(&mut output_text, input_decoder, output_info);
     }
@@ -633,7 +606,6 @@ fn od_format_line(
     output_text
 }
 
-/// 添加格式化所需的空格
 fn od_add_spacing(
     output_text: &mut String,
     formatter: &SpacedFormatterItemInfo,
@@ -649,14 +621,12 @@ fn od_add_spacing(
     .unwrap();
 }
 
-/// 格式化字节数据
 fn od_format_bytes(
     output_text: &mut String,
     input_decoder: &OdMemoryDecoder,
     formatter: &SpacedFormatterItemInfo,
     byte_pos: usize,
 ) {
-    // 根据不同的格式化器类型处理数据
     match &formatter.formatter_item_info.formatter {
         OdFormatWriter::IntWriter(func) => {
             let value = input_decoder.read_uint(byte_pos, formatter.formatter_item_info.byte_size);
@@ -672,7 +642,6 @@ fn od_format_bytes(
     }
 }
 
-/// 添加ASCII转储
 fn od_add_ascii_dump(
     output_text: &mut String,
     input_decoder: &OdMemoryDecoder,
@@ -691,9 +660,7 @@ fn od_add_ascii_dump(
     .unwrap();
 }
 
-/// 打印格式化后的行
 fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) {
-    // 只在第一个格式时打印地址
     if is_first {
         print!("{prefix}");
     } else {
@@ -702,12 +669,6 @@ fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) {
     println!("{output_text}");
 }
 
-/// 打印一行数据
-///
-/// # Arguments
-/// * `prefix` - 行前缀（地址）
-/// * `input_decoder` - 输入解码器
-/// * `output_info` - 输出格式信息
 fn od_print_bytes(prefix: &str, input_decoder: &OdMemoryDecoder, output_info: &OutputInfo) {
     let mut first = true;
 
@@ -718,18 +679,11 @@ fn od_print_bytes(prefix: &str, input_decoder: &OdMemoryDecoder, output_info: &O
     }
 }
 
-/// 创建输入流读取器
-///
-/// # Arguments
-/// * `input_strings` - 输入文件列表
-/// * `skip_bytes` - 需要跳过的字节数
-/// * `read_bytes` - 需要读取的字节数
 fn od_open_input_peek_reader(
     input_strings: &[String],
     skip_bytes: u64,
     read_bytes: Option<u64>,
 ) -> PeekReader<PartialReader<OdMultifileReader>> {
-    // 将输入字符串转换为输入源
     let inputs = input_strings
         .iter()
         .map(|w| match w as &str {
@@ -738,17 +692,12 @@ fn od_open_input_peek_reader(
         })
         .collect::<Vec<_>>();
 
-    // 创建多文件读取器
     let mf = OdMultifileReader::new(inputs);
-    // 创建部分读取器（处理跳过和限制读取）
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
-    // 创建支持预读的读取器
     PeekReader::new(pr)
 }
 
 fn od_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-    // NOTE:
-    // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
             format!("invalid suffix in --{} argument {}", option, s.quote())
@@ -770,7 +719,6 @@ impl Tool for Od {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        // 将&[OsString]转换为符合Args trait要求的iterator
         od_main(args.iter().cloned())
     }
 }

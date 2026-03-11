@@ -12,21 +12,20 @@
 // spell-checker:ignore (path) eacces inacc
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version, parser::ValueSource};
+use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
+use ctcore::Tool;
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use sys_locale::get_locale;
-use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -69,6 +68,7 @@ pub struct RMOptions {
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
     pub preserve_root: bool,
+    pub preserve_root_all: bool,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -82,11 +82,20 @@ impl RMOptions {
         let force = matches.get_flag(rm_flags::RM_FORCE);
         let force_prompt_never = should_force_prompt_never(matches, force);
 
+        // 解析 preserve_root 及其扩展参数
+        let preserve_root_val = matches
+            .get_one::<String>(rm_flags::RM_PRESERVE_ROOT)
+            .map(|s| s.as_str());
+        let preserve_root_all = preserve_root_val == Some("all");
+        let preserve_root =
+            preserve_root_val.is_some() || !matches.get_flag(rm_flags::RM_NO_PRESERVE_ROOT);
+
         Ok(RMOptions {
             force,
             interactive: determine_interactive_mode(matches, force_prompt_never),
             one_fs: matches.get_flag(rm_flags::RM_ONE_FILE_SYSTEM),
-            preserve_root: !matches.get_flag(rm_flags::RM_NO_PRESERVE_ROOT),
+            preserve_root,
+            preserve_root_all,
             recursive: matches.get_flag(rm_flags::RM_RECURSIVE),
             dir: matches.get_flag(rm_flags::RM_DIR),
             verbose: matches.get_flag(rm_flags::RM_VERBOSE),
@@ -139,8 +148,49 @@ pub fn rm_main(args: impl ctcore::Args) -> CTResult<()> {
     validate_input(&files, force_flag)?;
 
     let options = RMOptions::new(&matches)?;
+    let mut had_err = false;
+    let mut safe_files = Vec::new();
 
-    if should_remove_file(&files, &options) && remove(&files, &options) {
+    // 拦截试图删除 . 或 .. 的危险操作，并打印标准警告
+    for file_osstr in &files {
+        let path = Path::new(file_osstr);
+
+        // 将 OsStr 转换为字符串，以便进行字面量匹配
+        let path_str = file_osstr.to_string_lossy();
+
+        // 去除尾部的所有斜杠 '/'
+        let trimmed = path_str.trim_end_matches('/');
+
+        // 提取最后一个路径节点（basename）
+        let base_name = if let Some(idx) = trimmed.rfind('/') {
+            &trimmed[idx + 1..]
+        } else {
+            trimmed
+        };
+
+        // 严格判断 basename 是否为 "." 或 ".."
+        if base_name == "." || base_name == ".." {
+            // 打印 GNU 期望的特制警告信息
+            ct_show_error!(
+                "refusing to remove '.' or '..' directory: skipping {}",
+                path.quote()
+            );
+            had_err = true;
+            // 跳过此文件，不加入 safe_files
+        } else {
+            safe_files.push(*file_osstr);
+        }
+    }
+
+    // 只对通过了安全检查的文件执行真实的删除逻辑
+    if !safe_files.is_empty()
+        && should_remove_file(&safe_files, &options)
+        && remove(&safe_files, &options)
+    {
+        had_err = true;
+    }
+
+    if had_err {
         return Err(1.into());
     }
     Ok(())
@@ -148,25 +198,13 @@ pub fn rm_main(args: impl ctcore::Args) -> CTResult<()> {
 
 fn should_remove_file(files: &[&OsStr], options: &RMOptions) -> bool {
     if should_prompt_user(options, files) {
-        // 获取第一个文件的名称
-        let first_file = Path::new(files[0]).display().to_string();
+        let n = files.len();
+        let plural = if n == 1 { "" } else { "s" };
 
-        // 根据是否有多个文件决定提示信息
-        let has_multiple_files = files.len() > 1;
-
-        match (options.recursive, has_multiple_files) {
-            (true, true) => {
-                ct_prompt_yes!("remove files recursively starting from '{}'?", first_file)
-            }
-            (true, false) => {
-                ct_prompt_yes!("remove '{}' and its contents recursively?", first_file)
-            }
-            (false, true) => {
-                ct_prompt_yes!("remove files starting from '{}'?", first_file)
-            }
-            (false, false) => {
-                ct_prompt_yes!("remove '{}'?", first_file)
-            }
+        if options.recursive {
+            ct_prompt_yes!("remove {} argument{} recursively?", n, plural)
+        } else {
+            ct_prompt_yes!("remove {} argument{}?", n, plural)
         }
     } else {
         true
@@ -284,7 +322,11 @@ pub fn ct_app() -> Command {
         Arg::new(rm_flags::RM_PRESERVE_ROOT)
             .long(rm_flags::RM_PRESERVE_ROOT)
             .help(t!("rm.clap.rm_preserve_root"))
-            .action(ArgAction::SetTrue),
+            .value_name("all")
+            .num_args(0..=1)
+            .require_equals(true)
+            .value_parser(["all"])
+            .default_missing_value("true"),
         Arg::new(rm_flags::RM_RECURSIVE)
             .short('r')
             .visible_short_alias('R')
@@ -322,22 +364,29 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
-// TODO: implement one-file-system (this may get partially implemented in walkdir)
-/// Remove (or unlink) the given files
-///
-/// Returns true if it has encountered an error.
-///
-/// Behavior is determined by the `options` parameter, see [`RMOptions`] for
-/// details.
 pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
     let mut had_err = false;
 
     for filename in files {
         let file = Path::new(filename);
+
+        // 处理 --preserve-root=all 保护挂载点的特性
+        if options.preserve_root_all && is_mount_point(file) {
+            ct_show_error!(
+                "skipping {}, since it's on a different device",
+                file.quote()
+            );
+            ct_show_error!("and --preserve-root=all is in effect");
+            had_err = true;
+            continue;
+        }
+
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
+                let top_dev = get_device(&metadata); // 获取顶层目录的设备号
+
                 if metadata.is_dir() {
-                    handle_dir(file, options)
+                    handle_dir(file, options, top_dev)
                 } else if is_symlink_dir(&metadata) {
                     remove_dir(file, options)
                 } else {
@@ -345,10 +394,6 @@ pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
                 }
             }
             Err(_e) => {
-                // TODO: actually print out the specific error
-                // TODO: When the error is not about missing files
-                // (e.g., permission), even rm -f should fail with
-                // outputting the error, but there's no easy way.
                 if options.force {
                     false
                 } else {
@@ -367,75 +412,28 @@ pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn handle_dir(path: &Path, options: &RMOptions) -> bool {
+fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     let mut had_err = false;
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = custom_remove_dir_all(path) {
+            if let Err(e) = custom_remove_dir_all(path, options, top_dev) {
                 // GNU compatibility (rm/empty-inacc.sh)
-                // remove_dir_all failed. maybe it is because of the permissions
-                // but if the directory is empty, remove_dir might work.
-                // So, let's try that before failing for real
                 if fs::remove_dir(path).is_err() {
                     had_err = true;
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        // GNU compatibility (rm/fail-eacces.sh)
-                        // here, GNU doesn't use some kind of remove_dir_all
-                        // It will show directory+file
                         ct_show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
+                    } else if e.to_string() == "crosses device boundary" {
+                        // ignore
                     } else {
                         ct_show_error!("cannot remove {}: {}", path.quote(), e);
                     }
                 }
             }
         } else {
-            let mut dirs: VecDeque<DirEntry> = VecDeque::new();
-            // The Paths to not descend into. We need to this because WalkDir doesn't have a way, afaik, to not descend into a directory
-            // So we have to just ignore paths as they come up if they start with a path we aren't descending into
-            let mut not_descended: Vec<PathBuf> = Vec::new();
-
-            'outer: for entry in WalkDir::new(path) {
-                match entry {
-                    Ok(entry) => {
-                        if options.interactive == InteractiveMode::Always {
-                            for not_descend in &not_descended {
-                                if entry.path().starts_with(not_descend) {
-                                    // We don't need to continue the rest of code in this loop if we are in a directory we don't want to descend into
-                                    continue 'outer;
-                                }
-                            }
-                        }
-                        let file_type = entry.file_type();
-                        if file_type.is_dir() {
-                            // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
-                            if options.interactive == InteractiveMode::Always
-                                && fs::read_dir(entry.path()).unwrap().count() != 0
-                            {
-                                // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
-                                if prompt_descend(entry.path()) {
-                                    dirs.push_back(entry);
-                                } else {
-                                    not_descended.push(entry.path().to_path_buf());
-                                }
-                            } else {
-                                dirs.push_back(entry);
-                            }
-                        } else {
-                            had_err = remove_file(entry.path(), options).bitor(had_err);
-                        }
-                    }
-                    Err(e) => {
-                        had_err = true;
-                        ct_show_error!("recursing in {}: {}", path.quote(), e);
-                    }
-                }
-            }
-
-            for dir in dirs.iter().rev() {
-                had_err = remove_dir(dir.path(), options).bitor(had_err);
-            }
+            // 抛弃 WalkDir，使用严格的深度优先递归引擎
+            had_err = interactive_remove_dir_all(path, options, top_dev, true);
         }
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
@@ -443,10 +441,7 @@ fn handle_dir(path: &Path, options: &RMOptions) -> bool {
         ct_show_error!("could not remove directory {}", path.quote());
         had_err = true;
     } else {
-        ct_show_error!(
-            "cannot remove {}: Is a directory", // GNU's rm error message does not include help
-            path.quote()
-        );
+        ct_show_error!("cannot remove {}: Is a directory", path.quote());
         had_err = true;
     }
 
@@ -575,6 +570,11 @@ fn prompt_file(path: &Path, options: &RMOptions) -> bool {
 }
 
 fn prompt_file_permission_readonly(path: &Path) -> bool {
+    #[cfg(unix)]
+    if unsafe { libc::geteuid() } == 0 {
+        return true; // root 不受只读保护限制，直接放行
+    }
+
     match fs::metadata(path) {
         Ok(metadata) if !metadata.permissions().readonly() => true,
         Ok(metadata) if metadata.len() == 0 => ct_prompt_yes!(
@@ -594,7 +594,11 @@ fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metada
     // Check if directory has user write permissions
     #[allow(clippy::unnecessary_cast)]
     let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
-    if !user_writable {
+
+    // 如果是 root，同样豁免只读权限限制
+    let is_root = unsafe { libc::geteuid() } == 0;
+
+    if !user_writable && !is_root {
         ct_prompt_yes!("remove write-protected directory {}?", path.quote())
     } else if options.interactive == InteractiveMode::Always {
         ct_prompt_yes!("remove directory {}?", path.quote())
@@ -641,6 +645,106 @@ fn normalize(path: &Path) -> PathBuf {
     ctcore::ct_fs::normalize_path(path)
 }
 
+#[cfg(unix)]
+fn get_device(metadata: &Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    metadata.dev()
+}
+
+#[cfg(not(unix))]
+fn get_device(_metadata: &Metadata) -> u64 {
+    0 // Windows 等非 Unix 系统直接视为同设备
+}
+
+fn is_mount_point(path: &Path) -> bool {
+    if let Some(parent) = path.parent() {
+        if parent.as_os_str().is_empty() {
+            return false;
+        }
+        if let (Ok(m1), Ok(m2)) = (fs::symlink_metadata(path), fs::symlink_metadata(parent)) {
+            return get_device(&m1) != get_device(&m2);
+        }
+    }
+    false
+}
+
+fn interactive_remove_dir_all(
+    path: &Path,
+    options: &RMOptions,
+    top_dev: u64,
+    is_top_level: bool,
+) -> bool {
+    let mut had_err = false;
+
+    // 1. One file system 跨设备检测 (顶层参数本身不跳过)
+    if !is_top_level && options.one_fs {
+        if let Ok(meta) = fs::symlink_metadata(path) {
+            if get_device(&meta) != top_dev {
+                ct_show_error!(
+                    "skipping {}, since it's on a different device",
+                    path.quote()
+                );
+                return true;
+            }
+        }
+    }
+
+    // 2. 读取目录内容，判断是否为空
+    let mut is_empty = true;
+    let mut entries = Vec::new();
+    match fs::read_dir(path) {
+        Ok(iter) => {
+            for entry in iter {
+                match entry {
+                    Ok(e) => {
+                        is_empty = false;
+                        entries.push(e);
+                    }
+                    Err(e) => {
+                        ct_show_error!("cannot read directory {}: {}", path.quote(), e);
+                        had_err = true;
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            ct_show_error!("cannot read directory {}: {}", path.quote(), e);
+            had_err = true;
+        }
+    }
+
+    // 3. 询问是否深入目录
+    if options.interactive == InteractiveMode::Always && !is_empty {
+        if !prompt_descend(path) {
+            return had_err; // 用户选择不深入，直接跳过
+        }
+    }
+
+    // 4. 严格深度优先：先处理里面的子目录和文件
+    for entry in entries {
+        let entry_path = entry.path();
+        let is_dir = match entry.file_type() {
+            Ok(ft) => ft.is_dir(),
+            Err(_) => fs::symlink_metadata(&entry_path)
+                .map(|m| m.is_dir())
+                .unwrap_or(false),
+        };
+
+        if is_dir {
+            // 递归进入子目录
+            had_err |= interactive_remove_dir_all(&entry_path, options, top_dev, false);
+        } else {
+            // 删除普通文件
+            had_err |= remove_file(&entry_path, options);
+        }
+    }
+
+    // 5. 子项清理完毕，最后删除当前目录自己
+    had_err |= remove_dir(path, options);
+
+    had_err
+}
+
 #[cfg(not(windows))]
 fn is_symlink_dir(_metadata: &Metadata) -> bool {
     false
@@ -657,31 +761,43 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
 
 /// 自定义的remove_dir_all函数，不使用fs库的remove_dir_all
 /// 递归删除目录及其所有内容
-fn custom_remove_dir_all(path: &Path) -> std::io::Result<()> {
-    let metadata = std::fs::metadata(path)?;
+fn custom_remove_dir_all(path: &Path, options: &RMOptions, top_dev: u64) -> std::io::Result<()> {
+    // 必须使用 symlink_metadata 以防跟踪进挂载的符号链接
+    let metadata = std::fs::symlink_metadata(path)?;
 
     if metadata.is_dir() {
-        // 读取目录内容
         let entries = std::fs::read_dir(path)?;
         let mut had_error = false;
         let mut last_error = None;
 
-        // 递归删除所有子项
         for entry in entries {
             match entry {
                 Ok(entry) => {
                     let entry_path = entry.path();
-                    match entry.metadata() {
+                    match std::fs::symlink_metadata(&entry_path) {
                         Ok(entry_metadata) => {
                             if entry_metadata.is_dir() {
-                                // 递归删除子目录
-                                if let Err(e) = custom_remove_dir_all(&entry_path) {
+                                // 处理 --one-file-system 跨设备检测
+                                if options.one_fs && get_device(&entry_metadata) != top_dev {
+                                    ct_show_error!(
+                                        "skipping {}, since it's on a different device",
+                                        entry_path.quote()
+                                    );
+                                    had_error = true;
+                                    last_error = Some(std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        "crosses device boundary",
+                                    ));
+                                    continue;
+                                }
+
+                                if let Err(e) = custom_remove_dir_all(&entry_path, options, top_dev)
+                                {
                                     ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
                                     had_error = true;
                                     last_error = Some(e);
                                 }
                             } else {
-                                // 删除文件
                                 if let Err(e) = std::fs::remove_file(&entry_path) {
                                     ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
                                     had_error = true;
@@ -704,11 +820,12 @@ fn custom_remove_dir_all(path: &Path) -> std::io::Result<()> {
             }
         }
 
-        // 尝试删除空目录
-        if let Err(e) = std::fs::remove_dir(path) {
-            ct_show_error!("cannot remove {}: {}", path.display(), e);
-            had_error = true;
-            last_error = Some(e);
+        if !had_error {
+            if let Err(e) = std::fs::remove_dir(path) {
+                ct_show_error!("cannot remove {}: {}", path.display(), e);
+                had_error = true;
+                last_error = Some(e);
+            }
         }
 
         // 如果有错误发生，返回最后一个错误
@@ -718,7 +835,6 @@ fn custom_remove_dir_all(path: &Path) -> std::io::Result<()> {
             }
         }
     } else {
-        // 如果不是目录，直接删除文件
         std::fs::remove_file(path)?;
     }
 

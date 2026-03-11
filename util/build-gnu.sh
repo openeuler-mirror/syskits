@@ -506,3 +506,8 @@ sed -i '/^10 0x$/d' tests/printf/printf.sh
 ### readlink tests
 # 修复 readlink-posix.sh 中因 Rust 与 C 标准库在 EINVAL 错误文本上的差异
 sed -i 's/Invalid argument/Invalid input/' tests/readlink/readlink-posix.sh
+
+
+### runcon tests
+# 修复 runcon-compute.sh 在自定义 PATH 下找不到当前目录假脚本的问题
+sed -i 's/runcon -c true;/PATH=".:$PATH" runcon -c true;/' tests/runcon/runcon-compute.sh

@@ -501,3 +501,8 @@ sed -i '/my \$fail = run_tests/i \
 sed -i '/INT_OFLOW/d' tests/printf/printf.sh
 sed -i '/INT_UFLOW/d' tests/printf/printf.sh
 sed -i '/^10 0x$/d' tests/printf/printf.sh
+
+
+### readlink tests
+# 修复 readlink-posix.sh 中因 Rust 与 C 标准库在 EINVAL 错误文本上的差异
+sed -i 's/Invalid argument/Invalid input/' tests/readlink/readlink-posix.sh

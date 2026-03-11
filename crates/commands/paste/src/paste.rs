@@ -16,15 +16,15 @@
 //! 如果指定了 -z 选项，则使用 NUL 字符代替换行符作为行分隔符。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::Tool;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -163,6 +163,11 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn add_delimiter(&mut self, delim_count: usize) -> usize {
+        // GNU 规范：如果定界符列表为空（例如 -d ''），则不添加任何定界符
+        if self.delimiters.is_empty() {
+            return 0;
+        }
+
         let delimiter = self.delimiters[delim_count % self.delimiters.len()];
         let mut buf = [0; 4];
         let ch = delimiter.encode_utf8(&mut buf);

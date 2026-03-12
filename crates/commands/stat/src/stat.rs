@@ -12,15 +12,15 @@
 extern crate rust_i18n;
 use chrono::{DateTime, Local};
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
-use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
+use ctcore::ct_fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, CtBirthTime, FsMeta};
 use ctcore::libc::mode_t;
+use ctcore::Tool;
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
-use rustix::fs::{AtFlags, StatxFlags, statx};
+use rustix::fs::{statx, AtFlags, StatxFlags};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -75,6 +75,7 @@ struct StatFlags {
     is_space: bool,
     is_sign: bool,
     is_group: bool,
+    is_locale: bool,
 }
 
 enum StatPadding {
@@ -116,7 +117,7 @@ enum StatToken {
     Directive {
         flag: StatFlags,
         width: usize,
-        precision: Option<usize>,
+        precision: Option<i32>,
         modifier: Option<char>,
         format: char,
     },
@@ -206,7 +207,7 @@ struct Stater {
 /// * `precision` - An Option containing the precision value.
 ///
 /// This function delegates the printing process to more specialized functions depending on the output type.
-fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: Option<usize>) {
+fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: Option<i32>) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -245,10 +246,10 @@ fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: 
             print_unsigned(*num, &flags, width, precision, padding_char)
         }
         StatOutputType::UnsignedOct(num) => {
-            print_unsigned_oct(*num, &flags, width, precision, padding_char);
+            print_unsigned_oct(*num, &flags, width, precision, padding_char)
         }
         StatOutputType::UnsignedHex(num) => {
-            print_unsigned_hex(*num, &flags, width, precision, padding_char);
+            print_unsigned_hex(*num, &flags, width, precision, padding_char)
         }
         StatOutputType::Unknown => print!("?"),
     }
@@ -264,7 +265,7 @@ fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: 
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &StatFlags, precision: &Option<usize>) -> StatPadding {
+fn determine_padding_char(flags: &StatFlags, precision: &Option<i32>) -> StatPadding {
     if flags.is_zero && !flags.is_left && precision.is_none() {
         StatPadding::Zero
     } else {
@@ -280,11 +281,13 @@ fn determine_padding_char(flags: &StatFlags, precision: &Option<usize>) -> StatP
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - An Option containing the precision value.
-fn print_str(s: &str, flags: &StatFlags, width: usize, precision: Option<usize>) {
-    let s = match precision {
-        Some(p) if p < s.len() => &s[..p],
-        _ => s,
+fn print_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) {
+    let p = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => usize::MAX,
     };
+    let s = if p < s.len() { &s[..p] } else { s };
     pad_and_print(s, flags.is_left, width, StatPadding::Space);
 }
 
@@ -301,14 +304,14 @@ fn print_integer(
     num: i64,
     flags: &StatFlags,
     width: usize,
-    precision: Option<usize>,
+    precision: Option<i32>,
     padding_char: StatPadding,
 ) {
-    let num = num.to_string();
+    let num_str = num.to_string();
     let arg = if flags.is_group {
-        group_num(&num)
+        group_num(&num_str)
     } else {
-        Cow::Borrowed(num.as_str())
+        Cow::Borrowed(num_str.as_str())
     };
     let prefix = if flags.is_sign {
         "+"
@@ -317,10 +320,12 @@ fn print_integer(
     } else {
         ""
     };
-    let extended = format!(
-        "{prefix}{arg:0>precision$}",
-        precision = precision.unwrap_or(0)
-    );
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    let extended = format!("{prefix}{arg:0>precision$}", precision = prec);
     pad_and_print(&extended, flags.is_left, width, padding_char);
 }
 
@@ -337,16 +342,21 @@ fn print_unsigned(
     num: u64,
     flags: &StatFlags,
     width: usize,
-    precision: Option<usize>,
+    precision: Option<i32>,
     padding_char: StatPadding,
 ) {
-    let num = num.to_string();
+    let num_str = num.to_string();
     let s = if flags.is_group {
-        group_num(&num)
+        group_num(&num_str)
     } else {
-        Cow::Borrowed(num.as_str())
+        Cow::Borrowed(num_str.as_str())
     };
-    let s = format!("{s:0>precision$}", precision = precision.unwrap_or(0));
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    let s = format!("{s:0>precision$}", precision = prec);
     pad_and_print(&s, flags.is_left, width, padding_char);
 }
 
@@ -363,14 +373,16 @@ fn print_unsigned_oct(
     num: u32,
     flags: &StatFlags,
     width: usize,
-    precision: Option<usize>,
+    precision: Option<i32>,
     padding_char: StatPadding,
 ) {
     let prefix = if flags.is_alter { "0" } else { "" };
-    let s = format!(
-        "{prefix}{num:0>precision$o}",
-        precision = precision.unwrap_or(0)
-    );
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    let s = format!("{prefix}{num:0>precision$o}", precision = prec);
     pad_and_print(&s, flags.is_left, width, padding_char);
 }
 
@@ -387,14 +399,16 @@ fn print_unsigned_hex(
     num: u64,
     flags: &StatFlags,
     width: usize,
-    precision: Option<usize>,
+    precision: Option<i32>,
     padding_char: StatPadding,
 ) {
     let prefix = if flags.is_alter { "0x" } else { "" };
-    let s = format!(
-        "{prefix}{num:0>precision$x}",
-        precision = precision.unwrap_or(0)
-    );
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    let s = format!("{prefix}{num:0>precision$x}", precision = prec);
     pad_and_print(&s, flags.is_left, width, padding_char);
 }
 
@@ -426,7 +440,7 @@ impl Stater {
                 ' ' => flag.is_space = true,
                 '+' => flag.is_sign = true,
                 '\'' => flag.is_group = true,
-                'I' => unimplemented!(),
+                'I' => flag.is_locale = true,
                 _ => break,
             }
             *i += 1;
@@ -436,7 +450,6 @@ impl Stater {
         let mut precision = None;
         let mut j = *i;
 
-        // 使用 chars 数组来处理数字
         while j < bound && chars[j].is_ascii_digit() {
             width = width * 10 + chars[j].to_digit(10).unwrap() as usize;
             j += 1;
@@ -444,19 +457,17 @@ impl Stater {
 
         if j < bound && chars[j] == '.' {
             j += 1;
-            if j < bound {
-                let mut prec = 0;
-                let mut has_precision = false;
-                while j < bound && chars[j].is_ascii_digit() {
-                    prec = prec * 10 + chars[j].to_digit(10).unwrap() as usize;
-                    has_precision = true;
-                    j += 1;
-                }
-                if has_precision {
-                    precision = Some(prec);
-                } else {
-                    precision = Some(0);
-                }
+            let mut prec = 0;
+            let mut has_precision = false;
+            while j < bound && chars[j].is_ascii_digit() {
+                prec = prec * 10 + chars[j].to_digit(10).unwrap() as i32;
+                has_precision = true;
+                j += 1;
+            }
+            if has_precision {
+                precision = Some(prec);
+            } else {
+                precision = Some(-1);
             }
         }
 
@@ -464,11 +475,10 @@ impl Stater {
         if *i >= bound {
             return Err(CtSimpleError::new(
                 1,
-                format!("{}: invalid directive", &format_str[old..]),
+                format!("'{}': invalid directive", &format_str[old..]),
             ));
         }
 
-        // 检查修饰符 (H, L)
         let mut modifier = None;
         if chars[*i] == 'H' || chars[*i] == 'L' {
             modifier = Some(chars[*i]);
@@ -476,9 +486,16 @@ impl Stater {
             if *i >= bound {
                 return Err(CtSimpleError::new(
                     1,
-                    format!("{}: invalid directive", &format_str[old..]),
+                    format!("'{}': invalid directive", &format_str[old..]),
                 ));
             }
+        }
+
+        if chars[*i] == '%' {
+            return Err(CtSimpleError::new(
+                1,
+                format!("'{}': invalid directive", &format_str[old..=*i]),
+            ));
         }
 
         Ok(StatToken::Directive {

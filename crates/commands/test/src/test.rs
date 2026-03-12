@@ -12,15 +12,15 @@
 pub(crate) mod error;
 mod parser;
 
-use clap::Command;
 use clap::crate_version;
-use ctcore::Tool;
+use clap::Command;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_process::{getegid, geteuid};
+use ctcore::Tool;
 use error::{ParseError, ParseResult};
-use parser::{TestOperator, TestSymbol, TestUnaryOperator, test_parse};
+use parser::{test_parse, TestOperator, TestSymbol, TestUnaryOperator};
 use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -76,9 +76,22 @@ pub fn ct_app() -> Command {
 
 /// 处理 help 和 version 标志
 fn handle_help_version(program: &OsString, args: &[OsString]) -> Option<CTResult<()>> {
-    if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
-        ct_app().get_matches_from(std::iter::once(program.clone()).chain(args.iter().cloned()));
-        return Some(Ok(()));
+    let prog_name = program.to_string_lossy();
+
+    // 如果是 test 命令，严格遵循 POSIX/GNU 规范，不拦截 --help 和 --version，
+    // 把它们留给后端作为普通非空字符串处理（会静默返回 true）
+    if prog_name.ends_with("test") {
+        return None;
+    }
+
+    // 如果是 `[` 命令，则允许输出帮助信息
+    if !args.is_empty() && (args[0] == "--help" || args[0] == "--version") {
+        // 允许匹配 `[ --help` 或者正规的 `[ --help ]`
+        if args.len() == 1 || (args.len() == 2 && args[1] == "]") {
+            // 交给 clap 触发默认的帮助和版本打印
+            ct_app().get_matches_from(vec![program.clone(), args[0].clone()]);
+            return Some(Ok(()));
+        }
     }
     None
 }
@@ -113,7 +126,11 @@ pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
     // Parse and evaluate the expression
     let result = test_parse(args).map(|mut stack| test_eval(&mut stack))??;
 
-    if result { Ok(()) } else { Err(1.into()) }
+    if result {
+        Ok(())
+    } else {
+        Err(1.into())
+    }
 }
 
 /// 评估符号栈并返回布尔结果
@@ -485,14 +502,12 @@ mod tests_all {
         }
 
         // Test invalid integer
-        assert!(
-            test_integers(
-                OsStr::new("not_a_number"),
-                OsStr::new("0"),
-                OsStr::new("-eq")
-            )
-            .is_err()
-        );
+        assert!(test_integers(
+            OsStr::new("not_a_number"),
+            OsStr::new("0"),
+            OsStr::new("-eq")
+        )
+        .is_err());
 
         // Test invalid operator
         assert!(test_integers(OsStr::new("0"), OsStr::new("0"), OsStr::new("-invalid")).is_err());

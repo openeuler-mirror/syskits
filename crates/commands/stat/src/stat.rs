@@ -288,7 +288,7 @@ fn determine_padding_char(flags: &StatFlags, precision: &Option<i32>) -> StatPad
 /// * `precision` - An Option containing the precision value.
 fn print_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) {
     let p = match precision {
-        Some(-1) => 0,
+        Some(-1) => 0, // 对于字符串，单独的 '.' 意味着精度为 0
         Some(p) => p as usize,
         None => usize::MAX,
     };
@@ -424,7 +424,7 @@ fn print_timestamp(sec: i64, nsec: i64, flags: &StatFlags, width: usize, precisi
     }
 
     if let Some(p) = precision {
-        let p = if p == -1 { 9 } else { p as usize };
+        let p = if p == -1 { 9 } else { p as usize }; // 对于时间戳，单独的 '.' 意味着输出完整的 9 位纳秒！
         if p > 0 {
             let nsec_str = format!("{:09}", nsec);
             let frac = if p <= 9 {
@@ -493,7 +493,7 @@ impl Stater {
                 ' ' => flag.is_space = true,
                 '+' => flag.is_sign = true,
                 '\'' => flag.is_group = true,
-                'I' => flag.is_locale = true,
+                'I' => flag.is_locale = true, // 【修复】：不再 panic，正确识别 I 标志
                 _ => break,
             }
             *i += 1;
@@ -525,6 +525,7 @@ impl Stater {
         }
 
         *i = j;
+        // 使用单引号包裹错误信息
         if *i >= bound {
             return Err(CtSimpleError::new(
                 1,
@@ -544,6 +545,7 @@ impl Stater {
             }
         }
 
+        // 如果跟在修饰符后的是 '%'，直接拦截报错，而不是把它当成合法的 format 指令
         if chars[*i] == '%' {
             return Err(CtSimpleError::new(
                 1,
@@ -572,6 +574,7 @@ impl Stater {
             return StatToken::Char('\\');
         }
         match chars[*i] {
+            // 精确区分 \x 是不完整还是无法识别，并使用裸字节
             'x' => {
                 if *i + 1 < bound {
                     if let Some((b, offset)) = format_str[*i + 1..].scan_char(16) {
@@ -586,6 +589,7 @@ impl Stater {
                     StatToken::Char('x')
                 }
             }
+            // 八进制直接生成裸字节
             '0'..='7' => {
                 let (b, offset) = format_str[*i..].scan_char(8).unwrap();
                 *i += offset - 1;
@@ -796,12 +800,10 @@ impl Stater {
         #[cfg(not(unix))]
         let path = file.to_string_lossy();
 
-        // 注意：与 GNU coreutils 的 stat 实现一致，statfs 函数不支持 cached 选项
-        // 缓存控制选项仅影响文件元数据获取，不影响文件系统信息获取
-
         match statfs(path) {
             Ok(meta) => {
-                self.print_filesystem_info(&meta, &self.default_tokens);
+                // 传入 display_name
+                self.print_filesystem_info(&meta, &self.default_tokens, display_name);
                 0
             }
             Err(e) => {
@@ -829,17 +831,15 @@ impl Stater {
 
     fn handle_file_stat(&self, file: &OsStr, display_name: &str, stdin_is_fifo: bool) -> i32 {
         let result = if stdin_is_fifo && display_name == "-" {
-            // 对于标准输入，使用标准库的方法
             fs::metadata(file)
         } else {
-            // 使用我们的新函数，它会根据缓存模式设置适当的标志
             get_metadata(file, self.is_follow, self.cached_mode)
         };
 
         match result {
             Ok(meta) => {
                 let tokens = self.select_tokens(&meta);
-                self.print_file_info(&meta, tokens, file);
+                self.print_file_info(&meta, tokens, file, display_name);
                 0
             }
             Err(e) => {
@@ -896,7 +896,7 @@ impl Stater {
         }
     }
 
-    fn print_filesystem_info(&self, meta: &impl FsMeta, tokens: &[StatToken]) {
+    fn print_filesystem_info(&self, meta: &impl FsMeta, tokens: &[StatToken], display_name: &str) {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
@@ -911,14 +911,20 @@ impl Stater {
                     modifier: _,
                     format,
                 } => {
-                    let output = self.get_filesystem_output(meta, *format);
+                    let output = self.get_filesystem_output(meta, *format, display_name);
                     print_it(&output, *flag, *width, *precision);
                 }
             }
         }
     }
 
-    fn print_file_info(&self, meta: &fs::Metadata, tokens: &[StatToken], file: &OsStr) {
+    fn print_file_info(
+        &self,
+        meta: &fs::Metadata,
+        tokens: &[StatToken],
+        file: &OsStr,
+        display_name: &str,
+    ) {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
@@ -933,14 +939,19 @@ impl Stater {
                     modifier,
                     format,
                 } => {
-                    let output = self.get_file_output(meta, *format, file, *modifier);
+                    let output = self.get_file_output(meta, *format, file, display_name, *modifier);
                     print_it(&output, *flag, *width, *precision);
                 }
             }
         }
     }
 
-    fn get_filesystem_output(&self, meta: &impl FsMeta, format: char) -> StatOutputType {
+    fn get_filesystem_output(
+        &self,
+        meta: &impl FsMeta,
+        format: char,
+        display_name: &str,
+    ) -> StatOutputType {
         match format {
             // free blocks available to non-superuser
             'a' => StatOutputType::Unsigned(meta.avail_blocks()),
@@ -957,12 +968,7 @@ impl Stater {
             // maximum length of filenames
             'l' => StatOutputType::Unsigned(meta.namelen()),
             // file name
-            'n' => StatOutputType::Str(
-                self.files
-                    .first()
-                    .map(|f| f.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
-            ),
+            'n' => StatOutputType::Str(display_name.to_string()),
             // block size (for faster transfers)
             's' => StatOutputType::Unsigned(meta.io_size()),
             // fundamental block size (for block counts)
@@ -980,9 +986,9 @@ impl Stater {
         meta: &fs::Metadata,
         format: char,
         file: &OsStr,
+        display_name: &str,
         modifier: Option<char>,
     ) -> StatOutputType {
-        let display_name = file.to_string_lossy();
         let file_type = meta.file_type();
         let mut context_str = "".to_string();
         let substitute_string = "?".to_string();
@@ -990,7 +996,6 @@ impl Stater {
         if !file.is_empty() {
             context_str = match selinux::SecurityContext::of_path(file, false, false) {
                 Err(_r) => {
-                    // TODO: show the actual reason why it failed
                     ct_show_warning!("failed to get security context of: {}", file.quote());
                     substitute_string
                 }
@@ -1033,8 +1038,14 @@ impl Stater {
                     _ => StatOutputType::Unsigned(meta.dev()),              // full device number
                 }
             }
-            // device number in hex
-            'D' => StatOutputType::UnsignedHex(meta.dev()),
+            // device number in hex (新增了对 H 和 L 修饰符的支持)
+            'D' => {
+                match modifier {
+                    Some('H') => StatOutputType::UnsignedHex(meta.dev() >> 8), // major device type
+                    Some('L') => StatOutputType::UnsignedHex(meta.dev() & 0xff), // minor device type
+                    _ => StatOutputType::UnsignedHex(meta.dev()), // full device number
+                }
+            }
             // raw mode in hex
             'f' => StatOutputType::UnsignedHex(meta.mode() as u64),
             // file type (localized)
@@ -1052,25 +1063,37 @@ impl Stater {
             // inode number
             'i' => StatOutputType::Unsigned(meta.ino()),
             // mount point
-            'm' => StatOutputType::Str(
-                self.find_mount_point(display_name.as_ref())
-                    .unwrap_or_default(),
-            ),
+            'm' => StatOutputType::Str(self.find_mount_point(file).unwrap_or_default()),
             // file name
             'n' => StatOutputType::Str(display_name.to_string()),
             // quoted file name with dereference if symbolic link
             'N' => {
+                let quoting_style = std::env::var("QUOTING_STYLE").unwrap_or_default();
+
+                let format_quote = |s: &str| -> String {
+                    if quoting_style == "locale" {
+                        format!("'{}'", s.replace('\'', "\\'"))
+                    } else {
+                        s.quote().to_string()
+                    }
+                };
+
                 let file_name = if file_type.is_symlink() {
-                    let dst = match fs::read_link(display_name.as_ref()) {
+                    // 读取符号链接应该用真实解析出的 file，而不是字面量 display_name
+                    let dst = match fs::read_link(file) {
                         Ok(path) => path,
                         Err(e) => {
                             println!("{e}");
                             return StatOutputType::Unknown;
                         }
                     };
-                    format!("'{}' -> '{}'", display_name, dst.display())
+                    format!(
+                        "{} -> {}",
+                        format_quote(display_name), // 输出原始名称
+                        format_quote(&dst.to_string_lossy())
+                    )
                 } else {
-                    format!("'{display_name}'")
+                    format_quote(display_name) // 输出原始名称
                 };
                 StatOutputType::Str(file_name)
             }
@@ -1096,8 +1119,16 @@ impl Stater {
                     _ => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // default to minor
                 }
             }
-            // device type (r format) - mainly used with modifiers %Hr,%Lr
+            // device type in decimal (r format) - mainly used with modifiers %Hr,%Lr
             'r' => {
+                match modifier {
+                    Some('H') => StatOutputType::Unsigned(meta.rdev() >> 8), // major device type
+                    Some('L') => StatOutputType::Unsigned(meta.rdev() & 0xff), // minor device type
+                    _ => StatOutputType::Unsigned(meta.rdev()),              // full rdev
+                }
+            }
+            // device type in hex (R format)
+            'R' => {
                 match modifier {
                     Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
                     Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type

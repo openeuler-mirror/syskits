@@ -10,15 +10,15 @@
  */
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::io::{ErrorKind, Write, stdout};
+use std::io::{stdout, ErrorKind, Write};
 rust_i18n::i18n!("locales", fallback = "en-US");
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
 
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_format::{num_format, Format};
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
-use ctcore::ct_format::{Format, num_format};
 use std::ffi::OsString;
 use sys_locale::get_locale;
 mod error;
@@ -103,8 +103,9 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
             &options.terminator,
         ) {
             Ok(_) => Ok(()),
-            Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
-            Err(e) => Err(e.map_err_context(|| "write error".into())),
+            // 如果是 BrokenPipe，优雅地当作成功退出
+            Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
+            Err(e) => Err(CtSimpleError::new(1, format!("write error: {}", e)).into()),
         };
     }
 
@@ -125,8 +126,8 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     match print_seq((first.number, increment.number, last.number), config) {
         Ok(_) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
-        Err(e) => Err(e.map_err_context(|| "write error".into())),
+        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(CtSimpleError::new(1, format!("write error: {}", e)).into()),
     }
 }
 
@@ -339,9 +340,32 @@ fn write_value_float(
 ) -> std::io::Result<()> {
     let value_as_str =
         if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
-            format!("{value:>width$.precision$}")
+            if precision == 0 {
+                format!("{value:>width$}")
+            } else {
+                format!("{value:>width$.precision$}")
+            }
         } else {
-            format!("{value:>0width$.precision$}")
+            if precision == 0 {
+                // 模拟 C 语言 %g 的智能截断
+                let mut s = value.to_string();
+                if s.contains('.') {
+                    s = s.trim_end_matches('0').trim_end_matches('.').to_string();
+                }
+
+                // 处理 String 格式化时的前导零与负号的冲突
+                if s.starts_with('-') {
+                    let num_part = &s[1..];
+                    // 宽度需要减去负号占用的 1 位
+                    let pad_width = width.saturating_sub(1);
+                    format!("-{num_part:0>pad_width$}")
+                } else {
+                    format!("{s:0>width$}") // 强制使用 '0' 作为填充字符
+                }
+            } else {
+                // 原生数字类型格式化
+                format!("{value:0>width$.precision$}")
+            }
         };
     write!(writer, "{value_as_str}")
 }
@@ -502,14 +526,12 @@ mod tests {
 
         // 测试基本命令行参数
         assert!(app.get_arguments().any(|arg| arg.get_id() == SEQ_SEPARATOR));
-        assert!(
-            app.get_arguments()
-                .any(|arg| arg.get_id() == SEQ_TERMINATOR)
-        );
-        assert!(
-            app.get_arguments()
-                .any(|arg| arg.get_id() == SEQ_EQUAL_WIDTH)
-        );
+        assert!(app
+            .get_arguments()
+            .any(|arg| arg.get_id() == SEQ_TERMINATOR));
+        assert!(app
+            .get_arguments()
+            .any(|arg| arg.get_id() == SEQ_EQUAL_WIDTH));
         assert!(app.get_arguments().any(|arg| arg.get_id() == SEQ_FORMAT));
 
         // 测试帮助信息

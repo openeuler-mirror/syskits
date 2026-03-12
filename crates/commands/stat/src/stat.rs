@@ -108,6 +108,7 @@ pub enum StatOutputType {
     Unsigned(u64),
     UnsignedHex(u64),
     UnsignedOct(u32),
+    Timestamp(i64, i64),
     Unknown,
 }
 
@@ -250,6 +251,9 @@ fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: 
         }
         StatOutputType::UnsignedHex(num) => {
             print_unsigned_hex(*num, &flags, width, precision, padding_char)
+        }
+        StatOutputType::Timestamp(sec, nsec) => {
+            print_timestamp(*sec, *nsec, &flags, width, precision)
         }
         StatOutputType::Unknown => print!("?"),
     }
@@ -410,6 +414,54 @@ fn print_unsigned_hex(
     };
     let s = format!("{prefix}{num:0>precision$x}", precision = prec);
     pad_and_print(&s, flags.is_left, width, padding_char);
+}
+
+fn print_timestamp(sec: i64, nsec: i64, flags: &StatFlags, width: usize, precision: Option<i32>) {
+    let mut num = sec.to_string();
+    if flags.is_group {
+        num = group_num(&num).into_owned();
+    }
+
+    if let Some(p) = precision {
+        let p = if p == -1 { 9 } else { p as usize };
+        if p > 0 {
+            let nsec_str = format!("{:09}", nsec);
+            let frac = if p <= 9 {
+                nsec_str[..p].to_string()
+            } else {
+                format!("{:0<width$}", nsec_str, width = p)
+            };
+            num = format!("{}.{}", num, frac);
+        }
+    }
+
+    let prefix = if flags.is_sign && sec >= 0 {
+        "+"
+    } else if flags.is_space && sec >= 0 {
+        " "
+    } else {
+        ""
+    };
+    let pad_char = if flags.is_zero && !flags.is_left {
+        '0'
+    } else {
+        ' '
+    };
+
+    let total_len = prefix.len() + num.len();
+    if !flags.is_left && width > total_len {
+        let pad_str = pad_char.to_string().repeat(width - total_len);
+        if pad_char == '0' {
+            print!("{}{}{}", prefix, pad_str, num);
+        } else {
+            print!("{}{}{}", pad_str, prefix, num);
+        }
+    } else if flags.is_left && width > total_len {
+        let pad_str = ' '.to_string().repeat(width - total_len);
+        print!("{}{}{}", prefix, num, pad_str);
+    } else {
+        print!("{}{}", prefix, num);
+    }
 }
 
 impl Stater {
@@ -1054,20 +1106,23 @@ impl Stater {
                     .unwrap_or_else(|| "-".to_string()),
             ),
             // time of file birth, seconds since Epoch; 0 if unknown
-            'W' => StatOutputType::Unsigned(meta.birth().unwrap_or_default().0),
+            'W' => {
+                let (sec, nsec) = meta.birth().unwrap_or_default();
+                StatOutputType::Timestamp(sec as i64, nsec as i64)
+            }
 
             // time of last access, human-readable
             'x' => StatOutputType::Str(pretty_time(meta.atime(), meta.atime_nsec())),
             // time of last access, seconds since Epoch
-            'X' => StatOutputType::Integer(meta.atime()),
+            'X' => StatOutputType::Timestamp(meta.atime(), meta.atime_nsec()),
             // time of last data modification, human-readable
             'y' => StatOutputType::Str(pretty_time(meta.mtime(), meta.mtime_nsec())),
             // time of last data modification, seconds since Epoch
-            'Y' => StatOutputType::Integer(meta.mtime()),
+            'Y' => StatOutputType::Timestamp(meta.mtime(), meta.mtime_nsec()),
             // time of last status change, human-readable
             'z' => StatOutputType::Str(pretty_time(meta.ctime(), meta.ctime_nsec())),
             // time of last status change, seconds since Epoch
-            'Z' => StatOutputType::Integer(meta.ctime()),
+            'Z' => StatOutputType::Timestamp(meta.ctime(), meta.ctime_nsec()),
 
             _ => StatOutputType::Unknown,
         }

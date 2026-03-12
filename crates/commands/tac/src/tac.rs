@@ -13,22 +13,22 @@
 //! 这个命令的名字是 cat（concatenate，连接）的反向拼写，因此它以相反的顺序显示文件的行。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_show;
+use ctcore::Tool;
 use memchr::memmem;
 use memmap2::Mmap;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
-use std::io::{Read, Write, stdin, stdout};
+use std::io::{stdin, stdout, Read, Write};
 use std::{
-    fs::{File, read},
+    fs::{read, File},
     path::Path,
 };
 use sys_locale::get_locale;
@@ -241,27 +241,31 @@ fn tac_buffer_regex<W: Write>(
     pattern: &regex::bytes::Regex,
     before: bool,
 ) -> std::io::Result<()> {
-    let mut this_line_end = data.len();
+    // 为了符合 GNU 的从左至右贪婪匹配行为，必须先正向提取所有匹配项的边界！
+    let matches: Vec<(usize, usize)> = pattern
+        .find_iter(data)
+        .map(|m| (m.start(), m.end()))
+        .collect();
+
     let mut following_line_start = data.len();
 
-    for i in (0..data.len()).rev() {
-        if let Some(match_) = pattern.find_at(&data[..this_line_end], i) {
-            this_line_end = i;
-            let slen = match_.end() - match_.start();
-
-            if before {
-                writer.write_all(&data[i + slen..following_line_start])?;
-                if i > 0 {
-                    writer.write_all(&data[i..i + slen])?;
-                }
-                following_line_start = i;
-            } else {
-                writer.write_all(&data[i + slen..following_line_start])?;
-                following_line_start = i + slen;
-            }
+    // 然后倒序遍历这些正确的边界
+    for &(start, end) in matches.iter().rev() {
+        if before {
+            // before 模式：分隔符属于后面的记录
+            // 输出：分隔符 + 内容 (从分隔符的起点 start 开始，一直到上一个区块的起始位置)
+            writer.write_all(&data[start..following_line_start])?;
+            following_line_start = start;
+        } else {
+            // 默认模式：分隔符在记录之后
+            // 输出：内容 (不包含当前分隔符)
+            // 下一次循环时，这部分的分隔符会被自然囊括进上一个区块的输出中
+            writer.write_all(&data[end..following_line_start])?;
+            following_line_start = end;
         }
     }
 
+    // 输出开头剩余的最后一块内容
     writer.write_all(&data[0..following_line_start])?;
     Ok(())
 }
@@ -438,11 +442,20 @@ fn tac_process_file<W: Write>(writer: &mut W, filename: &str, settings: &TacFlag
 /// # 返回值
 /// 返回 `CTResult<()>`，表示执行结果
 fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
+    let mut has_error = false;
+
     for filename in &settings.files {
         if let Err(e) = tac_process_file(writer, filename, settings) {
-            ct_show!(e);
+            ctcore::ct_show_error!("{}", e);
+            has_error = true;
         }
     }
+
+    if has_error {
+        // 使用 CtSimpleError 返回一个通用的非零退出码
+        return Err(ctcore::ct_error::CtSimpleError::new(1, String::new()).into());
+    }
+
     Ok(())
 }
 

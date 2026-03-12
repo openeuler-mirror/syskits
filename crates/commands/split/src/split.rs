@@ -19,18 +19,18 @@ use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
-use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
-use ctcore::Tool;
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::uio_error;
+use ctcore::Tool;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{File, metadata};
+use std::fs::{metadata, File};
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
+use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -1048,184 +1048,74 @@ impl Write for SpliceLineChunkWriter<'_> {
     }
 }
 
-/// Write lines to each sequential output files, limited by bytes.
-///
-/// This struct maintains an underlying writer representing the
-/// current chunk of the output. On each call to [`write`], it writes
-/// as many lines as possible to the current chunk without exceeding
-/// the specified byte limit. If a single line has more bytes than the
-/// limit, then fill an entire single chunk with those bytes and
-/// handle the remainder of the line as if it were its own distinct
-/// line. As many new underlying writers are created as needed to
-/// write all the data in the input buffer.
-struct SplitLineBytesChunkWriter<'a> {
-    /// Parameters for creating the underlying writer for each new chunk.
-    settings: &'a SpliceSettings,
-
-    /// The maximum number of bytes allowed for a single chunk of output.
+/// 专门处理 `--line-bytes=SIZE` (-C) 选项的独立逻辑。
+/// 采用 GNU split 兼容的贪婪读取与末尾换行符截断算法。
+fn splice_line_bytes<R: BufRead>(
+    splice_settings: &SpliceSettings,
+    reader: &mut R,
     chunk_size: u64,
+) -> CTResult<()> {
+    let chunk_size = chunk_size as usize;
+    let separator = splice_settings.separator;
+    let mut file_iterator = FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)
+        .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
 
-    /// Running total of number of chunks that have been completed.
-    num_chunks_written: usize,
+    let mut carry_over = Vec::new();
 
-    /// Remaining capacity in number of bytes in the current chunk.
-    ///
-    /// This number starts at `chunk_size` and decreases as lines are
-    /// written. Once it reaches zero, a writer for a new chunk is
-    /// initialized and this number gets reset to `chunk_size`.
-    num_bytes_remaining_in_current_chunk: usize,
+    loop {
+        // 1. 尝试将缓冲区填充到 chunk_size 的长度
+        while carry_over.len() < chunk_size {
+            let needed = (chunk_size - carry_over.len()) as u64;
+            let before = carry_over.len();
+            reader
+                .by_ref()
+                .take(needed)
+                .read_to_end(&mut carry_over)
+                .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
 
-    /// The underlying writer for the current chunk.
-    ///
-    /// Once the number of bytes written to this writer exceeds
-    /// `chunk_size`, a new writer is initialized and assigned to this
-    /// field.
-    inner: BufWriter<Box<dyn Write>>,
+            if carry_over.len() == before {
+                break; // 已经无法读到更多数据，到达 EOF
+            }
+        }
 
-    /// Iterator that yields filenames for each chunk.
-    filename_iterator: FilenameIterator<'a>,
-}
+        if carry_over.is_empty() {
+            break;
+        }
 
-impl<'a> SplitLineBytesChunkWriter<'a> {
-    fn new(
-        chunk_size: u64,
-        splice_settings: &'a SpliceSettings,
-    ) -> CTResult<SplitLineBytesChunkWriter<'a>> {
-        let mut file_iterator =
-            FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)?;
-        let file_name = file_iterator
+        let filename = file_iterator
             .next()
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+
         if splice_settings.verbose {
-            println!("{} {}", t!("split.creating_file"), file_name.quote());
+            println!("{} {}", t!("split.creating_file"), filename.quote());
         }
-        let buf_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
-        Ok(SplitLineBytesChunkWriter {
-            settings: splice_settings,
-            chunk_size,
-            num_bytes_remaining_in_current_chunk: usize::try_from(chunk_size).unwrap(),
-            num_chunks_written: 0,
-            inner: buf_inner,
-            filename_iterator: file_iterator,
-        })
-    }
-}
 
-impl Write for SplitLineBytesChunkWriter<'_> {
-    /// Write as many lines to a chunk as possible without
-    /// exceeding the byte limit. If a single line has more bytes
-    /// than the limit, then fill an entire single chunk with those
-    /// bytes and handle the remainder of the line as if it were
-    /// its own distinct line.
-    ///
-    /// For example: if the `chunk_size` is 8 and the input is:
-    ///
-    /// ```text
-    /// aaaaaaaaa\nbbbb\ncccc\ndd\nee\n
-    /// ```
-    ///
-    /// then the output gets broken into chunks like this:
-    ///
-    /// ```text
-    /// chunk 0    chunk 1    chunk 2    chunk 3
-    ///
-    /// 0            1             2
-    /// 01234567  89 01234   56789 012   345 6
-    /// |------|  |-------|  |--------|  |---|
-    /// aaaaaaaa  a\nbbbb\n  cccc\ndd\n  ee\n
-    /// ```
-    ///
-    /// Implements `--line-bytes=SIZE`
-    fn write(&mut self, mut buffer: &[u8]) -> std::io::Result<usize> {
-        // 已写 mut total_bytes_written_size = 0入总字节数
-        let mut total_bytes_written_size = 0;
+        let mut writer = splice_settings
+            .splice_instantiate_current_writer(&filename, true)
+            .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
 
-        // 循环写入直到缓冲区为空（或发生I/O错误）
-        loop {
-            // 缓冲区为空，写入完成，返回已写入总字节数
-            if buffer.is_empty() {
-                return Ok(total_bytes_written_size);
-            }
+        // 如果缓冲区没满，说明必定是最后一块（EOF）
+        // 既然剩余数据总大小已经小于 chunk_size，无需再找换行符，全部写入！
+        if carry_over.len() < chunk_size {
+            splice_custom_write_all(&carry_over, &mut writer, splice_settings)
+                .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+            break; // 顺利结束
+        }
 
-            // 当前分块已满，分配新分块并初始化对应写入器
-            if self.num_bytes_remaining_in_current_chunk == 0 {
-                self.num_chunks_written += 1;
-                let filename = self
-                    .filename_iterator
-                    .next()
-                    .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
-                if self.settings.verbose {
-                    println!("{} {}", t!("split.creating_file"), filename.quote());
-                }
-                self.inner = self
-                    .settings
-                    .splice_instantiate_current_writer(&filename, true)?;
-                self.num_bytes_remaining_in_current_chunk = self.chunk_size.try_into().unwrap();
-            }
-
-            // 查找分隔符
-            let separator = self.settings.separator;
-            match memchr::memchr(separator, buffer) {
-                // 无分隔符且缓冲区非空，尽可能多地写入字节，并在必要时切换至新分块
-                None => {
-                    let end_size = self.num_bytes_remaining_in_current_chunk;
-
-                    // 这段代码虽然不太美观，但为了匹配GNU的行为而保留。如果输入数据末尾不含分隔符，
-                    // 为了处理倒数第二个分块，我们假装它存在。参见line-bytes.sh。
-                    if end_size == buffer.len()
-                        && self.num_bytes_remaining_in_current_chunk
-                            < self.chunk_size.try_into().unwrap_or(usize::MAX)
-                        && buffer[buffer.len() - 1] != separator
-                    {
-                        self.num_bytes_remaining_in_current_chunk = 0;
-                    } else {
-                        let num_bytes_written = splice_custom_write(
-                            &buffer[..end_size.min(buffer.len())],
-                            &mut self.inner,
-                            self.settings,
-                        )?;
-                        self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
-                        total_bytes_written_size += num_bytes_written;
-                        buffer = &buffer[num_bytes_written..];
-                    }
-                }
-
-                // 有分隔符，根据分隔符位置、当前分块剩余空间以及已写入其他行的情况，决定如何处理
-                Some(i) if i < self.num_bytes_remaining_in_current_chunk => {
-                    let num_bytes_written =
-                        splice_custom_write(&buffer[..=i], &mut self.inner, self.settings)?;
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
-                    total_bytes_written_size += num_bytes_written;
-                    buffer = &buffer[num_bytes_written..];
-                }
-
-                // 若存在分隔符字符，且当前行（包括分隔符字符）无法放入当前分块中，
-                // 同时当前分块尚未写入其他行，则尽可能多地写入字节并进入下一次迭代。
-                // （参考上述示例注释中的第0个分块）
-                Some(_)
-                    if self.num_bytes_remaining_in_current_chunk
-                        == self.chunk_size.try_into().unwrap_or(usize::MAX) =>
-                {
-                    let end = self.num_bytes_remaining_in_current_chunk;
-                    let num_bytes_written =
-                        splice_custom_write(&buffer[..end], &mut self.inner, self.settings)?;
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
-                    total_bytes_written_size += num_bytes_written;
-                    buffer = &buffer[num_bytes_written..];
-                }
-
-                // 如果存在分隔符字符，且当前行（包括分隔符字符）无法放入当前分块中，且当前分块中已至少写入过一行，则向下次迭代传递信号，
-                // 表示需要创建新分块，并继续循环以尝试在新分块中写入该行。
-                Some(_) => {
-                    self.num_bytes_remaining_in_current_chunk = 0;
-                }
-            }
+        // 3. 缓冲区满了。寻找最后一个换行符进行安全切割
+        if let Some(idx) = carry_over.iter().rposition(|&b| b == separator) {
+            splice_custom_write_all(&carry_over[..=idx], &mut writer, splice_settings)
+                .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+            carry_over.drain(..=idx); // 丢弃已写入的部分
+        } else {
+            // 没有换行符，说明这单独一行极其长，已经超出了 chunk_size。强行截断。
+            splice_custom_write_all(&carry_over, &mut writer, splice_settings)
+                .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+            carry_over.clear();
         }
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
+    Ok(())
 }
 
 /// Output file parameters
@@ -1871,16 +1761,8 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
             }
         }
         Strategy::LineBytes(chunk_size) => {
-            // 在行边界上按指定字节大小进行分割
-            let mut splice_writer = SplitLineBytesChunkWriter::new(chunk_size, splice_settings)?;
-            match std::io::copy(&mut reader, &mut splice_writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // 处理复制过程中出现的错误
-                    ErrorKind::Other => Err(CtSimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(e, "input/output error")),
-                },
-            }
+            // 在行边界上按指定字节大小进行贪婪切割
+            splice_line_bytes(splice_settings, &mut reader, chunk_size)
         }
     }
 }
@@ -8085,8 +7967,8 @@ mod tests {
     }
 
     mod tests_settings {
-        use crate::SpliceSettings;
         use crate::ct_app;
+        use crate::SpliceSettings;
         use std::fs;
         use std::fs::File;
         use std::path::Path;
@@ -10268,10 +10150,10 @@ mod tests {
         }
     }
     mod tests_setting_error {
+        use crate::split_should_extract_obs_lines;
         use crate::FilenameSuffixError;
         use crate::SpliceSettingsError;
         use crate::StrategyError;
-        use crate::split_should_extract_obs_lines;
 
         #[test]
         fn test_strategy_lines_does_not_require_usage() {
@@ -10463,8 +10345,8 @@ mod tests {
             assert_eq!(obs_lines, Some("100".to_string()));
         }
         #[test]
-        fn test_handle_extract_obs_lines_no_obs_lines_with_long_options_and_value_and_short_options()
-         {
+        fn test_handle_extract_obs_lines_no_obs_lines_with_long_options_and_value_and_short_options(
+        ) {
             let slice = "--extract-obs-lines=100a-x";
             let mut obs_lines = None;
             let result = splice_handle_extract_obs_lines(slice, &mut obs_lines);
@@ -10549,8 +10431,8 @@ mod tests {
             assert_eq!(obs_lines, Some("100".to_string()));
         }
         #[test]
-        fn test_handle_extract_obs_lines_with_long_options_before_and_after_and_value_and_value_and_value()
-         {
+        fn test_handle_extract_obs_lines_with_long_options_before_and_after_and_value_and_value_and_value(
+        ) {
             let slice = "--x100de=100a100a100";
             let mut obs_lines = None;
             let result = splice_handle_extract_obs_lines(slice, &mut obs_lines);

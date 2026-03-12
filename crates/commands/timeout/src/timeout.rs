@@ -23,11 +23,11 @@ mod exit_status;
 use crate::exit_status::ExitStatus;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
+use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
@@ -299,22 +299,19 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
     match process.wait_or_timeout(flags.duration) {
         Ok(Some(status)) => {
-            // 进程在超时前正常结束 - 这是成功的情况，不应该返回超时状态
-            if flags.is_preserve_status {
-                // 保留原始退出状态
-                if let Some(signal) = status.signal() {
-                    Err(ExitStatus::SignalTerminated(signal).into())
-                } else {
-                    let exit_code = status.code().unwrap_or(0);
-                    if exit_code == 0 {
-                        Ok(()) // 成功退出
-                    } else {
-                        Err(exit_code.into()) // 非零退出码
-                    }
-                }
+            // 进程在超时前结束 (未超时)
+            // 无论是否指定了 --preserve-status，都必须透传子进程的真实状态！
+            if let Some(signal) = status.signal() {
+                // 子进程被信号杀死
+                Err(ExitStatus::SignalTerminated(signal).into())
             } else {
-                // 不保留状态时，如果进程正常完成，返回成功
-                Ok(())
+                // 获取子进程的退出码
+                let exit_code = status.code().unwrap_or(0);
+                if exit_code == 0 {
+                    Ok(()) // 子进程正常返回 0
+                } else {
+                    Err(exit_code.into()) // 透传子进程的错误码 (例如 seq 抛出的 1)
+                }
             }
         }
         Ok(None) => {

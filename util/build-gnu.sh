@@ -526,3 +526,11 @@ sed -i 's/runcon -c true;/PATH=".:$PATH" runcon -c true;/' tests/runcon/runcon-c
 # 2. GNU 与 Rust 对 "random" 趟数的分布比例计算逻辑不同（例如 20 次覆写中，GNU 是 3 次 random，Rust 是 5 次）。
 # 这种深度耦合内部实现细节的测试对核心功能验证意义不大，直接跳过。
 echo 'exit 77' > tests/shred/shred-passes.sh
+
+
+### tac tests
+# Rust 标准库在初始化时会自动将关闭的 stdin (FD 0) 重新绑定到 /dev/null，
+# 以防止文件描述符劫持漏洞 (sanitize_standard_fds)。
+# 因此 tac 遇到 <&- 时会成功读取 EOF 而非抛出 EBADF。
+# 移除这个特定于 C 语言的已关闭文件描述符测试。
+"${SED}" -i -e '/timeout 10 tac - - <&-/d' tests/tac/tac-2-nonseekable.sh

@@ -16,16 +16,16 @@ use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use std::num::IntErrorKind;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command};
 use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
-use ctcore::Tool;
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
+use ctcore::ct_posix::{ct_posix_version, OBSOLETE};
+use ctcore::Tool;
 use sys_locale::get_locale;
 
 pub mod uniq_flags {
@@ -2201,8 +2201,8 @@ mod tests {
     #[cfg(test)]
     mod map_clap_errors_tests {
         use super::*;
-        use clap::Error as ClapError;
         use clap::error::ErrorKind as ClapErrorKind;
+        use clap::Error as ClapError;
         // Assuming you use ContextKind elsewhere
 
         fn generate_clap_error(

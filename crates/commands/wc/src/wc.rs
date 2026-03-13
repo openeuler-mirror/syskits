@@ -588,8 +588,6 @@ fn process_chunk<
         if SHOW_WORDS {
             if ch.is_whitespace() {
                 *in_word = false;
-            } else if ch.is_ascii_control() {
-                // 这些字符算作字符，但不影响单词状态
             } else if !(*in_word) {
                 *in_word = true;
                 total.words += 1;

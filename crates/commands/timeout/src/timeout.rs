@@ -30,6 +30,7 @@ use ctcore::ct_process::CtChildExt;
 use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::ErrorKind;
+use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
@@ -231,18 +232,14 @@ fn timeout_report_if_verbose(signal: usize, cmd: &str, is_verbose: bool) {
 }
 
 /// 发送信号给一个带有超时的进程，处理前台和后台进程
-fn timeout_send_signal(process: &mut Child, signal: usize, _is_foreground: bool) {
-    let kill_signal = get_ct_signal_by_name_or_value("KILL").unwrap();
-
-    // 对于KILL信号，总是直接发送给进程，因为它无法被捕获
-    if signal == kill_signal {
-        _ = process.send_signal(signal);
-        return;
+fn timeout_send_signal(process: &mut Child, signal: usize, is_foreground: bool) {
+    unsafe {
+        if is_foreground {
+            libc::kill(process.id() as libc::c_int, signal as libc::c_int);
+        } else {
+            libc::kill(-(process.id() as libc::c_int), signal as libc::c_int);
+        }
     }
-
-    // 为了避免timeout进程本身被信号杀死，我们直接向子进程发送信号
-    // 而不是向进程组发送信号
-    _ = process.send_signal(signal);
 }
 
 /// 根据指定的超时标志设置进程的超时行为
@@ -257,28 +254,48 @@ fn timeout_send_signal(process: &mut Child, signal: usize, _is_foreground: bool)
 ///
 /// # 返回
 /// * `CTResult<()>` - 一个结果类型，包装了可能的错误
+/// 根据指定的超时标志设置进程的超时行为
 fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
-    if !flags.is_foreground {
-        unsafe { libc::setpgid(0, 0) };
-    }
-
     #[cfg(unix)]
     enable_pipe_errors()?;
 
-    let process = &mut process::Command::new(&flags.command[0])
-        .args(&flags.command[1..])
+    let mut cmd = process::Command::new(&flags.command[0]);
+    cmd.args(&flags.command[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|err| {
-            let status = if err.kind() == ErrorKind::NotFound {
-                ExitStatus::CommandNotFound
-            } else {
-                ExitStatus::CommandNotExecutable
-            };
-            CtSimpleError::new(status.into(), format!("failed to execute process: {err}"))
-        })?;
+        .stderr(Stdio::inherit());
+
+    let is_foreground = flags.is_foreground;
+
+    // 子进程的预处理 (pre_exec)
+    unsafe {
+        cmd.pre_exec(move || {
+            // 1. 如果不是前台模式，自立门户 (新建进程组)
+            if !is_foreground {
+                libc::setpgid(0, 0);
+            }
+
+            // 2. 信号洗礼：清除 Shell 强加给后台任务的 SIG_IGN 魔法
+            // 确保子进程 (如脚本) 可以正常使用 trap 捕获这些信号！
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+            libc::signal(libc::SIGHUP, libc::SIG_DFL);
+            libc::signal(libc::SIGTERM, libc::SIG_DFL);
+            libc::signal(libc::SIGALRM, libc::SIG_DFL);
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+
+            Ok(())
+        });
+    }
+
+    let process = &mut cmd.spawn().map_err(|err| {
+        let status = if err.kind() == ErrorKind::NotFound {
+            ExitStatus::CommandNotFound
+        } else {
+            ExitStatus::CommandNotExecutable
+        };
+        CtSimpleError::new(status.into(), format!("failed to execute process: {err}"))
+    })?;
 
     timeout_unblock_sigchld();
     handle_process_timeout(process, flags)

@@ -30,10 +30,8 @@ use ctcore::ct_process::CtChildExt;
 use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::ErrorKind;
-use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::Duration;
 use sys_locale::get_locale;
 
@@ -45,6 +43,8 @@ use ctcore::{
     ct_signals::{get_ct_signal_by_name_or_value, get_ct_signal_name_by_value},
 };
 
+use std::os::unix::process::CommandExt;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 // 用于给 C 风格的信号处理器传递子进程状态
 static CHILD_PID: AtomicI32 = AtomicI32::new(0);
 static TIMEOUT_SIGNAL: AtomicI32 = AtomicI32::new(0);
@@ -371,17 +371,14 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
     match wait_result {
         Ok(Some(status)) => {
             // 进程在超时前结束 (未超时)
-            // 无论是否指定了 --preserve-status，都必须透传子进程的真实状态！
             if let Some(signal) = status.signal() {
-                // 子进程被信号杀死
                 Err(ExitStatus::SignalTerminated(signal).into())
             } else {
-                // 获取子进程的退出码
                 let exit_code = status.code().unwrap_or(0);
                 if exit_code == 0 {
-                    Ok(()) // 子进程正常返回 0
+                    Ok(())
                 } else {
-                    Err(exit_code.into()) // 透传子进程的错误码 (例如 seq 抛出的 1)
+                    Err(exit_code.into())
                 }
             }
         }
@@ -391,11 +388,9 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
             timeout_send_signal(process, flags.signal, flags.is_foreground);
 
             if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
-                // 如果直接使用 KILL 信号，等待进程结束
                 let status = process.wait()?;
                 if let Some(signal) = status.signal() {
                     if signal == 9 {
-                        // 子进程被SIGKILL杀死，向自己发送相同的信号以便shell正确显示"Killed"消息
                         unsafe {
                             libc::signal(libc::SIGKILL, libc::SIG_DFL);
                             libc::raise(libc::SIGKILL);
@@ -425,30 +420,75 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
 /// # 返回
 ///
 /// - `CTResult<()>` - 一个结果类型，表示操作是否成功。
+/// 处理超时情况
 fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
     match flags.kill_after {
         None => {
-            // 等待 TERM 信号的结果
-            let _status = process.wait()?;
-            // 无论进程如何结束，都应该返回超时状态，因为是由于超时触发的信号
+            // 等待初始信号（如 TERM）的结果
+            let status = process.wait()?;
+
+            // 如果启用了 --preserve-status，必须透传子进程的真实死法状态
+            if flags.is_preserve_status {
+                if let Some(signal) = status.signal() {
+                    return Err(ExitStatus::SignalTerminated(signal).into()); // 例如 143
+                } else {
+                    let code = status.code().unwrap_or(0);
+                    if code == 0 {
+                        return Ok(());
+                    } else {
+                        return Err(code.into());
+                    }
+                }
+            }
+
+            // 默认情况：由于超时触发，返回 124
             Err(ExitStatus::CommandTimedOut.into()) // 124
         }
         Some(kill_after) => {
             // 等待 kill_after 时间
-            match process.wait_or_timeout(kill_after) {
-                Ok(Some(_status)) => {
-                    // 进程在 kill_after 时间内结束，无论如何都应该返回超时状态（124）
-                    // 因为这表示进程是因为超时而被杀死的
+            let wait_result = if kill_after.is_zero() {
+                process.wait().map(|s| Some(s))
+            } else {
+                process.wait_or_timeout(kill_after)
+            };
+
+            match wait_result {
+                Ok(Some(status)) => {
+                    // 进程在触发 KILL 之前自己死掉了 (可能是被第一波信号干掉了)
+                    if flags.is_preserve_status {
+                        if let Some(signal) = status.signal() {
+                            return Err(ExitStatus::SignalTerminated(signal).into());
+                        } else {
+                            let code = status.code().unwrap_or(0);
+                            if code == 0 {
+                                return Ok(());
+                            } else {
+                                return Err(code.into());
+                            }
+                        }
+                    }
                     Err(ExitStatus::CommandTimedOut.into()) // 124
                 }
                 Ok(None) => {
-                    // 发送 KILL 信号
+                    // 触发了二次击杀！发送 KILL 信号
                     let kill_signal = get_ct_signal_by_name_or_value("KILL").unwrap();
                     timeout_report_if_verbose(kill_signal, &flags.command[0], flags.is_verbose);
                     timeout_send_signal(process, kill_signal, flags.is_foreground);
-                    process.wait()?;
-                    // KILL 信号无法被捕获，返回 124 而不是 137
-                    Err(ExitStatus::CommandTimedOut.into()) // 124
+
+                    let status = process.wait()?;
+                    if let Some(signal) = status.signal() {
+                        if signal == 9 {
+                            // 子进程被 SIGKILL 杀死，向自己发送相同的信号以便 shell 正确显示 "Killed" 消息
+                            unsafe {
+                                libc::signal(libc::SIGKILL, libc::SIG_DFL);
+                                libc::raise(libc::SIGKILL);
+                            }
+                        }
+                    }
+
+                    // GNU 规定，只要发射了 KILL 信号，退出码绝对是 137 (128+9)
+                    // 即使没有开启 preserve-status，也不能返回 124！
+                    Err(ExitStatus::SignalTerminated(9).into()) // 137
                 }
                 Err(_) => Err(ExitStatus::TimeoutFailed.into()),
             }

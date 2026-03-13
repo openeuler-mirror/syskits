@@ -33,6 +33,7 @@ use std::io::ErrorKind;
 use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::Duration;
 use sys_locale::get_locale;
 
@@ -43,6 +44,31 @@ use ctcore::{
     ct_show_error,
     ct_signals::{get_ct_signal_by_name_or_value, get_ct_signal_name_by_value},
 };
+
+// 用于给 C 风格的信号处理器传递子进程状态
+static CHILD_PID: AtomicI32 = AtomicI32::new(0);
+static TIMEOUT_SIGNAL: AtomicI32 = AtomicI32::new(0);
+static IS_FOREGROUND: AtomicBool = AtomicBool::new(false);
+static ALARM_RECEIVED: AtomicBool = AtomicBool::new(false);
+
+/// 专用于兼容 GNU 行为的 SIGALRM 处理器
+extern "C" fn handle_sigalrm(_sig: libc::c_int) {
+    ALARM_RECEIVED.store(true, Ordering::Relaxed);
+    let pid = CHILD_PID.load(Ordering::Relaxed);
+    let sig = TIMEOUT_SIGNAL.load(Ordering::Relaxed);
+    let is_fg = IS_FOREGROUND.load(Ordering::Relaxed);
+
+    if pid > 0 {
+        unsafe {
+            if is_fg {
+                libc::kill(pid, sig);
+            } else {
+                libc::kill(-pid, sig);
+            }
+        }
+    }
+    // 我们只负责发信号，然后立刻返回，让操作系统的 wait() 正常回收子进程。
+}
 
 pub mod timeout_flags {
     pub static TIMEOUT_FOREGROUND: &str = "foreground";
@@ -313,8 +339,36 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 /// # 返回值
 /// - `CTResult<()>` - 一个结果类型，表示处理是否成功。如果进程正常退出或被处理，
 ///   则返回Ok(())；否则返回一个错误状态。
+/// 处理进程超时逻辑
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
-    match process.wait_or_timeout(flags.duration) {
+    CHILD_PID.store(process.id() as i32, Ordering::Relaxed);
+    TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Relaxed);
+    IS_FOREGROUND.store(flags.is_foreground, Ordering::Relaxed);
+    ALARM_RECEIVED.store(false, Ordering::Relaxed);
+
+    unsafe {
+        let sa = nix::sys::signal::SigAction::new(
+            nix::sys::signal::SigHandler::Handler(handle_sigalrm),
+            nix::sys::signal::SaFlags::empty(),
+            nix::sys::signal::SigSet::empty(),
+        );
+        let _ = nix::sys::signal::sigaction(nix::sys::signal::Signal::SIGALRM, &sa);
+    }
+
+    let wait_result = if flags.duration.is_zero() {
+        process.wait().map(|status| Some(status))
+    } else {
+        process.wait_or_timeout(flags.duration)
+    };
+
+    // 如果中途收到了外部的 SIGALRM（级联超时），我们必须等子进程把后事料理完！
+    if ALARM_RECEIVED.load(Ordering::Relaxed) {
+        // 阻塞等待子进程执行完 trap 清理逻辑并正式退出
+        let _ = process.wait();
+        return Err(ExitStatus::CommandTimedOut.into()); // 等子进程死透了，我们再优雅返回 124
+    }
+
+    match wait_result {
         Ok(Some(status)) => {
             // 进程在超时前结束 (未超时)
             // 无论是否指定了 --preserve-status，都必须透传子进程的真实状态！

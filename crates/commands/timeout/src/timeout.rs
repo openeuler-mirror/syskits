@@ -68,16 +68,12 @@ struct TimeoutFlags {
 
 impl TimeoutFlags {
     // 根据提供的命令行参数创建一个新的CTimeout实例
-    // 参数: options - 包含命令行参数的ArgMatches引用
-    // 返回值: CTResult<CTimeout> - 返回一个结果类型，包含可能的错误
     fn new(timeout_flags: &clap::ArgMatches) -> CTResult<Self> {
-        // 获取配置的信号值，如果未提供，则默认为TERM信号
         let signal = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_SIGNAL) {
             Some(signal_) => {
                 let signal_result = get_ct_signal_by_name_or_value(signal_);
                 match signal_result {
                     None => {
-                        // 如果提供的信号无效，返回错误
                         return Err(CTsageError::new(
                             ExitStatus::TimeoutFailed.into(),
                             format!("{}: invalid signal", signal_.quote()),
@@ -89,43 +85,47 @@ impl TimeoutFlags {
             _ => ctcore::ct_signals::get_ct_signal_by_name_or_value("TERM").unwrap(),
         };
 
-        // 解析kill_after参数，如果没有提供，则为None
         let kill_after = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_KILL_AFTER) {
             None => None,
-            Some(kill_after) => match ctcore::ct_parse_time::ct_from_str(kill_after) {
-                Ok(k) => Some(k),
+            Some(kill_after_str) => match ctcore::ct_parse_time::ct_from_str(kill_after_str) {
+                Ok(mut k) => {
+                    // 处理正数下溢出。如果解析为0，但输入包含数字(1-9)，说明是极端微小的浮点数，向上取整为1纳秒
+                    if k.is_zero() && kill_after_str.chars().any(|c| c >= '1' && c <= '9') {
+                        k = Duration::from_nanos(1);
+                    }
+                    Some(k)
+                }
                 Err(err) => {
-                    // 如果解析失败，返回错误
                     return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
                 }
             },
         };
 
-        // 解析持续时间参数，这是必须的
-        let duration = match ctcore::ct_parse_time::ct_from_str(
-            timeout_flags
-                .get_one::<String>(timeout_flags::TIMEOUT_DURATION)
-                .unwrap(),
-        ) {
+        let duration_str = timeout_flags
+            .get_one::<String>(timeout_flags::TIMEOUT_DURATION)
+            .unwrap();
+        let mut duration = match ctcore::ct_parse_time::ct_from_str(duration_str) {
             Ok(duration) => duration,
             Err(err) => {
-                // 如果解析失败，返回错误
                 return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
             }
         };
+
+        // 同理，处理主超时的正数下溢出。这使得 1e-10000 变成 1纳秒而不是无限等待
+        if duration.is_zero() && duration_str.chars().any(|c| c >= '1' && c <= '9') {
+            duration = Duration::from_nanos(1);
+        }
 
         let is_preserve_status = timeout_flags.get_flag(timeout_flags::TIMEOUT_PRESERVE_STATUS);
         let is_foreground = timeout_flags.get_flag(timeout_flags::TIMEOUT_FOREGROUND);
         let is_verbose = timeout_flags.get_flag(timeout_flags::TIMEOUT_VERBOSE);
 
-        // 获取命令参数，这是必须的
         let command = timeout_flags
             .get_many::<String>(timeout_flags::TIMEOUT_COMMAND)
             .unwrap()
             .map(String::from)
             .collect::<Vec<_>>();
 
-        // 成功创建CTimeout实例
         Ok(Self {
             is_foreground,
             kill_after,

@@ -1082,11 +1082,11 @@ where
             || failed_open_file > 0
             || no_valid_lines)
     {
-        return Err(CtSimpleError::new(1, ""));
+        return Err(CtSimpleError::new(1, "").into());
     }
 
     if missing_file > 0 {
-        return Err(CtSimpleError::new(1, ""));
+        return Err(CtSimpleError::new(1, "").into());
     }
 
     Ok(())
@@ -1191,9 +1191,9 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
     // 初始化为可能的 GNU 格式，带有可选的二进制标记
     let gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
 
-    // BSD 格式正则表达式
+    // BSD 格式及 OpenSSL 格式正则表达式
     let bsd_re = Regex::new(&format!(
-        r"^(?P<escaped>\\)?{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+        r"^(?P<escaped>\\)?{algorithm} *\((?P<fileName>.*)\) *= *(?P<digest>[a-fA-F0-9]{digest_size})",
         algorithm = flags.algoname,
         digest_size = bytes_marker,
     ))

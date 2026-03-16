@@ -1113,7 +1113,6 @@ fn check_hash_file<W: Write>(
     failed_open_file: &mut usize,
     no_valid_lines: &mut bool,
 ) -> CTResult<Option<usize>> {
-    // 设置正则表达式用于行验证和解析
     let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes(flags)?;
     let mut bsd_reversed = None;
     let mut local_failed_cksum = 0;

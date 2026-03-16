@@ -143,7 +143,11 @@ fn cksum_detect_algo(
             } else {
                 CtBlake2b::new()
             }) as Box<dyn CtDigest>,
-            512,
+            if let Some(length) = len {
+                length * 8
+            } else {
+                512
+            },
         ),
         CKSUM_ALGORITHM_OPTIONS_SM3 => (
             CKSUM_ALGORITHM_OPTIONS_SM3,
@@ -972,16 +976,44 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                     );
                     let is_sha3_family = current_default_algo.starts_with("sha3");
 
-                    if (is_blake2b || is_sha2_family || is_sha3_family)
-                        && digest_str.chars().all(|c| c.is_ascii_hexdigit())
-                    {
-                        let bits = digest_str.len() * 4;
-                        if is_blake2b {
-                            inferred_len = Some(bits / 8);
-                            current_default_algo = "blake2b";
-                        } else if matches!(bits, 224 | 256 | 384 | 512) {
-                            inferred_len = Some(bits);
-                            current_default_algo = if is_sha2_family { "sha2" } else { "sha3" };
+                    if is_blake2b || is_sha2_family || is_sha3_family {
+                        let mut bits = 0;
+                        let is_hex_chars = digest_str.chars().all(|c| c.is_ascii_hexdigit());
+                        let is_b64_chars = digest_str.len() % 4 == 0
+                            && digest_str.chars().all(|c| {
+                                c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
+                            });
+
+                        let has_b64_only_chars = digest_str.chars().any(|c| {
+                            c == '+'
+                                || c == '/'
+                                || c == '='
+                                || (c >= 'g' && c <= 'z')
+                                || (c >= 'G' && c <= 'Z')
+                        });
+
+                        if is_b64_chars && has_b64_only_chars {
+                            let padding =
+                                digest_str.chars().rev().take_while(|&c| c == '=').count();
+                            let bytes = (digest_str.len() / 4) * 3 - padding;
+                            bits = bytes * 8;
+                        } else if is_hex_chars {
+                            bits = digest_str.len() * 4;
+                        } else if is_b64_chars {
+                            let padding =
+                                digest_str.chars().rev().take_while(|&c| c == '=').count();
+                            let bytes = (digest_str.len() / 4) * 3 - padding;
+                            bits = bytes * 8;
+                        }
+
+                        if bits > 0 {
+                            if is_blake2b {
+                                inferred_len = Some(bits / 8);
+                                current_default_algo = "blake2b";
+                            } else if matches!(bits, 224 | 256 | 384 | 512) {
+                                inferred_len = Some(bits);
+                                current_default_algo = if is_sha2_family { "sha2" } else { "sha3" };
+                            }
                         }
                     }
                 }

@@ -770,58 +770,58 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         let parsed_n = len_str.parse::<usize>();
         let (is_err, n) = match parsed_n {
             Ok(v) => (false, v),
-            Err(_) => (true, 0), // 解析失败（如溢出）视为非法
+            Err(_) => (true, 0),
         };
 
-        match algo_name {
-            CKSUM_ALGORITHM_OPTIONS_BLAKE2B => {
-                if is_err || n > 512 {
-                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "maximum digest length for 'BLAKE2b' is 512 bits",
-                    )
-                    .into());
-                }
-                if n % 8 != 0 {
-                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "length is not a multiple of 8",
-                    )
-                    .into());
-                }
-                if n == 0 {
-                    None
-                } else {
+        if !is_err && n == 0 {
+            None
+        } else {
+            match algo_name {
+                CKSUM_ALGORITHM_OPTIONS_BLAKE2B => {
+                    if is_err || n > 512 {
+                        ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "maximum digest length for 'BLAKE2b' is 512 bits",
+                        )
+                        .into());
+                    }
+                    if n % 8 != 0 {
+                        ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "length is not a multiple of 8",
+                        )
+                        .into());
+                    }
                     Some(n / 8)
                 }
-            }
-            CKSUM_ALGORITHM_OPTIONS_SHA2 | CKSUM_ALGORITHM_OPTIONS_SHA3 => {
-                if is_err || !matches!(n, 224 | 256 | 384 | 512) {
-                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
-                    let algo_display = if algo_name == CKSUM_ALGORITHM_OPTIONS_SHA2 {
-                        "SHA2"
-                    } else {
-                        "SHA3"
-                    };
+                CKSUM_ALGORITHM_OPTIONS_SHA2 | CKSUM_ALGORITHM_OPTIONS_SHA3 => {
+                    if is_err || !matches!(n, 224 | 256 | 384 | 512) {
+                        ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                        let algo_display = if algo_name == CKSUM_ALGORITHM_OPTIONS_SHA2 {
+                            "SHA2"
+                        } else {
+                            "SHA3"
+                        };
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "digest length for '{}' must be 224, 256, 384, or 512",
+                                algo_display
+                            ),
+                        )
+                        .into());
+                    }
+                    Some(n)
+                }
+                _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        format!(
-                            "digest length for '{}' must be 224, 256, 384, or 512",
-                            algo_display
-                        ),
+                        "--length is only supported with --algorithm=blake2b, sha2, or sha3",
                     )
                     .into());
                 }
-                Some(n)
-            }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "--length is only supported with --algorithm=blake2b, sha2, or sha3",
-                )
-                .into());
             }
         }
     } else {

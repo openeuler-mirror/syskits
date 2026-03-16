@@ -496,6 +496,66 @@ impl Write for CtDigestWriter<'_> {
     }
 }
 
+pub struct CtCRC32b {
+    state: u32,
+    crc_table: [u32; 256],
+}
+
+impl CtCRC32b {
+    fn generate_crc_table() -> [u32; 256] {
+        let mut table = [0; 256];
+        for (i, elt) in table.iter_mut().enumerate() {
+            let mut crc = i as u32;
+            for _ in 0..8 {
+                if crc & 1 != 0 {
+                    crc = (crc >> 1) ^ 0xEDB88320;
+                } else {
+                    crc >>= 1;
+                }
+            }
+            *elt = crc;
+        }
+        table
+    }
+}
+
+impl CtDigest for CtCRC32b {
+    fn new() -> Self {
+        Self {
+            state: 0xFFFFFFFF,
+            crc_table: Self::generate_crc_table(),
+        }
+    }
+
+    fn hash_update(&mut self, input: &[u8]) {
+        for &byte in input {
+            let index = ((self.state ^ byte as u32) & 0xFF) as usize;
+            self.state = (self.state >> 8) ^ self.crc_table[index];
+        }
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        let result = self.state ^ 0xFFFFFFFF;
+        // GNU cksum 的 raw 输出倾向于使用大端序
+        out.copy_from_slice(&result.to_be_bytes());
+    }
+
+    fn result_str(&mut self) -> String {
+        let result = self.state ^ 0xFFFFFFFF;
+        // 保持与 CtCRC 一致的十进制字符串输出格式
+        format!("{}", result)
+    }
+
+    fn reset(&mut self) {
+        // 重置时不需要重新生成查表，提高性能
+        self.state = 0xFFFFFFFF;
+    }
+
+    fn output_bits(&self) -> usize {
+        32 // CRC32b 输出长度为 4 字节
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

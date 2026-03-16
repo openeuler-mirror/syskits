@@ -621,12 +621,25 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     };
 
     if matches.get_flag(opt_flags::CHECK) {
+        // GNU 规定：老旧的非标签化算法不支持 --check 模式
+        if matches!(
+            opts.algo_name,
+            CKSUM_ALGORITHM_OPTIONS_BSD
+                | CKSUM_ALGORITHM_OPTIONS_SYSV
+                | CKSUM_ALGORITHM_OPTIONS_CRC
+        ) {
+            ctcore::ct_show_error!(
+                "--check is not supported with --algorithm={}",
+                opts.algo_name
+            );
+            return Ok(1); // 强制退出并返回错误码 1
+        }
+
         return cksum_check(opts, &matches);
     }
 
     match matches.get_many::<String>(opt_flags::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
-        // 如果用户没有输入任何参数，则视为隐式传入标准输入
         None => cksum(opts, std::iter::empty())?,
     };
 
@@ -935,8 +948,6 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::BASE64)
             .help(t!("cksum.clap.base64"))
             .action(ArgAction::SetTrue)
-            // Even though this could easily just override an earlier '--raw',
-            // GNU cksum does not permit these flags to be combined:
             .conflicts_with(opt_flags::RAW),
         Arg::new(opt_flags::CHECK)
             .short('c')

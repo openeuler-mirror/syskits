@@ -10,17 +10,17 @@
  */
 
 extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
-use clap::{Arg, ArgAction, Command, crate_version, value_parser};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
-    ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code},
+    ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo},
     ct_show,
     ct_sum::{
-        BSD, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1,
-        Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, div_ceil,
+        div_ceil, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224,
+        Sha256, Sha384, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha512, BSD, SYSV,
     },
 };
 use hex::decode;
@@ -30,7 +30,7 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
+use std::io::{self, stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -3041,6 +3041,7 @@ mod tests {
 
     #[cfg(test)]
     mod tests_detect_algo {
+        use crate::cksum_detect_algo;
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
@@ -3052,7 +3053,6 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::cksum_detect_algo;
 
         #[test]
         fn test_detect_algo_sysv() {
@@ -3165,7 +3165,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::{CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, ct_app, opt_flags};
+        use crate::{cksum, cksum_detect_algo, ct_app, opt_flags, CksumOptions, CksumOutputFormat};
         use std::ffi::OsStr;
         use std::fs;
         use std::fs::File;

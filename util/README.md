@@ -6,13 +6,13 @@
 
 ## 1. 解压GNU源码
 
-解压本目录的coreutils-9.9.tar.gz至syskits的上一级目录：
+解压本目录的coreutils-9.4.tar.gz至syskits的上一级目录：
 
 ```bash
 # 当前目录为xxx/syskits/util
-tar -xzf coreutils-9.9.tar.gz -C ../..
+tar -xzf coreutils-9.4.tar.gz -C ../..
 # 重命名为gnu
-mv ../../coreutils-9.9 ../../gnu
+mv ../../coreutils-9.4 ../../gnu
 ```
 
 ---

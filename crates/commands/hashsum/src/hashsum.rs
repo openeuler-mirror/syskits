@@ -183,32 +183,47 @@ impl HashsumFlags {
 /// 返回一个包含算法名称、哈希器实例和输出长度(以位为单位)的元组的 UResult，
 /// 如果长度不是 8 的倍数或大于 512，则返回错误
 fn create_blake2b(matches: &ArgMatches) -> CTResult<(&'static str, Box<dyn CtDigest>, usize)> {
-    match matches.get_one::<usize>("length") {
-        Some(0) | None => Ok((
+    match matches.get_one::<String>("length") {
+        None => Ok((
             "BLAKE2",
             Box::new(CtBlake2b::new()) as Box<dyn CtDigest>,
             512,
         )),
-        Some(length_in_bits) => {
-            if *length_in_bits > 512 {
-                return Err(CtSimpleError::new(
-                    1,
-                    "Invalid length (maximum digest length is 512 bits)",
-                ));
-            }
+        Some(len_str) => {
+            let parsed_n = len_str.parse::<usize>();
+            let (is_err, n) = match parsed_n {
+                Ok(v) => (false, v),
+                Err(_) => (true, 0),
+            };
 
-            if length_in_bits % 8 == 0 {
-                let length_in_bytes = length_in_bits / 8;
+            if !is_err && n == 0 {
                 Ok((
                     "BLAKE2",
-                    Box::new(CtBlake2b::with_output_bytes(length_in_bytes)),
-                    *length_in_bits,
+                    Box::new(CtBlake2b::new()) as Box<dyn CtDigest>,
+                    512,
                 ))
             } else {
-                Err(CtSimpleError::new(
-                    1,
-                    "Invalid length (expected a multiple of 8)",
-                ))
+                if is_err || n > 512 {
+                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                    return Err(CtSimpleError::new(
+                        1,
+                        "maximum digest length for 'BLAKE2b' is 512 bits",
+                    ));
+                }
+
+                if n % 8 == 0 {
+                    let length_in_bytes = n / 8;
+                    Ok((
+                        "BLAKE2",
+                        Box::new(CtBlake2b::with_output_bytes(length_in_bytes)),
+                        n,
+                    ))
+                } else {
+                    Err(CtSimpleError::new(
+                        1,
+                        "Invalid length (expected a multiple of 8)",
+                    ))
+                }
             }
         }
     }
@@ -923,7 +938,8 @@ fn add_length_option(command: Command) -> Command {
             .long("length")
             .help(t!("hashsum.clap.length"))
             .value_name("BITS")
-            .value_parser(parse_bit_num),
+            .action(ArgAction::Set)
+            .overrides_with("length"),
     )
 }
 

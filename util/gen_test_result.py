@@ -87,6 +87,11 @@ def extract_result_from_log(log_path: Path) -> str | None:
             continue
         if line.startswith(("PASS", "FAIL", "SKIP", "ERROR", "Failed")):
             return line.split()[0]
+        if "exit status:" in line:
+            if "exit status: 0" in line:
+                return "PASS"
+            else:
+                return "FAIL"
 
     return "Unknown"
 

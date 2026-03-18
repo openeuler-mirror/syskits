@@ -1173,20 +1173,18 @@ fn move_dir_cross_device_with_links(
             {
                 if let Ok(meta) = fs::symlink_metadata(&src_path) {
                     let inode = meta.ino();
-                    let nlink = meta.nlink();
 
-                    // 只有当文件的硬链接数大于 1 时，才有必要去查表和建表
-                    if nlink > 1 {
-                        if let Some(existing_dest) = inode_map.get(&inode) {
-                            // 直接在目标分区创建硬链接，绝不重复拷贝数据
-                            fs::hard_link(existing_dest, &dest_path)?;
-                            // 原文件使命达成，可以删除了
-                            fs::remove_file(&src_path)?;
-                            continue;
-                        } else {
-                            // 第一次遇到这个多链接文件，把它存入记忆表
-                            inode_map.insert(inode, dest_path.clone());
-                        }
+                    // 无论当前的 nlink 是多少，必须先查表！
+                    // 因为之前移动并删除它的兄弟硬链接时，当前文件的 nlink 可能已经降为 1 了。
+                    if let Some(existing_dest) = inode_map.get(&inode) {
+                        // 发现这个 inode 之前已经被复制过了，直接在目标分区重建硬链接
+                        fs::hard_link(existing_dest, &dest_path)?;
+                        // 原文件使命达成，可以删除了
+                        fs::remove_file(&src_path)?;
+                        continue;
+                    } else if meta.nlink() > 1 {
+                        // 第一次遇到这个多链接文件，把它存入记忆表
+                        inode_map.insert(inode, dest_path.clone());
                     }
                 }
             }

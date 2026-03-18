@@ -273,7 +273,9 @@ where
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
-        stdout.write_all(&buf[..read])?;
+
+        stdout.write_all(&buf[..read]).map_err(write_error)?;
+
         if let Some(ref mut b) = buffer {
             b.extend_from_slice(&buf[..read]);
         }
@@ -313,7 +315,7 @@ fn read_n_lines(
                         }
                     }
                 }
-                writer.write_all(&buf[..consumed])?;
+                writer.write_all(&buf[..consumed]).map_err(write_error)?;
                 if let Some(ref mut b) = buffer {
                     b.extend_from_slice(&buf[..consumed]);
                 }
@@ -327,7 +329,7 @@ fn read_n_lines(
             break;
         }
     }
-    writer.flush()?;
+    writer.flush().map_err(write_error)?;
     Ok(total_written)
 }
 
@@ -347,7 +349,7 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
 fn read_but_last_n_bytes(
     input: &mut impl std::io::BufRead,
     n: u64,
-    buffer: Option<&mut Vec<u8>>,
+    mut buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     if n == 0 {
         let _ = read_n_bytes(input, u64::MAX, buffer)?;
@@ -358,38 +360,47 @@ fn read_but_last_n_bytes(
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
 
-        let mut local_buffer = Vec::new();
         let mut ring_buffer = Vec::new();
-
         let mut buffer_size = [0u8; BUF_SIZE];
-        let mut total_read = 0;
 
         loop {
             let read = match input.read(&mut buffer_size) {
                 Ok(0) => break,
                 Ok(read) => read,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => continue,
-                    _ => return Err(e),
-                },
+                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
             };
 
-            total_read += read;
-
-            if total_read <= n {
+            let total_available = ring_buffer.len() + read;
+            if total_available <= n {
                 ring_buffer.extend_from_slice(&buffer_size[..read]);
             } else {
-                let to_write = &buffer_size[..(read - (n - (total_read - read)).min(read))];
-                local_buffer.extend_from_slice(to_write);
-                ring_buffer.clear();
-                ring_buffer.extend_from_slice(&buffer_size[(read - n.min(read))..read]);
+                let to_write_len = total_available - n;
+                if to_write_len <= ring_buffer.len() {
+                    stdout
+                        .write_all(&ring_buffer[..to_write_len])
+                        .map_err(write_error)?;
+                    if let Some(ref mut b) = buffer {
+                        b.extend_from_slice(&ring_buffer[..to_write_len]);
+                    }
+                    ring_buffer.drain(..to_write_len);
+                    ring_buffer.extend_from_slice(&buffer_size[..read]);
+                } else {
+                    stdout.write_all(&ring_buffer).map_err(write_error)?;
+                    if let Some(ref mut b) = buffer {
+                        b.extend_from_slice(&ring_buffer);
+                    }
+                    let remaining = to_write_len - ring_buffer.len();
+                    stdout
+                        .write_all(&buffer_size[..remaining])
+                        .map_err(write_error)?;
+                    if let Some(ref mut b) = buffer {
+                        b.extend_from_slice(&buffer_size[..remaining]);
+                    }
+                    ring_buffer.clear();
+                    ring_buffer.extend_from_slice(&buffer_size[remaining..read]);
+                }
             }
-        }
-
-        stdout.write_all(&local_buffer)?;
-
-        if let Some(buf) = buffer {
-            buf.extend_from_slice(&local_buffer);
         }
     }
 
@@ -400,22 +411,20 @@ fn read_but_last_n_lines(
     input: impl std::io::BufRead,
     n: u64,
     separator: u8,
-    buffer: Option<&mut Vec<u8>>,
+    mut buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
 
-        let mut local_buffer = Vec::new();
         for bytes in take_all_but(lines(input, separator), n) {
             let bytes = bytes?;
-            local_buffer.extend_from_slice(&bytes);
-        }
 
-        stdout.write_all(&local_buffer)?;
+            stdout.write_all(&bytes).map_err(write_error)?;
 
-        if let Some(buf) = buffer {
-            buf.extend_from_slice(&local_buffer);
+            if let Some(ref mut buf) = buffer {
+                buf.extend_from_slice(&bytes);
+            }
         }
     }
     Ok(())

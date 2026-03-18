@@ -939,7 +939,15 @@ fn initialize_copy_environment<'a>(
     output: DdOutput<'a>,
 ) -> (CopyState<'a>, BlockWriter<'a>) {
     let bsize = calc_bsize(input.settings.ibs, output.settings.obs);
-    let buffer = vec![BUF_INIT_BYTE; bsize];
+
+    // 按需分配缓冲区。
+    // 如果 count=0，主循环将直接退出，此时分配巨大的内存不仅无用，
+    // 还会在受到 ulimit 限制的测试（或资源受限的系统）中触发 OOM 崩溃。
+    let buffer = match input.settings.count {
+        Some(Num::Blocks(0) | Num::Bytes(0)) => Vec::new(),
+        _ => vec![BUF_INIT_BYTE; bsize],
+    };
+
     let read_stat = ReadStat::default();
     let write_stat = WriteStat::default();
     let start_time = Instant::now();
@@ -949,8 +957,10 @@ fn initialize_copy_environment<'a>(
     let output_thread = thread::spawn(gen_prog_updater(rx, input.settings.status));
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
-    // 创建输出写入器
-    let output = if output.settings.buffered {
+    // 如果 count=0，根本不会写入数据，不需要启动 DDBufferedOutput 从而避免
+    // 它在初始化时无脑申请 obs 大小的内存池导致 OOM。
+    let is_count_zero = matches!(input.settings.count, Some(Num::Blocks(0) | Num::Bytes(0)));
+    let output = if output.settings.buffered && !is_count_zero {
         BlockWriter::Buffered(DDBufferedOutput::new(output))
     } else {
         BlockWriter::Unbuffered(output)

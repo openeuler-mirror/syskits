@@ -156,7 +156,14 @@ impl HashsumFlags {
         // status 模式下禁用警告
         let is_warn = matches.get_flag(hashsum_flags::WARN) && !is_status;
         let is_zero = matches.get_flag(hashsum_flags::ZERO);
-        let is_ignore_missing = matches.get_flag(hashsum_flags::IGNORE_MISSING); // <--- 获取参数
+        let is_ignore_missing = matches.get_flag(hashsum_flags::IGNORE_MISSING);
+
+        if is_ignore_missing && !is_check {
+            ctcore::ct_show_error!(
+                "the --ignore-missing option is meaningful only when verifying checksums"
+            );
+            return Err(CtSimpleError::new(1, "").into());
+        }
 
         Ok(Self {
             algoname,
@@ -1059,6 +1066,7 @@ where
     let mut failed_open_file = 0;
     let mut missing_file = 0;
     let mut no_valid_lines = false;
+    let mut no_files_verified = false;
 
     let binary_marker = if flags.is_binary { "*" } else { " " };
 
@@ -1082,6 +1090,7 @@ where
                 &mut bad_format,
                 &mut failed_open_file,
                 &mut no_valid_lines,
+                &mut no_files_verified,
             )?;
 
             if let Some(failed) = check_result {
@@ -1096,11 +1105,13 @@ where
         output_summary(bad_format, failed_cksum, failed_open_file)?;
     }
 
+    // 把所有失败的指标汇总在这里退出，包括 no_files_verified
     if flags.is_check
         && ((bad_format > 0 && flags.is_strict)
             || failed_cksum > 0
             || failed_open_file > 0
-            || no_valid_lines)
+            || no_valid_lines
+            || no_files_verified)
     {
         return Err(CtSimpleError::new(1, "").into());
     }
@@ -1132,17 +1143,25 @@ fn check_hash_file<W: Write>(
     bad_format: &mut usize,
     failed_open_file: &mut usize,
     no_valid_lines: &mut bool,
+    no_files_verified: &mut bool,
 ) -> CTResult<Option<usize>> {
     let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes(flags)?;
     let mut bsd_reversed = None;
     let mut local_failed_cksum = 0;
     let mut file_has_valid_lines = false;
+    let mut matched_files = 0;
+    let mut local_bad_format = 0;
 
     for (i, maybe_line) in file.lines().enumerate() {
         let line = match maybe_line {
             Ok(l) => l,
             Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
         };
+
+        // 静默跳过空行
+        if line.is_empty() {
+            continue;
+        }
 
         // 尝试匹配哈希行格式
         let parse_result =
@@ -1160,6 +1179,7 @@ fn check_hash_file<W: Write>(
                     is_escaped,
                     writer,
                     failed_open_file,
+                    &mut matched_files, // <--- 传入
                 )?;
 
                 if !verify_result {
@@ -1167,12 +1187,10 @@ fn check_hash_file<W: Write>(
                 }
             }
             Err(ParseLineError::FormatError) => {
-                *bad_format += 1;
-                if flags.is_strict {
-                    return Err(HashsumError::InvalidFormat.into());
-                }
+                local_bad_format += 1;
                 if flags.is_warn {
-                    ct_show_warning!(
+                    // 使用 ct_show_error! 避免前缀多出 'warning:'，以完全匹配 GNU 输出
+                    ctcore::ct_show_error!(
                         "{}: {}: improperly formatted {} checksum line",
                         filename.maybe_quote(),
                         i + 1,
@@ -1188,11 +1206,17 @@ fn check_hash_file<W: Write>(
 
     if !file_has_valid_lines {
         *no_valid_lines = true;
-        ct_show_warning!(
-            "{}: no properly formatted {} checksum lines found",
-            filename.display(),
-            flags.algoname
+        ctcore::ct_show_error!(
+            "{}: no properly formatted checksum lines found",
+            filename.display()
         );
+    } else {
+        *bad_format += local_bad_format;
+        if flags.is_ignore_missing && matched_files == 0 {
+            // --ignore-missing 虽然能忽略不存在的文件，但如果所有的都没找到，同样要报错
+            ctcore::ct_show_error!("{}: no file was verified", filename.display());
+            *no_files_verified = true;
+        }
     }
 
     Ok(Some(local_failed_cksum))
@@ -1304,6 +1328,7 @@ fn verify_file_hash<W: Write>(
     is_escaped: bool,
     writer: &mut W,
     failed_open_file: &mut usize,
+    matched_files: &mut usize,
 ) -> CTResult<bool> {
     if flags.algoname == "BLAKE2" {
         // 根据文件中读取到的哈希字符串的长度推断出字节数 (2 个十六进制字符 = 1 字节)
@@ -1328,7 +1353,7 @@ fn verify_file_hash<W: Write>(
 
     let f = match File::open(&ck_filename_unescaped) {
         Err(e) => {
-            if flags.is_ignore_missing {
+            if flags.is_ignore_missing && e.kind() == std::io::ErrorKind::NotFound {
                 return Ok(true);
             }
             *failed_open_file += 1;
@@ -1349,6 +1374,8 @@ fn verify_file_hash<W: Write>(
         Ok(file) => file,
     };
 
+    *matched_files += 1;
+
     let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
 
     // 计算实际哈希值
@@ -1356,9 +1383,7 @@ fn verify_file_hash<W: Write>(
     {
         Ok(s) => s.to_ascii_lowercase(),
         Err(e) => {
-            if flags.is_ignore_missing {
-                return Ok(true);
-            }
+            // 如果成功打开了但发生 I/O 读取错误，不应被 ignore_missing 忽略
             *failed_open_file += 1;
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);

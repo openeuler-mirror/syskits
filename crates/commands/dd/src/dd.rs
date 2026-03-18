@@ -1016,8 +1016,12 @@ fn read_and_process_block(
     // 写入数据
     let wstat_update = output.write_blocks(&state.buffer)?;
 
+    // 判断是否遇到了文件末尾 (EOF)
+    // 如果读取的字节数少于请求的缓冲区大小，说明文件已经到底了
+    let hit_eof = (rstat_update.bytes_total as usize) < loop_bsize;
+
     // 处理缓存
-    handle_cache_updates(state, &rstat_update, &wstat_update, output)?;
+    handle_cache_updates(state, &rstat_update, &wstat_update, output, hit_eof)?;
 
     //累加用时
     state.duration += state.start_time.elapsed();
@@ -1037,18 +1041,29 @@ fn handle_cache_updates(
     rstat_update: &ReadStat,
     wstat_update: &WriteStat,
     output: &mut BlockWriter,
+    hit_eof: bool, // 新增参数：是否到达 EOF
 ) -> std::io::Result<()> {
     // 处理输入缓存
     if state.input.settings.iflags.is_nocache {
         let offset = state.read_offset as i64;
-        let len = rstat_update.bytes_total as i64;
+        // GNU 兼容性核心：如果遇到 EOF，len 必须传 0 (一直到文件尾)
+        let len = if hit_eof {
+            0
+        } else {
+            rstat_update.bytes_total as i64
+        };
         state.input.discard_cache(offset, len);
     }
 
     // 处理输出缓存
     if state.input.settings.oflags.is_nocache {
         let offset = state.write_offset as i64;
-        let len = wstat_update.bytes_total as i64;
+        // 同理，输出遇到 EOF 也是传 0
+        let len = if hit_eof {
+            0
+        } else {
+            wstat_update.bytes_total as i64
+        };
         output.discard_cache(offset, len);
     }
 

@@ -29,10 +29,9 @@ use nix::fcntl::FcntlArg::F_SETFL;
 #[cfg(target_os = "linux")]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
-use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 
-use clap::{Arg, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, Command};
 use ctcore::ct_display::Quotable;
 #[cfg(unix)]
 use ctcore::ct_error::set_ct_exit_code;
@@ -40,11 +39,12 @@ use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_show_error;
 #[cfg(target_os = "linux")]
 use ctcore::ct_show_if_err;
+use ctcore::Tool;
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use nix::{
     errno::Errno,
-    fcntl::{PosixFadviseAdvice, posix_fadvise},
+    fcntl::{posix_fadvise, PosixFadviseAdvice},
 };
 use std::cmp;
 use std::env;
@@ -62,9 +62,8 @@ use std::os::unix::{
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, Ordering::Relaxed},
-    mpsc,
+    mpsc, Arc,
 };
 use std::thread;
 use std::time::{Duration, Instant};
@@ -255,12 +254,14 @@ impl Source {
     /// then this function returns an error.
     #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
         match self {
-            Self::File(f) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
-            }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            Self::File(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
+            #[cfg(unix)]
+            Self::StdinFile(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
+            #[cfg(unix)]
+            Self::Fifo(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
+            _ => Err(Errno::ESPIPE),
         }
     }
 }
@@ -379,7 +380,11 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag == 0 { None } else { Some(flag) }
+    if flag == 0 {
+        None
+    } else {
+        Some(flag)
+    }
 }
 
 impl Read for Input<'_> {
@@ -417,10 +422,10 @@ impl Input<'_> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            ct_show_if_err!(self
-                .src
-                .discard_cache(offset, len)
-                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
+            if let Err(e) = self.src.discard_cache(offset, len) {
+                ct_show_error!("failed to discard cache for: 'standard input': {}", e);
+                set_ct_exit_code(1);
+            }
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -605,12 +610,13 @@ impl Dest {
     /// not possible, then this function returns an error.
     #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
         match self {
-            Self::File(f, _) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
-            }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            Self::File(f, _) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
+            Self::Stdout(stdout) => posix_fadvise(stdout.as_raw_fd(), offset, len, advice),
+            #[cfg(unix)]
+            Self::Fifo(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
+            _ => Err(Errno::ESPIPE),
         }
     }
 }
@@ -780,11 +786,12 @@ impl<'a> DdOutput<'a> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            ct_show_if_err!(self.dst.discard_cache(offset, len).map_err_context(|| {
-                "failed to discard cache for: 'standard output'".to_string()
-            }));
+            if let Err(e) = self.dst.discard_cache(offset, len) {
+                ct_show_error!("failed to discard cache for: 'standard output': {}", e);
+                set_ct_exit_code(1);
+            }
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "linux"))]
         {
             // TODO Is there a way to discard filesystem cache on
             // these other operating systems?
@@ -962,8 +969,17 @@ fn initialize_copy_environment<'a>(
     (state, output)
 }
 
-/// 执行主复制循环
 fn perform_copy_loop(state: &mut CopyState, output: &mut BlockWriter) -> std::io::Result<()> {
+    if let Some(Num::Blocks(0) | Num::Bytes(0)) = state.input.settings.count {
+        if state.input.settings.iflags.is_nocache {
+            state.input.discard_cache(0, 0);
+        }
+        if state.input.settings.oflags.is_nocache {
+            output.discard_cache(0, 0);
+        }
+        return Ok(());
+    }
+
     while below_count_limit(&state.input.settings.count, &state.read_stat) {
         // 读取数据块
         if !read_and_process_block(state, output)? {
@@ -1110,7 +1126,11 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag == 0 { None } else { Some(flag) }
+    if flag == 0 {
+        None
+    } else {
+        Some(flag)
+    }
 }
 
 /// Read from an input (that is, a source of bytes) into the given buffer.
@@ -1326,7 +1346,7 @@ pub fn ct_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DdOutput, Parser, calc_bsize};
+    use crate::{calc_bsize, DdOutput, Parser};
     use std::path::Path;
 
     #[test]

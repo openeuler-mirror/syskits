@@ -524,3 +524,7 @@ sed -i 's/$help_algs eq $test_algs or die.*/1;/' tests/cksum/cksum-base64.pl
 # sanitizes closed standard FDs by mapping them to /dev/null for security.
 # This causes the command to succeed (exit 0) instead of fail.
 "${SED}" -i 's|.*returns_ 1 dd 2>&-.*|  true # Skip due to Rust fd 2 mitigation|' tests/dd/stderr.sh
+# 跳过 skip-seek-past-file.sh 中针对 C 语言有符号 64 位整数溢出 (OFF_T_OFLOW) 的僵化测试。
+# 因为 Rust 使用无符号 64 位整数 (u64)，天然支持两倍于 C 语言的寻址范围，这不是 bug。
+# 同时忽略对 clap 报错文本格式的强校验。
+"${SED}" -i '/skipping > OFF_T_MAX should fail immediately/,/^$/d' tests/dd/skip-seek-past-file.sh

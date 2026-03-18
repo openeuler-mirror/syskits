@@ -19,7 +19,10 @@ use std::time::Duration;
 
 use ctcore::ct_error::CTResult;
 
-use crate::numbers::{SuffixType, to_magnitude_and_suffix};
+use crate::numbers::{to_magnitude_and_suffix, SuffixType};
+
+#[cfg(unix)]
+use ctcore::ct_error::set_ct_exit_code;
 
 // On Linux, we register a signal handler that prints progress updates.
 #[cfg(target_os = "linux")]
@@ -29,8 +32,8 @@ use std::{
     env,
     error::Error,
     sync::{
-        Arc,
         atomic::{AtomicUsize, Ordering},
+        Arc,
     },
 };
 
@@ -238,7 +241,9 @@ impl ProgUpdate {
     /// See [`ProgUpdate::write_io_lines`] for more information.
     pub(crate) fn print_io_lines(&self) {
         let mut stderr = std::io::stderr();
-        self.write_io_lines(&mut stderr).unwrap();
+        if self.write_io_lines(&mut stderr).is_err() || stderr.flush().is_err() {
+            std::process::exit(1);
+        }
     }
 
     /// Re-print the number of bytes written, duration, and throughput.
@@ -247,7 +252,9 @@ impl ProgUpdate {
     pub(crate) fn reprint_prog_line(&self) {
         let mut stderr = std::io::stderr();
         let rewrite = true;
-        self.write_prog_line(&mut stderr, rewrite).unwrap();
+        if self.write_prog_line(&mut stderr, rewrite).is_err() || stderr.flush().is_err() {
+            std::process::exit(1);
+        }
     }
 
     /// Write all summary statistics.
@@ -255,7 +262,9 @@ impl ProgUpdate {
     /// See [`ProgUpdate::write_transfer_stats`] for more information.
     pub(crate) fn print_transfer_stats(&self, new_line: bool) {
         let mut stderr = std::io::stderr();
-        self.write_transfer_stats(&mut stderr, new_line).unwrap();
+        if self.write_transfer_stats(&mut stderr, new_line).is_err() || stderr.flush().is_err() {
+            std::process::exit(1);
+        }
     }
 
     /// Write all the final statistics.

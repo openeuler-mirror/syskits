@@ -23,7 +23,7 @@ use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::rc::Rc;
-use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
+use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
 use std::thread::{self, JoinHandle};
 
 use compare::Compare;
@@ -33,8 +33,8 @@ use ctcore::ct_error::CTResult;
 
 use crate::chunks::{self, Chunk, ChunkRecycled};
 use crate::tmp_dir::TmpDirWrapper;
-use crate::{SortError, SortGlobalConfigs, SortOutput};
 use crate::{sort_compare_by, sort_open};
+use crate::{SortError, SortGlobalConfigs, SortOutput};
 
 /// 如果输出文件也出现在输入文件中，则复制输出文件的内容
 /// 并用该副本替换输入文件中出现的输出文件。
@@ -103,25 +103,60 @@ pub fn merge_with_file_limit<
     F: ExactSizeIterator<Item = CTResult<M>>,
     Tmp: MergeWriteableTmpFile + 'static,
 >(
-    files: F,
+    mut files: F,
     settings: &'a SortGlobalConfigs,
     tmp_dir: &mut TmpDirWrapper,
 ) -> CTResult<MergeFileMerger<'a>> {
-    if files.len() > settings.merge_batch_size {
-        let mut remaining_files_len = files.len();
-        let batches = files.chunks(settings.merge_batch_size);
-        let mut batches = batches.into_iter();
+    // 计算安全批次，并手动管理迭代以避免 `itertools::chunks` 的预读缓冲陷阱
+    let batch_size = {
+        let mut b = settings.merge_batch_size;
+        #[cfg(unix)]
+        {
+            let mut rlim = std::mem::MaybeUninit::uninit();
+            if unsafe { ctcore::libc::getrlimit(ctcore::libc::RLIMIT_NOFILE, rlim.as_mut_ptr()) }
+                == 0
+            {
+                let rlim = unsafe { rlim.assume_init() };
+                let max_open = rlim.rlim_cur as usize;
+
+                // 保留 3 个给 stdio，1 个给临时输出文件，再留 1 个安全冗余。
+                // 总计扣除 5 个 FD 配额。至少保持 2 路归并。
+                let safe_b = std::cmp::max(max_open.saturating_sub(5), 2);
+
+                if safe_b < b {
+                    b = safe_b;
+                }
+            }
+        }
+        b
+    };
+
+    if files.len() > batch_size {
         let mut temporary_files_vec = vec![];
-        while remaining_files_len != 0 {
-            // Work around the fact that `Chunks` is not an `ExactSizeIterator`.
-            remaining_files_len = remaining_files_len.saturating_sub(settings.merge_batch_size);
-            let merger = merge_without_limit(batches.next().unwrap(), settings)?;
+
+        loop {
+            // 手动组装当前批次，绝不提前调用 files.next() 导致后台 FD 泄露
+            let mut current_batch = Vec::with_capacity(batch_size);
+            for _ in 0..batch_size {
+                if let Some(f) = files.next() {
+                    current_batch.push(f);
+                } else {
+                    break;
+                }
+            }
+
+            if current_batch.is_empty() {
+                break;
+            }
+
+            let merger = merge_without_limit(current_batch.into_iter(), settings)?;
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
             merger.write_all_to(settings, tmp_file.as_write())?;
             temporary_files_vec.push(tmp_file.finished_writing()?);
         }
-        assert!(batches.next().is_none());
+
+        // 递归合并生成的临时文件
         merge_with_file_limit::<_, _, Tmp>(
             temporary_files_vec
                 .into_iter()

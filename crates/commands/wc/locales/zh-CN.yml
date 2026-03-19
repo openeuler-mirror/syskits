@@ -16,7 +16,7 @@ wc:
   errors:
     system: "系统错误"
     unknown: "未知错误"
-    disabled_files: "多余的操作数 '{extra}'\n文件操作数不能与 --files0-from 组合使用"
+    disabled_files: "多余的操作数 %{extra}\n文件操作数不能与 --files0-from 组合使用"
     stdin_repr_not_allowed: "从标准输入读取文件名时，不允许使用文件名 '-'"
     zero_length: "无效的零长度文件名"
-    zero_length_ctx: "{path}:{idx}: 无效的零长度文件名" 
+    zero_length_ctx: "%{path}:%{idx}: 无效的零长度文件名" 

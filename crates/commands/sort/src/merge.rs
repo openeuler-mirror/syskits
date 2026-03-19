@@ -49,13 +49,23 @@ fn merge_replace_output_file_in_input_files(
             if let Ok(file_path) = Path::new(file).canonicalize() {
                 if file_path == output_path {
                     match &copy {
-                        Some(copy) => {
-                            *file = copy.clone().into_os_string();
+                        Some(copy_path) => {
+                            *file = copy_path.clone().into_os_string();
                         }
                         _ => {
-                            let (_file, copy_path) = tmp_dir.next_file()?;
-                            std::fs::copy(file_path, &copy_path)
+                            // 复用 tmp_dir.next_file 返回的已打开文件句柄
+                            // 避免 std::fs::copy 导致的一瞬间 3 个 FD 的并发占用峰值
+                            let (mut tmp_file, copy_path) = tmp_dir.next_file()?;
+                            let mut src_file = File::open(&file_path)
                                 .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
+
+                            std::io::copy(&mut src_file, &mut tmp_file)
+                                .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
+
+                            // 及时主动释放 FD，给后续合并留出生命空间
+                            drop(src_file);
+                            drop(tmp_file);
+
                             *file = copy_path.clone().into_os_string();
                             copy = Some(copy_path);
                         }

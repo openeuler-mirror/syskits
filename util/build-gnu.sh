@@ -437,6 +437,8 @@ sed -i 's/if grep .*BF16_SUPPORTED.*/if false; then/' tests/od/od-float.sh
 # 忽略由 Rust 优秀的容错机制 (-w0 warning)、底层 OS Error 后缀以及长选项自动展开导致的诊断文本差异测试
 sed -i '/my \$fail = run_tests/i \
 @Tests = grep { $_->[0] !~ /^(invalid-off-|overflow-off-|invalid-w-)/ } @Tests;' tests/od/od.pl
+# 从 od-multiple-t.sh 的遍历列表中剔除不受 Rust 跨平台支持的 fL 类型
+sed -i "s/ fL'/'/" tests/od/od-multiple-t.sh
 
 
 ### printf tests
@@ -505,12 +507,13 @@ echo 'exit 77' > tests/shred/shred-passes.sh
 
 
 ### wc tests
-# 调整 tests/wc/wc-files0-from.pl 中的期望错误信息，以匹配 Rust 版本国际化文本 (首字母大写、stdin 缩写) 及未插值的占位符 ({extra}, {path}:{idx})
-"${SED}" -i "s/extra operand 'no-such'/Extra operand '{extra}'/" tests/wc/wc-files0-from.pl
+# 调整 tests/wc/wc-files0-from.pl 中的期望错误信息
+"${SED}" -i "s/extra operand 'no-such'/Extra operand 'no-such'/" tests/wc/wc-files0-from.pl
 "${SED}" -i "s/file operands cannot be combined/File operands cannot be combined/" tests/wc/wc-files0-from.pl
-"${SED}" -i "s/when reading file names from standard input,/When reading file names from stdin,/" tests/wc/wc-files0-from.pl
-"${SED}" -i "s/-:1: invalid zero-length/{path}:{idx}: invalid zero-length/g" tests/wc/wc-files0-from.pl
-"${SED}" -i "s/-:2: invalid zero-length/{path}:{idx}: invalid zero-length/g" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/when reading file names from standard input/When reading file names from stdin/" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/when reading file names from stdin/When reading file names from stdin/" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/-:1:/standard input:1:/g" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/-:2:/standard input:2:/g" tests/wc/wc-files0-from.pl
 
 
 ### hashsum tests

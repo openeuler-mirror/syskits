@@ -2382,14 +2382,12 @@ mod tests {
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
 
-            assert!(
-                merge_replace_output_file_in_input_files(
-                    &mut files,
-                    Some("/path/to/output.txt"),
-                    &mut tmp_dir,
-                )
-                .is_ok()
-            );
+            assert!(merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            )
+            .is_ok());
         }
 
         #[test]
@@ -2400,14 +2398,12 @@ mod tests {
             ];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
 
-            assert!(
-                merge_replace_output_file_in_input_files(
-                    &mut files,
-                    Some("/path/to/output.txt"),
-                    &mut tmp_dir,
-                )
-                .is_ok()
-            );
+            assert!(merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            )
+            .is_ok());
             assert_eq!(files[0], files[1]);
             println!("{:?}", files[0].to_string_lossy());
             // assert!(files[0].to_string_lossy().contains("cttils_sort"));
@@ -2420,14 +2416,12 @@ mod tests {
                 OsString::from("/path/to/file2.txt"),
             ];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
-            assert!(
-                merge_replace_output_file_in_input_files(
-                    &mut files,
-                    Some("/path/to/output.txt"),
-                    &mut tmp_dir,
-                )
-                .is_ok()
-            );
+            assert!(merge_replace_output_file_in_input_files(
+                &mut files,
+                Some("/path/to/output.txt"),
+                &mut tmp_dir,
+            )
+            .is_ok());
             assert_eq!(
                 files,
                 vec![

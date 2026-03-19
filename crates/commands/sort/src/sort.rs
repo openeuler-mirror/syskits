@@ -1182,14 +1182,6 @@ fn sort_handle_settings(
         );
     }
 
-    // 验证我们是否可以打开所有输入文件。
-    // 正确的做法是，随后关闭所有文件、
-    // 之后关闭所有文件并在稍后重新打开它们才是正确的行为。这与处理输出文件的方式不同、
-    // 可能是为了防止文件描述符耗尽。
-    for file in &files {
-        sort_open(file)?;
-    }
-
     let output = SortOutput::new(
         matches
             .get_one::<String>(sort_flags::SORT_OUTPUT)

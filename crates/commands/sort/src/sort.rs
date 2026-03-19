@@ -654,11 +654,8 @@ impl<'a> SortLine<'a> {
                 _ => {}
             }
 
-            write!(
-                w,
-                "{}",
-                " ".repeat(UnicodeWidthStr::width(&line[..selection.start]))
-            )?;
+            let prefix_width = UnicodeWidthStr::width(line[..selection.start].replace('\0', "").as_str());
+            write!(w, "{}", " ".repeat(prefix_width))?;
 
             if selection.is_empty() {
                 writeln!(w, "^ no match for key")?;

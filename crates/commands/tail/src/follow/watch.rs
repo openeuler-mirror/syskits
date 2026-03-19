@@ -481,6 +481,32 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
 
     // main follow loop
     loop {
+        // 第一时间探测标准 I/O 的生死状态
+        let (stdin_dead, stdout_dead) = check_io_health();
+
+        // 如果输出管道断裂（下游退出或被关闭），立即停止工作，防止变成僵尸进程
+        if stdout_dead {
+            break;
+        }
+
+        // 如果输入管道枯竭，将标准输入从监控名单中永久除名
+        if stdin_dead {
+            let mut dead_paths = vec![];
+            for path in observer.files.keys() {
+                if path.to_string_lossy() == "-" || path.to_string_lossy() == "/dev/stdin" {
+                    dead_paths.push(path.clone());
+                }
+            }
+            for p in dead_paths {
+                observer.files.remove(&p);
+            }
+        }
+
+        // 如果剔除死管道后，已经没有任何合法文件需要追踪了，优雅退出
+        if observer.files.no_files_remaining(options) {
+            break;
+        }
+
         let mut _read_some = false;
 
         // If `--pid=p`, tail checks whether process p
@@ -528,6 +554,7 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
             .unwrap()
             .receiver
             .recv_timeout(options.sleep_sec);
+
         if rx_result.is_ok() {
             timeout_counter = 0;
         }
@@ -600,4 +627,39 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn check_io_health() -> (bool, bool) {
+    let mut stdin_dead = false;
+    let mut stdout_dead = false;
+    unsafe {
+        let mut pfds = [
+            libc::pollfd {
+                fd: libc::STDIN_FILENO,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: libc::STDOUT_FILENO,
+                events: libc::POLLOUT,
+                revents: 0,
+            },
+        ];
+        if libc::poll(pfds.as_mut_ptr(), 2, 0) > 0 {
+            // POLLHUP(挂断), POLLERR(错误), POLLNVAL(无效FD)
+            if (pfds[0].revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL)) != 0 {
+                stdin_dead = true;
+            }
+            if (pfds[1].revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0 {
+                stdout_dead = true;
+            }
+        }
+    }
+    (stdin_dead, stdout_dead)
+}
+
+#[cfg(not(unix))]
+fn check_io_health() -> (bool, bool) {
+    (false, false)
 }

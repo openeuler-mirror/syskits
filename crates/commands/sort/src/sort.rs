@@ -1312,13 +1312,79 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
 
         let mut files = Vec::new();
         for path in &files0_from {
-            let reader = sort_open(path)?;
-            let buf_reader = BufReader::new(reader);
-            for line in buf_reader.split(b'\0').flatten() {
-                files.push(OsString::from(
-                    std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input."),
-                ));
+            let is_stdin = path == "-";
+            // 这里故意不用 sort_open，为了完美匹配 GNU 在 --files0-from 下特殊的 "open failed" 报错文本
+            let reader: Box<dyn Read> = if is_stdin {
+                Box::new(std::io::stdin())
+            } else {
+                match std::fs::File::open(path) {
+                    Ok(f) => Box::new(f),
+                    Err(e) => {
+                        return Err(SortError::SortOpenFailed {
+                            path: path.to_string_lossy().into_owned(),
+                            error: e,
+                        }
+                        .into())
+                    }
+                }
+            };
+
+            let mut buf_reader = BufReader::new(reader);
+            let mut buffer = Vec::new();
+            let mut read_anything = false;
+            let mut file_idx = 1;
+
+            loop {
+                buffer.clear();
+                // 放弃 .split()，改用 read_until 精确控制每一行，以捕捉 \0 异常
+                match buf_reader.read_until(b'\0', &mut buffer) {
+                    Ok(0) => break, // 读到文件末尾
+                    Ok(_) => {}
+                    Err(e) => {
+                        return Err(SortError::SortReadFailed {
+                            path: PathBuf::from(path),
+                            error: e,
+                        }
+                        .into())
+                    }
+                }
+
+                read_anything = true;
+
+                let ends_with_nul = buffer.last() == Some(&b'\0');
+                let line_len = if ends_with_nul {
+                    buffer.len() - 1
+                } else {
+                    buffer.len()
+                };
+                let line_slice = &buffer[..line_len];
+
+                // 捕捉输入了 \0\0 导致的零长度文件名异常
+                if line_slice.is_empty() {
+                    return Err(CtSimpleError::new(
+                        2,
+                        format!(
+                            "{}:{}: invalid zero-length file name",
+                            path.to_string_lossy(),
+                            file_idx
+                        ),
+                    )
+                    .into());
+                }
+
+                let file_name_string = String::from_utf8_lossy(line_slice).into_owned();
+                files.push(OsString::from(file_name_string));
+
+                file_idx += 1;
+            }
+
+            // 捕捉 /dev/null 或空文件异常
+            if !read_anything {
+                return Err(CtSimpleError::new(
+                    2,
+                    format!("no input from {}", path.quote()),
+                )
+                .into());
             }
         }
         Ok(files)

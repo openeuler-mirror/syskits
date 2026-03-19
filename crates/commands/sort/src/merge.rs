@@ -117,25 +117,30 @@ pub fn merge_with_file_limit<
     settings: &'a SortGlobalConfigs,
     tmp_dir: &mut TmpDirWrapper,
 ) -> CTResult<MergeFileMerger<'a>> {
-    // 计算安全批次，并手动管理迭代以避免 `itertools::chunks` 的预读缓冲陷阱
+    // 不要用 ulimit 盲猜，直接用物理探测法获取当前进程真实的可用 FD
     let batch_size = {
         let mut b = settings.merge_batch_size;
         #[cfg(unix)]
         {
-            let mut rlim = std::mem::MaybeUninit::uninit();
-            if unsafe { ctcore::libc::getrlimit(ctcore::libc::RLIMIT_NOFILE, rlim.as_mut_ptr()) }
-                == 0
-            {
-                let rlim = unsafe { rlim.assume_init() };
-                let max_open = rlim.rlim_cur as usize;
+            let mut available_fds = 0;
+            let mut dummy_fds = Vec::new();
 
-                // 保留 3 个给 stdio，1 个给临时输出文件，再留 1 个安全冗余。
-                // 总计扣除 5 个 FD 配额。至少保持 2 路归并。
-                let safe_b = std::cmp::max(max_open.saturating_sub(5), 2);
-
-                if safe_b < b {
-                    b = safe_b;
+            // 用 /dev/null 塞满剩下的可用 FD，能塞多少个就说明当前真实剩余多少个
+            while let Ok(f) = std::fs::File::open("/dev/null") {
+                dummy_fds.push(f);
+                available_fds += 1;
+                // 不需要探测太多，比我们期望的批次大一点点就足够了
+                if available_fds >= b + 4 {
+                    break;
                 }
+            }
+            drop(dummy_fds); // 探测完毕，立刻全部释放归还给系统
+
+            // 扣除 1 个临时文件所需 FD，保留 2 个安全冗余
+            // 至少保证有 2 路归并的能力
+            let safe_b = std::cmp::max(available_fds.saturating_sub(3), 2);
+            if safe_b < b {
+                b = safe_b;
             }
         }
         b

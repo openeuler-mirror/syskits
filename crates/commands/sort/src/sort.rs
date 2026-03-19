@@ -1283,7 +1283,28 @@ fn sort_get_settings_buffer_size(matches: &ArgMatches) -> CTResult<usize> {
 }
 
 fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dyn CTError>> {
-    Ok(if matches.contains_id(sort_flags::SORT_FILES0_FROM) {
+    let has_files0_from = matches.contains_id(sort_flags::SORT_FILES0_FROM);
+    let positional_files: Vec<OsString> = matches
+        .get_many::<OsString>(sort_flags::SORT_FILES)
+        .map(|v| v.map(ToOwned::to_owned).collect())
+        .unwrap_or_default();
+
+    if has_files0_from {
+        // 如果指定了 --files0-from，绝对不能有位置参数！
+        // 必须在试图读取 stdin 之前立刻报错退出。
+        if !positional_files.is_empty() {
+            let extra = &positional_files[0];
+            return Err(CtSimpleError::new(
+                2,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with --files0-from\nTry '{} --help' for more information.",
+                    extra.quote(),
+                    ctcore::ct_util_name()
+                ),
+            )
+            .into());
+        }
+
         let files0_from: Vec<OsString> = matches
             .get_many::<OsString>(sort_flags::SORT_FILES0_FROM)
             .map(|v| v.map(ToOwned::to_owned).collect())
@@ -1300,13 +1321,10 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                 ));
             }
         }
-        files
+        Ok(files)
     } else {
-        matches
-            .get_many::<OsString>(sort_flags::SORT_FILES)
-            .map(|v| v.map(ToOwned::to_owned).collect())
-            .unwrap_or_default()
-    })
+        Ok(positional_files)
+    }
 }
 
 fn sort_get_settings_mode(matches: &ArgMatches) -> (SortMode, bool) {

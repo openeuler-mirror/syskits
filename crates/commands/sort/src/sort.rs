@@ -1213,6 +1213,19 @@ fn sort_get_settings_merge_batch_size(matches: &ArgMatches) -> CTResult<usize> {
                 format!("invalid --batch-size argument {}", n_merge.quote()),
             )
         })?;
+
+        // 拦截小于 2 的非法 batch_size，防止底层 merge 算法 Panic 且修正退出码
+        if merge_batch_size < 2 {
+            return Err(CTsageError::new(
+                2,
+                format!(
+                    "invalid --batch-size argument {}\n{}: minimum --batch-size argument is '2'",
+                    n_merge.quote(),
+                    ctcore::ct_util_name()
+                ),
+            ));
+        }
+
         Ok(merge_batch_size)
     } else {
         Ok(32)

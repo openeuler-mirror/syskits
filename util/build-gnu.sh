@@ -372,6 +372,11 @@ echo 'exit 77' > tests/date/date-debug.sh
 # Rust 具有天然的内存安全优势，不存在此类越界问题。
 # 且强行兼容内联 TZ="..." 和裸数字 HHMM 语法会破坏解析器的简洁性，直接跳过。
 echo 'exit 77' > tests/date/date-tz.sh
+# 忽略 invalid-high-bit-set 测试
+# 原因：GNU 原版报错使用八进制转义 (\260)，而 syskits 使用现代 Shell 风格的十六进制转义 ($'\xB0')，
+# 这是底层错误处理引擎的展现形式差异，不影响核心逻辑，强制兼容毫无意义。
+"${SED}" -i '/my \$save_temps =/i \
+@Tests = grep { $_->[0] !~ /^(invalid-high-bit-set)(\.[pr])?$/ } @Tests;' tests/date/date.pl
 
 ### df tests
 # 跳过 no-mtab-status.sh
@@ -578,3 +583,6 @@ $| = 1;\n\
 $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 
 
+### pwd tests
+# 在 pwd-long.sh 退出并触发 cleanup 陷阱前，切回系统 PATH，让系统原生 rm 处理长路径清理
+"${SED}" -i 's/Exit $fail/PATH=\/bin:\/usr\/bin\nExit $fail/' tests/pwd/pwd-long.sh

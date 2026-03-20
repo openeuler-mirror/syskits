@@ -39,9 +39,65 @@ fn is_minus_zero_float(s: &str, x: &BigDecimal) -> bool {
     s.starts_with('-') && x == &BigDecimal::zero()
 }
 
+/// 一个强大的兼容层：手动处理缺失的前导 0（如 "-.1"）和科学计数法（如 "1e-3"）。
+/// 完全不依赖 bigdecimal crate 是否开启了 scientific feature。
+fn parse_bigdecimal_compat(s: &str) -> Result<BigDecimal, ParseNumberError> {
+    // 补齐缺失的前导 0 (例如 "-.1" -> "-0.1")
+    let mut norm = String::with_capacity(s.len() + 1);
+    if s.starts_with('.') {
+        norm.push('0');
+        norm.push_str(s);
+    } else if s.starts_with("-.") {
+        norm.push_str("-0.");
+        norm.push_str(&s[2..]);
+    } else if s.starts_with("+.") {
+        norm.push_str("+0.");
+        norm.push_str(&s[2..]);
+    } else {
+        norm.push_str(s);
+    }
+
+    // 尝试解析科学计数法
+    let lower = norm.to_ascii_lowercase();
+    if let Some(e_idx) = lower.find('e') {
+        let mantissa_str = &norm[..e_idx];
+        let exp_str = &norm[e_idx + 1..];
+
+        let exp = exp_str
+            .parse::<i64>()
+            .map_err(|_| ParseNumberError::Float)?;
+
+        let dot_idx = mantissa_str.find('.');
+        let (digits_str, frac_len) = if let Some(idx) = dot_idx {
+            let mut d = String::from(&mantissa_str[..idx]);
+            d.push_str(&mantissa_str[idx + 1..]);
+            (d, mantissa_str.len() - idx - 1)
+        } else {
+            (mantissa_str.to_string(), 0)
+        };
+
+        let num = BigInt::from_str(&digits_str).map_err(|_| ParseNumberError::Float)?;
+        // 动态调整 scale 以实现科学计数法
+        return Ok(BigDecimal::new(num, frac_len as i64 - exp));
+    }
+
+    // 常规小数解析
+    let dot_idx = norm.find('.');
+    let (digits_str, frac_len) = if let Some(idx) = dot_idx {
+        let mut d = String::from(&norm[..idx]);
+        d.push_str(&norm[idx + 1..]);
+        (d, norm.len() - idx - 1)
+    } else {
+        (norm.clone(), 0)
+    };
+
+    let num = BigInt::from_str(&digits_str).map_err(|_| ParseNumberError::Float)?;
+    Ok(BigDecimal::new(num, frac_len as i64))
+}
+
 /// Parse a number with neither a decimal point nor an exponent.
 fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberError> {
-    match s.parse::<BigDecimal>() {
+    match parse_bigdecimal_compat(s) {
         Ok(n) => {
             if is_minus_zero_int(s, &n) {
                 Ok(PreciseNumber::new(ExtendedBigDecimal::MinusZero, 2, 0))
@@ -54,9 +110,11 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
             }
         }
         Err(_) => match s.to_ascii_lowercase().as_str() {
-            "inf" | "infinity" => Ok(PreciseNumber::new(ExtendedBigDecimal::Infinity, 0, 0)),
+            "inf" | "infinity" | "+inf" | "+infinity" => {
+                Ok(PreciseNumber::new(ExtendedBigDecimal::Infinity, 0, 0))
+            }
             "-inf" | "-infinity" => Ok(PreciseNumber::new(ExtendedBigDecimal::MinusInfinity, 0, 0)),
-            "nan" | "-nan" => Err(ParseNumberError::Nan),
+            "nan" | "-nan" | "+nan" => Err(ParseNumberError::Nan),
             _ => Err(ParseNumberError::Float),
         },
     }
@@ -98,7 +156,7 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
         ));
     }
 
-    let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let x = parse_bigdecimal_compat(s)?;
 
     let num_integral_digits = if is_minus_zero_int(s, &x) {
         if exponent > 0 {
@@ -131,7 +189,7 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
 
 /// Parse a number with a decimal point but no exponent.
 fn parse_decimal_no_exponent(s: &str, i: usize) -> Result<PreciseNumber, ParseNumberError> {
-    let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let x = parse_bigdecimal_compat(s)?;
     let num_integral_digits = if s.starts_with("-.") { i + 1 } else { i };
     let num_fractional_digits = s.len() - (i + 1);
 
@@ -211,7 +269,7 @@ fn parse_decimal_and_exponent(
         ));
     }
 
-    let val: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let val = parse_bigdecimal_compat(s)?;
 
     let num_integral_digits = {
         let minimum = calculate_minimum_digits(s, j)?;
@@ -243,7 +301,7 @@ fn parse_decimal_and_exponent(
                 .try_into()
                 .unwrap();
             let expanded = build_expanded_number(s, i, j, zeros_count);
-            let n = expanded.parse().map_err(|_| ParseNumberError::Float)?;
+            let n = parse_bigdecimal_compat(&expanded)?;
             Ok(PreciseNumber::new(
                 ExtendedBigDecimal::BigDecimal(n),
                 num_integral_digits,

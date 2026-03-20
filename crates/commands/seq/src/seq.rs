@@ -40,28 +40,36 @@ const SEQ_NUMBERS: &str = "numbers";
 const SEQ_FAST_STEP_LIMIT: u64 = 200;
 
 #[derive(Clone, Default)]
-struct SeqOptions<'a> {
+struct SeqOptions {
     separator: String,
     terminator: String,
     is_equal_width: bool,
-    format: Option<&'a str>,
+    format: Option<String>,
 }
 
-impl<'a> SeqOptions<'a> {
-    fn new(matches: &'a clap::ArgMatches) -> Self {
+impl SeqOptions {
+    fn new(matches: &clap::ArgMatches) -> Self {
+        let unescape = |s: &str| -> String {
+            if let Some(stripped) = s.strip_prefix("CT_NEG_") {
+                format!("-{}", stripped)
+            } else {
+                s.to_string()
+            }
+        };
+
         Self {
             separator: matches
                 .get_one::<String>(SEQ_SEPARATOR)
-                .map(|s| s.as_str())
-                .unwrap_or("\n")
-                .to_string(),
+                .map(|s| unescape(s.as_str()))
+                .unwrap_or_else(|| "\n".to_string()),
             terminator: matches
                 .get_one::<String>(SEQ_TERMINATOR)
-                .map(|s| s.as_str())
-                .unwrap_or("\n")
-                .to_string(),
+                .map(|s| unescape(s.as_str()))
+                .unwrap_or_else(|| "\n".to_string()),
             is_equal_width: matches.get_flag(SEQ_EQUAL_WIDTH),
-            format: matches.get_one::<String>(SEQ_FORMAT).map(|s| s.as_str()),
+            format: matches
+                .get_one::<String>(SEQ_FORMAT)
+                .map(|s| unescape(s.as_str())),
         }
     }
 }
@@ -85,7 +93,26 @@ struct PrintConfig<'a> {
 pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+
+    // 核心拦截器：在参数送入 clap 之前进行“易容伪装”。
+    // 将所有形如负数的参数（如 -1e-3, -.1）伪装成 CT_NEG_xxx，完美绕过 clap 的死板校验。
+    let mut modified_args: Vec<OsString> = Vec::new();
+    for arg in args {
+        let arg_str = arg.to_string_lossy();
+        if arg_str.starts_with('-') && arg_str.len() > 1 {
+            let second_char = arg_str.chars().nth(1).unwrap();
+            // 如果破折号后面紧跟的是数字或小数点，认定它是负数值
+            if second_char.is_ascii_digit() || second_char == '.' {
+                let mut safe_arg = "CT_NEG_".to_string();
+                safe_arg.push_str(&arg_str[1..]);
+                modified_args.push(safe_arg.into());
+                continue;
+            }
+        }
+        modified_args.push(arg.into());
+    }
+
+    let matches = ct_app().try_get_matches_from(modified_args)?;
     let options = SeqOptions::new(&matches);
 
     let numbers = parse_number_args(&matches)?;
@@ -103,16 +130,14 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
             &options.terminator,
         ) {
             Ok(_) => Ok(()),
-            // 如果是 BrokenPipe，优雅地当作成功退出
             Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
             Err(e) => Err(CtSimpleError::new(1, format!("write error: {}", e)).into()),
         };
     }
 
-    // Fall back to general floating-point path
     let padding = calculate_padding(&first, &increment, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
-    let format = parse_format_option(options.format)?;
+    let format = parse_format_option(options.format.as_deref())?;
 
     let config = PrintConfig {
         largest_dec,
@@ -135,7 +160,13 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
     Ok(matches
         .get_many::<String>(SEQ_NUMBERS)
         .ok_or(SeqError::NoArguments)?
-        .map(ToString::to_string)
+        .map(|s| {
+            if let Some(stripped) = s.strip_prefix("CT_NEG_") {
+                format!("-{}", stripped)
+            } else {
+                s.to_string()
+            }
+        })
         .collect::<Vec<_>>())
 }
 

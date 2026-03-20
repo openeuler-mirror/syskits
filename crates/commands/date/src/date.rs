@@ -22,7 +22,7 @@ use sys_locale::get_locale;
 
 #[cfg(target_os = "linux")]
 use libc::{
-    CLOCK_REALTIME, D_T_FMT, LC_ALL, c_char, clock_getres, clock_settime, gmtime_r, localtime_r,
+    CLOCK_REALTIME, LC_ALL, c_char, clock_getres, clock_settime, gmtime_r, localtime_r,
     nl_langinfo, setlocale, strftime, timespec, tm,
 };
 #[cfg(target_os = "linux")]
@@ -633,21 +633,16 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
     while let Some(c) = chars.next() {
         if c == '%' {
             let mut has_minus = false;
+            let mut has_plus = false;
             let mut colons = 0;
             let mut flags_str = String::new();
             let mut width_str = String::new();
 
-            // 1. 提取所有 Flag
+            // 提取所有 Flag
             while let Some(&next) = chars.peek() {
-                if next == '-' {
-                    has_minus = true;
-                    flags_str.push(next);
-                    chars.next();
-                } else if next == '_' || next == '0' || next == '^' || next == '#' {
-                    flags_str.push(next);
-                    chars.next();
-                } else if next == ':' {
-                    colons += 1;
+                if next == '-' || next == '_' || next == '0' || next == '^' || next == '#' || next == '+' {
+                    if next == '-' { has_minus = true; }
+                    if next == '+' { has_plus = true; }
                     flags_str.push(next);
                     chars.next();
                 } else {
@@ -655,7 +650,7 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                 }
             }
 
-            // 2. 提取指定宽度
+            // 提取指定宽度
             while let Some(&next) = chars.peek() {
                 if next.is_ascii_digit() {
                     width_str.push(next);
@@ -665,7 +660,18 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                 }
             }
 
-            // 3. 提取修饰符 (E 或 O)
+            // 专门为 %z 提取冒号 (兼容 GNU 的 %8:z 语法)
+            while let Some(&next) = chars.peek() {
+                if next == ':' {
+                    colons += 1;
+                    flags_str.push(next);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            // 提取修饰符 (E 或 O)
             let mut modifier = None;
             if let Some(&m) = chars.peek() {
                 if m == 'E' || m == 'O' {
@@ -674,9 +680,23 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                 }
             }
 
-            // 4. 提取指令符
+            // 提取指令符
             if let Some(spec) = chars.next() {
                 match spec {
+                    's' => {
+                        let mut s_val = format!("{}", dt.timestamp());
+                        let w = width_str.parse::<usize>().unwrap_or(0);
+                        if w > s_val.len() && !has_minus {
+                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
+                            if pad_char == '0' && s_val.starts_with('-') {
+                                let sign_char = s_val.remove(0);
+                                s_val = format!("{sign_char}{}{s_val}", "0".repeat(w - s_val.len() - 1));
+                            } else {
+                                s_val = format!("{}{s_val}", pad_char.to_string().repeat(w - s_val.len()));
+                            }
+                        }
+                        fmt_adjusted.push_str(&s_val);
+                    }
                     'N' | 'f' => {
                         let ns = dt.nanosecond();
                         let mut ns_str = format!("{ns:09}");
@@ -720,7 +740,38 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                         } else {
                             format!("{sign}{hours:02}{minutes:02}")
                         };
-                        fmt_adjusted.push_str(&tz_str);
+
+                        let mut s = tz_str;
+                        let w = width_str.parse::<usize>().unwrap_or(0);
+                        if w > s.len() && !has_minus {
+                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
+                            if pad_char == '0' && (s.starts_with('+') || s.starts_with('-')) {
+                                let sign_char = s.remove(0);
+                                s = format!("{sign_char}{}{s}", "0".repeat(w - s.len() - 1));
+                            } else {
+                                s = format!("{}{s}", pad_char.to_string().repeat(w - s.len()));
+                            }
+                        }
+                        fmt_adjusted.push_str(&s);
+                    }
+                    'C' => {
+                        // 世纪数：年份除以 100。需要处理 '+' 标志和宽度填充
+                        let century = dt.year() / 100;
+                        let mut s = format!("{century}");
+                        if has_plus && century >= 0 {
+                            s = format!("+{s}");
+                        }
+                        let w = width_str.parse::<usize>().unwrap_or(0);
+                        if w > s.len() && !has_minus {
+                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
+                            if pad_char == '0' && (s.starts_with('+') || s.starts_with('-')) {
+                                let sign_char = s.remove(0);
+                                s = format!("{sign_char}{}{s}", "0".repeat(w - s.len() - 1));
+                            } else {
+                                s = format!("{}{s}", pad_char.to_string().repeat(w - s.len()));
+                            }
+                        }
+                        fmt_adjusted.push_str(&s);
                     }
                     'q' => {
                         let quarter = (dt.month0() / 3) + 1;

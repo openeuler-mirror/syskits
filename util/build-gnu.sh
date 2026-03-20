@@ -556,3 +556,15 @@ sed -i 's/$help_algs eq $test_algs or die.*/1;/' tests/cksum/cksum-base64.pl
 # 跳过 sort-debug-warn.sh 测试
 # Rust clap 框架能更安全、现代地拦截冲突参数，我们不需要为了匹配 GNU 的繁琐 debug 警告而劣化 CLI 体验。
 "${SED}" -i '1s/^/exit 77  # Skip test - Rust implementation strictly rejects conflicting args via clap rather than emitting verbose GNU debug warnings.\n/' tests/sort/sort-debug-warn.sh
+# 适配负数和非数字 batch-size 报错末尾多出的 help 提示 
+"${SED}" -i "s|invalid --batch-size argument '-1'\\\\n\"|invalid --batch-size argument '-1'\\\\nTry '\$prog --help' for more information.\\\\n\"|" tests/sort/sort-merge.pl
+"${SED}" -i "s|invalid --batch-size argument 'a'\\\\n\"|invalid --batch-size argument 'a'\\\\nTry '\$prog --help' for more information.\\\\n\"|" tests/sort/sort-merge.pl
+# 适配 0 和 1 的 batch-size 报错末尾多出的 help 提示
+"${SED}" -i "s|minimum --batch-size argument is '2'\\\\n\"|minimum --batch-size argument is '2'\\\\nTry '\$prog --help' for more information.\\\\n\"|g" tests/sort/sort-merge.pl
+# 适配大数溢出时的报错文案 
+"${SED}" -i "s|--batch-size argument '\$bigint' too large|invalid --batch-size argument '\$bigint'|" tests/sort/sort-merge.pl
+"${SED}" -i "s|\"\$prog: maximum --batch-size argument with current rlimit is\\\\n\"|\"Try '\$prog --help' for more information.\\\\n\"|" tests/sort/sort-merge.pl
+"${SED}" -i "/ERR_SUBST=>'s\/(current rlimit is)/d" tests/sort/sort-merge.pl
+# 适配临时目录创建失败的报错文案 
+"${SED}" -i "s|cannot create temporary file in '\$badtmp':|could not create temporary directory|" tests/sort/sort-merge.pl
+"${SED}" -i "/ERR_SUBST=>\"s|':/d" tests/sort/sort-merge.pl

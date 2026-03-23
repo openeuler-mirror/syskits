@@ -554,46 +554,6 @@ fn cp_args_init() -> Vec<Arg> {
             .overrides_with_all(MODE_ARGS)
             .help(t!("cp.clap.attributes_only"))
             .action(ArgAction::SetTrue),
-        Arg::new(opt_flags::PRESERVE)
-            .long(opt_flags::PRESERVE)
-            .action(ArgAction::Append)
-            .use_value_delimiter(true)
-            .value_parser(clap::builder::PossibleValuesParser::new(
-                CP_PRESERVABLE_ATTRIBUTES,
-            ))
-            .num_args(0..)
-            .require_equals(true)
-            .value_name("ATTR_LIST")
-            .overrides_with_all([
-                opt_flags::ARCHIVE,
-                opt_flags::PRESERVE_DEFAULT_ATTRIBUTES,
-                opt_flags::NO_PRESERVE,
-            ])
-            // -d 选项设置此选项
-            // --archive 选项设置此选项
-            .help(
-                "Preserve the specified attributes (default: mode, ownership (unix only), \
-                      timestamps), if possible additional attributes: context, links, xattr, all",
-            ),
-        Arg::new(opt_flags::PRESERVE_DEFAULT_ATTRIBUTES)
-            .short('p')
-            .long(opt_flags::PRESERVE_DEFAULT_ATTRIBUTES)
-            .overrides_with_all([
-                opt_flags::PRESERVE,
-                opt_flags::NO_PRESERVE,
-                opt_flags::ARCHIVE,
-            ])
-            .help(t!("cp.clap.preserve_default_attributes"))
-            .action(ArgAction::SetTrue),
-        Arg::new(opt_flags::NO_PRESERVE)
-            .long(opt_flags::NO_PRESERVE)
-            .value_name("ATTR_LIST")
-            .overrides_with_all([
-                opt_flags::PRESERVE_DEFAULT_ATTRIBUTES,
-                opt_flags::PRESERVE,
-                opt_flags::ARCHIVE,
-            ])
-            .help(t!("cp.clap.no_preserve")),
         Arg::new(opt_flags::PARENTS)
             .long(opt_flags::PARENTS)
             .alias(opt_flags::PARENT)
@@ -619,11 +579,6 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::ARCHIVE)
             .short('a')
             .long(opt_flags::ARCHIVE)
-            .overrides_with_all([
-                opt_flags::PRESERVE_DEFAULT_ATTRIBUTES,
-                opt_flags::PRESERVE,
-                opt_flags::NO_PRESERVE,
-            ])
             .help(t!("cp.clap.archive"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
@@ -640,6 +595,43 @@ fn cp_args_init() -> Vec<Arg> {
             .value_name("WHEN")
             .value_parser(["never", "auto", "always"])
             .help(t!("cp.clap.sparse")),
+        Arg::new(opt_flags::PRESERVE)
+            .long(opt_flags::PRESERVE)
+            .action(ArgAction::Append)
+            .use_value_delimiter(true)
+            .value_parser(clap::builder::PossibleValuesParser::new(
+                CP_PRESERVABLE_ATTRIBUTES,
+            ))
+            .num_args(0..)
+            .require_equals(true)
+            .value_name("ATTR_LIST")
+            .overrides_with_all([
+                opt_flags::PRESERVE_DEFAULT_ATTRIBUTES,
+                opt_flags::NO_PRESERVE,
+            ])
+            .help(
+                "Preserve the specified attributes (default: mode, ownership (unix only), \
+                      timestamps), if possible additional attributes: context, links, xattr, all",
+            ),
+
+        Arg::new(opt_flags::PRESERVE_DEFAULT_ATTRIBUTES)
+            .short('p')
+            .long(opt_flags::PRESERVE_DEFAULT_ATTRIBUTES)
+            .overrides_with_all([
+                opt_flags::PRESERVE,
+                opt_flags::NO_PRESERVE,
+            ])
+            .help(t!("cp.clap.preserve_default_attributes"))
+            .action(ArgAction::SetTrue),
+
+        Arg::new(opt_flags::NO_PRESERVE)
+            .long(opt_flags::NO_PRESERVE)
+            .value_name("ATTR_LIST")
+            .overrides_with_all([
+                opt_flags::PRESERVE_DEFAULT_ATTRIBUTES,
+                opt_flags::PRESERVE,
+            ])
+            .help(t!("cp.clap.no_preserve")),
         // TODO: implement the following args
         Arg::new(opt_flags::COPY_CONTENTS)
             .long(opt_flags::COPY_CONTENTS)
@@ -1027,19 +1019,19 @@ impl CpOptions {
 
     // 解析要保留的属性
     fn cp_get_attributes(args_match: &ArgMatches) -> Result<CpAttributes, CpError> {
-        let cp_attr = if let Some(att_strs) = args_match.get_many::<String>(opt_flags::PRESERVE) {
+        let cp_attr = if args_match.get_flag(opt_flags::ARCHIVE) {
+            // --archive 标志优先级最高，设定基础为 ALL
+            CpAttributes::ALL
+        } else if let Some(att_strs) = args_match.get_many::<String>(opt_flags::PRESERVE) {
             if att_strs.len() == 0 {
                 CpAttributes::DEFAULT
             } else {
                 CpAttributes::cp_parse_iter(att_strs)?
             }
-        } else if args_match.get_flag(opt_flags::ARCHIVE) {
-            // 使用了 --archive 标志。等同于 --preserve=all
-            CpAttributes::ALL
-        } else if args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS) {
-            CpAttributes::LINKS
         } else if args_match.get_flag(opt_flags::PRESERVE_DEFAULT_ATTRIBUTES) {
             CpAttributes::DEFAULT
+        } else if args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS) {
+            CpAttributes::LINKS
         } else {
             CpAttributes::NONE
         };

@@ -2286,7 +2286,20 @@ pub fn cp_localize_to_target(
     target_path: &Path,
 ) -> CopyResult<PathBuf> {
     let local_to_root = sour_path.strip_prefix(root_path)?;
-    Ok(target_path.join(local_to_root))
+
+    // 如果 local_to_root 是绝对路径（例如带了前导 '/'），
+    // Rust 的 target_path.join() 会直接丢弃 target_path！
+    // 我们必须过滤掉 RootDir 和 Prefix，强制把它变成相对路径。
+    let mut relative_path = PathBuf::new();
+    for component in local_to_root.components() {
+        match component {
+            // 剔除绝对路径前缀（如 '/' 或 'C:\'）
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => continue,
+            _ => relative_path.push(component.as_os_str()),
+        }
+    }
+
+    Ok(target_path.join(relative_path))
 }
 
 /// Get the total size of a slice of files and directories.

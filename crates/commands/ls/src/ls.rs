@@ -727,11 +727,16 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<CtQuoting
             always_quote: true,
             show_control,
         }),
-        "c" => Some(CtQuotingStyle::C {
+        // C 和 clocale 在行为上等价，使用双引号
+        "c" | "clocale" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::Double,
         }),
         "escape" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::None,
+        }),
+        // locale 在 C 环境下等价于使用单引号包裹的 C 转义风格
+        "locale" => Some(CtQuotingStyle::C {
+            quotes: ct_quoting_style::CtQuotes::Single,
         }),
         _ => None,
     }
@@ -1325,6 +1330,40 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
     list(paths_from_args, &config)
 }
 
+fn parse_quoting_style(s: &str) -> Result<String, String> {
+    let styles = [
+        "literal",
+        "shell",
+        "shell-always",
+        "shell-escape",
+        "shell-escape-always",
+        "c",
+        "escape",
+        "locale",
+        "clocale",
+    ];
+
+    // 如果完全精准匹配，直接返回
+    if styles.contains(&s) {
+        return Ok(s.to_string());
+    }
+
+    // 模糊前缀匹配
+    let matches: Vec<&str> = styles
+        .iter()
+        .filter(|&&style| style.starts_with(s))
+        .copied()
+        .collect();
+
+    if matches.len() == 1 {
+        Ok(matches[0].to_string())
+    } else if matches.is_empty() {
+        Err(format!("invalid quoting style '{}'", s))
+    } else {
+        Err(format!("ambiguous quoting style '{}'", s))
+    }
+}
+
 pub fn ct_app() -> Command {
     // ct_ls::ct_app()
     let utility_name = ctcore::ct_util_name();
@@ -1459,15 +1498,7 @@ pub fn ct_app() -> Command {
         Arg::new(ls_flags::LS_QUOTING_STYLE)
             .long(ls_flags::LS_QUOTING_STYLE)
             .help("Set quoting style.")
-            .value_parser([
-                "literal",
-                "shell",
-                "shell-always",
-                "shell-escape",
-                "shell-escape-always",
-                "c",
-                "escape",
-            ])
+            .value_parser(parse_quoting_style)
             .overrides_with_all([
                 ls_flags::LS_QUOTING_STYLE,
                 ls_flags::quoting::LS_LITERAL,
@@ -3641,14 +3672,15 @@ fn color_name<W: Write>(
     target_symlink: Option<&PathData>,
 ) -> String {
     if let Some(target) = target_symlink {
-        // 使用可选的 target_symlink
-        // 此处使用 fn get_metadata_with_deref_opt 代替 get_metadata()
-        let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.is_must_dereference)
-            .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
+        // 当目标软链接是断链时，get_metadata 会失败并返回 None。
+        // 这里必须避免使用 unwrap()，以防止 exit code 101。
+        let md_owned =
+            get_metadata_with_deref_opt(target.p_buf.as_path(), path.is_must_dereference).ok();
+        let md_ref = md_owned.as_ref().or_else(|| target.get_metadata(out));
 
         apply_style_based_on_metadata(
             path,
-            Some(&md),
+            md_ref,
             ls_colors,
             style_manager,
             &name,

@@ -1327,6 +1327,9 @@ fn copy_source(
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
 
+    // 提取 dest_path，供下面 parents 祖先目录同步使用
+    let dest = cp_construct_dest_path(source_path, target, target_type, options)?;
+
     // 绝不能盲目调用 .is_dir()，必须根据当前的解引用策略来判断
     let is_dir = if options.cp_dereference(true) {
         source_path.is_dir()
@@ -1336,7 +1339,7 @@ fn copy_source(
             .unwrap_or(false)
     };
 
-    if is_dir {
+    let res = if is_dir {
         // 复制目录
         copy_directory(
             progress_bar,
@@ -1349,8 +1352,7 @@ fn copy_source(
         )
     } else {
         // 复制文件
-        let dest = cp_construct_dest_path(source_path, target, target_type, options)?;
-        let res = copy_file(
+        copy_file(
             progress_bar,
             source_path,
             dest.as_path(),
@@ -1358,15 +1360,17 @@ fn copy_source(
             symlinked_files,
             copied_files,
             true,
-        );
-        // 如果选项设置为复制父目录，则复制源文件的父目录属性到目标文件的父目录
-        if options.parents {
-            for (x, y) in cp_aligned_ancestors(source, dest.as_path()) {
-                copy_attributes(x, y, &options.attributes)?;
-            }
+        )
+    };
+
+    // 必须放在 if/else 外部，确保复制目录时也能触发父目录的权限同步！
+    if res.is_ok() && options.parents {
+        for (x, y) in cp_aligned_ancestors(source, dest.as_path()) {
+            // 父目录被当做路径穿透，必须强制解引用 (true) 获取真实属性
+            copy_attributes_with_deref(x, y, &options.attributes, true)?;
         }
-        res
     }
+    res
 }
 
 impl CpOverwriteMode {

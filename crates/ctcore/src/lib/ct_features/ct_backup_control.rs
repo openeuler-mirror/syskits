@@ -334,26 +334,19 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// }
 /// ```
 pub fn determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
-    if matches.contains_id(arguments::OPT_BACKUP) {
-        // 使用方法来确定要创建的备份类型。
-        // 当使用此选项但未指定方法时，将使用 VERSION_CONTROL 环境变量的值。
-        // 如果 VERSION_CONTROL 未设置，则默认备份类型为 'existing'。
+    let has_backup_opt = matches.contains_id(arguments::OPT_BACKUP);
+    let has_b_flag = matches.get_flag(arguments::OPT_BACKUP_NO_ARG);
+
+    // 只要开启了备份机制（无论是 --backup 还是 -b），都应该优先尊重参数，其次尊重环境变量
+    if has_backup_opt || has_b_flag {
         if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
-            // 第二个参数用于返回的错误字符串。
             match_method(method, "backup type")
         } else if let Ok(method) = env::var("VERSION_CONTROL") {
-            // 第二个参数是用于返回的错误字符串
             match_method(&method, "$VERSION_CONTROL")
         } else {
-            // 如果未向 --backup 提供参数时的默认值
             Ok(CtBackupMode::ExistingBackup)
         }
-    } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
-        // 该选项的短形式 -b 不接受任何参数。
-        // 使用 -b 相当于使用 --backup=existing。
-        Ok(CtBackupMode::ExistingBackup)
     } else {
-        // 完全没有出现任何选项
         Ok(CtBackupMode::NoBackup)
     }
 }

@@ -1577,17 +1577,13 @@ fn is_forbidden_to_copy_to_same_file(
         if has_backup && no_deref {
             return false;
         }
-        return true;
     }
 
-    if dest_path.is_symlink() {
-        if is_remove_dest || has_backup {
-            return false;
-        }
-        return true;
+    // 如果是不同的路径但指向同文件，若有备份或移除目标的指令，则允许操作 (GNU 行为)
+    if is_remove_dest || has_backup {
+        return false;
     }
 
-    // 默认禁止同文件覆盖
     true
 }
 
@@ -1988,21 +1984,10 @@ fn copy_file(
         return Ok(());
     }
 
-    if are_hardlinks_to_same_file(sour_path, dest_path)
-        && matches!(
-            cp_opts.overwrite,
-            CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
-        )
-    {
-        let _ = fs::remove_file(dest_path);
-    }
-
     if cp_file_or_link_exists(dest_path) {
-        if are_hardlinks_to_same_file(sour_path, dest_path)
-            && !cp_opts.cp_force()
-            && cp_opts.backup == CtBackupMode::NoBackup
-            && sour_path != dest_path
-            || (sour_path == dest_path && cp_opts.copy_mode == CpCopyMode::Link)
+        // 仅当明确开启硬链接模式（-l），且两者已经是同文件硬链接时，才静默跳过。
+        // 其他模式下必须让它掉入 handle_existing_dest 去触发 "are the same file" 错误。
+        if are_hardlinks_to_same_file(sour_path, dest_path) && cp_opts.copy_mode == CpCopyMode::Link
         {
             return Ok(());
         }

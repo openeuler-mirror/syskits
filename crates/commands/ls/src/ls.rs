@@ -2759,31 +2759,47 @@ fn ls_has_context(item: &PathData) -> bool {
 fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
     #[cfg(feature = "feat_acl")]
     {
+        static ACL_SUPPORTED: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(0);
+        let supported = ACL_SUPPORTED.load(std::sync::atomic::Ordering::Relaxed);
+
+        // 熔断机制
+        if supported == -1 {
+            return false;
+        }
+
+        // 探针机制：避免第三方 exacl crate 吞掉底层 errno
+        if supported == 0 {
+            use std::ffi::CString;
+            if let Ok(c_path) = CString::new(file.as_ref().as_os_str().as_bytes()) {
+                let res = unsafe {
+                    ctcore::libc::getxattr(
+                        c_path.as_ptr(),
+                        b"system.posix_acl_access\0".as_ptr() as *const ctcore::libc::c_char,
+                        std::ptr::null_mut(),
+                        0,
+                    )
+                };
+                if res < 0 {
+                    let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+                    if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
+                        ACL_SUPPORTED.store(-1, std::sync::atomic::Ordering::Relaxed);
+                        return false;
+                    }
+                }
+            }
+            ACL_SUPPORTED.store(1, std::sync::atomic::Ordering::Relaxed);
+        }
+
         use exacl::getfacl;
         match getfacl(file, None) {
-            Ok(acls) => {
-                acls.iter().any(|acl| {
-                    if !acl.name.is_empty() {
-                        // 通过acl名字，排除默认acl entry
-                        true
-                    } else {
-                        false
-                    }
-                })
-            }
-            Err(e) => {
-                // println!("Failed to get ACLs: {}", e);
-                false
-            }
+            Ok(acls) => acls
+                .iter()
+                .any(|acl| if !acl.name.is_empty() { true } else { false }),
+            Err(e) => false,
         }
     }
     #[cfg(not(feature = "feat_acl"))]
     {
-        // #[cfg(unix)]
-        // use ctcore::ct_fsxattr::has_acl;
-        // has_acl(file)
-
-        // 没有enable acl 检查就默认返回 false
         false
     }
 }
@@ -3528,20 +3544,37 @@ impl StyleManager {
 
 #[cfg(target_os = "linux")]
 fn has_capability(path: &Path) -> bool {
+    // 0 = 未知, 1 = 支持, -1 = 不支持
+    static CAP_SUPPORTED: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(0);
+
+    // 熔断机制：如果已知系统不支持，直接快速返回
+    if CAP_SUPPORTED.load(std::sync::atomic::Ordering::Relaxed) == -1 {
+        return false;
+    }
+
     use std::ffi::CString;
-    // 使用 CString 和底层 libc 探测文件的扩展属性 (xattr)
     if let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) {
-        unsafe {
+        let res = unsafe {
             ctcore::libc::getxattr(
                 c_path.as_ptr(),
                 b"security.capability\0".as_ptr() as *const ctcore::libc::c_char,
                 std::ptr::null_mut(),
                 0,
-            ) > 0
+            )
+        };
+        if res > 0 {
+            CAP_SUPPORTED.store(1, std::sync::atomic::Ordering::Relaxed);
+            return true;
+        } else {
+            let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+            // ENOTSUP 或 EOPNOTSUPP 表示当前文件系统不支持扩展属性
+            if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
+                CAP_SUPPORTED.store(-1, std::sync::atomic::Ordering::Relaxed);
+            }
+            return false;
         }
-    } else {
-        false
     }
+    false
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -3634,9 +3667,6 @@ fn display_inode(mdata: &Metadata) -> String {
 #[allow(unused_variables)]
 fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
-    // 如果必须取消引用，即使系统不支持 SELinux，也要确保符号链接有效。
-    // 不支持 SELinux。
-    // 与 GNU coreutils 一致，在 GNU coreutils 中，悬空的符号链接会导致退出代码 1。
     if must_dereference {
         if let Err(err) = get_metadata_with_deref_opt(p_buf, must_dereference) {
             ct_show!(LsError::LsIOErrorContext(err, p_buf.to_path_buf(), false));
@@ -3646,23 +3676,67 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
     if config.is_selinux_supported {
         #[cfg(feature = "selinux")]
         {
+            static SELINUX_SUPPORTED: std::sync::atomic::AtomicI8 =
+                std::sync::atomic::AtomicI8::new(0);
+            let supported = SELINUX_SUPPORTED.load(std::sync::atomic::Ordering::Relaxed);
+
+            // 熔断机制：如果已知系统不支持，直接快速返回
+            if supported == -1 {
+                return substitute_string;
+            }
+
+            // 探针机制：避免第三方 selinux crate 吞掉底层的 errno，使用原生 libc 精准探测
+            if supported == 0 {
+                use std::ffi::CString;
+                if let Ok(c_path) = CString::new(p_buf.as_os_str().as_bytes()) {
+                    let res = unsafe {
+                        if must_dereference {
+                            ctcore::libc::getxattr(
+                                c_path.as_ptr(),
+                                b"security.selinux\0".as_ptr() as *const ctcore::libc::c_char,
+                                std::ptr::null_mut(),
+                                0,
+                            )
+                        } else {
+                            ctcore::libc::lgetxattr(
+                                c_path.as_ptr(),
+                                b"security.selinux\0".as_ptr() as *const ctcore::libc::c_char,
+                                std::ptr::null_mut(),
+                                0,
+                            )
+                        }
+                    };
+                    if res < 0 {
+                        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+                        if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
+                            SELINUX_SUPPORTED.store(-1, std::sync::atomic::Ordering::Relaxed);
+                            return substitute_string;
+                        }
+                    }
+                }
+                // 探测过一次没报 ENOTSUP，标记为 1，不再重复探测
+                SELINUX_SUPPORTED.store(1, std::sync::atomic::Ordering::Relaxed);
+            }
+
             match selinux::SecurityContext::of_path(p_buf, must_dereference.to_owned(), false) {
                 Err(_r) => {
-                    // TODO: show the actual reason why it failed
-                    ct_show_warning!("failed to get security context of: {}", p_buf.quote());
+                    if config.is_context {
+                        ct_show_warning!("failed to get security context of: {}", p_buf.quote());
+                    }
                     substitute_string
                 }
                 Ok(None) => substitute_string,
                 Ok(Some(security_context)) => {
                     let context = security_context.as_bytes();
-
                     let context_strip_suffix = context.strip_suffix(&[0]).unwrap_or(context);
                     String::from_utf8(context_strip_suffix.to_vec()).unwrap_or_else(|e| {
-                        ct_show_warning!(
-                            "getting security context of: {}: {}",
-                            p_buf.quote(),
-                            e.to_string()
-                        );
+                        if config.is_context {
+                            ct_show_warning!(
+                                "getting security context of: {}: {}",
+                                p_buf.quote(),
+                                e.to_string()
+                            );
+                        }
                         String::from_utf8_lossy(context_strip_suffix).into_owned()
                     })
                 }

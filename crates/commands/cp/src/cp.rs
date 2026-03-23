@@ -951,12 +951,20 @@ impl CpOptions {
             copy_contents: args_match.get_flag(opt_flags::COPY_CONTENTS),
             cli_dereference: args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS),
             copy_mode: CpCopyMode::cp_from_matches(args_match),
-            // 使用 -p、-d 和 --archive 时不设置递归引用
-            dereference: !(args_match.get_flag(opt_flags::NO_DEREFERENCE)
+            dereference: if args_match.get_flag(opt_flags::DEREFERENCE) {
+                true
+            } else if args_match.get_flag(opt_flags::NO_DEREFERENCE)
                 || args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
                 || args_match.get_flag(opt_flags::ARCHIVE)
-                || recursive)
-                || args_match.get_flag(opt_flags::DEREFERENCE),
+            {
+                false
+            } else if args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS) {
+                false
+            } else if args_match.get_flag(opt_flags::LINK) {
+                true // --link 的优先级高于 recursive 的默认不展开
+            } else {
+                !recursive
+            },
             one_file_system: args_match.get_flag(opt_flags::ONE_FILE_SYSTEM),
             parents: args_match.get_flag(opt_flags::PARENTS),
             update: update_mode,
@@ -1318,7 +1326,17 @@ fn copy_source(
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
-    if source_path.is_dir() {
+
+    // 绝不能盲目调用 .is_dir()，必须根据当前的解引用策略来判断
+    let is_dir = if options.cp_dereference(true) {
+        source_path.is_dir()
+    } else {
+        fs::symlink_metadata(source_path)
+            .map(|m| m.is_dir())
+            .unwrap_or(false)
+    };
+
+    if is_dir {
         // 复制目录
         copy_directory(
             progress_bar,
@@ -1954,9 +1972,9 @@ fn copy_file(
             .unwrap_or(false)
         {
             return Err(CpError::Error(format!(
-                "不会通过刚创建的符号链接 '{}' 复制 '{}'",
-                dest_path.display(),
-                sour_path.display()
+                "will not copy {} through just-created symlink {}",
+                sour_path.quote(),
+                dest_path.quote()
             )));
         }
 
@@ -1972,8 +1990,8 @@ fn copy_file(
                 && std::env::var_os("POSIXLY_CORRECT").is_none()
             {
                 return Err(CpError::Error(format!(
-                    "不会通过悬垂符号链接 '{}' 写入",
-                    dest_path.display()
+                    "not writing through dangling symlink {}",
+                    dest_path.quote()
                 )));
             }
         }
@@ -2026,7 +2044,7 @@ fn copy_file(
 
     // 准备上下文并获取源文件元数据以进行复制。
     let context = cp_context_for(sour_path, dest_path);
-    let context = context.as_str();
+    let context_str = context.as_str();
 
     let source_metadata = {
         let result = if cp_opts.cp_dereference(source_in_command_line) {
@@ -2034,19 +2052,27 @@ fn copy_file(
         } else {
             fs::symlink_metadata(sour_path)
         };
-        result.context(context)?
+        // 对齐 GNU 的 stat 报错标准格式，并剥离底层的 "(os error 2)"
+        result.map_err(|err| {
+            let err_msg = if err.kind() == std::io::ErrorKind::NotFound {
+                "No such file or directory".to_string()
+            } else {
+                err.to_string()
+            };
+            CpError::Error(format!("cannot stat {}: {}", sour_path.quote(), err_msg))
+        })?
     };
 
     // 计算目标文件权限，基于源文件及选项。
     let dest_permissions =
-        cp_calculate_dest_permissions(dest_path, &source_metadata, cp_opts, context)?;
+        cp_calculate_dest_permissions(dest_path, &source_metadata, cp_opts, &context)?;
 
     // 根据复制模式和其他选项处理实际复制过程。
     cp_handle_copy_mode(
         sour_path,
         dest_path,
         cp_opts,
-        context,
+        &context,
         source_metadata,
         symlinked_files,
         source_in_command_line,

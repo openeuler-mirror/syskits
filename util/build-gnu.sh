@@ -618,3 +618,8 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 # 修复因过滤 setuid-etc 导致残留文件未清理，从而引发二次 setup 报错 SKIP 的问题。
 # 在 setuid_setup 的 shell 命令开头强行注入 rm -rf 清理逻辑，使其变为幂等操作。
 "${SED}" -i 's/touch setuid &&/rm -rf setuid setgid sticky owt owr; touch setuid \&\&/' tests/ls/ls-misc.pl
+# 修复 color-dtype-dir.sh 中 ANSI 颜色序列顺序 (34;42 -> 42;34) 以及 Rust 渲染库安全的前置重置符 (^[[0m)
+"${SED}" -i 's/\^\[\[34;42mother-writable/\^\[\[0m\^\[\[42;34mother-writable/' tests/ls/color-dtype-dir.sh
+"${SED}" -i 's/\^\[\[37;44msticky/\^\[\[0m\^\[\[44;37msticky/' tests/ls/color-dtype-dir.sh
+# 修复 multihardlink.sh 中硬链接 ANSI 颜色序列的规范化顺序差异 (37;44 -> 44;37)
+"${SED}" -i "s/code_mh='37;44'/code_mh='44;37'/" tests/ls/multihardlink.sh

@@ -18,8 +18,8 @@ default = ["feat_common_core"]
 feat_require_selinux = ["chcon", "runcon"]
 feat_acl = ["cp/feat_acl", "ls/feat_acl"]
 feat_selinux = [
-  "cp/selinux",
-  "ls/selinux",
+  "cp/feat_selinux",
+  "ls/feat_selinux",
   "selinux",
   "feat_require_selinux"
 ]

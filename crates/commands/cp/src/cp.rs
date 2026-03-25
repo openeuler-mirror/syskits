@@ -24,7 +24,7 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Path, PathBuf, StripPrefixError, Component};
 
 // 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
 use crate::copydir::copy_directory;
@@ -1325,12 +1325,27 @@ fn copy_source(
     symlinked_files: &mut HashSet<CtFileInformation>,
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
 ) -> CopyResult<()> {
-    let source_path = Path::new(&source);
-
-    // 提取 dest_path，供下面 parents 祖先目录同步使用
+    let source_str = source.as_os_str().to_string_lossy();
+    let source_buf = if source_str.ends_with("/.") || source_str.ends_with("\\.") {
+        // 手动移除末尾的 /. 或 \.，保留前面的路径
+        let new_str = if source_str.ends_with("/.") {
+            &source_str[..source_str.len() - 2] // 移除 "/."
+        } else {
+            &source_str[..source_str.len() - 2] // 移除 "\."
+        };
+        // 处理边界情况：如果裁剪后为空，使用 "." 
+        if new_str.is_empty() {
+            PathBuf::from(".")
+        } else {
+            PathBuf::from(new_str)
+        }
+    } else {
+        source.to_path_buf()
+    };
+    let source_path: &Path = &source_buf;
+    
     let dest = cp_construct_dest_path(source_path, target, target_type, options)?;
 
-    // 绝不能盲目调用 .is_dir()，必须根据当前的解引用策略来判断
     let is_dir = if options.cp_dereference(true) {
         source_path.is_dir()
     } else {
@@ -1339,11 +1354,33 @@ fn copy_source(
             .unwrap_or(false)
     };
 
+    if is_dir && target.exists() && target.is_dir() && !options.parents {
+        // 检查源目录是否为空（过滤掉 . 和 ..）
+        let is_empty = match fs::read_dir(source_path) {
+            Ok(entries) => {
+                entries.filter(|e| {
+                    match e.as_ref() {
+                        Ok(entry) => {
+                            let name = entry.file_name();
+                            name != "." && name != ".."
+                        }
+                        Err(_) => false,
+                    }
+                }).next().is_none()
+            }
+            Err(_) => false, // 如果无法读取目录，不视为空，让后续错误处理
+        };
+        
+        if is_empty {
+            // 空目录复制到已存在目录：静默成功，无操作，无输出
+            return Ok(());
+        }
+    }
+
     let res = if is_dir {
-        // 复制目录（内部应使用默认权限创建，不提前设置源权限）
         copy_directory(
             progress_bar,
-            source,
+            source_path,
             target,
             options,
             symlinked_files,
@@ -1351,7 +1388,6 @@ fn copy_source(
             true,
         )
     } else {
-        // 复制文件（内部已处理属性，但我们在下面统一处理以确保一致性）
         copy_file(
             progress_bar,
             source_path,
@@ -1363,26 +1399,14 @@ fn copy_source(
         )
     };
 
-    // 复制完成后，对目标目录/文件应用属性
-    // 这确保了：
-    // 1. 对于 --preserve=mode：先以默认权限创建，现在改为源权限
-    // 2. 对于 --preserve=ownership：只设置 UID/GID，不设置 mode（保持默认）
     if res.is_ok() {
         if is_dir {
-            // 目录：统一在这里应用属性（延迟到复制完成后）
-            // 注意：dereference=true 因为我们想要源的真实属性
-            copy_attributes_with_deref(source, dest.as_path(), &options.attributes, true)?;
+            copy_attributes_with_deref(source_path, dest.as_path(), &options.attributes, true)?;
         }
-        // 文件：copy_file 内部可能已经处理过，但再次调用是幂等的（相同参数）
-        // 如果 copy_file 内部已处理且你希望避免重复，可以注释掉下面这行
-        // 但为了确保 --parents 场景下的祖先目录权限正确，建议保留对文件的调用
-        // 或者仅针对目录保留此调用
     }
 
-    // 处理 --parents 的祖先目录（中间路径）
     if res.is_ok() && options.parents {
-        for (x, y) in cp_aligned_ancestors(source, dest.as_path()) {
-            // 祖先目录被当做路径穿透，必须强制解引用 (true) 获取真实属性
+        for (x, y) in cp_aligned_ancestors(source_path, dest.as_path()) {
             copy_attributes_with_deref(x, y, &options.attributes, true)?;
         }
     }

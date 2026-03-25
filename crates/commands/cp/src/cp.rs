@@ -2056,8 +2056,26 @@ fn copy_file(
         }
     }
 
-    // 把 --update 拦截逻辑放在询问和同文件判断的最前面！
     if is_skipped_by_update(sour_path, dest_path, cp_opts, source_in_command_line) {
+        // 即使跳过内容复制，对于硬链接保持，仍需处理硬链接关系
+        if cp_opts.cp_preserve_hard_links() && dest_path.exists() {
+            if let Ok(src_info) = CtFileInformation::from_path(
+                sour_path,
+                cp_opts.cp_dereference(source_in_command_line),
+            ) {
+                if let Some(first_dest_path) = copied_files.get(&src_info) {
+                    // 已有同 inode 文件被复制，确保当前目标也链接到那里
+                    // 使用现有的 are_hardlinks_to_same_file 检查是否已是硬链接
+                    if !are_hardlinks_to_same_file(first_dest_path, dest_path) {
+                        fs::remove_file(dest_path)?;
+                        std::fs::hard_link(first_dest_path, dest_path)?;
+                    }
+                } else {
+                    // 没有同 inode 文件被复制过，记录当前目标作为该 inode 的代表
+                    copied_files.insert(src_info, dest_path.to_path_buf());
+                }
+            }
+        }
         return Ok(());
     }
 
@@ -2084,14 +2102,19 @@ fn copy_file(
 
     // 如请求，保留硬链接。
     if cp_opts.cp_preserve_hard_links() {
-        if let Some(new_source) = copied_files.get(
+        if let Some(existing_dest) = copied_files.get(
             &CtFileInformation::from_path(
                 sour_path,
                 cp_opts.cp_dereference(source_in_command_line),
             )
             .context(format!("无法获取 {} 的状态", sour_path.quote()))?,
         ) {
-            std::fs::hard_link(new_source, dest_path)?;
+            // 如果目标文件已存在，必须先删除才能建立硬链接
+            if dest_path.exists() {
+                fs::remove_file(dest_path)?;
+            }
+            std::fs::hard_link(existing_dest, dest_path)?;
+            // 记录此路径以便后续链接（同一 inode 多个硬链接时）
             return Ok(());
         };
     }

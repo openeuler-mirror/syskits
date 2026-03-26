@@ -4,7 +4,7 @@ ct_yes:
   errors:
     system: "System error"
     invalid_utf8: "Arguments contain invalid UTF-8"
-    stdout: "Standard output error: %{error}"
+    stdout: "standard output: %{error}"
   clap:
     help: "Display this help and exit"
     version: "Output version information and exit" 

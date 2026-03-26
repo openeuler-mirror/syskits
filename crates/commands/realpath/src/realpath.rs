@@ -393,15 +393,16 @@ fn realpath_process_relative(
 ) -> PathBuf {
     // 根据 `relative_base` 和 `relative_to` 的不同情况处理路径
     match (relative_base, relative_to) {
-        // 当 `relative_base` 存在且 `path` 以 `relative_base` 开头时，
-        // 尝试将 `path` 相对于 `relative_to` 或 `relative_base`（如果 `relative_to` 不存在）
-        (Some(base), _) if path.starts_with(base) => {
-            make_path_relative_to(path, relative_to.unwrap_or(base))
+        // 提供了 relative_base 且路径在其下 → 相对于 relative_to（或 base）计算
+        (Some(base), to) if path.starts_with(base) => {
+            make_path_relative_to(path, to.unwrap_or(base))
         }
-        // 当 `relative_to` 存在时，将 `path` 相对于 `relative_to`
-        (_, Some(to)) => make_path_relative_to(path, to),
-        // 如果上述条件都不满足，返回原始的 `path`
-        _ => path,
+        // 提供了 relative_base 但路径不在其下 → 返回绝对路径（不做转换）
+        (Some(_), _) => path,
+        // 没有 relative_base 但有 relative_to → 相对于 relative_to 计算
+        (None, Some(to)) => make_path_relative_to(path, to),
+        // 两者都没有 → 返回绝对路径
+        (None, None) => path,
     }
 }
 

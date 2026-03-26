@@ -1640,10 +1640,12 @@ fn is_forbidden_to_copy_to_same_file(
         || !sour_path.is_symlink()
         || !dest_path.is_symlink();
 
+    // 首先检查是否是同一文件（解析符号链接后指向相同 inode）
     if !paths_refer_to_same_file(sour_path, dest_path, dereference_to_compare) {
         return false;
     }
 
+    // 如果是完全相同的文件路径
     if sour_path == dest_path {
         // GNU cp 唯一的例外：带 --force 和 --backup 允许覆盖自身
         if cp_opts.cp_force() && cp_opts.backup != CtBackupMode::NoBackup {
@@ -1657,27 +1659,45 @@ fn is_forbidden_to_copy_to_same_file(
         cp_opts.overwrite,
         CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
     );
+    let no_deref = !cp_opts.cp_dereference(source_in_command_line);
 
-    if sour_path.is_symlink() {
-        let no_deref = !cp_opts.cp_dereference(source_in_command_line);
-        if has_backup && no_deref {
+    // 检查源和目标的实际类型（不解析符号链接）
+    let sour_is_symlink = sour_path.is_symlink();
+    let dest_is_symlink = dest_path.is_symlink();
+
+    // 情况1：源是符号链接，目标是它指向的实际文件（危险情况）
+    // 例如：cp link.txt real.txt （link.txt -> real.txt）
+    // 删除/覆盖目标会导致源链接悬空
+    if sour_is_symlink && !dest_is_symlink {
+        // 只有同时满足以下条件才允许：
+        // 1. 有 --backup（数据不会丢失）
+        // 2. 有 -d（不跟随链接，复制链接本身而非内容）
+        // 3. 没有 --remove-destination（会删除目标导致链接悬空）
+        if has_backup && no_deref && !is_remove_dest {
             return false;
         }
+        return true;
     }
 
-    // GNU 行为：如果有备份或移除目标的指令，则允许操作
-    if is_remove_dest || has_backup {
+    // 情况2：源是实际文件，目标是符号链接（安全情况）
+    // 例如：cp real.txt link.txt （link.txt -> real.txt）
+    // 删除/覆盖目标只是删除链接，不影响源文件
+    if !sour_is_symlink && dest_is_symlink {
+        // 当有 --backup、--remove-destination 或 --force 时允许覆盖
+        // 注意：-f（force）模式也应该允许覆盖符号链接
+        if has_backup || is_remove_dest || cp_opts.cp_force() {
+            return false;
+        }
+        return true;
+    }
+
+    // 情况3：其他情况（都是普通文件、都是符号链接、硬链接等）
+    // 只要有备份就允许
+    if has_backup {
         return false;
     }
 
-    // 如果是强制覆盖 (-f)，且我们在建链模式 (-s 或 -l)，且目标是一个现有的符号链接，则开绿灯允许
-    if cp_opts.cp_force()
-        && dest_path.is_symlink()
-        && matches!(cp_opts.copy_mode, CpCopyMode::SymLink | CpCopyMode::Link)
-    {
-        return false;
-    }
-
+    // 默认禁止
     true
 }
 

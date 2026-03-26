@@ -17,7 +17,6 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, UClapError, set_ct_exit_code};
-use ctcore::ct_show_error;
 
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
@@ -28,7 +27,7 @@ use std::ffi::CString;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
-use std::io::{Error, IsTerminal};
+use std::io::{self, Write, stderr, Error, IsTerminal};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
@@ -92,6 +91,12 @@ impl Display for NohupError {
     }
 }
 
+fn write_nohup_msg(msg: &str) -> io::Result<()> {
+    let mut handle = stderr();
+    writeln!(handle, "nohup: {}", msg)?;
+    handle.flush()
+}
+
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -142,18 +147,26 @@ pub fn ct_app() -> Command {
 
 // 替换标准输入、输出和错误输出文件描述符
 fn nohup_replace_fds() -> CTResult<()> {
-    if std::io::stdin().is_terminal() {
+    let stdin_is_tty = std::io::stdin().is_terminal();
+    let stdout_is_tty = std::io::stdout().is_terminal();
+
+    if stdin_is_tty {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
             return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
         }
+        
+        if !stdout_is_tty {
+            if write_nohup_msg("ignoring input").is_err() {
+                std::process::exit(125);
+            }
+        }
     }
 
-    if std::io::stdout().is_terminal() {
+    if stdout_is_tty {
         let new_stdout = nohup_find_stdout()?;
         let raw_fd = new_stdout.as_raw_fd();
-
         if unsafe { dup2(raw_fd, 1) } != 1 {
             return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
         }
@@ -178,10 +191,10 @@ fn nohup_find_stdout() -> CTResult<File> {
         .open(Path::new(NOHUP_OUT))
     {
         Ok(file) => {
-            ct_show_error!(
-                "ignoring input and appending output to {}",
-                NOHUP_OUT.quote()
-            );
+            let msg = format!("ignoring input and appending output to {}", NOHUP_OUT.quote());
+            if write_nohup_msg(&msg).is_err() {
+                std::process::exit(125);
+            }
             Ok(file)
         }
         Err(err1) => {
@@ -194,10 +207,10 @@ fn nohup_find_stdout() -> CTResult<File> {
             let path_buf_str = path_buf.to_str().unwrap();
             match OpenOptions::new().create(true).append(true).open(&path_buf) {
                 Ok(file) => {
-                    ct_show_error!(
-                        "ignoring input and appending output to {}",
-                        path_buf_str.quote()
-                    );
+                    let msg = format!("ignoring input and appending output to {}", NOHUP_OUT.quote());
+                    if write_nohup_msg(&msg).is_err() {
+                        std::process::exit(125);
+                    }
                     Ok(file)
                 }
                 Err(err2) => Err(NohupError::OpenFailed2(

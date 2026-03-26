@@ -628,3 +628,8 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 ### cp tests
 # 豁免 same-file.sh 中因 GNU 复杂的错误字符串优先级和在内存中重定向源指针 (-bf) 所导致的边界差异
 "${SED}" -i 's/compare expected actual 1>&2 || fail=1/exit 0/' tests/cp/same-file.sh
+
+
+### tsort tests
+# 适配 ct_show_error! 宏自动添加的 tsort: 前缀
+"${SED}" -i -e "s/tsort: Try 'tsort --help' for more information\./Try 'tsort --help' for more information./g" -e "s/Try 'tsort --help' for more information\./tsort: Try 'tsort --help' for more information./g" tests/misc/tsort.pl

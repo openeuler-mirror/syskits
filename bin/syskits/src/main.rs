@@ -327,7 +327,7 @@ impl CommandHandler {
 
     /// 报告工具未找到并退出
     fn report_not_found(util_os_str: &OsStr) -> ! {
-        println!("{}: utility/function not found", util_os_str.maybe_quote());
+        eprintln!("{}: function/utility not found", util_os_str.maybe_quote());
         process::exit(1);
     }
 }

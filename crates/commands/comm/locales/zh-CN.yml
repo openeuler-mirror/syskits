@@ -23,3 +23,4 @@ comm:
     both_stdin: 两个文件不能同为标准输入
     not_sorted: 文件 %{file_num} 没有被正确排序
     input_not_sorted: 输入没有被正确排序
+    multiple_delimiters: 指定了多个输出分隔符

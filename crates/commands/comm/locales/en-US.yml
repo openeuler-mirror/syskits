@@ -24,3 +24,4 @@ comm:
     both_stdin: both files cannot be standard input
     not_sorted: file %{file_num} is not in sorted order
     input_not_sorted: input is not in sorted order
+    multiple_delimiters: multiple output delimiters specified

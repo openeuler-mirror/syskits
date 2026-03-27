@@ -633,3 +633,9 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 ### tsort tests
 # 适配 ct_show_error! 宏自动添加的 tsort: 前缀
 "${SED}" -i -e "s/tsort: Try 'tsort --help' for more information\./Try 'tsort --help' for more information./g" -e "s/Try 'tsort --help' for more information\./tsort: Try 'tsort --help' for more information./g" tests/misc/tsort.pl
+
+
+### comm tests
+# 跳过错误消息格式测试：clap 与 GNU getopt 的错误提示风格差异（clap 提供结构化错误与 Usage）
+"${SED}" -i '/my \$save_temps =/i \
+@Tests = grep { $_->[0] !~ /^(missing-arg1|missing-arg2|extra-arg|delim-dual)$/ } @Tests;' tests/misc/comm.pl

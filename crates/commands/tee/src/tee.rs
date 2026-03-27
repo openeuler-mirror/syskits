@@ -380,10 +380,16 @@ impl Write for MultiWriter {
         let mut aborted = None;
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
+        let mut would_block_occurred = false;
         self.writers.retain_mut(|writer| {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
+                    // WouldBlock is a temporary error, don't remove the writer
+                    if f.kind() == ErrorKind::WouldBlock {
+                        would_block_occurred = true;
+                        return true;
+                    }
                     if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
                         if aborted.is_none() {
                             aborted = Some(e);
@@ -397,6 +403,9 @@ impl Write for MultiWriter {
         self.ignored_errors += errors;
         if let Some(e) = aborted {
             Err(e)
+        } else if would_block_occurred {
+            // Return WouldBlock to let the caller retry
+            Err(Error::from(ErrorKind::WouldBlock))
         } else if self.writers.is_empty() {
             // 标准库永远不会引发此错误类型，因此我们可以使用它来提前终止 `copy`
             Err(Error::from(ErrorKind::Other))
@@ -409,10 +418,16 @@ impl Write for MultiWriter {
         let mut aborted = None;
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
+        let mut would_block_occurred = false;
         self.writers.retain_mut(|writer| {
             let result = writer.flush();
             match result {
                 Err(f) => {
+                    // WouldBlock is a temporary error, don't remove the writer
+                    if f.kind() == ErrorKind::WouldBlock {
+                        would_block_occurred = true;
+                        return true;
+                    }
                     if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
                         if aborted.is_none() {
                             aborted = Some(e);
@@ -426,6 +441,8 @@ impl Write for MultiWriter {
         self.ignored_errors += errors;
         if let Some(e) = aborted {
             Err(e)
+        } else if would_block_occurred {
+            Err(Error::from(ErrorKind::WouldBlock))
         } else {
             Ok(())
         }

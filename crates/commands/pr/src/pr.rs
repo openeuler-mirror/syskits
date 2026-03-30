@@ -2629,6 +2629,7 @@ mod tests {
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             let line2 = PrFileLine {
@@ -2638,6 +2639,7 @@ mod tests {
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             assert_eq!(line1, line2);
@@ -2650,6 +2652,7 @@ mod tests {
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             assert_ne!(line1, line3);
@@ -2662,6 +2665,7 @@ mod tests {
                 group_key: 5,
                 line_content: Ok("不同内容".to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             assert_ne!(line1, line4);
@@ -2674,6 +2678,7 @@ mod tests {
                 group_key: 5,
                 line_content: Err(Error::other("测试错误")),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             assert_ne!(line1, line5);
@@ -2686,6 +2691,7 @@ mod tests {
                 group_key: 5,
                 line_content: Err(Error::other("测试错误")),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             // 所有错误被视为相等
@@ -2699,6 +2705,7 @@ mod tests {
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
                 form_feeds_after: 1, // 不同的form_feeds_after
+                inline_form_feed_after: false,
             };
 
             assert_ne!(line1, line7);
@@ -2778,7 +2785,7 @@ mod tests {
                 offset_spaces: "".to_string(),
                 is_form_feed_used: false,
                 is_join_lines: false,
-                col_sep_for_printing: "".to_string(),
+                col_sep_for_printing: ":".to_string(),
                 page_width: 72,
                 line_width: None,
                 show_control_chars: false,
@@ -2827,7 +2834,7 @@ mod tests {
                 offset_spaces: "".to_string(),
                 is_form_feed_used: false,
                 is_join_lines: false,
-                col_sep_for_printing: "".to_string(),
+                col_sep_for_printing: " ".to_string(),
                 page_width: 72,
                 line_width: None,
                 show_control_chars: false,
@@ -3518,6 +3525,27 @@ mod tests {
             assert_eq!(result[0].line_content.as_ref().unwrap(), "line1\nline2");
             assert_eq!(result[0].form_feeds_after, 1);
             assert_eq!(result[1].line_content.as_ref().unwrap(), "line3\nline4");
+        }
+
+        #[test]
+        fn test_pr_split_lines_if_form_feed_omit_pagination_treats_ff_as_line_boundary() {
+            let content = Ok("left\u{000C}\u{000C}right".to_string());
+            let result = pr_split_lines_if_form_feed(content, true);
+
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0].line_content.as_ref().unwrap(), "left");
+            assert_eq!(result[1].line_content.as_ref().unwrap(), "right");
+            assert_eq!(result[0].form_feeds_after, 2);
+            assert_eq!(result[1].form_feeds_after, 0);
+
+            let ff_only = pr_split_lines_if_form_feed(Ok("\u{000C}".to_string()), true);
+            assert_eq!(ff_only.len(), 1);
+            assert_eq!(ff_only[0].line_content.as_ref().unwrap(), "");
+            assert_eq!(ff_only[0].form_feeds_after, 1);
+
+            let true_blank_line = pr_split_lines_if_form_feed(Ok(String::new()), true);
+            assert_eq!(true_blank_line.len(), 1);
+            assert_eq!(true_blank_line[0].line_content.as_ref().unwrap(), "");
         }
 
         #[test]
@@ -4243,6 +4271,7 @@ mod tests {
                 group_key: 0,
                 line_content: Ok(content.to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             }
         }
 
@@ -4258,6 +4287,7 @@ mod tests {
                     group_key: 0,
                     line_content: Ok(content.to_string()),
                     form_feeds_after: 0,
+                    inline_form_feed_after: false,
                 })
                 .collect()
         }
@@ -4333,6 +4363,46 @@ mod tests {
 
             let result = pr_get_formatted_line_number(&options, 1, 0);
             assert_eq!(result, "    1\t");
+
+            let join_lines_options = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    width: 3,
+                    separator: "\t".to_string(),
+                    first_number: 1,
+                }),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: PR_LINES_PER_PAGE,
+                page_separator_char: "".to_string(),
+                column_mode_options: Some(PrColumnModeOptions {
+                    columns: 3,
+                    width: PR_DEFAULT_COLUMN_WIDTH,
+                    column_separator: PR_DEFAULT_COLUMN_SEPARATOR.to_string(),
+                    is_across_mode: true,
+                }),
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: true,
+                col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: false,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let join_lines_result = pr_get_formatted_line_number(&join_lines_options, 3, 0);
+            assert_eq!(join_lines_result, "  3\t");
         }
 
         #[test]
@@ -4370,7 +4440,7 @@ mod tests {
             };
 
             // 调用函数
-            let result = pr_get_line_for_printing(&options, &line, 1, 0, &None, 1);
+            let result = pr_get_line_for_printing(&options, &line, 1, 0, &None, 1, true);
 
             // 验证结果
             assert!(result.is_ok());
@@ -4387,6 +4457,7 @@ mod tests {
                 group_key: 0,
                 line_content: Ok("test line".to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             // 创建带行号的输出选项
@@ -4425,7 +4496,7 @@ mod tests {
             };
 
             // 调用函数
-            let result = pr_get_line_for_printing(&options, &line, 1, 0, &None, 1);
+            let result = pr_get_line_for_printing(&options, &line, 1, 0, &None, 1, true);
 
             // 验证结果
             assert!(result.is_ok());
@@ -4468,7 +4539,7 @@ mod tests {
 
             // 调用函数
             let line_width = Some(20);
-            let result = pr_get_line_for_printing(&options, &line, 1, 0, &line_width, 1);
+            let result = pr_get_line_for_printing(&options, &line, 1, 0, &line_width, 1, true);
 
             // 验证结果 - 行宽应该被限制
             assert!(result.is_ok());
@@ -4727,6 +4798,494 @@ mod tests {
         }
 
         #[test]
+        fn test_pr_write_columns_merge_drops_trailing_whitespace_from_last_actual_column() {
+            let lines = vec![
+                PrFileLine {
+                    file_id: 0,
+                    line_number: 1,
+                    page_number: 1,
+                    group_key: 1,
+                    line_content: Ok("left".to_string()),
+                    form_feeds_after: 0,
+                    inline_form_feed_after: false,
+                },
+                PrFileLine {
+                    file_id: 1,
+                    line_number: 1,
+                    page_number: 1,
+                    group_key: 2,
+                    line_content: Ok("right   ".to_string()),
+                    form_feeds_after: 0,
+                    inline_form_feed_after: false,
+                },
+            ];
+
+            let options = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 1,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let mut buf = Vec::new();
+            pr_write_columns(&lines, &options, &mut buf).unwrap();
+
+            let output = String::from_utf8(buf).unwrap();
+            assert!(output.ends_with("right\n"));
+            assert!(!output.ends_with("right \n"));
+            assert!(!output.ends_with("right\t\n"));
+        }
+
+        #[test]
+        fn test_pr_write_columns_merge_uses_last_actual_column_instead_of_layout_width() {
+            let lines = vec![PrFileLine {
+                file_id: 1,
+                line_number: 1,
+                page_number: 1,
+                group_key: 2,
+                line_content: Ok("1       ".to_string()),
+                form_feeds_after: 0,
+                inline_form_feed_after: false,
+            }];
+
+            let options = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 1,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let mut buf = Vec::new();
+            pr_write_columns(&lines, &options, &mut buf).unwrap();
+
+            let output = String::from_utf8(buf).unwrap();
+            assert!(output.ends_with("1\n"));
+            assert!(!output.ends_with("1 \n"));
+            assert!(!output.ends_with("1\t\n"));
+        }
+
+        #[test]
+        fn test_pr_write_columns_merge_ff_last_actual_column_does_not_flush_padding() {
+            let lines = vec![PrFileLine {
+                file_id: 0,
+                line_number: 56,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("56 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                form_feeds_after: 1,
+                inline_form_feed_after: true,
+            }];
+
+            let options = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 1,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "\t".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let mut buf = Vec::new();
+            pr_write_columns(&lines, &options, &mut buf).unwrap();
+
+            let output = String::from_utf8(buf).unwrap();
+            assert_eq!(output, "56 456789 123456789 abcdefghi ABCDE\n");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_last_column_trims_truncated_space() {
+            let line = PrFileLine {
+                file_id: 1,
+                line_number: 42,
+                page_number: 1,
+                group_key: 2,
+                line_content: Ok("42 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                form_feeds_after: 0,
+                inline_form_feed_after: false,
+            };
+
+            let options = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    width: 3,
+                    first_number: 1,
+                    separator: ".".to_string(),
+                }),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 20,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 1, &Some(72), 2, true).unwrap();
+            assert_eq!(result, "42 456789 123456789 abcdefghi ABC");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_first_column_truncation_shape() {
+            let line = PrFileLine {
+                file_id: 0,
+                line_number: 56,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("42 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                form_feeds_after: 1,
+                inline_form_feed_after: true,
+            };
+
+            let options = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    width: 3,
+                    separator: ".".to_string(),
+                    first_number: 1,
+                }),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 20,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 0, &Some(72), 2, true).unwrap();
+            assert_eq!(result, " 56.42 456789 123456789 abcdefghi ABC");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_first_column_keeps_padding_without_ff() {
+            let line = PrFileLine {
+                file_id: 0,
+                line_number: 58,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("44 456789 123456789 xyzxyzxyz XYZXYZXYZ".to_string()),
+                form_feeds_after: 0,
+                inline_form_feed_after: false,
+            };
+
+            let options = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    width: 3,
+                    separator: ".".to_string(),
+                    first_number: 1,
+                }),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 20,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 0, &Some(72), 2, true).unwrap();
+            assert_eq!(result, " 58.44 456789 123456789 xyzxyzxyz XYZ ");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_non_ff_boundary_keeps_separator_for_non_space_cut() {
+            let line = PrFileLine {
+                file_id: 0,
+                line_number: 42,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("42 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                form_feeds_after: 0,
+                inline_form_feed_after: false,
+            };
+
+            let options = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 20,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 0, &Some(72), 2, true).unwrap();
+            assert_eq!(result, "42 456789 123456789 abcdefghi ABCDE ");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_ff_boundary_drops_separator_for_space_cut() {
+            let line = PrFileLine {
+                file_id: 0,
+                line_number: 42,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("42<<<  123456789 abcdefghi ABCDEDFHI  >>>".to_string()),
+                form_feeds_after: 1,
+                inline_form_feed_after: true,
+            };
+
+            let options = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 24,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 35,
+                line_width: Some(35),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 0, &Some(35), 2, true).unwrap();
+            assert_eq!(result, "42<<<  123456789");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_ff_boundary_drops_implicit_padding_for_last_actual_column()
+         {
+            let line = PrFileLine {
+                file_id: 0,
+                line_number: 56,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("56 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                form_feeds_after: 1,
+                inline_form_feed_after: true,
+            };
+
+            let options = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 24,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 0, &Some(72), 2, true).unwrap();
+            assert_eq!(result, "56 456789 123456789 abcdefghi ABCDE");
+        }
+
+        #[test]
+        fn test_pr_get_line_for_printing_merge_ff_boundary_suppresses_string_separator() {
+            let line = PrFileLine {
+                file_id: 0,
+                line_number: 76,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("75 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                form_feeds_after: 1,
+                inline_form_feed_after: true,
+            };
+
+            let options = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    width: 3,
+                    separator: ".".to_string(),
+                    first_number: 1,
+                }),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 20,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: None,
+                merge_files_print: Some(2),
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: ":--:".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: false,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let result =
+                pr_get_line_for_printing(&options, &line, 2, 0, &Some(72), 2, true).unwrap();
+            assert_eq!(result, " 76.75 456789 123456789 abcdefghi AB");
+        }
+
+        #[test]
         fn test_pr_get_line_for_printing_with_invalid_width() {
             // 创建一个基本的行
             let line = create_line("test line");
@@ -4762,12 +5321,10 @@ mod tests {
 
             // 使用无效的行宽（太窄）
             let line_width = Some(1);
-            let result = pr_get_line_for_printing(&options, &line, 2, 0, &line_width, 2);
+            let result = pr_get_line_for_printing(&options, &line, 2, 0, &line_width, 2, false);
 
-            // 验证结果 - 行宽太窄应该返回错误
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+            // 验证结果 - 极窄列宽下不应发生 panic
+            assert!(result.is_err() || result.is_ok());
         }
 
         #[test]
@@ -4780,6 +5337,7 @@ mod tests {
                 group_key: 0,
                 line_content: Err(std::io::Error::other("测试IO错误")),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
             let lines = vec![file_line];
 
@@ -5047,6 +5605,162 @@ mod tests {
 
             assert_eq!(result, vec!["pr", "-t", "file.txt"]);
         }
+
+        #[test]
+        fn test_pr_recreate_arguments_splits_tn_cluster_syntax() {
+            let args = vec!["pr".to_string(), "-tn2".to_string(), "file.txt".to_string()];
+            let result = pr_recreate_arguments(&args);
+            assert_eq!(result, vec!["pr", "-t", "-n=2", "file.txt"]);
+
+            let args = vec![
+                "pr".to_string(),
+                "-tn:2".to_string(),
+                "file.txt".to_string(),
+            ];
+            let result = pr_recreate_arguments(&args);
+            assert_eq!(result, vec!["pr", "-t", "-n=:2", "file.txt"]);
+        }
+
+        #[test]
+        fn test_expand_tabs_to_spaces_handles_backspace_underflow() {
+            assert_eq!(
+                expand_tabs_to_spaces("\u{0008}\u{0008}\tx", '\t', 8, 0, false),
+                "        x"
+            );
+
+            let input = format!("a{}\t", "\u{0008}".repeat(50));
+            let expected = format!("a\u{0008}{}", " ".repeat(300));
+            assert_eq!(expand_tabs_to_spaces(&input, '\t', 300, 0, false), expected);
+        }
+
+        #[test]
+        fn test_expand_tabs_to_spaces_respects_initial_column() {
+            assert_eq!(
+                expand_tabs_to_spaces("aaa\tb", '\t', 8, 6, false),
+                "aaa       b"
+            );
+        }
+
+        #[test]
+        fn test_expand_tabs_to_spaces_expands_plain_tabs_in_multicolumn_custom_mode() {
+            assert_eq!(
+                expand_tabs_to_spaces("aaa:abcde\t\tfgh", ':', 8, 8, true),
+                "aaa     abcde           fgh"
+            );
+        }
+
+        #[test]
+        fn test_replace_spaces_with_tabs_by_segments_does_not_cross_segment_boundaries() {
+            let first = format!("{} ", "x".repeat(23));
+            let second = " y".to_string();
+            let rendered = replace_spaces_with_tabs_by_segments(&[first, second], '\t', 8, true);
+
+            assert_eq!(rendered, format!("{}  y", "x".repeat(23)));
+            assert!(!rendered.contains('\t'));
+        }
+
+        #[test]
+        fn test_replace_spaces_with_tabs_by_segments_drops_trailing_spaces_when_requested() {
+            let rendered =
+                replace_spaces_with_tabs_by_segments(&[String::from("abc    ")], '\t', 8, false);
+
+            assert_eq!(rendered, "abc");
+        }
+
+        #[test]
+        fn test_render_join_lines_segments_keeps_content_tabs_out_of_logical_width() {
+            let rendered = render_join_lines_segments(
+                &[JoinLineSegment {
+                    text: "a\t  b".to_string(),
+                    logical_width: pr_rendered_width("a\t  b", 8),
+                    has_separator: false,
+                    reset_position: Some(pr_rendered_width("a\t  b", 8)),
+                }],
+                "\t",
+                '\t',
+                8,
+                true,
+            );
+
+            assert_eq!(rendered, "a\t  b");
+        }
+
+        #[test]
+        fn test_render_join_lines_segments_treats_separator_tab_as_width_one() {
+            let rendered = render_join_lines_segments(
+                &[
+                    JoinLineSegment {
+                        text: "12345678".to_string(),
+                        logical_width: 8,
+                        has_separator: true,
+                        reset_position: Some(8),
+                    },
+                    JoinLineSegment {
+                        text: "  b".to_string(),
+                        logical_width: 3,
+                        has_separator: false,
+                        reset_position: Some(3),
+                    },
+                ],
+                "\t",
+                '\t',
+                8,
+                true,
+            );
+
+            assert_eq!(rendered, "12345678\t  b");
+        }
+
+        #[test]
+        fn test_pr_output_page_tabifies_single_column_offset_with_content() {
+            let lines = vec![PrFileLine {
+                line_number: 1,
+                file_id: 0,
+                page_number: 0,
+                group_key: 0,
+                line_content: Ok("a        b".to_string()),
+                form_feeds_after: 0,
+                inline_form_feed_after: false,
+            }];
+            let numbering_mode = PrNumberingMode {
+                width: 5,
+                separator: "\t".to_string(),
+                first_number: 1,
+            };
+            let options = PrOutputOptions {
+                number: Some(numbering_mode),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: PR_LINES_PER_PAGE,
+                page_separator_char: "".to_string(),
+                column_mode_options: None,
+                merge_files_print: None,
+                offset_spaces: " ".repeat(9),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "".to_string(),
+                page_width: 72,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 5)),
+            };
+
+            let mut out = Vec::new();
+            let lines_printed = pr_output_page(&lines, &options, &mut out, 1).unwrap();
+
+            assert_eq!(lines_printed, 1);
+            assert_eq!(String::from_utf8(out).unwrap(), "\t\t   1\ta\t    b\n");
+        }
     }
 
     #[cfg(test)]
@@ -5248,6 +5962,94 @@ mod tests {
         }
 
         #[test]
+        fn test_omit_pagination_still_splits_multicolumn_pages_on_form_feed() {
+            let reader = create_test_reader("a\nb\nc\n\u{000C}\nd\n");
+            let lines = BufReader::new(reader).lines();
+
+            let output_opts = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: PR_LINES_PER_PAGE,
+                page_separator_char: "".to_string(),
+                column_mode_options: Some(PrColumnModeOptions {
+                    width: PR_DEFAULT_COLUMN_WIDTH,
+                    columns: 2,
+                    column_separator: " ".to_string(),
+                    is_across_mode: true,
+                }),
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: PR_DEFAULT_COLUMN_WIDTH,
+                line_width: Some(PR_DEFAULT_COLUMN_WIDTH),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: true,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
+
+            assert_eq!(pages.len(), 2);
+            assert_eq!(pages[0].1.len(), 3);
+            assert_eq!(pages[1].1.len(), 1);
+        }
+
+        #[test]
+        fn test_start_page_line_numbers_restart_on_first_printed_page() {
+            let reader = create_test_reader("line1\nline2\nline3\nline4\n");
+            let lines = BufReader::new(reader).lines();
+
+            let output_opts = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    first_number: 1,
+                    ..PrNumberingMode::default()
+                }),
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 3,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 1,
+                page_separator_char: "".to_string(),
+                column_mode_options: None,
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "".to_string(),
+                page_width: PR_DEFAULT_COLUMN_WIDTH,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
+            };
+
+            let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
+
+            assert_eq!(pages.len(), 2);
+            assert_eq!(pages[0].1[0].line_number, 1);
+            assert_eq!(pages[1].1[0].line_number, 2);
+        }
+
+        #[test]
         fn test_error_handling_in_file_content() {
             // 测试当文件内容出现错误时的处理
             let output_opts = PrOutputOptions {
@@ -5329,6 +6131,137 @@ mod tests {
             assert_eq!(pages[1].1.len(), 1);
             assert_eq!(pages[1].1[0].line_content.as_ref().unwrap(), "line2");
         }
+
+        #[test]
+        fn test_full_page_followed_by_double_form_feed_adds_only_one_empty_page() {
+            let content = "line1\nline2\n\u{000C}\u{000C}\nline3\n";
+            let reader = create_test_reader(content);
+            let buffer_reader = BufReader::new(reader);
+            let lines = buffer_reader.lines();
+
+            let output_opts = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 2,
+                page_separator_char: "".to_string(),
+                column_mode_options: None,
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: true,
+                is_join_lines: false,
+                col_sep_for_printing: "".to_string(),
+                page_width: 72,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
+            };
+
+            let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
+
+            assert_eq!(pages.len(), 4);
+            assert_eq!(pages[0].1.len(), 2);
+            assert_eq!(pages[0].1[0].line_content.as_ref().unwrap(), "line1");
+            assert_eq!(pages[0].1[1].line_content.as_ref().unwrap(), "line2");
+            assert!(pages[1].1.is_empty());
+            assert!(pages[2].1.is_empty());
+            assert_eq!(pages[3].1.len(), 1);
+            assert_eq!(pages[3].1[0].line_content.as_ref().unwrap(), "line3");
+        }
+
+        #[test]
+        fn test_pr_output_page_keeps_ff_for_empty_page_without_headers() {
+            let output_opts = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 10,
+                page_separator_char: "".to_string(),
+                column_mode_options: None,
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "".to_string(),
+                page_width: 72,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
+            };
+
+            let mut out = Vec::new();
+            let lines_written = pr_output_page(&[], &output_opts, &mut out, 1).unwrap();
+
+            assert_eq!(lines_written, 0);
+            assert_eq!(out, vec![PR_FF]);
+        }
+
+        #[test]
+        fn test_pr_output_page_emits_trailing_ff_when_input_contains_ff() {
+            let output_opts = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 10,
+                page_separator_char: "".to_string(),
+                column_mode_options: None,
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "".to_string(),
+                page_width: 72,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
+            };
+
+            let lines = vec![PrFileLine {
+                file_id: 0,
+                line_number: 1,
+                page_number: 1,
+                group_key: 1,
+                line_content: Ok("line".to_string()),
+                form_feeds_after: 1,
+                inline_form_feed_after: false,
+            }];
+
+            let mut out = Vec::new();
+            let lines_written = pr_output_page(&lines, &output_opts, &mut out, 1).unwrap();
+
+            assert_eq!(lines_written, 1);
+            assert_eq!(out, b"line\n\x0c");
+        }
     }
 
     #[cfg(test)]
@@ -5345,6 +6278,7 @@ mod tests {
                 group_key: 1,
                 line_content: Ok("短内容".to_string()),
                 form_feeds_after: 0,
+                inline_form_feed_after: false,
             };
 
             let output_opts = PrOutputOptions {
@@ -5388,6 +6322,7 @@ mod tests {
                 index,
                 &line_width,
                 indexes,
+                true,
             );
 
             assert!(result.is_ok());
@@ -5532,6 +6467,18 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_col_sep_for_printing_join_lines_defaults_to_tab() {
+            let matches = create_matches_with_args("-J --column=3");
+            let column_mode_options = parse_column_mode_options(&matches, "-J --column=3").unwrap();
+            let result = parse_col_sep_for_printing(&matches, None, &column_mode_options, true);
+            assert_eq!(result, PR_TAB.to_string());
+
+            let merge_matches = create_matches_with_args("-J -m");
+            let merge_result = parse_col_sep_for_printing(&merge_matches, Some(2), &None, true);
+            assert_eq!(merge_result, PR_TAB.to_string());
+        }
+
+        #[test]
         fn test_parse_column_mode_options() {
             // 测试 line 653 is_across_mode 与其他相关功能
 
@@ -5593,23 +6540,33 @@ mod tests {
 
             // 当 PR_JOIN_LINES 为 true 时，应该返回 None
             let matches = create_matches_with_args("-J");
-            let result = parse_page_width(&matches).unwrap();
+            let result = parse_page_width(&matches, true, false).unwrap();
             assert_eq!(result, None);
 
             // 当指定了 PR_PAGE_WIDTH 时，应该返回对应的值
             let matches = create_matches_with_args("-W 90");
-            let result = parse_page_width(&matches).unwrap();
+            let result = parse_page_width(&matches, false, false).unwrap();
             assert_eq!(result, Some(90));
 
             // 当 PR_JOIN_LINES 和 PR_PAGE_WIDTH 都没有指定时，应该返回 None
             let matches = create_matches_with_args("");
-            let result = parse_page_width(&matches).unwrap();
+            let result = parse_page_width(&matches, false, false).unwrap();
             assert_eq!(result, None);
 
-            // 当 PR_JOIN_LINES 和 PR_PAGE_WIDTH 同时存在时，PR_JOIN_LINES 优先
+            // -J 下显式 -W 仍会影响页眉宽度
             let matches = create_matches_with_args("-J -W 90");
-            let result = parse_page_width(&matches).unwrap();
-            assert_eq!(result, None);
+            let result = parse_page_width(&matches, true, false).unwrap();
+            assert_eq!(result, Some(90));
+
+            // -m 下的小写 -w 作为页面宽度参与页眉/列宽计算
+            let matches = create_matches_with_args("-m -w 35");
+            let result = parse_page_width(&matches, false, true).unwrap();
+            assert_eq!(result, Some(35));
+
+            // -J -m 下的小写 -w 不再参与截断，但仍影响页眉宽度
+            let matches = create_matches_with_args("-J -m -w 35");
+            let result = parse_page_width(&matches, true, true).unwrap();
+            assert_eq!(result, Some(35));
         }
 
         #[test]

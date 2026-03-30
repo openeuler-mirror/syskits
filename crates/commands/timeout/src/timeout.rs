@@ -23,11 +23,11 @@ mod exit_status;
 use crate::exit_status::ExitStatus;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
-use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
@@ -51,23 +51,43 @@ static TIMEOUT_SIGNAL: AtomicI32 = AtomicI32::new(0);
 static IS_FOREGROUND: AtomicBool = AtomicBool::new(false);
 static ALARM_RECEIVED: AtomicBool = AtomicBool::new(false);
 
+#[inline]
+fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) {
+    if pid <= 0 {
+        return;
+    }
+
+    unsafe {
+        // Always signal the direct child first.
+        libc::kill(pid, sig);
+
+        // In background mode we also signal the entire monitored process group.
+        if !is_foreground {
+            libc::kill(-pid, sig);
+            // Ensure stopped jobs can handle the termination signal.
+            if sig != libc::SIGKILL && sig != libc::SIGCONT {
+                libc::kill(pid, libc::SIGCONT);
+                libc::kill(-pid, libc::SIGCONT);
+            }
+        }
+    }
+}
+
 /// 专用于兼容 GNU 行为的 SIGALRM 处理器
 extern "C" fn handle_sigalrm(_sig: libc::c_int) {
     ALARM_RECEIVED.store(true, Ordering::Relaxed);
     let pid = CHILD_PID.load(Ordering::Relaxed);
     let sig = TIMEOUT_SIGNAL.load(Ordering::Relaxed);
     let is_fg = IS_FOREGROUND.load(Ordering::Relaxed);
-
-    if pid > 0 {
-        unsafe {
-            if is_fg {
-                libc::kill(pid, sig);
-            } else {
-                libc::kill(-pid, sig);
-            }
-        }
-    }
+    forward_signal_to_monitored_process(pid, sig, is_fg);
     // 我们只负责发信号，然后立刻返回，让操作系统的 wait() 正常回收子进程。
+}
+
+/// 转发 timeout 自身收到的终止信号，避免子进程残留
+extern "C" fn handle_forwarding_signal(sig: libc::c_int) {
+    let pid = CHILD_PID.load(Ordering::Relaxed);
+    let is_fg = IS_FOREGROUND.load(Ordering::Relaxed);
+    forward_signal_to_monitored_process(pid, sig, is_fg);
 }
 
 pub mod timeout_flags {
@@ -347,12 +367,33 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
     ALARM_RECEIVED.store(false, Ordering::Relaxed);
 
     unsafe {
-        let sa = nix::sys::signal::SigAction::new(
+        let alarm_sa = nix::sys::signal::SigAction::new(
             nix::sys::signal::SigHandler::Handler(handle_sigalrm),
-            nix::sys::signal::SaFlags::empty(),
+            nix::sys::signal::SaFlags::SA_RESTART,
             nix::sys::signal::SigSet::empty(),
         );
-        let _ = nix::sys::signal::sigaction(nix::sys::signal::Signal::SIGALRM, &sa);
+        let _ = nix::sys::signal::sigaction(nix::sys::signal::Signal::SIGALRM, &alarm_sa);
+
+        let forwarding_sa = nix::sys::signal::SigAction::new(
+            nix::sys::signal::SigHandler::Handler(handle_forwarding_signal),
+            nix::sys::signal::SaFlags::SA_RESTART,
+            nix::sys::signal::SigSet::empty(),
+        );
+
+        for sig in [
+            nix::sys::signal::Signal::SIGINT,
+            nix::sys::signal::Signal::SIGQUIT,
+            nix::sys::signal::Signal::SIGHUP,
+            nix::sys::signal::Signal::SIGTERM,
+        ] {
+            let _ = nix::sys::signal::sigaction(sig, &forwarding_sa);
+        }
+
+        if let Ok(custom_signal) = nix::sys::signal::Signal::try_from(flags.signal as i32) {
+            if custom_signal != nix::sys::signal::Signal::SIGALRM {
+                let _ = nix::sys::signal::sigaction(custom_signal, &forwarding_sa);
+            }
+        }
     }
 
     let wait_result = if flags.duration.is_zero() {
@@ -388,15 +429,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
             timeout_send_signal(process, flags.signal, flags.is_foreground);
 
             if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
-                let status = process.wait()?;
-                if let Some(signal) = status.signal() {
-                    if signal == 9 {
-                        unsafe {
-                            libc::signal(libc::SIGKILL, libc::SIG_DFL);
-                            libc::raise(libc::SIGKILL);
-                        }
-                    }
-                }
+                let _ = process.wait()?;
                 Err(ExitStatus::SignalTerminated(9).into())
             } else {
                 handle_timeout_exceeded(process, flags)
@@ -475,16 +508,7 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
                     timeout_report_if_verbose(kill_signal, &flags.command[0], flags.is_verbose);
                     timeout_send_signal(process, kill_signal, flags.is_foreground);
 
-                    let status = process.wait()?;
-                    if let Some(signal) = status.signal() {
-                        if signal == 9 {
-                            // 子进程被 SIGKILL 杀死，向自己发送相同的信号以便 shell 正确显示 "Killed" 消息
-                            unsafe {
-                                libc::signal(libc::SIGKILL, libc::SIG_DFL);
-                                libc::raise(libc::SIGKILL);
-                            }
-                        }
-                    }
+                    let _ = process.wait()?;
 
                     // GNU 规定，只要发射了 KILL 信号，退出码绝对是 137 (128+9)
                     // 即使没有开启 preserve-status，也不能返回 124！

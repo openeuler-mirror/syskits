@@ -65,6 +65,7 @@ mod pr_flags {
     pub const PR_COLUMN_WIDTH: &str = "width";
     pub const PR_PAGE_WIDTH: &str = "page-width";
     pub const PR_ACROSS: &str = "across";
+    pub const PR_BALANCE: &str = "balance";
     pub const PR_COLUMN: &str = "column";
     pub const PR_COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const PR_COLUMN_STRING_SEPARATOR: &str = "sep-string";
@@ -322,6 +323,11 @@ pub fn ct_app() -> Command {
                  second line in column 1, and so on).",
             )
             .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_BALANCE)
+            .short('b')
+            .long(pr_flags::PR_BALANCE)
+            .help("use balanced columns in the last page")
+            .action(ArgAction::SetTrue),
         Arg::new(pr_flags::PR_COLUMN)
             .long(pr_flags::PR_COLUMN)
             .alias("columns")
@@ -518,24 +524,37 @@ pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
 fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option_regex = Regex::new(r"^[-+]\d+.*").unwrap();
 
-    args.iter()
-        .filter(|&i| !column_page_option_regex.is_match(i))
-        .map(|arg| {
-            if arg.starts_with("-n") && arg.len() > 2 && !arg.starts_with("-n=") {
-                format!("-n={}", &arg[2..])
-            } else if arg.starts_with("-s") && arg.len() > 2 && !arg.starts_with("-s=") {
-                format!("-s={}", &arg[2..])
-            } else if arg.starts_with("-S") && arg.len() > 2 && !arg.starts_with("-S=") {
-                format!("-S={}", &arg[2..])
-            } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e=") {
-                format!("-e={}", &arg[2..])
-            } else if arg.starts_with("-i") && arg.len() > 2 && !arg.starts_with("-i=") {
-                format!("-i={}", &arg[2..])
-            } else {
-                arg.clone()
+    let mut recreated_args = Vec::with_capacity(args.len());
+    for arg in args {
+        // GNU pr accepts old-style column counts merged into -t (e.g. -t2 == -t -2).
+        if let Some(old_column_count) = arg.strip_prefix("-t") {
+            if !old_column_count.is_empty() && old_column_count.chars().all(|c| c.is_ascii_digit())
+            {
+                recreated_args.push("-t".to_string());
+                continue;
             }
-        })
-        .collect()
+        }
+
+        if column_page_option_regex.is_match(arg) {
+            continue;
+        }
+
+        if arg.starts_with("-n") && arg.len() > 2 && !arg.starts_with("-n=") {
+            recreated_args.push(format!("-n={}", &arg[2..]));
+        } else if arg.starts_with("-s") && arg.len() > 2 && !arg.starts_with("-s=") {
+            recreated_args.push(format!("-s={}", &arg[2..]));
+        } else if arg.starts_with("-S") && arg.len() > 2 && !arg.starts_with("-S=") {
+            recreated_args.push(format!("-S={}", &arg[2..]));
+        } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e=") {
+            recreated_args.push(format!("-e={}", &arg[2..]));
+        } else if arg.starts_with("-i") && arg.len() > 2 && !arg.starts_with("-i=") {
+            recreated_args.push(format!("-i={}", &arg[2..]));
+        } else {
+            recreated_args.push(arg.clone());
+        }
+    }
+
+    recreated_args
 }
 
 fn pr_print_error(arg_matches: &ArgMatches, pr_err: &PrError) {
@@ -754,28 +773,55 @@ fn parse_column_mode_options(
     arg_matches: &ArgMatches,
     args: &str,
 ) -> Result<Option<PrColumnModeOptions>, PrError> {
-    let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
-    let res = re_col.captures(args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
-        unparsed_num.parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument {}", "-", unparsed_num.quote()))
-        })
-    });
-    let start_column_option = if let Some(res) = res {
-        Some(res?)
-    } else {
-        None
-    };
+    let mut column_option_value = None;
+    let mut tokens = args.split_whitespace().peekable();
+    while let Some(token) = tokens.next() {
+        let parse_old_style = |unparsed_num: &str| {
+            unparsed_num.parse::<usize>().map_err(|_e| {
+                PrError::EncounteredErrors(format!(
+                    "invalid number of columns: {}",
+                    unparsed_num.quote()
+                ))
+            })
+        };
+
+        if let Some(num) = token.strip_prefix("--column=") {
+            column_option_value = Some(parse_old_style(num)?);
+            continue;
+        }
+        if let Some(num) = token.strip_prefix("--columns=") {
+            column_option_value = Some(parse_old_style(num)?);
+            continue;
+        }
+        if token == "--column" || token == "--columns" {
+            if let Some(num) = tokens.next() {
+                column_option_value = Some(parse_old_style(num)?);
+            }
+            continue;
+        }
+        if let Some(num) = token.strip_prefix("-t") {
+            if !num.is_empty() && num.chars().all(|c| c.is_ascii_digit()) {
+                column_option_value = Some(parse_old_style(num)?);
+            }
+            continue;
+        }
+        if token.starts_with('-')
+            && token.len() > 1
+            && token[1..].chars().all(|c| c.is_ascii_digit())
+        {
+            column_option_value = Some(parse_old_style(&token[1..])?);
+        }
+    }
 
     let column_width = parse_column_width(arg_matches)?;
     let column_separator = parse_column_separator(arg_matches);
     let is_across_mode = arg_matches.get_flag(pr_flags::PR_ACROSS);
-    // --column 的优先级高于 -column
-    let column_option_value = if let Some(res) = pr_parse_usize(arg_matches, pr_flags::PR_COLUMN) {
-        Some(res?)
-    } else {
-        start_column_option
-    };
+
+    if let Some(0) = column_option_value {
+        return Err(PrError::EncounteredErrors(
+            "invalid number of columns: '0'".to_string(),
+        ));
+    }
     let column_mode_options = column_option_value.map(|columns| PrColumnModeOptions {
         columns,
         width: column_width,
@@ -4129,6 +4175,15 @@ mod tests {
             assert_eq!(result[0], "pr");
             assert_eq!(result[1], "file.txt");
         }
+
+        #[test]
+        fn test_pr_recreate_arguments_splits_t_old_column_syntax() {
+            let args = vec!["pr".to_string(), "-t2".to_string(), "file.txt".to_string()];
+
+            let result = pr_recreate_arguments(&args);
+
+            assert_eq!(result, vec!["pr", "-t", "file.txt"]);
+        }
     }
 
     #[cfg(test)]
@@ -4577,10 +4632,33 @@ mod tests {
             let options = result.unwrap();
             assert_eq!(options.columns, 3);
 
+            // 测试旧式 -t2 语法（等价于 -t -2）
+            let matches = create_matches_with_args("-t");
+            let result = parse_column_mode_options(&matches, " -t2 ").unwrap();
+            assert!(result.is_some());
+            let options = result.unwrap();
+            assert_eq!(options.columns, 2);
+
+            // 测试列参数按出现顺序覆盖（最后的 -2 覆盖 --columns=1）
+            let matches = create_matches_with_args("--columns=1");
+            let result = parse_column_mode_options(&matches, " --columns=1 -2 ").unwrap();
+            assert!(result.is_some());
+            let options = result.unwrap();
+            assert_eq!(options.columns, 2);
+
             // 测试无效的 -column 格式
             let matches = create_matches_with_args("");
             let result = parse_column_mode_options(&matches, " -abc ");
             assert!(result.unwrap().is_none());
+
+            // -0 不是合法的列数
+            let matches = create_matches_with_args("");
+            let result = parse_column_mode_options(&matches, " -0 ");
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "pr: invalid number of columns: '0'"
+            );
         }
 
         #[test]

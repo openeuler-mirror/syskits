@@ -198,8 +198,16 @@ impl StdbufFlags {
             tempdir().map_err_context(|| "failed to create temporary directory".to_string())?;
         let (preload_env, libstdbuf) = self.get_preload_env(&tmp_dir)?;
 
+        let mut preload_val = libstdbuf.into_os_string();
+        if let Some(existing) = std::env::var_os(&preload_env) {
+            let mut new_val = existing;
+            new_val.push(":");
+            new_val.push(preload_val);
+            preload_val = new_val;
+        }
+
         // 设置环境变量
-        command.env(preload_env, libstdbuf);
+        command.env(preload_env, preload_val);
         self.set_command_env(&mut command, "_STDBUF_I", &self.stdin);
         self.set_command_env(&mut command, "_STDBUF_O", &self.stdout);
         self.set_command_env(&mut command, "_STDBUF_E", &self.stderr);

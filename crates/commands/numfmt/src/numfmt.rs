@@ -23,7 +23,7 @@ use sys_locale::get_locale;
 
 use crate::errors::*;
 use crate::flags::*;
-use crate::format::numfmt_format_and_print;
+use crate::format::{numfmt_format_and_print, numfmt_format_and_print_abort};
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -92,25 +92,56 @@ where
             }?;
         }
     } else {
-        for (idx, line_result) in input.lines().by_ref().enumerate() {
-            match line_result {
-                Ok(line) if idx < numfmt_configs.header => {
-                    println!("{line}");
-                    Ok(())
+        let mut input = input;
+        let mut line = String::new();
+        let mut idx = 0usize;
+
+        loop {
+            line.clear();
+            let bytes = input
+                .read_line(&mut line)
+                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
+            if bytes == 0 {
+                break;
+            }
+
+            let has_newline = line.ends_with('\n');
+            if has_newline {
+                line.pop();
+                if line.ends_with('\r') {
+                    line.pop();
                 }
-                Ok(line) => numfmt_format_and_handle_validation(line.as_ref(), numfmt_configs),
-                Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
-            }?;
+            }
+
+            if idx < numfmt_configs.header {
+                if has_newline {
+                    println!("{line}");
+                } else {
+                    print!("{line}");
+                }
+            } else {
+                numfmt_format_and_handle_validation_with_line_ending(
+                    line.as_ref(),
+                    numfmt_configs,
+                    has_newline,
+                )?;
+            }
+            idx += 1;
         }
     }
     Ok(())
 }
 
-fn numfmt_format_and_handle_validation(
+fn numfmt_format_and_handle_validation_with_line_ending(
     input_line: &str,
     numfmt_configs: &NumfmtConfigs,
+    has_line_ending: bool,
 ) -> CTResult<()> {
-    let handled_line = numfmt_format_and_print(input_line, numfmt_configs);
+    let handled_line = if numfmt_configs.invalid == NumfmtInvalidModes::Abort {
+        numfmt_format_and_print_abort(input_line, numfmt_configs)
+    } else {
+        numfmt_format_and_print(input_line, numfmt_configs)
+    };
 
     if let Err(error_msg) = handled_line {
         match numfmt_configs.invalid {
@@ -127,12 +158,21 @@ fn numfmt_format_and_handle_validation(
         };
         if numfmt_configs.zero_terminated {
             print!("{input_line}\0");
-        } else {
+        } else if has_line_ending {
             println!("{input_line}");
+        } else {
+            print!("{input_line}");
         }
     }
 
     Ok(())
+}
+
+fn numfmt_format_and_handle_validation(
+    input_line: &str,
+    numfmt_configs: &NumfmtConfigs,
+) -> CTResult<()> {
+    numfmt_format_and_handle_validation_with_line_ending(input_line, numfmt_configs, true)
 }
 
 fn numfmt_parse_unit(unit: &str) -> Result<NumfmtUnit> {

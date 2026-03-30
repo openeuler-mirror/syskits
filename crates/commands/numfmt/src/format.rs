@@ -434,6 +434,33 @@ fn numfmt_format_string(
     ))
 }
 
+fn pad_string(value: String, width: isize, fill: char) -> String {
+    if width == 0 {
+        return value;
+    }
+
+    let target_width = width.unsigned_abs();
+    let value_width = value.chars().count();
+    if target_width <= value_width {
+        return value;
+    }
+
+    let pad_count = target_width - value_width;
+    let padding: String = std::iter::repeat_n(fill, pad_count).collect();
+
+    if width > 0 {
+        let mut out = String::with_capacity(target_width);
+        out.push_str(&padding);
+        out.push_str(&value);
+        out
+    } else {
+        let mut out = String::with_capacity(target_width);
+        out.push_str(&value);
+        out.push_str(&padding);
+        out
+    }
+}
+
 fn get_padded_number(
     numfmt_configs: &NumfmtConfigs,
     implicit_padding: Option<isize>,
@@ -447,28 +474,14 @@ fn get_padded_number(
     match padding {
         0 => number_with_suffix,
         p_isize if p_isize > 0 && numfmt_configs.format.is_zero_padding => {
-            let zero_padded = format!(
-                "{:0>padding$}",
-                number_with_suffix,
-                padding = p_isize as usize
-            );
+            let zero_padded = pad_string(number_with_suffix, p_isize, '0');
 
             match implicit_padding.unwrap_or(numfmt_configs.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{:>padding$}", zero_padded, padding = p as usize),
-                p => format!("{:<padding$}", zero_padded, padding = p.unsigned_abs()),
+                p => pad_string(zero_padded, p, ' '),
             }
         }
-        p_isize if p_isize > 0 => format!(
-            "{:>padding$}",
-            number_with_suffix,
-            padding = p_isize as usize
-        ),
-        p_isize => format!(
-            "{:<padding$}",
-            number_with_suffix,
-            padding = p_isize.unsigned_abs()
-        ),
+        p_isize => pad_string(number_with_suffix, p_isize, ' '),
     }
 }
 

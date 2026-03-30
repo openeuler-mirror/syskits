@@ -17,7 +17,9 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::{BufRead, Write};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, parser::ValueSource};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind, parser::ValueSource,
+};
 use std::str::FromStr;
 use sys_locale::get_locale;
 
@@ -27,7 +29,7 @@ use crate::format::{numfmt_format_and_print, numfmt_format_and_print_abort};
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, get_ct_exit_code};
 use ctcore::ct_ranges::CtRange;
 use ctcore::ct_show;
 use ctcore::ct_show_error;
@@ -40,6 +42,7 @@ pub mod format;
 mod units;
 
 pub mod numfmt_flags {
+    pub const NUMFMT_DEBUG: &str = "debug";
     pub const NUMFMT_DELIMITER: &str = "delimiter";
     pub const NUMFMT_FIELD: &str = "field";
     pub const NUMFMT_FIELD_DEFAULT: &str = "1";
@@ -53,6 +56,7 @@ pub mod numfmt_flags {
     pub const NUMFMT_INVALID: &str = "invalid";
     pub const NUMFMT_NUMBER: &str = "NUMBER";
     pub const NUMFMT_PADDING: &str = "padding";
+    pub const NUMFMT_GROUPING: &str = "grouping";
     pub const NUMFMT_ROUND: &str = "round";
     pub const NUMFMT_SUFFIX: &str = "suffix";
     pub const NUMFMT_TO: &str = "to";
@@ -142,7 +146,6 @@ fn numfmt_format_and_handle_validation_with_line_ending(
     } else {
         numfmt_format_and_print(input_line, numfmt_configs)
     };
-
     if let Err(error_msg) = handled_line {
         match numfmt_configs.invalid {
             NumfmtInvalidModes::Abort => {
@@ -234,10 +237,89 @@ fn numfmt_parse_unit_size_suffix(unit: &str) -> Option<usize> {
     None
 }
 
+fn normalize_numfmt_args(args: impl ctcore::Args) -> Vec<OsString> {
+    args.map(|arg| {
+        if arg.to_str() == Some("---debug") {
+            OsString::from("--debug")
+        } else {
+            arg
+        }
+    })
+    .collect()
+}
+
+fn map_field_parse_error(err: String) -> String {
+    const TRY_HELP: &str = "\nTry 'numfmt --help' for more information.";
+
+    let Some(rest) = err.strip_prefix("range '") else {
+        return err;
+    };
+    let Some((token, cause)) = rest.split_once("' was invalid: ") else {
+        return err;
+    };
+
+    match cause {
+        "fields and positions are numbered from 1" => {
+            format!("fields are numbered from 1{TRY_HELP}")
+        }
+        "high end of range less than low end" => format!("invalid decreasing range{TRY_HELP}"),
+        "byte/character offset is too large" => {
+            format!("field number '{token}' is too large{TRY_HELP}")
+        }
+        "failed to parse range" => {
+            if token.chars().all(char::is_alphabetic) {
+                format!("invalid field value {}{TRY_HELP}", token.quote())
+            } else if token.starts_with('-')
+                && token.len() > 1
+                && token[1..].chars().all(char::is_alphabetic)
+            {
+                format!("invalid field value {}{TRY_HELP}", token[1..].quote())
+            } else {
+                format!("invalid field range{TRY_HELP}")
+            }
+        }
+        _ => err,
+    }
+}
+
+fn has_conversion_option(matches: &ArgMatches, options: &NumfmtConfigs, grouping: bool) -> bool {
+    grouping
+        || options.padding != 0
+        || options.transform.from != NumfmtUnit::None
+        || options.transform.to != NumfmtUnit::None
+        || options.transform.from_unit != 1
+        || options.transform.to_unit != 1
+        || options.suffix.is_some()
+        || options.format != NumfmtFormatOptions::default()
+        || matches.value_source(numfmt_flags::NUMFMT_FIELD) == Some(ValueSource::CommandLine)
+        || matches.value_source(numfmt_flags::NUMFMT_DELIMITER) == Some(ValueSource::CommandLine)
+}
+
+fn is_c_locale() -> bool {
+    for key in ["LC_ALL", "LANG", "LANGUAGE"] {
+        let Ok(v) = std::env::var(key) else {
+            continue;
+        };
+        if v.is_empty() {
+            continue;
+        }
+        return v == "C" || v == "POSIX" || v.starts_with("C.");
+    }
+    false
+}
+
 fn numfmt_parse_options(arg_matches: &ArgMatches) -> Result<NumfmtConfigs> {
     let transform = parse_transform(arg_matches)?;
     let format = parse_format(arg_matches)?;
-    if format.is_grouping && transform.to != NumfmtUnit::None {
+    let grouping = arg_matches.get_flag(numfmt_flags::NUMFMT_GROUPING);
+
+    if grouping
+        && arg_matches.value_source(numfmt_flags::NUMFMT_FORMAT) == Some(ValueSource::CommandLine)
+    {
+        return Err("--grouping cannot be combined with --format".to_string());
+    }
+
+    if (grouping || format.is_grouping) && transform.to != NumfmtUnit::None {
         return Err("grouping cannot be combined with --to".to_string());
     }
 
@@ -300,7 +382,7 @@ fn parse_padding(arg_matches: &ArgMatches) -> Result<isize> {
             .parse::<isize>()
             .map_err(|_| s)
             .and_then(|n| match n {
-                0 => Err(s),
+                0 | isize::MIN => Err(s),
                 _ => Ok(n),
             })
             .map_err(|s| format!("invalid padding value {}", s.quote())),
@@ -332,10 +414,20 @@ fn parse_header(arg_matches: &ArgMatches) -> Result<usize> {
 }
 
 fn parse_fields(arg_matches: &ArgMatches) -> Result<Vec<CtRange>> {
-    let fields = arg_matches
-        .get_one::<String>(numfmt_flags::NUMFMT_FIELD)
-        .unwrap()
-        .as_str();
+    let field_args = arg_matches
+        .get_many::<String>(numfmt_flags::NUMFMT_FIELD)
+        .map(|v| v.map(String::as_str).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    if field_args.len() > 1 {
+        return Err("multiple field specifications".to_string());
+    }
+
+    let fields = field_args
+        .first()
+        .copied()
+        .unwrap_or(numfmt_flags::NUMFMT_FIELD_DEFAULT);
+
     // a lone "-" means "all fields", even as part of a list of fields
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![CtRange {
@@ -343,7 +435,7 @@ fn parse_fields(arg_matches: &ArgMatches) -> Result<Vec<CtRange>> {
             high: usize::MAX,
         }]
     } else {
-        CtRange::from_list(fields)?
+        CtRange::from_list(fields).map_err(map_field_parse_error)?
     };
     Ok(fields)
 }
@@ -352,7 +444,7 @@ fn parse_delimiter(arg_matches: &ArgMatches) -> Result<Option<String>> {
     let delimiter = arg_matches
         .get_one::<String>(numfmt_flags::NUMFMT_DELIMITER)
         .map_or(Ok(None), |arg| {
-            if arg.len() == 1 {
+            if arg.len() <= 1 {
                 Ok(Some(arg.to_string()))
             } else {
                 Err("the delimiter must be a single character".to_string())
@@ -395,8 +487,34 @@ fn parse_round(arg_matches: &ArgMatches) -> NumfmtRoundMethod {
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let normalized_args = normalize_numfmt_args(args);
+    let matches = match ct_app().try_get_matches_from(normalized_args) {
+        Ok(matches) => matches,
+        Err(err) if err.kind() == ErrorKind::UnknownArgument => {
+            return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
+                "unrecognized option\nTry 'numfmt --help' for more information.".to_string(),
+            )));
+        }
+        Err(err) => return Err(err.into()),
+    };
     let options = numfmt_parse_options(&matches).map_err(NumfmtError::NumfmtIllegalArgument)?;
+    let debug = matches.get_flag(numfmt_flags::NUMFMT_DEBUG);
+    let grouping = matches.get_flag(numfmt_flags::NUMFMT_GROUPING) || options.format.is_grouping;
+    let has_command_line_numbers = matches
+        .get_many::<String>(numfmt_flags::NUMFMT_NUMBER)
+        .is_some();
+
+    if debug && has_command_line_numbers && options.header > 0 {
+        ct_show_error!("--header ignored with command-line input");
+    }
+
+    if debug && !has_conversion_option(&matches, &options, grouping) {
+        ct_show_error!("no conversion option specified");
+    }
+
+    if debug && grouping && is_c_locale() {
+        ct_show_error!("grouping has no effect in this locale");
+    }
 
     let result = match matches.get_many::<String>(numfmt_flags::NUMFMT_NUMBER) {
         Some(values) => numfmt_handle_args(values.map(|s| s.as_str()), &options),
@@ -406,6 +524,10 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
             numfmt_handle_buffer(&mut locked_stdin, &options)
         }
     };
+
+    if debug && options.invalid == NumfmtInvalidModes::Fail && get_ct_exit_code() == 2 {
+        ct_show_error!("failed to convert some of the input numbers");
+    }
 
     if let Err(e) = result {
         std::io::stdout().flush().expect("error flushing stdout");
@@ -431,12 +553,16 @@ pub fn ct_app() -> Command {
             .help(t!("numfmt.clap.numfmt_field"))
             .value_name("FIELDS")
             .allow_hyphen_values(true)
-            .default_value(numfmt_flags::NUMFMT_FIELD_DEFAULT),
+            .action(ArgAction::Append),
         Arg::new(numfmt_flags::NUMFMT_FORMAT)
             .long(numfmt_flags::NUMFMT_FORMAT)
             .help(t!("numfmt.clap.numfmt_format"))
             .value_name("FORMAT")
             .allow_hyphen_values(true),
+        Arg::new(numfmt_flags::NUMFMT_GROUPING)
+            .long(numfmt_flags::NUMFMT_GROUPING)
+            .help("use locale-defined digit grouping")
+            .action(ArgAction::SetTrue),
         Arg::new(numfmt_flags::NUMFMT_FROM)
             .long(numfmt_flags::NUMFMT_FROM)
             .help(t!("numfmt.clap.numfmt_from"))
@@ -476,6 +602,10 @@ pub fn ct_app() -> Command {
             .value_name("N")
             .default_missing_value(numfmt_flags::NUMFMT_HEADER_DEFAULT)
             .hide_default_value(true),
+        Arg::new(numfmt_flags::NUMFMT_DEBUG)
+            .long(numfmt_flags::NUMFMT_DEBUG)
+            .help("print warnings about invalid or ineffective options")
+            .action(ArgAction::SetTrue),
         Arg::new(numfmt_flags::NUMFMT_ROUND)
             .long(numfmt_flags::NUMFMT_ROUND)
             .help(t!("numfmt.clap.numfmt_round"))
@@ -1826,7 +1956,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "range '2-1' was invalid: high end of range less than low end";
+            let expected_value =
+                "invalid decreasing range\nTry 'numfmt --help' for more information.";
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -1914,7 +2045,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "range 'aa' was invalid: failed to parse range";
+            let expected_value =
+                "invalid field value 'aa'\nTry 'numfmt --help' for more information.";
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -1961,7 +2093,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "range '0' was invalid: fields and positions are numbered from 1";
+            let expected_value =
+                "fields are numbered from 1\nTry 'numfmt --help' for more information.";
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -1973,7 +2106,7 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "range '2.1' was invalid: failed to parse range";
+            let expected_value = "invalid field range\nTry 'numfmt --help' for more information.";
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -1985,7 +2118,7 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "range '2.1' was invalid: failed to parse range";
+            let expected_value = "invalid field range\nTry 'numfmt --help' for more information.";
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }

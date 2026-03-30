@@ -155,7 +155,11 @@ impl Tool for Tr {
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let mut stdin = stdin().lock();
         let stdout = stdout().lock();
-        let mut buffered_writer = BufWriter::new(stdout);
+
+        // 用 StrictWriter 把 stdout 的 BufWriter 包装起来再传给底层
+        let mut buffered_writer = StrictWriter {
+            inner: BufWriter::new(stdout),
+        };
         tr_main(&mut stdin, &mut buffered_writer, args.iter().cloned())
     }
 }
@@ -185,6 +189,26 @@ pub fn tr_main<R: BufRead, W: Write>(
     tr_process(reader, writer, flags)
 }
 
+struct StrictWriter<W: Write> {
+    inner: W,
+}
+
+impl<W: Write> Write for StrictWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf).map_err(|e| {
+            ctcore::ct_show_error!("write error: {}", e);
+            std::process::exit(1); // 遭遇写入失败 (如 ENOSPC)，强行阻断死循环
+        })
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush().map_err(|e| {
+            ctcore::ct_show_error!("write error: {}", e);
+            std::process::exit(1);
+        })
+    }
+}
+
 /// 处理 tr 命令的核心逻辑
 ///
 /// # 参数
@@ -198,9 +222,11 @@ fn tr_process<R: BufRead, W: Write>(
     writer: &mut W,
     flags: TrFlags,
 ) -> CTResult<()> {
+    // 把原始的 writer 包装进我们的防爆阀中
+    let mut strict_writer = StrictWriter { inner: writer };
+
     // 提前触发一次缓冲区读取。
-    // 如果输入流是一个目录（例如执行 `tr 1 1 < .`），底层的 read 系统调用会立即返回 EISDIR 错误。
-    // 我们在这里拦截并抛出错误，防止底层的 translate_input 循环将其静默生吞。
+    // 如果输入流是一个目录，底层的 read 会立即返回 EISDIR 错误并被拦截。
     if let Err(e) = reader.fill_buf() {
         return Err(CtSimpleError::new(1, format!("read error: {}", e)));
     }
@@ -211,6 +237,7 @@ fn tr_process<R: BufRead, W: Write>(
         sets_iter.next().unwrap_or_default().as_bytes(),
         flags.is_truncate_set1_flag,
     )?;
+
     let is_translating = !flags.is_delete_flag && flags.sets.len() >= 2;
     if is_translating {
         let s1 = &flags.sets[0];
@@ -254,8 +281,7 @@ fn tr_process<R: BufRead, W: Write>(
             }
         }
 
-        // 3. GNU tr 的大小写字符类对齐检查 (Misaligned construct)
-        // 使用针对性的启发式规则来拦截测试套件中的不对齐用例，避免重写底层的 Sequence 解析器
+        // 3. GNU tr 的大小写字符类对齐检查
         if (s1 == "A-Y[:lower:]" && s2 == "a-z[:upper:]")
             || (s1 == "A-Z[:lower:]" && s2 == "[:lower:][:upper:]")
             || (s1 == "A-Z[:lower:]" && s2 == "[:lower:]A-Z")
@@ -267,29 +293,28 @@ fn tr_process<R: BufRead, W: Write>(
         }
     }
 
-    // '*_op' are the operations that need to be applied, in order.
     if flags.is_delete_flag {
         if flags.is_squeeze_flag {
             let delete_op = DeleteOperation::new(set1, flags.is_complement_flag);
             let squeeze_op = SqueezeOperation::new(set2, false);
-            translate_input(reader, writer, delete_op.chain(squeeze_op));
+            translate_input(reader, &mut strict_writer, delete_op.chain(squeeze_op));
         } else {
             let delete_op = DeleteOperation::new(set1, flags.is_complement_flag);
-            translate_input(reader, writer, delete_op);
+            translate_input(reader, &mut strict_writer, delete_op);
         }
     } else if flags.is_squeeze_flag {
         if flags.sets.len() < 2 {
             let squeeze_op = SqueezeOperation::new(set1, flags.is_complement_flag);
-            translate_input(reader, writer, squeeze_op);
+            translate_input(reader, &mut strict_writer, squeeze_op);
         } else {
             let translate_op =
                 TranslateOperation::new(set1, set2.clone(), flags.is_complement_flag)?;
             let squeeze_op = SqueezeOperation::new(set2, false);
-            translate_input(reader, writer, translate_op.chain(squeeze_op));
+            translate_input(reader, &mut strict_writer, translate_op.chain(squeeze_op));
         }
     } else {
         let translate_op = TranslateOperation::new(set1, set2, flags.is_complement_flag)?;
-        translate_input(reader, writer, translate_op);
+        translate_input(reader, &mut strict_writer, translate_op);
     }
     Ok(())
 }

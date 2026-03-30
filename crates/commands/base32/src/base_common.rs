@@ -11,13 +11,11 @@
 
 use std::io::Read;
 use std::io::Write;
-use std::io::stdout;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_encoding::CtEncodeError;
 use ctcore::ct_encoding::Data;
 use ctcore::ct_encoding::Format;
-use ctcore::ct_encoding::wrap_print;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
@@ -184,15 +182,15 @@ pub fn handle_base_input<R: Read, W: Write>(
     if ct_decode {
         match input_data.decode(&mut writer) {
             Ok(_) => Ok(()),
-            Err(_) => Err(CtSimpleError::new(1, "error: invalid input")),
+            Err(_) => Err(CtSimpleError::new(1, "invalid input")),
         }
     } else {
         match input_data.encode(&mut writer) {
             Ok(_) => Ok(()),
-            Err(CtEncodeError::InvalidInput) => Err(CtSimpleError::new(1, "error: invalid input")),
+            Err(CtEncodeError::InvalidInput) => Err(CtSimpleError::new(1, "invalid input")),
             Err(_) => Err(CtSimpleError::new(
                 1,
-                "error: invalid input (length must be multiple of 4 characters)",
+                "invalid input (length must be multiple of 4 characters)",
             )),
         }
     }

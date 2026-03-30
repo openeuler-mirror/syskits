@@ -177,9 +177,7 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
     let stdin_fd = stdin_handle.as_fd();
     let stdout_fd = stdout_handle.as_fd();
 
-    // 强行清除 stdout 的 O_NONBLOCK 标志。
-    // 当恶意测试（如 dd oflag=nonblock）共享并篡改了底层管道的状态时，
-    // 将其重置为阻塞模式能彻底避免在管道写满时触发 WouldBlock 导致程序崩溃。
+    // 强行清除 stdout 的 O_NONBLOCK 标志，防止因测试环境污染导致崩溃
     unsafe {
         let fd = stdout_handle.as_raw_fd();
         let flags = nix::libc::fcntl(fd, nix::libc::F_GETFL, 0);
@@ -190,9 +188,10 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
 
     let mut buf = [0u8; 8192];
     let mut stdin_lock = stdin_handle.lock();
+    let mut stdout_active = true;
 
     loop {
-        // Poll stdin for readability and stdout for errors
+        // 动态组装需要监控的 fds，如果 stdout 挂了就不要再 poll 它了，防止死循环
         let mut poll_fds = [
             PollFd::new(stdin_fd, PollFlags::POLLIN),
             PollFd::new(
@@ -201,45 +200,58 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
             ),
         ];
 
-        match poll(&mut poll_fds, PollTimeout::NONE) {
+        let fds_to_poll = if stdout_active {
+            &mut poll_fds[..2]
+        } else {
+            &mut poll_fds[..1]
+        };
+
+        match poll(fds_to_poll, PollTimeout::NONE) {
             Ok(_) => {
-                // Check if stdout has error/hangup
-                if let Some(revents) = poll_fds[1].revents() {
-                    if revents
-                        .intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
-                    {
-                        // Output closed, write to remaining outputs and exit
-                        let _ = output.flush();
+                let stdin_revents = poll_fds[0].revents().unwrap_or(PollFlags::empty());
+                let stdout_revents = if stdout_active {
+                    poll_fds[1].revents().unwrap_or(PollFlags::empty())
+                } else {
+                    PollFlags::empty()
+                };
+
+                if stdin_revents.intersects(PollFlags::POLLIN) {
+                    match stdin_lock.read(&mut buf) {
+                        Ok(0) => {
+                            // EOF
+                            return Ok(());
+                        }
+                        Ok(n) => {
+                            if let Err(e) = output.write_all(&buf[..n]) {
+                                if e.kind() == IoErrorKind::Other {
+                                    // 所有输出都已经关闭
+                                    return Ok(());
+                                }
+                                return Err(e);
+                            }
+                            // 如果 write_all 内部移除了出错的 stdout，我们需要更新 active 状态
+                            stdout_active = output.has_stdout();
+                        }
+                        Err(e) => {
+                            ct_show_error!("stdin: {}", e);
+                            return Err(e);
+                        }
+                    }
+                }
+                else if stdout_revents.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL) {
+                    // 人工触发 Broken Pipe 错误，交由 --output-error 策略处理
+                    if let Err(e) = output.report_broken_pipe_for_stdout() {
+                        return Err(e); // Exit 模式下会抛出错误退出
+                    }
+                    stdout_active = false;
+                    
+                    // 如果 stdout 是唯一的输出，那么它挂了我们就可以提前结束进程了
+                    if output.is_empty() {
                         return Ok(());
                     }
                 }
-
-                // Check if stdin is readable
-                if let Some(revents) = poll_fds[0].revents() {
-                    if revents.intersects(PollFlags::POLLIN) {
-                        match stdin_lock.read(&mut buf) {
-                            Ok(0) => {
-                                // EOF
-                                return Ok(());
-                            }
-                            Ok(n) => {
-                                if let Err(e) = output.write_all(&buf[..n]) {
-                                    if e.kind() == IoErrorKind::Other {
-                                        // All outputs closed
-                                        return Ok(());
-                                    }
-                                    return Err(e);
-                                }
-                            }
-                            Err(e) => {
-                                ct_show_error!("stdin: {}", e);
-                                return Err(e);
-                            }
-                        }
-                    } else if revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR) {
-                        // stdin closed/error
-                        return Ok(());
-                    }
+                else if stdin_revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR) {
+                    return Ok(());
                 }
             }
             Err(nix::errno::Errno::EINTR) => continue,
@@ -392,6 +404,44 @@ impl MultiWriter {
 
     fn error_occurred(&self) -> bool {
         self.ignored_errors != 0
+    }
+
+    // 新增：判断是否所有输出都已关闭
+    fn is_empty(&self) -> bool {
+        self.writers.is_empty()
+    }
+
+    // 新增：检查标准输出是否还在写入列表中
+    fn has_stdout(&self) -> bool {
+        self.writers.iter().any(|w| w.name == "'standard output'")
+    }
+
+    // 新增：人工模拟 Broken Pipe 错误并交由统一的 process_error 处理
+    fn report_broken_pipe_for_stdout(&mut self) -> Result<()> {
+        let mut errors = 0;
+        let mode = self.output_error_mode.clone();
+        let mut aborted = None;
+        self.writers.retain_mut(|writer| {
+            if writer.name == "'standard output'" {
+                if let Err(e) = process_error(
+                    mode.as_ref(),
+                    Error::from(IoErrorKind::BrokenPipe),
+                    writer,
+                    &mut errors,
+                ) {
+                    aborted = Some(e);
+                }
+                false // 发生断管后移除该 writer
+            } else {
+                true
+            }
+        });
+        self.ignored_errors += errors;
+        if let Some(e) = aborted {
+            Err(e)
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -19,21 +19,23 @@ mod platform;
 pub mod text;
 
 pub use args::ct_app;
-use args::{tail_parse_args, TailFilterMode, TailOptions, TailSignum};
+use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use chunks::TailReverseChunks;
 use clap::Command;
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code, CTResult, CtSimpleError, FromIo};
 use ctcore::Tool;
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code};
 use ctcore::{ct_show, ct_show_error};
 use follow::Observer;
-use paths::{TailFileExtTail, TailHeaderPrinter, TailInput, TailInputKind, TailMetadataExt};
+use paths::{TailHeaderPrinter, TailInput, TailInputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::ffi::OsString;
-use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::fs::{File, FileType, Metadata};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt as _};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -198,17 +200,14 @@ fn handle_tailable_file(
     input: &TailInput,
     path: &Path,
     observer: &mut Observer,
-    offset: u64, // 注意：这个参数即使未使用也需保留以匹配函数签名
+    offset: u64,
     buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     match File::open(path) {
         Ok(mut file) => {
             header_printer.print_input(input);
 
-            // 放弃可能误判块设备的 is_seekable，直接用原生 seek 探测
-            let is_seek = file.seek(SeekFrom::Current(0)).is_ok();
-
-            let reader = if !options.presume_input_pipe && is_seek {
+            let reader = if should_use_bounded_io(&mut file, options, offset) {
                 tail_bounded(&mut file, options, buffer)?;
                 BufReader::new(file)
             } else {
@@ -230,6 +229,65 @@ fn handle_tailable_file(
     }
 
     Ok(())
+}
+
+fn should_use_bounded_io(file: &mut File, options: &TailOptions, current_offset: u64) -> bool {
+    if options.presume_input_pipe {
+        return false;
+    }
+
+    let metadata = match file.metadata() {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    let file_type = metadata.file_type();
+    let Some(end_pos) = seekable_end_position(file, current_offset) else {
+        return false;
+    };
+
+    let remaining_len = end_pos.saturating_sub(current_offset);
+    if remaining_len <= bounded_io_threshold(&metadata) {
+        return false;
+    }
+
+    match options.mode {
+        TailFilterMode::Lines(TailSignum::Negative(_), _) => file_type.is_file(),
+        TailFilterMode::Bytes(TailSignum::Negative(_)) => supports_bounded_bytes(&file_type),
+        TailFilterMode::Bytes(TailSignum::Positive(_)) => supports_bounded_bytes(&file_type),
+        _ => false,
+    }
+}
+
+fn bounded_io_threshold(metadata: &Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        metadata.blksize().max(1)
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        chunks::TAIL_BUFFER_SIZE as u64
+    }
+}
+
+fn seekable_end_position(file: &mut File, current_offset: u64) -> Option<u64> {
+    let end_pos = file.seek(SeekFrom::End(0)).ok()?;
+    file.seek(SeekFrom::Start(current_offset)).ok()?;
+    Some(end_pos)
+}
+
+fn supports_bounded_bytes(file_type: &FileType) -> bool {
+    #[cfg(unix)]
+    {
+        file_type.is_file() || file_type.is_block_device()
+    }
+
+    #[cfg(not(unix))]
+    {
+        file_type.is_file()
+    }
 }
 
 fn handle_file_open_error(
@@ -536,7 +594,7 @@ fn handle_bounded_bytes(
 
             if end_pos > 0 {
                 // 自己计算绝对起点，再使用绝对寻址 SeekFrom::Start
-                let start_pos = end_pos.saturating_sub(*count as u64);
+                let start_pos = end_pos.saturating_sub(*count);
                 file.seek(SeekFrom::Start(start_pos))?;
             }
             io::copy(file, writer)?;
@@ -862,6 +920,7 @@ mod test_tail_bounded_unbounded {
     use serial_test::serial;
     use std::fs::File;
     use std::io::Write;
+    use std::path::Path;
     use std::time::Duration;
     use tempfile::NamedTempFile;
 
@@ -887,6 +946,26 @@ mod test_tail_bounded_unbounded {
             presume_input_pipe: false,
             inputs: vec![],
         }
+    }
+
+    fn tail_path_to_buffer(path: &Path, options: &TailOptions) -> Vec<u8> {
+        let mut printer = TailHeaderPrinter::new(false, true);
+        let input = TailInput::from(path.as_os_str());
+        let mut observer = Observer::from(options);
+        let mut buffer = Vec::new();
+
+        tail_file(
+            options,
+            &mut printer,
+            &input,
+            path,
+            &mut observer,
+            0,
+            Some(&mut buffer),
+        )
+        .unwrap();
+
+        buffer
     }
 
     #[test]
@@ -981,6 +1060,92 @@ mod test_tail_bounded_unbounded {
 
         assert_eq!(String::from_utf8(buffer).unwrap().trim(), "");
     }
+
+    #[test]
+    fn test_should_use_bounded_io_for_large_regular_files() {
+        let content = "x".repeat(131_072);
+        let temp_file = create_temp_file(&content);
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(1)));
+        let mut file = File::open(temp_file.path()).unwrap();
+
+        assert!(should_use_bounded_io(&mut file, &options, 0));
+    }
+
+    #[test]
+    fn test_should_not_use_bounded_io_for_small_regular_files() {
+        let temp_file = create_temp_file("small");
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(1)));
+        let mut file = File::open(temp_file.path()).unwrap();
+
+        assert!(!should_use_bounded_io(&mut file, &options, 0));
+    }
+
+    #[test]
+    fn test_should_use_bounded_io_for_positive_offsets_on_large_seekable_files() {
+        let content = "x".repeat(131_072);
+        let temp_file = create_temp_file(&content);
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Positive(2)));
+        let mut file = File::open(temp_file.path()).unwrap();
+
+        assert!(should_use_bounded_io(&mut file, &options, 0));
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_file_positive_bytes_on_large_seekable_file() {
+        let content = "x".repeat(131_072);
+        let temp_file = create_temp_file(&content);
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Positive(131_072)));
+        let mut file = File::open(temp_file.path()).unwrap();
+
+        assert!(should_use_bounded_io(&mut file, &options, 0));
+        let output = tail_path_to_buffer(temp_file.path(), &options);
+        assert_eq!(output, b"x");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_special_files_avoid_bounded_io_for_negative_bytes() {
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(1)));
+
+        for path in ["/proc/version", "/sys/kernel/profiling"] {
+            let Ok(mut file) = File::open(path) else {
+                continue;
+            };
+
+            assert!(
+                !should_use_bounded_io(&mut file, &options, 0),
+                "{path} should use the streaming path"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn test_tail_bytes_negative_matches_special_file_snapshots() {
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(1)));
+
+        for raw_path in ["/proc/version", "/sys/kernel/profiling"] {
+            let path = Path::new(raw_path);
+            let Ok(snapshot) = NamedTempFile::new() else {
+                continue;
+            };
+            if std::fs::copy(path, snapshot.path()).is_err() {
+                continue;
+            }
+
+            let expected = std::fs::read(snapshot.path())
+                .unwrap()
+                .last()
+                .copied()
+                .map_or_else(Vec::new, |byte| vec![byte]);
+            let actual = tail_path_to_buffer(path, &options);
+
+            assert_eq!(actual, expected, "special file regression: {raw_path}");
+        }
+    }
+
     #[test]
     #[serial]
     fn test_tail_unbounded_lines_negative() {

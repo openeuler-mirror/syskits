@@ -12,8 +12,7 @@
 use crate::text;
 use ctcore::ct_error::CTResult;
 use std::ffi::OsStr;
-use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::fs::Metadata;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
@@ -140,25 +139,9 @@ impl TailHeaderPrinter {
         }
     }
 }
-pub trait TailFileExtTail {
-    #[allow(clippy::wrong_self_convention)]
-    fn is_seekable(&mut self, current_offset: u64) -> bool;
-}
-
-impl TailFileExtTail for File {
-    /// Test if File is seekable.
-    /// Set the current position offset to `current_offset`.
-    fn is_seekable(&mut self, current_offset: u64) -> bool {
-        self.stream_position().is_ok()
-            && self.seek(SeekFrom::End(0)).is_ok()
-            && self.seek(SeekFrom::Start(current_offset)).is_ok()
-    }
-}
-
 pub trait TailMetadataExt {
     fn is_tailable(&self) -> bool;
     fn got_truncated(&self, other: &Metadata) -> CTResult<bool>;
-    fn get_block_size(&self) -> u64;
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -178,17 +161,6 @@ impl TailMetadataExt for Metadata {
     /// Return true if the file was modified and is now shorter
     fn got_truncated(&self, other: &Metadata) -> CTResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
-    }
-
-    fn get_block_size(&self) -> u64 {
-        #[cfg(unix)]
-        {
-            self.blocks()
-        }
-        #[cfg(not(unix))]
-        {
-            self.len()
-        }
     }
 
     fn file_id_eq(&self, _other: &Metadata) -> bool {

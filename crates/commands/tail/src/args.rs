@@ -15,17 +15,17 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use clap::{crate_version, value_parser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::ct_show_warning;
 
 use crate::paths::TailInput;
-use crate::{parse, platform, Quotable};
+use crate::{Quotable, parse, platform};
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");

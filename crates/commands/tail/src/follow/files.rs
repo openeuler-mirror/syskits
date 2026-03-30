@@ -17,7 +17,7 @@ use ctcore::ct_error::CTResult;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{BufRead, BufReader, BufWriter, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, stdout};
 use std::path::{Path, PathBuf};
 
 /// 现在记录这个单词是否以标点符号结尾
@@ -96,8 +96,8 @@ impl FileHandling {
 
     /// Return true if there is at least one "tailable" path (or stdin) remaining
     pub fn files_remaining(&self) -> bool {
-        for path in self.map.keys() {
-            if path.is_tailable() || path.is_stdin() {
+        for (path, data) in &self.map {
+            if data.reader.is_some() || path.is_stdin() {
                 return true;
             }
         }
@@ -125,6 +125,16 @@ impl FileHandling {
         self.get_mut(path)
             .reader
             .replace(Box::new(BufReader::new(File::open(path)?)));
+        Ok(())
+    }
+
+    /// Reopen the file and position the reader at EOF.
+    pub fn update_reader_at_end(&mut self, path: &Path) -> CTResult<()> {
+        let mut file = File::open(path)?;
+        let _ = file.seek(SeekFrom::End(0))?;
+        self.get_mut(path)
+            .reader
+            .replace(Box::new(BufReader::new(file)));
         Ok(())
     }
 
@@ -209,5 +219,33 @@ impl PathData {
         };
 
         Self::new(reader, path.metadata().ok(), data.display_name.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::args::TailOptions;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn files_remaining_counts_open_reader_even_if_path_disappears() {
+        let mut files = FileHandling::from(&TailOptions::default());
+        let temp_dir = tempdir().unwrap();
+        let old_path = temp_dir.path().join("a");
+        let new_path = temp_dir.path().join("b");
+
+        fs::write(&old_path, b"x\n").unwrap();
+        let reader = Box::new(BufReader::new(File::open(&old_path).unwrap())) as Box<dyn BufRead>;
+        files.insert(
+            &old_path,
+            PathData::new(Some(reader), old_path.metadata().ok(), "a"),
+            false,
+        );
+
+        fs::rename(&old_path, &new_path).unwrap();
+
+        assert!(files.files_remaining());
     }
 }

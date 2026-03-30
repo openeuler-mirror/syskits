@@ -2036,12 +2036,48 @@ enum SortMonth {
     December,
 }
 
+#[cfg(unix)]
+fn get_locale_month_abbr(line_upper: &str) -> SortMonth {
+    use std::ffi::CStr;
+    // POSIX 标准的月份缩写常量
+    let constants = [
+        (ctcore::libc::ABMON_1, SortMonth::January),
+        (ctcore::libc::ABMON_2, SortMonth::February),
+        (ctcore::libc::ABMON_3, SortMonth::March),
+        (ctcore::libc::ABMON_4, SortMonth::April),
+        (ctcore::libc::ABMON_5, SortMonth::May),
+        (ctcore::libc::ABMON_6, SortMonth::June),
+        (ctcore::libc::ABMON_7, SortMonth::July),
+        (ctcore::libc::ABMON_8, SortMonth::August),
+        (ctcore::libc::ABMON_9, SortMonth::September),
+        (ctcore::libc::ABMON_10, SortMonth::October),
+        (ctcore::libc::ABMON_11, SortMonth::November),
+        (ctcore::libc::ABMON_12, SortMonth::December),
+    ];
+
+    for &(abmon, month) in &constants {
+        let ptr = unsafe { ctcore::libc::nl_langinfo(abmon) };
+        if !ptr.is_null() {
+            let cstr = unsafe { CStr::from_ptr(ptr) };
+            
+            let s = cstr.to_string_lossy();
+            let s_trimmed = s.trim_start().to_uppercase();
+            
+            if !s_trimmed.is_empty() && line_upper.starts_with(&s_trimmed) {
+                return month;
+            }
+        }
+    }
+    SortMonth::Unknown
+}
+
 /// 将开头字符串解析为月份，如果出错，则返回 Month::Unknown。
-/// 根据locale设置支持本地化月份名称。
+/// 根据 locale 设置支持本地化月份名称。
 fn sort_month_parse(line: &str) -> SortMonth {
     let line = line.trim();
+    let line_upper = line.to_uppercase();
 
-    // 英文月份名称（C/POSIX locale）
+    // 英文月份名称（C/POSIX locale），作为基础保底
     const MONTHS_EN: [(&str, SortMonth); 12] = [
         ("JAN", SortMonth::January),
         ("FEB", SortMonth::February),
@@ -2057,18 +2093,23 @@ fn sort_month_parse(line: &str) -> SortMonth {
         ("DEC", SortMonth::December),
     ];
 
-    // 首先尝试英文月份（保持向后兼容）
     for (month_str, month) in &MONTHS_EN {
-        if line.is_char_boundary(month_str.len())
-            && line[..month_str.len()].eq_ignore_ascii_case(month_str)
-        {
+        if line_upper.starts_with(month_str) {
             return *month;
         }
     }
 
-    // 如果使用非C locale，尝试本地化月份名称
+    // 如果使用非 C locale，尝试向系统请求本地化月份名称
     if hard_locale_time() {
-        // 中文月份名称示例（可以根据需要扩展）
+        #[cfg(unix)]
+        {
+            let m = get_locale_month_abbr(&line_upper);
+            if m != SortMonth::Unknown {
+                return m;
+            }
+        }
+
+        // 保留你原有的中文兜底
         const MONTHS_ZH: [(&str, SortMonth); 12] = [
             ("一月", SortMonth::January),
             ("二月", SortMonth::February),

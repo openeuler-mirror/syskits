@@ -198,6 +198,13 @@ fn tr_process<R: BufRead, W: Write>(
     writer: &mut W,
     flags: TrFlags,
 ) -> CTResult<()> {
+    // 提前触发一次缓冲区读取。
+    // 如果输入流是一个目录（例如执行 `tr 1 1 < .`），底层的 read 系统调用会立即返回 EISDIR 错误。
+    // 我们在这里拦截并抛出错误，防止底层的 translate_input 循环将其静默生吞。
+    if let Err(e) = reader.fill_buf() {
+        return Err(CtSimpleError::new(1, format!("read error: {}", e)));
+    }
+
     let mut sets_iter = flags.sets.iter().map(|c| c.as_str());
     let (set1, set2) = Sequence::solve_set_characters(
         sets_iter.next().unwrap_or_default().as_bytes(),

@@ -192,6 +192,20 @@ struct PrColumnModeOptions {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+struct JoinLineSegment {
+    text: String,
+    logical_width: usize,
+    has_separator: bool,
+    reset_position: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PrRenderedLine {
+    text: String,
+    has_separator: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 /// 行编号模式
 struct PrNumberingMode {
     width: usize,
@@ -1592,7 +1606,6 @@ fn pr_write_columns(
     let line_width = output_opts.line_width;
     let mut lines_printed = 0;
     let feed_line_present = output_opts.is_form_feed_used;
-    let mut not_found_break = false;
 
     let across_mode = output_opts
         .column_mode_options
@@ -1681,93 +1694,255 @@ fn pr_write_columns(
                 .collect()
         })
         .collect();
+    if columns > 1 {
+        return pr_write_multicolumn_table(
+            &table,
+            output_opts,
+            out,
+            line_separator,
+            feed_line_present,
+            across_mode,
+            &line_width,
+        );
+    }
 
     let blank_line = PrFileLine::default();
     for row in table {
-        let indexes = row.len();
-        let mut row_buffer = String::new();
-        if columns > 1 && output_opts.merge_files_print.is_none() && row.iter().all(|c| c.is_none())
-        {
+        let cell = row.first().copied().flatten();
+        if cell.is_none() {
             if feed_line_present || !output_opts.is_display_header_and_trailer {
                 if feed_line_present && lines_printed == 0 {
                     out.write_all(line_separator)?;
                 }
                 break;
-            } else {
-                out.write_all(line_separator)?;
-                continue;
             }
-        }
-        if output_opts.merge_files_print.is_some() && row.iter().all(|c| c.is_none()) {
-            if feed_line_present || !output_opts.is_display_header_and_trailer {
-                break;
-            } else {
-                out.write_all(line_separator)?;
-                continue;
-            }
-        }
-        for (i, cell) in row.iter().enumerate() {
-            if cell.is_none() && output_opts.merge_files_print.is_some() {
-                row_buffer.push_str(&pr_get_line_for_printing(
-                    output_opts,
-                    &blank_line,
-                    columns,
-                    i,
-                    &line_width,
-                    indexes,
-                )?);
-            } else if cell.is_none() {
-                if across_mode || columns == 1 {
-                    not_found_break = true;
-                    break;
-                }
-                row_buffer.push_str(&pr_get_line_for_printing(
-                    output_opts,
-                    &blank_line,
-                    columns,
-                    i,
-                    &line_width,
-                    indexes,
-                )?);
-            } else if cell.is_some() {
-                let file_line = cell.unwrap();
-
-                row_buffer.push_str(&pr_get_line_for_printing(
-                    output_opts,
-                    file_line,
-                    columns,
-                    i,
-                    &line_width,
-                    indexes,
-                )?);
-                lines_printed += 1;
-            }
-        }
-        let has_row_content = !row_buffer.is_empty();
-        if has_row_content {
-            let rendered_row = if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
-                replace_spaces_with_tabs(&row_buffer, tab_ch, tab_width)
-            } else {
-                row_buffer.clone()
-            };
-            if columns > 1 {
-                let trimmed = rendered_row.trim_end_matches([' ', '\t']);
-                out.write_all(trimmed.as_bytes())?;
-            } else {
-                out.write_all(rendered_row.as_bytes())?;
-            }
-        }
-        if not_found_break && (feed_line_present || !output_opts.is_display_header_and_trailer) {
-            if has_row_content {
-                out.write_all(line_separator)?;
-            } else if feed_line_present && lines_printed == 0 {
-                // GNU pr keeps one empty content line on an empty page in form-feed mode.
-                out.write_all(line_separator)?;
-            }
-            break;
-        } else {
             out.write_all(line_separator)?;
+            continue;
         }
+
+        let segment = pr_get_line_for_printing(
+            output_opts,
+            cell.unwrap_or(&blank_line),
+            columns,
+            0,
+            &line_width,
+            1,
+            true,
+        )?;
+        lines_printed += 1;
+        let rendered_row = if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
+            replace_spaces_with_tabs_by_segments(
+                &[format!("{}{}", output_opts.offset_spaces, segment)],
+                tab_ch,
+                tab_width,
+                true,
+            )
+        } else {
+            format!("{}{}", output_opts.offset_spaces, segment)
+        };
+        out.write_all(rendered_row.as_bytes())?;
+        out.write_all(line_separator)?;
+    }
+
+    Ok(lines_printed)
+}
+
+fn pr_write_multicolumn_table(
+    table: &[Vec<Option<&PrFileLine>>],
+    output_opts: &PrOutputOptions,
+    out: &mut impl Write,
+    line_separator: &[u8],
+    feed_line_present: bool,
+    across_mode: bool,
+    line_width: &Option<usize>,
+) -> Result<usize, std::io::Error> {
+    let columns = table.first().map_or(0, Vec::len);
+    let blank_line = PrFileLine::default();
+    let mut lines_printed = 0usize;
+
+    for row in table {
+        if row.iter().all(|cell| cell.is_none()) {
+            if feed_line_present || !output_opts.is_display_header_and_trailer {
+                if feed_line_present && lines_printed == 0 {
+                    out.write_all(line_separator)?;
+                }
+                break;
+            }
+            out.write_all(line_separator)?;
+            continue;
+        }
+
+        let last_actual_index = row.iter().rposition(|cell| cell.is_some());
+        let last_actual_has_inline_ff = last_actual_index
+            .and_then(|index| row.get(index).copied().flatten())
+            .is_some_and(|line| line.inline_form_feed_after);
+        let layout_indexes = if output_opts.merge_files_print.is_some()
+            && !output_opts.is_join_lines
+            && last_actual_has_inline_ff
+        {
+            row.iter()
+                .rposition(|cell| cell.is_some())
+                .map(|i| i + 1)
+                .unwrap_or(0)
+        } else if output_opts.is_join_lines
+            && (output_opts.merge_files_print.is_none() || last_actual_has_inline_ff)
+        {
+            row.iter()
+                .rposition(|cell| cell.is_some())
+                .map(|i| i + 1)
+                .unwrap_or(0)
+        } else if output_opts.merge_files_print.is_some() || across_mode {
+            columns
+        } else {
+            row.iter()
+                .rposition(|cell| cell.is_some())
+                .map(|i| i + 1)
+                .unwrap_or(0)
+        };
+        let mut row_segments: Vec<(String, bool, bool)> = Vec::new();
+        if !output_opts.offset_spaces.is_empty() {
+            row_segments.push((output_opts.offset_spaces.clone(), false, false));
+        }
+        let mut pending_empty_segments: Vec<(String, bool, bool)> = Vec::new();
+        let mut row_has_actual_cell = false;
+        for (index, cell) in row.iter().enumerate() {
+            if layout_indexes > 0 && index >= layout_indexes {
+                continue;
+            }
+            if output_opts.merge_files_print.is_none() && across_mode && cell.is_none() {
+                break;
+            }
+
+            let segment = if output_opts.is_join_lines {
+                match cell {
+                    Some(file_line) => {
+                        let rendered = pr_get_rendered_line_for_printing(
+                            output_opts,
+                            file_line,
+                            columns,
+                            index,
+                            line_width,
+                            layout_indexes,
+                            last_actual_index == Some(index),
+                        )?;
+                        lines_printed += 1;
+                        (rendered.text, rendered.has_separator, true)
+                    }
+                    None => {
+                        let rendered = pr_get_rendered_line_for_printing(
+                            output_opts,
+                            &blank_line,
+                            columns,
+                            index,
+                            line_width,
+                            layout_indexes,
+                            false,
+                        )?;
+                        (rendered.text, rendered.has_separator, false)
+                    }
+                }
+            } else {
+                let segment = match cell {
+                    Some(file_line) => {
+                        let segment = pr_get_line_for_printing(
+                            output_opts,
+                            file_line,
+                            columns,
+                            index,
+                            line_width,
+                            layout_indexes,
+                            last_actual_index == Some(index),
+                        )?;
+                        lines_printed += 1;
+                        segment
+                    }
+                    None => pr_get_line_for_printing(
+                        output_opts,
+                        &blank_line,
+                        columns,
+                        index,
+                        line_width,
+                        layout_indexes,
+                        false,
+                    )?,
+                };
+                (segment, false, cell.is_some())
+            };
+
+            if cell.is_some() {
+                row_segments.append(&mut pending_empty_segments);
+                row_segments.push(segment);
+                row_has_actual_cell = true;
+            } else if row_has_actual_cell {
+                row_segments.push(segment);
+            } else {
+                pending_empty_segments.push(segment);
+            }
+        }
+
+        let rendered_row = if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
+            if output_opts.is_join_lines {
+                let join_line_segments = row_segments
+                    .into_iter()
+                    .scan(
+                        0usize,
+                        |actual_segment_index, (text, has_separator, is_actual_cell)| {
+                            let is_offset_prefix = !output_opts.offset_spaces.is_empty()
+                                && *actual_segment_index == 0
+                                && !has_separator
+                                && text == output_opts.offset_spaces;
+                            let reset_position = if output_opts.merge_files_print.is_none()
+                                && !across_mode
+                                && is_actual_cell
+                                && !is_offset_prefix
+                            {
+                                let base = if *actual_segment_index == 0 {
+                                    UnicodeWidthStr::width(output_opts.offset_spaces.as_str())
+                                } else {
+                                    0
+                                };
+                                *actual_segment_index += 1;
+                                Some(base + pr_rendered_width(&text, 8))
+                            } else {
+                                None
+                            };
+                            Some(JoinLineSegment {
+                                logical_width: pr_rendered_width(&text, 8),
+                                text,
+                                has_separator,
+                                reset_position,
+                            })
+                        },
+                    )
+                    .collect::<Vec<_>>();
+                render_join_lines_segments(
+                    &join_line_segments,
+                    &output_opts.col_sep_for_printing,
+                    tab_ch,
+                    tab_width,
+                    output_opts.merge_files_print.is_none() && !across_mode,
+                )
+            } else {
+                let row_segments = row_segments
+                    .iter()
+                    .map(|(segment, _, _)| segment.clone())
+                    .collect::<Vec<_>>();
+                replace_spaces_with_tabs_by_segments(&row_segments, tab_ch, tab_width, false)
+            }
+        } else {
+            row_segments
+                .into_iter()
+                .map(|(segment, has_separator, _)| {
+                    if has_separator {
+                        format!("{segment}{}", output_opts.col_sep_for_printing)
+                    } else {
+                        segment
+                    }
+                })
+                .collect::<String>()
+        };
+        out.write_all(rendered_row.as_bytes())?;
+        out.write_all(line_separator)?;
     }
 
     Ok(lines_printed)
@@ -1780,15 +1955,53 @@ fn pr_get_line_for_printing(
     index: usize,
     line_width: &Option<usize>,
     indexes: usize,
+    is_last_actual_column: bool,
 ) -> Result<String, std::io::Error> {
-    let blank_line = String::new();
+    let rendered = pr_get_rendered_line_for_printing(
+        output_opts,
+        file_line,
+        columns,
+        index,
+        line_width,
+        indexes,
+        is_last_actual_column,
+    )?;
+    if rendered.has_separator {
+        Ok(format!(
+            "{}{}",
+            rendered.text, output_opts.col_sep_for_printing
+        ))
+    } else {
+        Ok(rendered.text)
+    }
+}
+
+fn pr_get_rendered_line_for_printing(
+    output_opts: &PrOutputOptions,
+    file_line: &PrFileLine,
+    columns: usize,
+    index: usize,
+    line_width: &Option<usize>,
+    indexes: usize,
+    is_last_actual_column: bool,
+) -> Result<PrRenderedLine, std::io::Error> {
     let formatted_line_number =
         pr_get_formatted_line_number(output_opts, file_line.line_number, index);
+    let numbering_width = pr_rendered_width(&formatted_line_number, 8);
 
     let mut content = match &file_line.line_content {
         Ok(content) => {
             if let Some((tab_ch, tab_width)) = output_opts.expand_tabs {
-                expand_tabs_to_spaces(content, tab_ch, tab_width)
+                let expand_plain_tabs = tab_ch != '\t'
+                    && (output_opts.merge_files_print.is_some()
+                        || output_opts.column_mode_options.is_some());
+                expand_tabs_to_spaces(
+                    content,
+                    tab_ch,
+                    tab_width,
+                    numbering_width,
+                    expand_plain_tabs,
+                )
             } else {
                 content.clone()
             }
@@ -1804,22 +2017,23 @@ fn pr_get_line_for_printing(
         );
     }
 
+    if output_opts.merge_files_print.is_some() && !output_opts.is_join_lines {
+        content = content.trim_end_matches([' ', '\t']).to_string();
+    }
+
     let complete_line = format!("{formatted_line_number}{content}");
 
-    let offset_spaces = &output_opts.offset_spaces;
+    let display_length = pr_rendered_width(&complete_line, 8);
 
-    let tab_count = complete_line.chars().filter(|i| i == &PR_TAB).count();
-
-    let display_length = UnicodeWidthStr::width(complete_line.as_str()) + (tab_count * 7);
-
+    let has_no_separator = output_opts.col_sep_for_printing.is_empty();
     let is_string_sep = !output_opts.col_sep_for_printing.is_empty()
         && output_opts.col_sep_for_printing != "\t"
         && output_opts.col_sep_for_printing != " ";
 
-    let sep = if (!output_opts.is_pad_columns || is_string_sep) && (index + 1) != indexes {
-        &output_opts.col_sep_for_printing
+    let parallel_number_field_width = if output_opts.merge_files_print.is_some() {
+        pr_get_number_field_width_for_multicolumn(output_opts)
     } else {
-        &blank_line
+        None
     };
 
     let result_line = line_width
@@ -1827,14 +2041,17 @@ fn pr_get_line_for_printing(
             // When is_pad_columns is true, the implicit separator (tab/space) between
             // columns takes 1 character of width, matching GNU pr's formula:
             // chars_per_column = (chars_per_line - (columns-1) * col_sep_length) / columns
-            let effective_sep_width = if output_opts.is_pad_columns && columns > 1 && !is_string_sep
-            {
-                1 // implicit tab/space separator
-            } else {
-                UnicodeWidthStr::width(output_opts.col_sep_for_printing.as_str())
-            };
+            let effective_sep_width =
+                if output_opts.is_pad_columns && columns > 1 && !is_string_sep && !has_no_separator
+                {
+                    1 // implicit tab/space separator
+                } else {
+                    UnicodeWidthStr::width(output_opts.col_sep_for_printing.as_str())
+                };
 
-            if i <= (columns - 1) * effective_sep_width {
+            let useful_line_width = i.saturating_sub(parallel_number_field_width.unwrap_or(0));
+
+            if useful_line_width <= (columns - 1) * effective_sep_width {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Page width too narrow".to_owned(),
@@ -1844,12 +2061,19 @@ fn pr_get_line_for_printing(
             // Should dynamic tab/space padding be generated?
             let should_pad = output_opts.is_pad_columns && index + 1 < indexes;
 
-            let min_width = i.saturating_sub((columns - 1) * effective_sep_width) / columns;
+            let mut min_width =
+                useful_line_width.saturating_sub((columns - 1) * effective_sep_width) / columns;
+
+            // GNU pr: for parallel mode (-m) with numbering, the line-number field
+            // is reserved once globally and effectively belongs to the first column.
+            if index == 0 {
+                min_width += parallel_number_field_width.unwrap_or(0);
+            }
 
             if should_pad {
                 // For implicit separators (default tab/space), pad includes +1 for separator.
                 // For explicit string separators (-S), the separator is appended via `sep`, so no +1.
-                let pad_target = if is_string_sep {
+                let pad_target = if is_string_sep || has_no_separator {
                     min_width
                 } else {
                     min_width + 1
@@ -1862,34 +2086,144 @@ fn pr_get_line_for_printing(
                         extended_line.push(' ');
                         current_len += 1;
                     }
-                    Ok(extended_line.chars().take(pad_target).collect::<String>())
+                    Ok((pr_take_display_width(&extended_line, pad_target, 8), false))
                 } else {
-                    let mut truncated: String = complete_line.chars().take(min_width).collect();
-                    if !is_string_sep {
+                    let mut truncated = pr_take_display_width(&complete_line, min_width, 8);
+                    let was_truncated = truncated.chars().count() < complete_line.chars().count();
+                    let omitted_suffix = &complete_line[truncated.len()..];
+                    let next_omitted_char = omitted_suffix.chars().next();
+                    let omitted_suffix_has_whitespace =
+                        omitted_suffix.chars().any(|c| matches!(c, ' ' | '\t'));
+                    let suppress_trailing_separator = output_opts.merge_files_print.is_some()
+                        && is_last_actual_column
+                        && file_line.inline_form_feed_after
+                        && was_truncated
+                        && (file_line.form_feeds_after > 1
+                            || !formatted_line_number.is_empty()
+                            || is_string_sep
+                            || truncated.ends_with([' ', '\t'])
+                            || omitted_suffix_has_whitespace
+                            || matches!(next_omitted_char, Some(' ' | '\t'))
+                            || output_opts.is_pad_columns);
+                    if suppress_trailing_separator {
+                        truncated = truncated.trim_end_matches([' ', '\t']).to_string();
+                    }
+                    if !is_string_sep && !has_no_separator && !suppress_trailing_separator {
                         truncated.push(' ');
                     }
-                    Ok(truncated)
+                    Ok((truncated, suppress_trailing_separator))
                 }
             } else {
-                Ok(complete_line.chars().take(min_width).collect::<String>())
+                let mut truncated = pr_take_display_width(&complete_line, min_width, 8);
+                let was_truncated = truncated.chars().count() < complete_line.chars().count();
+                let omitted_suffix = &complete_line[truncated.len()..];
+                let next_omitted_char = omitted_suffix.chars().next();
+                let omitted_suffix_has_whitespace =
+                    omitted_suffix.chars().any(|c| matches!(c, ' ' | '\t'));
+                let suppress_trailing_separator = output_opts.merge_files_print.is_some()
+                    && is_last_actual_column
+                    && file_line.inline_form_feed_after
+                    && was_truncated
+                    && (file_line.form_feeds_after > 1
+                        || !formatted_line_number.is_empty()
+                        || is_string_sep
+                        || truncated.ends_with([' ', '\t'])
+                        || omitted_suffix_has_whitespace
+                        || matches!(next_omitted_char, Some(' ' | '\t'))
+                        || output_opts.is_pad_columns);
+                if suppress_trailing_separator {
+                    truncated = truncated.trim_end_matches([' ', '\t']).to_string();
+                }
+                Ok((truncated, suppress_trailing_separator))
             }
         })
-        .unwrap_or_else(|| Ok(complete_line.clone()));
+        .unwrap_or_else(|| Ok((complete_line.clone(), false)));
 
-    result_line.map(|line| format!("{offset_spaces}{line}{sep}"))
+    result_line.map(|(line, suppress_trailing_separator)| {
+        let has_separator = !suppress_trailing_separator
+            && (!output_opts.is_pad_columns || is_string_sep)
+            && (index + 1) != indexes;
+        let text = if output_opts.merge_files_print.is_some() && index + 1 == indexes {
+            line.trim_end_matches([' ', '\t']).to_string()
+        } else {
+            line
+        };
+        PrRenderedLine {
+            text,
+            has_separator,
+        }
+    })
 }
 
-fn expand_tabs_to_spaces(s: &str, tab_char: char, tab_width: usize) -> String {
+fn pr_rendered_width(s: &str, tab_width: usize) -> usize {
+    if tab_width == 0 {
+        return UnicodeWidthStr::width(s);
+    }
+
+    let mut current_col = 0usize;
+    for c in s.chars() {
+        if c == '\t' {
+            current_col = (current_col / tab_width + 1) * tab_width;
+        } else if c == '\u{0008}' {
+            current_col = current_col.saturating_sub(1);
+        } else {
+            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+        }
+    }
+    current_col
+}
+
+fn pr_take_display_width(s: &str, max_width: usize, tab_width: usize) -> String {
+    let mut current_col = 0usize;
+    let mut result = String::new();
+
+    for c in s.chars() {
+        let next_col = if c == '\t' {
+            (current_col / tab_width + 1) * tab_width
+        } else if c == '\u{0008}' {
+            current_col.saturating_sub(1)
+        } else {
+            current_col + UnicodeWidthChar::width(c).unwrap_or(0)
+        };
+
+        if next_col > max_width {
+            break;
+        }
+
+        result.push(c);
+        current_col = next_col;
+    }
+
+    result
+}
+
+fn expand_tabs_to_spaces(
+    s: &str,
+    tab_char: char,
+    tab_width: usize,
+    initial_col: usize,
+    expand_plain_tabs: bool,
+) -> String {
     if tab_width == 0 {
         return s.to_string();
     }
     let mut res = String::new();
-    let mut current_col = 0;
+    let mut current_col = initial_col;
     for c in s.chars() {
-        if c == tab_char {
-            let spaces = tab_width - (current_col % tab_width);
+        if c == tab_char || (expand_plain_tabs && c == '\t') {
+            let width = if c == tab_char { tab_width } else { 8 };
+            let spaces = width - (current_col % width);
             res.push_str(&" ".repeat(spaces));
             current_col += spaces;
+        } else if c == '\t' {
+            res.push(c);
+            current_col = (current_col / 8 + 1) * 8;
+        } else if c == '\u{0008}' {
+            // Match GNU pr: backspaces beyond column 0 are ignored.
+            if current_col > 0 {
+                res.push(c);
+                current_col -= 1;
+            }
         } else {
             res.push(c);
             current_col += UnicodeWidthChar::width(c).unwrap_or(0);
@@ -1898,10 +2232,16 @@ fn expand_tabs_to_spaces(s: &str, tab_char: char, tab_width: usize) -> String {
     res
 }
 
-fn replace_spaces_with_tabs(s: &str, tab_char: char, tab_width: usize) -> String {
+fn replace_spaces_with_tabs_by_segments(
+    segments: &[String],
+    tab_char: char,
+    tab_width: usize,
+    flush_trailing_spaces: bool,
+) -> String {
     if tab_width == 0 {
-        return s.to_string();
+        return segments.concat();
     }
+
     let mut res = String::new();
     let mut current_col = 0usize;
     let mut pending_spaces = 0usize;
@@ -1932,22 +2272,143 @@ fn replace_spaces_with_tabs(s: &str, tab_char: char, tab_width: usize) -> String
         *pending_spaces = 0;
     };
 
-    for c in s.chars() {
-        if c == ' ' {
-            pending_spaces += 1;
-            continue;
-        }
+    for (index, segment) in segments.iter().enumerate() {
+        for c in segment.chars() {
+            if c == ' ' {
+                pending_spaces += 1;
+                continue;
+            }
 
-        flush_spaces(&mut res, &mut current_col, &mut pending_spaces);
-        res.push(c);
-        if c == '\t' {
-            current_col = (current_col / tab_width + 1) * tab_width;
-        } else {
-            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+            flush_spaces(&mut res, &mut current_col, &mut pending_spaces);
+            res.push(c);
+            if c == '\t' {
+                current_col = (current_col / tab_width + 1) * tab_width;
+            } else if c == '\u{0008}' {
+                current_col = current_col.saturating_sub(1);
+            } else {
+                current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+            }
+        }
+        let is_last_segment = index + 1 == segments.len();
+        if !is_last_segment || flush_trailing_spaces {
+            // Match GNU behavior: flush pending spaces between logical output chunks,
+            // but leave end-of-line pending spaces unprinted in multicolumn mode.
+            flush_spaces(&mut res, &mut current_col, &mut pending_spaces);
         }
     }
 
-    flush_spaces(&mut res, &mut current_col, &mut pending_spaces);
+    res
+}
+
+fn render_join_lines_segments(
+    segments: &[JoinLineSegment],
+    separator: &str,
+    tab_char: char,
+    tab_width: usize,
+    align_to_segment_logical_width: bool,
+) -> String {
+    if tab_width == 0 {
+        return segments
+            .iter()
+            .map(|segment| {
+                if segment.has_separator {
+                    format!("{}{}", segment.text, separator)
+                } else {
+                    segment.text.clone()
+                }
+            })
+            .collect();
+    }
+
+    let mut res = String::new();
+    let mut logical_col = 0usize;
+    let mut pending_spaces = 0usize;
+    let separator_width = if separator == "\t" {
+        1
+    } else {
+        UnicodeWidthStr::width(separator)
+    };
+
+    let flush_spaces = |res: &mut String, logical_col: &mut usize, pending_spaces: &mut usize| {
+        if *pending_spaces == 0 {
+            return;
+        }
+
+        let mut h_old = *logical_col;
+        let goal = h_old + *pending_spaces;
+
+        while goal.saturating_sub(h_old) > 1 {
+            let h_new = (h_old / tab_width + 1) * tab_width;
+            if h_new > goal {
+                break;
+            }
+            res.push(tab_char);
+            h_old = h_new;
+        }
+
+        while h_old < goal {
+            res.push(' ');
+            h_old += 1;
+        }
+
+        *logical_col = goal;
+        *pending_spaces = 0;
+    };
+
+    let emit_content_char =
+        |res: &mut String, logical_col: &mut usize, pending_spaces: &mut usize, c: char| {
+            if c == ' ' {
+                *pending_spaces += 1;
+                return;
+            }
+
+            flush_spaces(res, logical_col, pending_spaces);
+            res.push(c);
+            if c == '\u{0008}' {
+                *logical_col = logical_col.saturating_sub(1);
+            } else if c != '\t' {
+                *logical_col += UnicodeWidthChar::width(c).unwrap_or(0);
+            }
+        };
+
+    let emit_separator = |res: &mut String, logical_col: &mut usize, pending_spaces: &mut usize| {
+        let mut has_non_space = false;
+        for c in separator.chars() {
+            if c == ' ' {
+                *pending_spaces += 1;
+                continue;
+            }
+
+            has_non_space = true;
+            flush_spaces(res, logical_col, pending_spaces);
+            res.push(c);
+        }
+
+        if has_non_space {
+            *logical_col += separator_width;
+        }
+
+        if *pending_spaces > 0 {
+            flush_spaces(res, logical_col, pending_spaces);
+        }
+    };
+
+    for segment in segments {
+        let segment_start_col = logical_col;
+        for c in segment.text.chars() {
+            emit_content_char(&mut res, &mut logical_col, &mut pending_spaces, c);
+        }
+
+        if align_to_segment_logical_width && pending_spaces == 0 {
+            logical_col = segment
+                .reset_position
+                .unwrap_or(segment_start_col + segment.logical_width);
+        }
+
+        if segment.has_separator {
+            emit_separator(&mut res, &mut logical_col, &mut pending_spaces);
+        }
+    }
 
     res
 }
@@ -1962,7 +2423,19 @@ fn pr_get_formatted_line_number(
         let line_str = line_number.to_string();
         let num_opt = output_opts.number.as_ref().unwrap();
         let width = num_opt.width;
-        let separator = &num_opt.separator;
+        let is_multicolumn = output_opts
+            .merge_files_print
+            .unwrap_or_else(|| pr_get_columns(output_opts))
+            > 1;
+        let separator = if is_multicolumn && !output_opts.is_join_lines && num_opt.separator == "\t"
+        {
+            // GNU pr: in multicolumn output, default line-number TAB uses a fixed
+            // width (from column start), so it behaves like spaces before tabify.
+            let spaces = 8 - (width % 8);
+            " ".repeat(spaces)
+        } else {
+            num_opt.separator.clone()
+        };
         if line_str.len() >= width {
             format!(
                 "{:>width$}{}",
@@ -1975,6 +2448,18 @@ fn pr_get_formatted_line_number(
     } else {
         String::new()
     }
+}
+
+fn pr_get_number_field_width_for_multicolumn(output_opts: &PrOutputOptions) -> Option<usize> {
+    output_opts.number.as_ref().map(|num_opt| {
+        let width = num_opt.width;
+        let separator_width = if num_opt.separator == "\t" {
+            8 - (width % 8)
+        } else {
+            UnicodeWidthStr::width(num_opt.separator.as_str())
+        };
+        width + separator_width
+    })
 }
 
 fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting: bool) -> String {

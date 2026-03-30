@@ -160,6 +160,7 @@ struct PrFileLine {
     group_key: usize,
     line_content: Result<String, std::io::Error>,
     form_feeds_after: usize,
+    inline_form_feed_after: bool,
 }
 
 impl PartialEq for PrFileLine {
@@ -169,6 +170,7 @@ impl PartialEq for PrFileLine {
             || self.page_number != other.page_number
             || self.group_key != other.group_key
             || self.form_feeds_after != other.form_feeds_after
+            || self.inline_form_feed_after != other.inline_form_feed_after
         {
             return false;
         }
@@ -202,7 +204,7 @@ impl Default for PrNumberingMode {
         Self {
             width: 5,
             separator: PR_TAB.to_string(),
-            first_number: 1,
+            first_number: 0,
         }
     }
 }
@@ -216,6 +218,7 @@ impl Default for PrFileLine {
             group_key: 0,
             line_content: Ok(String::new()),
             form_feeds_after: 0,
+            inline_form_feed_after: false,
         }
     }
 }
@@ -1172,37 +1175,36 @@ fn pr_open(path: &str) -> Result<Box<dyn Read>, PrError> {
 
 fn pr_split_lines_if_form_feed(
     file_content: Result<String, std::io::Error>,
-    is_omit_pagination: bool,
+    _is_omit_pagination: bool,
 ) -> Vec<PrFileLine> {
     file_content
         .map(|content| {
             let mut lines = Vec::new();
             let mut f_occurred = 0;
             let mut chunk = Vec::new();
+
             for byte in content.as_bytes() {
-                if byte == &PR_FF && !is_omit_pagination {
+                if *byte == PR_FF {
                     f_occurred += 1;
-                } else if byte == &PR_FF && is_omit_pagination {
-                    // 忽略换页符
                     continue;
-                } else {
-                    if f_occurred != 0 {
-                        // 扫描中首次出现字节
-                        lines.push(PrFileLine {
-                            line_content: Ok(String::from_utf8(chunk.clone()).unwrap()),
-                            form_feeds_after: f_occurred,
-                            ..PrFileLine::default()
-                        });
-                        chunk.clear();
-                    }
-                    chunk.push(*byte);
+                }
+
+                if f_occurred != 0 {
+                    lines.push(PrFileLine {
+                        line_content: Ok(String::from_utf8(std::mem::take(&mut chunk)).unwrap()),
+                        form_feeds_after: f_occurred,
+                        inline_form_feed_after: true,
+                        ..PrFileLine::default()
+                    });
                     f_occurred = 0;
                 }
+                chunk.push(*byte);
             }
 
             lines.push(PrFileLine {
                 line_content: Ok(String::from_utf8(chunk).unwrap()),
                 form_feeds_after: f_occurred,
+                inline_form_feed_after: f_occurred > 0,
                 ..PrFileLine::default()
             });
 
@@ -1237,52 +1239,74 @@ fn pr_read_stream_and_create_pages(
 ) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>> {
     let start_page = output_opts.start_page;
     let start_line_number = pr_get_start_line_number(output_opts);
+    let renumber_from_first_printed_page = output_opts
+        .number
+        .as_ref()
+        .is_some_and(|number| number.first_number != 0);
     let last_page = output_opts.end_page;
     let lines_needed_per_page = pr_lines_to_read_for_page(output_opts);
     let is_omit_pagination = output_opts.is_omit_pagination;
+    let keep_input_form_feeds =
+        !output_opts.is_display_header_and_trailer && !output_opts.is_omit_pagination;
     let mut ignore_next_leading_form_feed = false;
-
     Box::new(
         lines
             .flat_map(move |l| pr_split_lines_if_form_feed(l, is_omit_pagination))
-            .enumerate()
-            .map(move |(i, line)| PrFileLine {
-                line_number: i + start_line_number,
-                file_id,
-                ..line
-            }) // 添加行号和文件 ID
+            .scan(start_line_number, move |next_line_number, line| {
+                let is_form_feed_marker = line.form_feeds_after > 0
+                    && matches!(line.line_content.as_ref(), Ok(content) if content.is_empty());
+                let line_number = if is_form_feed_marker {
+                    0
+                } else {
+                    let current = *next_line_number;
+                    *next_line_number += 1;
+                    current
+                };
+
+                Some(PrFileLine {
+                    line_number,
+                    file_id,
+                    ..line
+                })
+            })
             .batching(move |it| {
-                let mut first_page = Vec::new();
-                let mut page_with_lines = Vec::new();
+                let mut first_page: Vec<PrFileLine> = Vec::new();
+                let mut page_with_lines: Vec<Vec<PrFileLine>> = Vec::new();
                 for line in it {
                     let form_feeds_after = line.form_feeds_after;
                     let is_form_feed_marker = form_feeds_after > 0
                         && matches!(line.line_content.as_ref(), Ok(content) if content.is_empty());
 
-                    if is_omit_pagination {
-                        if !is_form_feed_marker {
-                            first_page.push(line);
-                        }
-                        continue;
-                    }
-
                     if is_form_feed_marker {
+                        let mut effective_form_feeds_after = form_feeds_after;
                         if first_page.is_empty()
                             && ignore_next_leading_form_feed
-                            && form_feeds_after == 1
+                            && !keep_input_form_feeds
                         {
-                            // GNU pr avoids creating an extra empty page when a full page
-                            // boundary is immediately followed by a form-feed marker.
+                            // GNU pr consumes one leading form feed if the previous page
+                            // was already full (FF-coincidence case), which prevents an
+                            // extra empty page.
+                            effective_form_feeds_after =
+                                effective_form_feeds_after.saturating_sub(1);
                             ignore_next_leading_form_feed = false;
-                            continue;
+                            if effective_form_feeds_after == 0 {
+                                continue;
+                            }
                         }
 
                         if first_page.is_empty() {
                             page_with_lines.push(vec![]);
                         } else {
+                            if let Some(last) = first_page.last_mut() {
+                                // If we hit an FF-only marker after printable content, one FF
+                                // belongs to the current page boundary; remaining FFs become
+                                // empty pages below.
+                                last.form_feeds_after = last.form_feeds_after.max(1);
+                                last.inline_form_feed_after = false;
+                            }
                             page_with_lines.push(first_page);
                         }
-                        for _i in 1..form_feeds_after {
+                        for _i in 1..effective_form_feeds_after {
                             page_with_lines.push(vec![]);
                         }
                         ignore_next_leading_form_feed = false;
@@ -1310,7 +1334,8 @@ fn pr_read_stream_and_create_pages(
                 if first_page.is_empty() {
                     return None;
                 }
-                ignore_next_leading_form_feed = first_page.len() == lines_needed_per_page
+                ignore_next_leading_form_feed = !keep_input_form_feeds
+                    && first_page.len() == lines_needed_per_page
                     && first_page
                         .last()
                         .is_some_and(|line| line.form_feeds_after == 0);
@@ -1330,67 +1355,162 @@ fn pr_read_stream_and_create_pages(
 
                 current_page >= start_page
                     && last_page.is_none_or(|last_page| current_page <= last_page)
+            })
+            .scan(start_line_number, move |next_line_number, (page_index, page_lines)| {
+                if !renumber_from_first_printed_page {
+                    return Some((page_index, page_lines));
+                }
+
+                let page_lines = page_lines
+                    .into_iter()
+                    .map(|line| {
+                        let is_form_feed_marker = line.form_feeds_after > 0
+                            && matches!(line.line_content.as_ref(), Ok(content) if content.is_empty());
+                        let line_number = if is_form_feed_marker {
+                            0
+                        } else {
+                            let current = *next_line_number;
+                            *next_line_number += 1;
+                            current
+                        };
+
+                        PrFileLine {
+                            line_number,
+                            ..line
+                        }
+                    })
+                    .collect();
+
+                Some((page_index, page_lines))
             }),
     )
 }
 
 fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrError> {
-    let n_files = paths.len();
-
     // 检查文件是否存在
     for path in paths {
         pr_open(path)?;
     }
 
-    let file_line_groups = paths
+    let file_pages = paths
         .iter()
         .enumerate()
         .map(|(i, path)| {
+            let mut page_input_opts = output_opts.clone();
+            page_input_opts.start_page = 1;
             let lines =
                 BufReader::with_capacity(PR_READ_BUFFER_SIZE, pr_open(path).unwrap()).lines();
 
-            pr_read_stream_and_create_pages(output_opts, lines, i).flat_map(move |(x, line)| {
-                let file_line = line;
-                let page_number = x + 1;
-                file_line
-                    .into_iter()
-                    .map(|fl| PrFileLine {
-                        page_number,
-                        group_key: page_number * n_files + fl.file_id,
-                        ..fl
-                    })
-                    .collect::<Vec<_>>()
+            pr_read_stream_and_create_pages(&page_input_opts, lines, i).collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let start_page_index = output_opts.start_page.saturating_sub(1);
+    let maybe_last_page_index = file_pages
+        .iter()
+        .filter_map(|pages| pages.last().map(|(page_index, _)| *page_index))
+        .max();
+
+    let Some(last_page_index) = maybe_last_page_index else {
+        return Ok(0);
+    };
+
+    let renumber_from_first_printed_page = output_opts
+        .number
+        .as_ref()
+        .is_some_and(|number| number.first_number != 0);
+    let mut next_merge_line_number = None;
+
+    for page_index in start_page_index..=last_page_index {
+        let page_number = page_index + 1;
+        let page_lines_by_file = file_pages
+            .iter()
+            .map(|pages| {
+                pages
+                    .iter()
+                    .find(|(idx, _)| *idx == page_index)
+                    .map(|(_, page_lines)| page_lines)
             })
-        })
-        .kmerge_by(|a, b| {
-            if a.group_key == b.group_key {
-                a.line_number < b.line_number
+            .collect::<Vec<_>>();
+        let rows_in_page = if output_opts.is_omit_pagination {
+            page_lines_by_file
+                .iter()
+                .filter_map(|page_lines| page_lines.map(Vec::len))
+                .max()
+                .unwrap_or(0)
+        } else if output_opts.is_double_space {
+            output_opts.content_lines_per_page / 2
+        } else {
+            output_opts.content_lines_per_page
+        };
+        let mut merged_columns = (0..paths.len()).map(|_| Vec::new()).collect::<Vec<_>>();
+
+        for row_index in 0..rows_in_page {
+            let row_has_content = page_lines_by_file
+                .iter()
+                .any(|page_lines| page_lines.and_then(|lines| lines.get(row_index)).is_some());
+
+            if !row_has_content {
+                continue;
+            }
+
+            let first_file_line = page_lines_by_file
+                .first()
+                .and_then(|page_lines| page_lines.and_then(|lines| lines.get(row_index)));
+            let row_line_number = if output_opts.number.is_some() {
+                let current = next_merge_line_number.unwrap_or_else(|| {
+                    if renumber_from_first_printed_page {
+                        pr_get_start_line_number(output_opts)
+                    } else {
+                        first_file_line
+                            .map(|file_line| file_line.line_number)
+                            .unwrap_or_else(|| pr_get_start_line_number(output_opts))
+                    }
+                });
+                next_merge_line_number = Some(current.saturating_add(1));
+                current
             } else {
-                a.group_key < b.group_key
-            }
-        })
-        .group_by(|file_line| file_line.group_key);
+                0
+            };
 
-    let start_page = output_opts.start_page;
-    let mut lines = Vec::new();
-    let mut page_counter = start_page;
-
-    for (_key, file_line_group) in &file_line_groups {
-        for file_line in file_line_group {
-            if let Err(e) = file_line.line_content {
-                return Err(e.into());
+            for (file_id, page_lines) in page_lines_by_file.iter().enumerate() {
+                if let Some(file_line) = page_lines.and_then(|lines| lines.get(row_index)) {
+                    match &file_line.line_content {
+                        Ok(content) => merged_columns[file_id].push(PrFileLine {
+                            file_id,
+                            line_number: if file_id == 0 {
+                                row_line_number
+                            } else {
+                                file_line.line_number
+                            },
+                            page_number,
+                            group_key: page_number * paths.len() + file_id,
+                            line_content: Ok(content.clone()),
+                            form_feeds_after: file_line.form_feeds_after,
+                            inline_form_feed_after: file_line.inline_form_feed_after,
+                        }),
+                        Err(e) => return Err(std::io::Error::new(e.kind(), e.to_string()).into()),
+                    }
+                } else if file_id == 0 && output_opts.number.is_some() {
+                    merged_columns[file_id].push(PrFileLine {
+                        file_id,
+                        line_number: row_line_number,
+                        page_number,
+                        group_key: page_number * paths.len() + file_id,
+                        line_content: Ok(String::new()),
+                        form_feeds_after: 0,
+                        inline_form_feed_after: false,
+                    });
+                }
             }
-            let new_page_number = file_line.page_number;
-            if page_counter != new_page_number {
-                pr_print_page(&lines, output_opts, page_counter)?;
-                lines = Vec::new();
-                page_counter = new_page_number;
-            }
-            lines.push(file_line);
         }
-    }
 
-    pr_print_page(&lines, output_opts, page_counter)?;
+        let merged_lines = merged_columns.into_iter().flatten().collect::<Vec<_>>();
+
+        let mut page_output_opts = output_opts.clone();
+        page_output_opts.merge_files_print = Some(paths.len());
+        pr_print_page(&merged_lines, &page_output_opts, page_number)?;
+    }
 
     Ok(0)
 }
@@ -1414,6 +1534,16 @@ fn pr_output_page(
 ) -> Result<usize, Error> {
     let line_separator = output_opts.line_separator.as_bytes();
     let page_separator = output_opts.page_separator_char.as_bytes();
+    let keep_input_form_feeds =
+        !output_opts.is_display_header_and_trailer && !output_opts.is_omit_pagination;
+    let page_has_input_form_feed =
+        keep_input_form_feeds && lines.iter().any(|line| line.form_feeds_after > 0);
+
+    if keep_input_form_feeds && lines.is_empty() {
+        out.write_all(&[PR_FF])?;
+        out.flush()?;
+        return Ok(0);
+    }
 
     let header = pr_header_content(output_opts, page);
     let trailer_content = pr_trailer_content(output_opts);
@@ -1433,6 +1563,8 @@ fn pr_output_page(
     }
     if output_opts.is_display_header_and_trailer {
         out.write_all(page_separator)?;
+    } else if page_has_input_form_feed {
+        out.write_all(&[PR_FF])?;
     }
     out.flush()?;
     Ok(lines_written)
@@ -1446,7 +1578,7 @@ fn pr_write_columns(
 ) -> Result<usize, std::io::Error> {
     let line_separator = output_opts.content_line_separator.as_bytes();
 
-    let content_lines_per_page = if output_opts.is_double_space {
+    let mut content_lines_per_page = if output_opts.is_double_space {
         output_opts.content_lines_per_page / 2
     } else {
         output_opts.content_lines_per_page
@@ -1467,6 +1599,22 @@ fn pr_write_columns(
         .as_ref()
         .map(|i| i.is_across_mode)
         .unwrap_or(false);
+
+    if output_opts.is_omit_pagination {
+        content_lines_per_page = if output_opts.merge_files_print.is_some() {
+            (0..columns)
+                .map(|column_id| {
+                    lines
+                        .iter()
+                        .filter(|line| line.file_id == column_id)
+                        .count()
+                })
+                .max()
+                .unwrap_or(0)
+        } else {
+            lines.len().div_ceil(columns)
+        };
+    }
 
     let mut filled_lines = Vec::new();
     if output_opts.merge_files_print.is_some() {
@@ -1945,7 +2093,13 @@ fn pr_get_start_line_number(output_opts: &PrOutputOptions) -> usize {
     output_opts
         .number
         .as_ref()
-        .map(|i| i.first_number)
+        .map(|i| {
+            if i.first_number == 0 {
+                1
+            } else {
+                i.first_number
+            }
+        })
         .unwrap_or(1)
 }
 

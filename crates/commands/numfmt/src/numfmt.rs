@@ -565,7 +565,7 @@ mod tests {
 
             let input_line = "abc";
             let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
-            let expected_result2 = "invalid suffix in input: 'abc'".to_string();
+            let expected_result2 = "invalid number: 'abc'".to_string();
             assert!(result2.is_err());
             assert_eq!(result2.unwrap_err().to_string(), expected_result2);
         }
@@ -8607,9 +8607,9 @@ mod tests {
             let result_display = format!("{result}");
             assert_eq!(
                 result_debug,
-                "NumfmtFormattingError(\"invalid suffix in input: 'hello'\")"
+                "NumfmtFormattingError(\"invalid number: 'hello'\")"
             );
-            assert_eq!(result_display, "invalid suffix in input: 'hello'");
+            assert_eq!(result_display, "invalid number: 'hello'");
             assert_eq!(result.code(), 2);
         }
 

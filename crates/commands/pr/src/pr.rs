@@ -13,6 +13,8 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
+#[cfg(unix)]
+use std::ffi::CString;
 use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -45,10 +47,52 @@ const PR_DEFAULT_COLUMN_SEPARATOR: &char = &' ';
 const PR_FF: u8 = 0x0C_u8;
 // 根据locale选择时间格式
 fn get_pr_date_time_format() -> &'static str {
-    if hard_locale_time() {
-        "%Y-%m-%d %H:%M" // ISO格式用于非C locale
+    if std::env::var_os("POSIXLY_CORRECT").is_some() && !hard_locale_time() {
+        "%b %d %H:%M %Y" // POSIXLY_CORRECT + C/POSIX locale
     } else {
-        "%b %d %H:%M %Y" // 英文月份缩写格式用于C/POSIX locale
+        "%Y-%m-%d %H:%M" // GNU 默认格式
+    }
+}
+
+#[cfg(unix)]
+fn pr_format_local_time_strftime(seconds: i64, fmt: &str) -> Option<String> {
+    let time = ctcore::libc::time_t::try_from(seconds).ok()?;
+    let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
+    let c_format = CString::new(fmt).ok()?;
+    let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
+    if tm_ptr.is_null() {
+        return None;
+    }
+
+    let mut capacity = 128usize;
+    while capacity <= 8192 {
+        let mut buf = vec![0u8; capacity];
+        let written = unsafe {
+            ctcore::libc::strftime(
+                buf.as_mut_ptr() as *mut ctcore::libc::c_char,
+                capacity,
+                c_format.as_ptr(),
+                &tm as *const _,
+            )
+        };
+        if written > 0 {
+            buf.truncate(written);
+            return String::from_utf8(buf).ok();
+        }
+        capacity *= 2;
+    }
+    None
+}
+
+fn pr_format_local_datetime(fmt: &str, date_time: DateTime<Local>) -> String {
+    #[cfg(unix)]
+    {
+        pr_format_local_time_strftime(date_time.timestamp(), fmt)
+            .unwrap_or_else(|| date_time.format(fmt).to_string())
+    }
+    #[cfg(not(unix))]
+    {
+        date_time.format(fmt).to_string()
     }
 }
 
@@ -972,8 +1016,7 @@ fn parse_start_end_page(
 
 fn parse_last_modified_time(fmt: &str, paths: &[&str], is_merge_mode: bool) -> String {
     if is_merge_mode || paths[0].eq(PR_FILE_STDIN) {
-        let date_time = Local::now();
-        date_time.format(fmt).to_string()
+        pr_format_local_datetime(fmt, Local::now())
     } else {
         pr_file_last_modified_time(paths.first().unwrap(), fmt)
     }
@@ -2890,6 +2933,14 @@ mod tests {
             let result = parse_last_modified_time(fmt, paths, true);
             // 在合并模式下，函数仍然会返回当前时间，而不是空字符串
             assert!(!result.is_empty());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_parse_last_modified_time_percent_z_not_offset_with_colon() {
+            let out = parse_last_modified_time("%Z", &[PR_FILE_STDIN], true);
+            assert!(!out.is_empty());
+            assert!(!out.contains(':'));
         }
 
         #[test]
@@ -5001,19 +5052,33 @@ mod tests {
             }
         }
 
-        fn save_locale_env() -> (Option<String>, Option<String>, Option<String>) {
+        fn save_locale_env() -> (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ) {
             (
                 env::var("LC_ALL").ok(),
                 env::var("LC_TIME").ok(),
                 env::var("LANG").ok(),
+                env::var("POSIXLY_CORRECT").ok(),
             )
         }
 
-        fn restore_locale_env(saved: (Option<String>, Option<String>, Option<String>)) {
-            let (lc_all, lc_time, lang) = saved;
+        fn restore_locale_env(
+            saved: (
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ),
+        ) {
+            let (lc_all, lc_time, lang, posixly_correct) = saved;
             set_or_remove_env("LC_ALL", lc_all.as_deref());
             set_or_remove_env("LC_TIME", lc_time.as_deref());
             set_or_remove_env("LANG", lang.as_deref());
+            set_or_remove_env("POSIXLY_CORRECT", posixly_correct.as_deref());
         }
 
         #[test]
@@ -5025,9 +5090,26 @@ mod tests {
             set_or_remove_env("LC_ALL", None);
             set_or_remove_env("LANG", None);
             set_or_remove_env("LC_TIME", Some("C"));
+            set_or_remove_env("POSIXLY_CORRECT", Some("1"));
 
-            // C locale应该使用英文格式
+            // POSIXLY_CORRECT + C locale 应使用英文格式
             assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
+
+            restore_locale_env(saved);
+        }
+
+        #[test]
+        fn test_get_pr_date_time_format_c_locale_default_iso() {
+            let _guard = LOCALE_TEST_LOCK
+                .lock()
+                .expect("failed to lock locale test mutex");
+            let saved = save_locale_env();
+            set_or_remove_env("LC_ALL", None);
+            set_or_remove_env("LANG", None);
+            set_or_remove_env("LC_TIME", Some("C"));
+            set_or_remove_env("POSIXLY_CORRECT", None);
+
+            assert_eq!(get_pr_date_time_format(), "%Y-%m-%d %H:%M");
 
             restore_locale_env(saved);
         }
@@ -5041,8 +5123,9 @@ mod tests {
             set_or_remove_env("LC_ALL", None);
             set_or_remove_env("LANG", None);
             set_or_remove_env("LC_TIME", Some("zh_CN.UTF-8"));
+            set_or_remove_env("POSIXLY_CORRECT", Some("1"));
 
-            // 非C locale应该使用ISO格式
+            // 非C/POSIX locale 应使用 ISO 格式
             let format = get_pr_date_time_format();
             if hard_locale_time() {
                 assert_eq!(format, "%Y-%m-%d %H:%M");
@@ -5063,8 +5146,9 @@ mod tests {
             set_or_remove_env("LC_ALL", None);
             set_or_remove_env("LANG", None);
             set_or_remove_env("LC_TIME", Some("POSIX"));
+            set_or_remove_env("POSIXLY_CORRECT", Some("1"));
 
-            // POSIX locale应该使用英文格式
+            // POSIXLY_CORRECT + POSIX locale 应使用英文格式
             assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
 
             restore_locale_env(saved);
@@ -5078,6 +5162,7 @@ mod tests {
             let saved = save_locale_env();
             set_or_remove_env("LC_ALL", None);
             set_or_remove_env("LANG", None);
+            set_or_remove_env("POSIXLY_CORRECT", None);
 
             // 测试hard_locale_time函数的使用
             set_or_remove_env("LC_TIME", Some("C"));

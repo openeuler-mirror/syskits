@@ -325,7 +325,7 @@ fn odexec_strings<R: Read>(
             } else {
                 // GNU 规范：字符串必须以 NUL (\0) 字节结尾才算合法！
                 if buffer.len() >= min_len && b == 0 {
-                    print_string_record(string_start, radix, &buffer);
+                    print_string_record(string_start, radix, &buffer)?;
                 }
                 buffer.clear();
             }
@@ -333,13 +333,11 @@ fn odexec_strings<R: Read>(
         }
     }
 
-    // 文件流结尾时的特殊处理：
-    // 如果是因为触碰到了 -N 的限制而强行截断的流，即使没有 \0 结尾也要打印；
-    // 如果是正常的 EOF 结尾并且没有 \0，则根据 GNU 规范直接丢弃忽略。
+    // 文件流结尾时的特殊处理
     if buffer.len() >= min_len {
         if let Some(limit) = read_bytes {
             if bytes_read_total == limit {
-                print_string_record(string_start, radix, &buffer);
+                print_string_record(string_start, radix, &buffer)?;
             }
         }
     }
@@ -347,7 +345,10 @@ fn odexec_strings<R: Read>(
     Ok(())
 }
 
-fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) {
+fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<()> {
+    use std::io::Write as _;
+    let mut stdout = std::io::stdout().lock();
+
     let address = match radix {
         OdRadix::Octal => format!("{:07o}", offset),
         OdRadix::Decimal => format!("{:07}", offset),
@@ -359,10 +360,11 @@ fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) {
     let s = unsafe { std::str::from_utf8_unchecked(buffer) };
 
     if address.is_empty() {
-        println!("{}", s);
+        writeln!(stdout, "{}", s).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     } else {
-        println!("{} {}", address, s);
+        writeln!(stdout, "{} {}", address, s).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
+    Ok(())
 }
 
 pub fn ct_app() -> Command {
@@ -519,13 +521,14 @@ fn od_process_next_line<I: PeekRead + HasError>(
             }
 
             od_handle_incomplete_line(&mut memory_decoder, length, output_info);
+            // 向上抛出 I/O 错误
             od_process_line_content(
                 input_offset,
                 &mut memory_decoder,
                 output_info,
                 state,
                 length,
-            );
+            )?;
 
             Ok(LineProcessResult::Continue)
         }
@@ -554,11 +557,14 @@ fn od_process_line_content(
     output_info: &OutputInfo,
     state: &mut DuplicateState,
     length: usize,
-) {
+) -> CTResult<()> {
+    use std::io::Write as _;
+    let mut stdout = std::io::stdout().lock();
+
     if is_duplicate_line(memory_decoder, output_info, state, length) {
         if !state.is_duplicate {
             state.is_duplicate = true;
-            println!("*");
+            writeln!(stdout, "*").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         }
     } else {
         state.is_duplicate = false;
@@ -569,9 +575,10 @@ fn od_process_line_content(
             &input_offset.format_byte_offset(),
             memory_decoder,
             output_info,
-        );
+        )?;
     }
     input_offset.increase_position(length as u64);
+    Ok(())
 }
 
 fn is_duplicate_line(
@@ -660,23 +667,33 @@ fn od_add_ascii_dump(
     .unwrap();
 }
 
-fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) {
+fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) -> CTResult<()> {
+    use std::io::Write as _;
+    let mut stdout = std::io::stdout().lock();
+
     if is_first {
-        print!("{prefix}");
+        write!(stdout, "{prefix}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     } else {
-        print!("{:>width$}", "", width = prefix.chars().count());
+        write!(stdout, "{:>width$}", "", width = prefix.chars().count())
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
-    println!("{output_text}");
+    writeln!(stdout, "{output_text}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+    Ok(())
 }
 
-fn od_print_bytes(prefix: &str, input_decoder: &OdMemoryDecoder, output_info: &OutputInfo) {
+fn od_print_bytes(
+    prefix: &str,
+    input_decoder: &OdMemoryDecoder,
+    output_info: &OutputInfo,
+) -> CTResult<()> {
     let mut first = true;
 
     for formatter in output_info.spaced_formatters_iter() {
         let output_text = od_format_line(input_decoder, formatter, output_info);
-        od_print_formatted_line(prefix, &output_text, first);
+        od_print_formatted_line(prefix, &output_text, first)?;
         first = false;
     }
+    Ok(())
 }
 
 fn od_open_input_peek_reader(

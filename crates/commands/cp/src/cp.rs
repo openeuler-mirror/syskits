@@ -1568,7 +1568,7 @@ pub(crate) fn copy_attributes_with_deref(
         fs::symlink_metadata(source_path).context(str)?
     };
 
-        // 必须先更改所有权以避免干扰模式更改。
+    // 必须先更改所有权以避免干扰模式更改。
     #[cfg(unix)]
     cp_handle_preserve(&attr.ownership, || -> CopyResult<()> {
         use ctcore::ct_perms::wrap_chown;
@@ -1645,38 +1645,116 @@ pub(crate) fn copy_attributes_with_deref(
 
     #[cfg(feature = "feat_selinux")]
     cp_handle_preserve(&attr.context, || -> CopyResult<()> {
+        let is_required = match attr.context {
+            CpPreserve::Yes { required } => required,
+            _ => false,
+        };
         let context =
             selinux::SecurityContext::of_path(source_path, false, false).map_err(|e| {
-                format!(
+                CpError::Error(format!(
                     "failed to get security context of {}: {}",
                     source_path.display(),
                     e
-                )
+                ))
             })?;
         if let Some(context) = context {
-            context.set_for_path(dest_path, false, false).map_err(|e| {
-                format!(
-                    "failed to set security context for {}: {}",
-                    dest_path.display(),
-                    e
-                )
-            })?;
-        }
-        Ok(())
-    })?;
-
-    cp_handle_preserve(&attr.xattr, || -> CopyResult<()> {
-        #[cfg(target_os = "linux")]
-        {
-            let xattrs = xattr::list(source_path)?;
-            for attr in xattrs {
-                if let Some(attr_value) = xattr::get(source_path, attr.clone())? {
-                    xattr::set(dest_path, attr, &attr_value[..])?;
+            if let Err(e) = context.set_for_path(dest_path, false, false) {
+                use std::error::Error;
+                let mut suppress = false;
+                if let Some(io_err) = e.source().and_then(|s| s.downcast_ref::<std::io::Error>()) {
+                    if let Some(os_err) = io_err.raw_os_error() {
+                        if (os_err == libc::ENOTSUP || os_err == libc::ENODATA) && !is_required {
+                            suppress = true;
+                        }
+                    }
+                }
+                if !suppress {
+                    return Err(CpError::Error(format!(
+                        "failed to set the security context of {}: {}",
+                        dest_path.quote(),
+                        match e.source().and_then(|s| s.downcast_ref::<std::io::Error>()) {
+                            Some(io_err) => io_err.to_string(),
+                            None => e.to_string(),
+                        }
+                    )));
                 }
             }
         }
         Ok(())
     })?;
+
+    cp_handle_preserve(&attr.xattr, || -> CopyResult<()> {
+        let is_required = match attr.xattr {
+            CpPreserve::Yes { required } => required,
+            _ => false,
+        };
+        #[cfg(target_os = "linux")]
+        {
+            let xattrs = match xattr::list(source_path) {
+                Ok(x) => x,
+                Err(e) => {
+                    let os_err = e.raw_os_error();
+                    if (os_err == Some(libc::ENOTSUP) || os_err == Some(libc::ENODATA))
+                        && !is_required
+                    {
+                        return Ok(());
+                    }
+                    return Err(CpError::IoErr(e));
+                }
+            };
+
+            // 如果禁用了 context 保留，或者使用了 -Z/--context，则绝对不能通过 xattr 隐式复制 SELinux 标签
+            let skip_selinux =
+                attr.selinux_context.is_some() || matches!(attr.context, CpPreserve::No { .. });
+
+            for attr_name in xattrs {
+                if skip_selinux && attr_name.to_string_lossy() == "security.selinux" {
+                    continue; // 拦截内鬼！
+                }
+
+                if let Some(attr_value) = match xattr::get(source_path, attr_name.clone()) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        let os_err = e.raw_os_error();
+                        if (os_err == Some(libc::ENOTSUP) || os_err == Some(libc::ENODATA))
+                            && !is_required
+                        {
+                            return Ok(());
+                        }
+                        return Err(CpError::IoErr(e));
+                    }
+                } {
+                    if let Err(e) = xattr::set(dest_path, attr_name, &attr_value[..]) {
+                        let os_err = e.raw_os_error();
+                        if (os_err == Some(libc::ENOTSUP) || os_err == Some(libc::ENODATA))
+                            && !is_required
+                        {
+                            return Ok(());
+                        }
+                        return Err(CpError::IoErr(e));
+                    }
+                }
+            }
+        }
+        Ok(())
+    })?;
+
+    // 处理显式指定的 -Z 或 --context，强制覆盖目标的安全上下文
+    #[cfg(feature = "feat_selinux")]
+    {
+        if let Some(ref selinux_ctx) = attr.selinux_context {
+            if let Some(ctx_str) = selinux_ctx {
+                // --context=CTX 显式指定上下文，直接通过底层 xattr 设置
+                #[cfg(target_os = "linux")]
+                let _ = xattr::set(dest_path, "security.selinux", ctx_str.as_bytes());
+            } else {
+                // -Z 恢复为系统默认上下文，借助外部绝对可靠的 restorecon 工具
+                let _ = std::process::Command::new("restorecon")
+                    .arg(dest_path)
+                    .output();
+            }
+        }
+    }
 
     Ok(())
 }
@@ -2173,6 +2251,7 @@ fn copy_file(
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    let dest_existed = dest_path.exists();
     if dest_path.is_symlink() {
         if CtFileInformation::from_path(dest_path, false)
             .map(|info| symlinked_files.contains(&info))
@@ -2331,12 +2410,25 @@ fn copy_file(
     }
 
     // 使用带有精确 dereference 标志的引擎同步属性
-    copy_attributes_with_deref(
+    if let Err(e) = copy_attributes_with_deref(
         sour_path,
         dest_path,
         &cp_opts.attributes,
         cp_opts.cp_dereference(source_in_command_line),
-    )?;
+    ) {
+        if !dest_existed {
+            fs::remove_file(dest_path).ok();
+        } else {
+            let matches_selinux_err = match &e {
+                CpError::Error(msg) => msg.contains("failed to set the security context"),
+                _ => false,
+            };
+            if matches_selinux_err {
+                fs::File::create(dest_path).and_then(|f| f.set_len(0)).ok();
+            }
+        }
+        return Err(e);
+    }
 
     copied_files.insert(
         CtFileInformation::from_path(sour_path, cp_opts.cp_dereference(source_in_command_line))?,

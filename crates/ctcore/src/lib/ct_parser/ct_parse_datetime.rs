@@ -18,8 +18,7 @@
 
 use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
-    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Utc,
-    Weekday,
+    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Weekday,
 };
 
 /// 日期时间解析错误
@@ -255,16 +254,15 @@ pub fn parse_datetime_gnu_compat(
                     &amount_part
                 };
 
-                let mut secs: i64 = 0;
-                let mut nanos: i64 = 0;
-                if let Some(dot_idx) = amount_abs.find('.') {
-                    secs = amount_abs[..dot_idx].parse().unwrap_or(0);
+                let (mut secs, mut nanos) = if let Some(dot_idx) = amount_abs.find('.') {
+                    let secs = amount_abs[..dot_idx].parse().unwrap_or(0);
                     let frac = &amount_abs[dot_idx + 1..];
                     let frac_padded = format!("{:0<9}", frac);
-                    nanos = frac_padded[..9].parse().unwrap_or(0);
+                    let nanos = frac_padded[..9].parse().unwrap_or(0);
+                    (secs, nanos)
                 } else {
-                    secs = amount_abs.parse().unwrap_or(0);
-                }
+                    (amount_abs.parse().unwrap_or(0), 0)
+                };
 
                 if is_neg {
                     secs = -secs;
@@ -555,32 +553,20 @@ fn parse_weekday_expression(
                 - target_weekday.num_days_from_monday() as i32
                 + 7)
                 % 7;
-            if days == 0 {
-                -7
-            } else {
-                -days
-            }
+            if days == 0 { -7 } else { -days }
         }
         Some(&"this") => {
             // "this Friday" - 本周的星期五
             let days = target_weekday.num_days_from_monday() as i32
                 - current_weekday.num_days_from_monday() as i32;
-            if days < 0 {
-                days + 7
-            } else {
-                days
-            }
+            if days < 0 { days + 7 } else { days }
         }
         _ => {
             // 只有星期几名称，例如 "Friday"
             // GNU的行为：如果今天是该星期几则返回今天，否则返回下一个该星期几
             let days = target_weekday.num_days_from_monday() as i32
                 - current_weekday.num_days_from_monday() as i32;
-            if days < 0 {
-                days + 7
-            } else {
-                days
-            }
+            if days < 0 { days + 7 } else { days }
         }
     };
 

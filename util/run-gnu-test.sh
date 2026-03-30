@@ -22,7 +22,25 @@ echo "path_SYSKITS='${path_SYSKITS}'"
 echo "path_GNU='${path_GNU}'"
 
 # 并行编译设置（加速）
-NPROC=$(command -v ${path_GNU}/src/nproc||command -v nproc)
+# 注意：这里必须把 nproc 可执行文件“执行后得到的数字”传给 -j，
+# 不能把可执行文件路径本身写进 MAKEFLAGS。
+NPROC_BIN=$(command -v "${path_GNU}/src/nproc" || command -v nproc || command -v gnproc || true)
+if [[ -n "${NPROC_BIN}" ]]; then
+    NPROC="$("${NPROC_BIN}" 2>/dev/null || echo 1)"
+else
+    NPROC=1
+fi
+
+case "${NPROC}" in
+    ''|*[!0-9]*)
+        NPROC=1
+        ;;
+esac
+
+if [[ "${NPROC}" -lt 1 ]]; then
+    NPROC=1
+fi
+
 MAKEFLAGS="${MAKEFLAGS} -j ${NPROC}"
 export MAKEFLAGS
 

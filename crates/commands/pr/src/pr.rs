@@ -577,6 +577,17 @@ fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
                 recreated_args.push("-t".to_string());
                 continue;
             }
+
+            // GNU pr accepts -tn2 / -tn:2 style short-option clusters.
+            if let Some(number_arg) = old_column_count.strip_prefix('n') {
+                recreated_args.push("-t".to_string());
+                if number_arg.is_empty() {
+                    recreated_args.push("-n".to_string());
+                } else {
+                    recreated_args.push(format!("-n={number_arg}"));
+                }
+                continue;
+            }
         }
 
         if column_page_option_regex.is_match(arg) {
@@ -637,13 +648,19 @@ fn pr_build_options(
         parse_content_lines_per_page(arg_matches, page_length);
 
     let column_mode_options = parse_column_mode_options(arg_matches, args)?;
+    let is_join_lines = arg_matches.get_flag(pr_flags::PR_JOIN_LINES)
+        || (arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            && !arg_matches.contains_id(pr_flags::PR_COLUMN_WIDTH)
+            && !arg_matches.contains_id(pr_flags::PR_PAGE_WIDTH));
     let merge_files_print = parse_merge_files_print(arg_matches, paths);
-    let col_sep_for_printing =
-        parse_col_sep_for_printing(arg_matches, merge_files_print, &column_mode_options);
+    let col_sep_for_printing = parse_col_sep_for_printing(
+        arg_matches,
+        merge_files_print,
+        &column_mode_options,
+        is_join_lines,
+    );
     let columns_to_print = parse_columns_to_print(merge_files_print, &column_mode_options);
-
-    let is_join_lines = arg_matches.get_flag(pr_flags::PR_JOIN_LINES);
-    let page_width = parse_page_width(arg_matches)?;
+    let page_width = parse_page_width(arg_matches, is_join_lines, merge_files_print.is_some())?;
     let line_width = parse_line_width(
         page_width,
         &column_mode_options,
@@ -693,7 +710,7 @@ fn pr_build_options(
         is_form_feed_used,
         is_join_lines,
         col_sep_for_printing,
-        page_width: pr_parse_usize(arg_matches, pr_flags::PR_PAGE_WIDTH).unwrap_or(Ok(72))?,
+        page_width: page_width.unwrap_or(72),
         line_width,
         show_control_chars: arg_matches.get_flag(pr_flags::PR_SHOW_CONTROL_CHARS),
         show_nonprinting: arg_matches.get_flag(pr_flags::PR_SHOW_NONPRINTING),
@@ -804,11 +821,16 @@ fn parse_col_sep_for_printing(
     arg_matches: &ArgMatches,
     merge_files_print: Option<usize>,
     column_mode_options: &Option<PrColumnModeOptions>,
+    is_join_lines: bool,
 ) -> String {
     let fallback = || {
-        merge_files_print
-            .map(|_k| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
-            .unwrap_or_default()
+        if is_join_lines && (merge_files_print.is_some() || column_mode_options.is_some()) {
+            PR_TAB.to_string()
+        } else {
+            merge_files_print
+                .map(|_k| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
+                .unwrap_or_default()
+        }
     };
 
     // First try the column separator explicitly
@@ -818,15 +840,29 @@ fn parse_col_sep_for_printing(
             .cloned()
             .unwrap_or_default();
     } else if arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
-        return arg_matches
-            .get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
-            .cloned()
-            .unwrap_or_else(|| PR_TAB.to_string());
+        return match arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
+            Some(value) => value.clone(),
+            None => {
+                if arg_matches.contains_id(pr_flags::PR_COLUMN_WIDTH)
+                    || arg_matches.contains_id(pr_flags::PR_PAGE_WIDTH)
+                {
+                    String::new()
+                } else {
+                    PR_TAB.to_string()
+                }
+            }
+        };
     }
 
     column_mode_options
         .as_ref()
-        .map(|i| i.column_separator.clone())
+        .map(|i| {
+            if is_join_lines {
+                PR_TAB.to_string()
+            } else {
+                i.column_separator.clone()
+            }
+        })
         .unwrap_or_else(fallback)
 }
 
@@ -892,11 +928,15 @@ fn parse_column_mode_options(
     Ok(column_mode_options)
 }
 
-fn parse_page_width(arg_matches: &ArgMatches) -> Result<Option<usize>, PrError> {
-    let page_width = if arg_matches.get_flag(pr_flags::PR_JOIN_LINES) {
-        None
-    } else if let Some(res) = pr_parse_usize(arg_matches, pr_flags::PR_PAGE_WIDTH) {
+fn parse_page_width(
+    arg_matches: &ArgMatches,
+    _is_join_lines: bool,
+    is_merge_mode: bool,
+) -> Result<Option<usize>, PrError> {
+    let page_width = if let Some(res) = pr_parse_usize(arg_matches, pr_flags::PR_PAGE_WIDTH) {
         Some(res?)
+    } else if is_merge_mode {
+        pr_parse_usize(arg_matches, pr_flags::PR_COLUMN_WIDTH).transpose()?
     } else {
         None
     };

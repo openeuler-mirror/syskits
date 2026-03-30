@@ -19,12 +19,12 @@ use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
-use std::io;
+use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Component, Path, PathBuf, StripPrefixError};
+use std::path::{Path, PathBuf, StripPrefixError};
 
 // 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
 use crate::copydir::copy_directory;
@@ -683,6 +683,7 @@ impl Tool for Cp {
 }
 
 pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
+    let stdout_initially_closed = ctcore::ct_stdout_is_closed();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args);
@@ -700,6 +701,11 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
         };
     } else if let Ok(mut args_matches) = args_match {
         let cp_options = CpOptions::cp_from_matches(&args_matches)?;
+
+        // 对于会向 stdout 写输出的模式，保持与 GNU close-stdout 行为一致。
+        if cp_options.verbose && (stdout_initially_closed || ctcore::ct_stdout_was_closed()) {
+            return Err(CTsageError::new(EXIT_ERR, "write error"));
+        }
 
         if cp_options.overwrite == CpOverwriteMode::NoClobber
             && cp_options.backup != CtBackupMode::NoBackup
@@ -1978,18 +1984,30 @@ fn cp_print_verbose_output(
     progress_bar: &Option<ProgressBar>,
     sour_path: &Path,
     dest_path: &Path,
-) {
+) -> CopyResult<()> {
     if let Some(pb) = progress_bar {
         // 暂停（隐藏）进度条，以防止其与 println 输出重叠
-        pb.suspend(|| {
-            cp_print_paths(is_parents, sour_path, dest_path);
-        });
+        pb.suspend(|| cp_print_paths(is_parents, sour_path, dest_path))?;
     } else {
-        cp_print_paths(is_parents, sour_path, dest_path);
+        cp_print_paths(is_parents, sour_path, dest_path)?;
     }
+
+    Ok(())
 }
 
-fn cp_print_paths(is_parents: bool, sour_path: &Path, dest_path: &Path) {
+fn cp_print_paths(is_parents: bool, sour_path: &Path, dest_path: &Path) -> CopyResult<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    cp_write_verbose_output(&mut stdout, is_parents, sour_path, dest_path)?;
+    Ok(())
+}
+
+fn cp_write_verbose_output<W: Write>(
+    writer: &mut W,
+    is_parents: bool,
+    sour_path: &Path,
+    dest_path: &Path,
+) -> io::Result<()> {
     if is_parents {
         // 例如，若将文件 a/b/c 及其上级目录复制至目录 d/，则打印
         //
@@ -1997,11 +2015,11 @@ fn cp_print_paths(is_parents: bool, sour_path: &Path, dest_path: &Path) {
         // a/b -> d/a/b
         //
         for (x, y) in cp_aligned_ancestors(sour_path, dest_path) {
-            println!("{} -> {}", x.display(), y.display());
+            writeln!(writer, "{} -> {}", x.display(), y.display())?;
         }
     }
 
-    println!("{}", cp_context_for(sour_path, dest_path));
+    writeln!(writer, "{}", cp_context_for(sour_path, dest_path))
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2338,7 +2356,7 @@ fn copy_file(
 
     // 如请求，输出详细信息。
     if cp_opts.verbose {
-        cp_print_verbose_output(cp_opts.parents, progress_bar, sour_path, dest_path);
+        cp_print_verbose_output(cp_opts.parents, progress_bar, sour_path, dest_path)?;
     }
 
     // 准备上下文并获取源文件元数据以进行复制。
@@ -2658,12 +2676,14 @@ mod tests {
 
     mod tests_cp_fn {
         use std::fs;
+        use std::io::{self, Write};
 
         use crate::cp_aligned_ancestors;
         use crate::cp_disk_usage;
         use crate::cp_disk_usage_directory;
 
         use crate::cp_localize_to_target;
+        use crate::cp_write_verbose_output;
 
         use crate::CpOffloadReflinkDebug;
         use crate::CpPreserve;
@@ -2673,6 +2693,19 @@ mod tests {
         use std::fs::File;
         use std::path::{Path, PathBuf};
         use tempfile::Builder;
+
+        struct FailingWriter;
+
+        impl Write for FailingWriter {
+            fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe"))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
         #[test]
         fn test_cp_localize_to_target() {
             let root = Path::new("a/source/");
@@ -2691,6 +2724,25 @@ mod tests {
                 (Path::new("a/b"), Path::new("d/a/b")),
             ];
             assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_cp_write_verbose_output_writes_all_lines() {
+            let mut output = Vec::new();
+            cp_write_verbose_output(&mut output, true, Path::new("a/b/c"), Path::new("d/a/b/c"))
+                .unwrap();
+            let output = String::from_utf8(output).unwrap();
+            assert!(output.contains("a -> d/a"));
+            assert!(output.contains("a/b -> d/a/b"));
+            assert!(output.contains("'a/b/c' -> 'd/a/b/c'"));
+        }
+
+        #[test]
+        fn test_cp_write_verbose_output_propagates_io_error() {
+            let mut writer = FailingWriter;
+            let err = cp_write_verbose_output(&mut writer, false, Path::new("a"), Path::new("b"))
+                .unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
         }
 
         #[test]

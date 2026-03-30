@@ -173,26 +173,43 @@ pub fn chunk_read<T: Read>(
     carry_over_vec.extend_from_slice(&buffer[read..]);
 
     if read != 0 {
+        let max_lossy_len = read * 3;
+        let total_required = read + max_lossy_len;
+        if buffer.len() < total_required {
+            buffer.resize(total_required, 0);
+        }
+
+        let lossy_len = {
+            let (raw_part, target_part) = buffer.split_at_mut(read);
+
+            let lossy_string = String::from_utf8_lossy(raw_part);
+            let lossy_bytes = lossy_string.as_bytes();
+            let len = lossy_bytes.len();
+
+            target_part[..len].copy_from_slice(lossy_bytes);
+            len
+        };
+
         let payload: CTResult<Chunk> = Chunk::try_new(buffer, |buffer| {
             let selections_str = unsafe {
-                // 安全：转换为生命周期较短的空选择向量是安全的。
-                // 只是暂时转换为 Vec<Line<'static>>，以便循环使用。
                 std::mem::transmute::<Vec<&'static str>, Vec<&'_ str>>(selections)
             };
             let mut sort_lines = unsafe {
-                // 安全性：（同上）转换为生命周期较短的行矢量是安全的、
-                // 因为它只是暂时转换为 Vec<Line<'static>>，以便可以循环使用。
                 std::mem::transmute::<Vec<SortLine<'static>>, Vec<SortLine<'_>>>(lines)
             };
-            let read = std::str::from_utf8(&buffer[..read])
-                .map_err(|error| SortError::SortUft8Error { error })?;
+            
+            // 分别获取原始字节流和容错字符串
+            let raw_read = &buffer[..read];
+            let lossy_read_str = unsafe { std::str::from_utf8_unchecked(&buffer[read..read + lossy_len]) };
+            
             let mut chunk_line_data = ChunkLineData {
                 selections: selections_str,
                 num_infos,
                 parsed_floats,
             };
             chunk_parse_lines(
-                read,
+                lossy_read_str,
+                raw_read,
                 &mut sort_lines,
                 &mut chunk_line_data,
                 separator,
@@ -211,24 +228,32 @@ pub fn chunk_read<T: Read>(
 /// 将 `read` 分割成 `Line`，并将它们添加到 `lines`。
 fn chunk_parse_lines<'a>(
     read: &'a str,
+    raw_read: &'a [u8], // 接收同步的原始字节流
     sort_lines: &mut Vec<SortLine<'a>>,
     chunk_line_data: &mut ChunkLineData<'a>,
     separator: u8,
     sort_settings: &SortGlobalConfigs,
 ) {
     let read = read.strip_suffix(separator as char).unwrap_or(read);
+    let raw_read = raw_read.strip_suffix(&[separator]).unwrap_or(raw_read);
 
     assert!(sort_lines.is_empty());
     assert!(chunk_line_data.selections.is_empty());
     assert!(chunk_line_data.num_infos.is_empty());
     assert!(chunk_line_data.parsed_floats.is_empty());
+    
     let mut token_buffer = vec![];
+    let mut raw_lines = raw_read.split(|&b| b == separator); // 同步切割原始字节流
+
     sort_lines.extend(
         read.split(separator as char)
             .enumerate()
             .map(|(index, line_str)| {
+                // 分割操作绝对对齐，安全取出对应的原始字节
+                let raw_bytes = raw_lines.next().unwrap();
                 SortLine::create(
                     line_str,
+                    raw_bytes,
                     index,
                     chunk_line_data,
                     &mut token_buffer,

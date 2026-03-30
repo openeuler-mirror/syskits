@@ -9,4 +9,4 @@ basename:
     version: "显示版本信息"
   errors:
     missing_operand: "缺少操作数"
-    extra_operand: "多余的操作数 %s"
+    extra_operand: "多余的操作数"

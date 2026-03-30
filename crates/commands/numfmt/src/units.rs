@@ -10,9 +10,10 @@
  */
 use std::fmt;
 
-pub const NUMFMT_SI_BASES: [f64; 10] = [1., 1e3, 1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24, 1e27];
+pub const NUMFMT_SI_BASES: [f64; 11] =
+    [1., 1e3, 1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24, 1e27, 1e30];
 
-pub const NUMFMT_IEC_BASES: [f64; 10] = [
+pub const NUMFMT_IEC_BASES: [f64; 11] = [
     1.,
     1_024.,
     1_048_576.,
@@ -23,6 +24,7 @@ pub const NUMFMT_IEC_BASES: [f64; 10] = [
     1_180_591_620_717_411_303_424.,
     1_208_925_819_614_629_174_706_176.,
     1_237_940_039_285_380_274_899_124_224.,
+    1.267_650_600_228_229_4e30,
 ];
 
 pub type NumfmtWithI = bool;
@@ -47,6 +49,8 @@ pub enum NumfmtRawSuffix {
     E,
     Z,
     Y,
+    R,
+    Q,
 }
 
 pub type NumfmtSuffix = (NumfmtRawSuffix, NumfmtWithI);
@@ -65,6 +69,8 @@ impl fmt::Display for DisplayableSuffix {
             NumfmtRawSuffix::E => write!(f, "E"),
             NumfmtRawSuffix::Z => write!(f, "Z"),
             NumfmtRawSuffix::Y => write!(f, "Y"),
+            NumfmtRawSuffix::R => write!(f, "R"),
+            NumfmtRawSuffix::Q => write!(f, "Q"),
         }
         .and_then(|()| if *with_i { write!(f, "i") } else { Ok(()) })
     }
@@ -83,6 +89,8 @@ mod tests {
             (NumfmtRawSuffix::E, false, "E"),
             (NumfmtRawSuffix::Z, false, "Z"),
             (NumfmtRawSuffix::Y, false, "Y"),
+            (NumfmtRawSuffix::R, false, "R"),
+            (NumfmtRawSuffix::Q, false, "Q"),
         ];
 
         for (raw_suffix, with_i, expected) in suffixes {
@@ -102,6 +110,8 @@ mod tests {
             (NumfmtRawSuffix::E, true, "Ei"),
             (NumfmtRawSuffix::Z, true, "Zi"),
             (NumfmtRawSuffix::Y, true, "Yi"),
+            (NumfmtRawSuffix::R, true, "Ri"),
+            (NumfmtRawSuffix::Q, true, "Qi"),
         ];
 
         for (raw_suffix, with_i, expected) in suffixes {

@@ -138,6 +138,8 @@ fn numfmt_remove_suffix(i: f64, s: Option<NumfmtSuffix>, u: &NumfmtUnit) -> Resu
             NumfmtRawSuffix::E => Ok(i * 1e18),
             NumfmtRawSuffix::Z => Ok(i * 1e21),
             NumfmtRawSuffix::Y => Ok(i * 1e24),
+            NumfmtRawSuffix::R => Ok(i * 1e27),
+            NumfmtRawSuffix::Q => Ok(i * 1e30),
         },
         (Some((raw_suffix, false)), &NumfmtUnit::Iec(false))
         | (Some((raw_suffix, true)), &NumfmtUnit::Auto)
@@ -150,6 +152,8 @@ fn numfmt_remove_suffix(i: f64, s: Option<NumfmtSuffix>, u: &NumfmtUnit) -> Resu
             NumfmtRawSuffix::E => Ok(i * NUMFMT_IEC_BASES[6]),
             NumfmtRawSuffix::Z => Ok(i * NUMFMT_IEC_BASES[7]),
             NumfmtRawSuffix::Y => Ok(i * NUMFMT_IEC_BASES[8]),
+            NumfmtRawSuffix::R => Ok(i * NUMFMT_IEC_BASES[9]),
+            NumfmtRawSuffix::Q => Ok(i * NUMFMT_IEC_BASES[10]),
         },
         (None, &NumfmtUnit::Iec(true)) => {
             Err(format!("missing 'i' suffix in input: '{i}' (e.g Ki/Mi/Gi)"))
@@ -236,8 +240,12 @@ fn numfmt_consider_suffix(
 ) -> Result<(f64, Option<NumfmtSuffix>)> {
     use crate::units::NumfmtRawSuffix::*;
 
+    if !n.is_finite() {
+        return Err("Number is too big and unsupported".to_string());
+    }
+
     let n_abs = n.abs();
-    let raw_suffixes = [K, M, G, T, P, E, Z, Y];
+    let raw_suffixes = [K, M, G, T, P, E, Z, Y, R, Q];
 
     let (bases, is_with_i) = match *u {
         NumfmtUnit::Si => (&NUMFMT_SI_BASES, false),
@@ -246,18 +254,18 @@ fn numfmt_consider_suffix(
         NumfmtUnit::None => return Ok((n, None)),
     };
 
-    let i = match n_abs {
-        _ if n_abs <= bases[1] - 1.0 => return Ok((n, None)),
-        _ if n_abs < bases[2] => 1,
-        _ if n_abs < bases[3] => 2,
-        _ if n_abs < bases[4] => 3,
-        _ if n_abs < bases[5] => 4,
-        _ if n_abs < bases[6] => 5,
-        _ if n_abs < bases[7] => 6,
-        _ if n_abs < bases[8] => 7,
-        _ if n_abs < bases[9] => 8,
-        _ => return Err("Number is too big and unsupported".to_string()),
-    };
+    if n_abs <= bases[1] - 1.0 {
+        return Ok((n, None));
+    }
+
+    let mut i = 1usize;
+    while i + 1 < bases.len() && n_abs >= bases[i + 1] {
+        i += 1;
+    }
+
+    if i > raw_suffixes.len() {
+        return Err("Number is too big and unsupported".to_string());
+    }
 
     let v = if precision > 0 {
         numfmt_round_with_precision(n / bases[i], round_method, precision)
@@ -267,6 +275,9 @@ fn numfmt_consider_suffix(
 
     // 检查四舍五入是否将我们推入下一个基数
     if v.abs() >= bases[1] {
+        if i >= raw_suffixes.len() {
+            return Err("Number is too big and unsupported".to_string());
+        }
         Ok((v / bases[1], Some((raw_suffixes[i], is_with_i))))
     } else {
         Ok((v, Some((raw_suffixes[i - 1], is_with_i))))
@@ -978,7 +989,7 @@ mod tests {
         #[test]
         fn test_number_too_big() {
             let unit = setup_si_options();
-            let result = numfmt_consider_suffix(1e30, &unit, NumfmtRoundMethod::Nearest, 0);
+            let result = numfmt_consider_suffix(1e33, &unit, NumfmtRoundMethod::Nearest, 0);
             assert!(result.is_err(), "Expected an error for too large number");
         }
 

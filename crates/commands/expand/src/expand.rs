@@ -35,29 +35,29 @@ extern crate rust_i18n;
 use clap::Arg;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use clap::crate_version;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
-use clap::crate_version;
 
 use ctcore::ct_display::Quotable;
+use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
-use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_show_error;
 
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
+use std::io::stdin;
+use std::io::stdout;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
-use std::io::stdin;
-use std::io::stdout;
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -589,41 +589,48 @@ fn expand_line(
 fn expand(options: &ExpandOptions) -> CTResult<()> {
     // 创建一个缓冲写入器，用于写入标准输出。
     let mut output = BufWriter::new(stdout());
-    // 获取tabstops的引用，用于在行扩展过程中定位和处理制表符。
     let tabstops = options.tabstops.as_ref();
-    // 创建一个缓冲区，用于临时存储从文件中读取的行。
     let mut buffer = Vec::new();
 
-    // 遍历文件列表。
     for file in &options.files {
-        // 检查文件是否为目录，如果是，则显示错误并继续处理下一个文件。
         if Path::new(file).is_dir() {
             ct_show_error!("{}: Is a directory", file);
             set_ct_exit_code(1);
             continue;
         }
-        // 尝试打开文件。
         match expand_open(file) {
             Ok(mut fh) => {
-                // 循环读取文件，直到没有更多内容可读。
-                while match fh.read_until(b'\n', &mut buffer) {
-                    Ok(s) => s > 0,
-                    Err(_) => buffer.is_empty(),
-                } {
-                    // 对读取的每一行进行扩展，并将结果写入输出缓冲区。
-                    expand_line(&mut buffer, &mut output, tabstops, options)
-                        .map_err_context(|| "failed to write output".to_string())?;
+                loop {
+                    buffer.clear();
+                    // 通过 take 限制单次读取上限为 64KB。
+                    // 避免读取 /dev/zero 等无换行符的无限流时造成死循环和 OOM。
+                    let mut chunk_reader = (&mut fh).take(65536);
+                    let n = match chunk_reader.read_until(b'\n', &mut buffer) {
+                        Ok(size) => size,
+                        Err(e) => {
+                            ct_show_error!("{}", e);
+                            set_ct_exit_code(1);
+                            break;
+                        }
+                    };
+
+                    if n == 0 {
+                        break;
+                    }
+
+                    // expand_line 中有写入操作，现在它会及时执行并触发 ENOSPC
+                    if let Err(e) = expand_line(&mut buffer, &mut output, tabstops, options) {
+                        return Err(ctcore::ct_error::CtSimpleError::new(1, e.to_string()));
+                    }
                 }
             }
             Err(e) => {
-                // 如果打开文件时发生错误，显示错误并继续处理下一个文件。
                 ct_show_error!("{}", e);
                 set_ct_exit_code(1);
                 continue;
             }
         }
     }
-    // 如果成功处理所有文件，返回成功结果。
     Ok(())
 }
 
@@ -949,8 +956,8 @@ mod tests {
     mod tests_expand_functions {
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
-            DEFAULT_TABSTOP, ExpandParseError, RemainingMode, expand_next_tabstop, expand_open,
-            expand_shortcuts, expand_tabstops_parse,
+            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
+            ExpandParseError, RemainingMode, DEFAULT_TABSTOP,
         };
 
         use crate::is_digit_or_comma;

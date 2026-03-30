@@ -23,20 +23,20 @@
 //! - 提供引用和上下文显示
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version, error::ErrorKind};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::Tool;
 use regex::Regex;
 use std::cmp;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
 use sys_locale::get_locale;
 
@@ -1105,19 +1105,23 @@ pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args: Vec<OsString> = args.collect();
-    if args.len() == 2 {
-        if let Some(arg1) = args[1].to_str() {
-            if arg1 == "--help" {
-                print!("{PTX_HELP_TEXT}");
-                return Ok(());
-            }
-            if arg1 == "--version" || arg1 == "-V" {
-                print!("{PTX_VERSION_TEXT}");
-                return Ok(());
-            }
+    let matches = match ct_app().try_get_matches_from(args.into_iter()) {
+        Ok(matches) => matches,
+        Err(err) => {
+            return match err.kind() {
+                ErrorKind::DisplayHelp => {
+                    print!("{PTX_HELP_TEXT}");
+                    Ok(())
+                }
+                ErrorKind::DisplayVersion => {
+                    print!("{PTX_VERSION_TEXT}");
+                    Ok(())
+                }
+                _ => Err(err.into()),
+            };
         }
-    }
-    let settings = PtxSettings::new(args.into_iter())?;
+    };
+    let settings = PtxSettings::from_matches(matches)?;
     ptx_exec(&settings)
 }
 
@@ -1157,17 +1161,7 @@ struct PtxSettings {
 }
 
 impl PtxSettings {
-    /// 从命令行参数创建 PTX 设置
-    ///
-    /// # 参数
-    /// * `args` - 命令行参数
-    ///
-    /// # 返回值
-    /// 成功返回 PTX 设置及其所需的数据结构，失败返回错误
-    fn new(args: impl ctcore::Args) -> CTResult<Self> {
-        // 解析命令行参数
-        let matches = ct_app().try_get_matches_from(args)?;
-
+    fn from_matches(matches: clap::ArgMatches) -> CTResult<Self> {
         // 获取输入文件列表
         let mut input_files: Vec<String> = match &matches.get_many::<String>(ptx_options::PTX_FILE)
         {
@@ -1319,7 +1313,21 @@ pub fn ct_app() -> Command {
         .about(t!("ptx.about"))
         .version(crate_version!())
         .override_usage(t!("ptx.usage"))
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .infer_long_args(true)
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .help("display this help and exit")
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .help("output version information and exit")
+                .action(ArgAction::Version),
+        )
         .args(args)
 }
 

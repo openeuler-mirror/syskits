@@ -1875,7 +1875,7 @@ fn pr_file_last_modified_time(path: &str, fmt: &str) -> String {
             i.modified()
                 .map(|x| {
                     let date_time: DateTime<Local> = x.into();
-                    date_time.format(fmt).to_string()
+                    pr_format_local_datetime(fmt, date_time)
                 })
                 .unwrap_or_default()
         })
@@ -2939,6 +2939,17 @@ mod tests {
         #[test]
         fn test_parse_last_modified_time_percent_z_not_offset_with_colon() {
             let out = parse_last_modified_time("%Z", &[PR_FILE_STDIN], true);
+            assert!(!out.is_empty());
+            assert!(!out.contains(':'));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_parse_last_modified_time_percent_z_file_not_offset_with_colon() {
+            let file = create_temp_file_with_content("test content");
+            let file_path = file.path().to_str().unwrap();
+
+            let out = parse_last_modified_time("%Z", &[file_path], false);
             assert!(!out.is_empty());
             assert!(!out.contains(':'));
         }

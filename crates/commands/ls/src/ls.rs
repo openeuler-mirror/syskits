@@ -16,6 +16,8 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::error::Error;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::OsString;
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
@@ -217,7 +219,7 @@ impl Display for LsError {
                     s.quote()
                 )?;
                 for style in possible_time_styles {
-                    write!(formatter, "\n  - {}", style)?;
+                    write!(formatter, "\n  - {style}")?;
                 }
                 write!(formatter, "\n\nFor more information try --help")
             }
@@ -359,7 +361,7 @@ enum LsTimeStyle {
     LsLongIso,
     LsIso,
     LsLocale,
-    LsFormat(String),
+    LsFormat { non_recent: String, recent: String },
 }
 
 fn is_posix_locale() -> bool {
@@ -413,7 +415,27 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
                 Ok(LsTimeStyle::LsLocale)
             } else {
                 match field_str.chars().next() {
-                    Some('+') => Ok(LsTimeStyle::LsFormat(String::from(&field_str[1..]))),
+                    Some('+') => {
+                        let format = &field_str[1..];
+                        if let Some((non_recent, recent)) = format.split_once('\n') {
+                            if recent.contains('\n') {
+                                Err(LsError::LsTimeStyleParseError(
+                                    String::from(field),
+                                    possible_time_styles,
+                                ))
+                            } else {
+                                Ok(LsTimeStyle::LsFormat {
+                                    non_recent: non_recent.to_string(),
+                                    recent: recent.to_string(),
+                                })
+                            }
+                        } else {
+                            Ok(LsTimeStyle::LsFormat {
+                                non_recent: format.to_string(),
+                                recent: format.to_string(),
+                            })
+                        }
+                    }
                     _ => Err(LsError::LsTimeStyleParseError(
                         String::from(field),
                         possible_time_styles,
@@ -1358,9 +1380,9 @@ fn parse_quoting_style(s: &str) -> Result<String, String> {
     if matches.len() == 1 {
         Ok(matches[0].to_string())
     } else if matches.is_empty() {
-        Err(format!("invalid quoting style '{}'", s))
+        Err(format!("invalid quoting style '{s}'"))
     } else {
-        Err(format!("ambiguous quoting style '{}'", s))
+        Err(format!("ambiguous quoting style '{s}'"))
     }
 }
 
@@ -2114,7 +2136,7 @@ fn show_dir_name<W: Write>(path_data: &PathData, out: &mut W, config: &LsConfig)
             let hyperlink = create_hyperlink(&escaped_path, path_data);
             write!(out, "{hyperlink}:").unwrap()
         }
-        false => write!(out, "{}:", escaped_path).unwrap(),
+        false => write!(out, "{escaped_path}:").unwrap(),
     }
 }
 
@@ -2838,7 +2860,7 @@ fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
                 let res = unsafe {
                     ctcore::libc::getxattr(
                         c_path.as_ptr(),
-                        b"system.posix_acl_access\0".as_ptr() as *const ctcore::libc::c_char,
+                        c"system.posix_acl_access".as_ptr(),
                         std::ptr::null_mut(),
                         0,
                     )
@@ -2856,10 +2878,8 @@ fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
 
         use exacl::getfacl;
         match getfacl(file, None) {
-            Ok(acls) => acls
-                .iter()
-                .any(|acl| if !acl.name.is_empty() { true } else { false }),
-            Err(e) => false,
+            Ok(acls) => acls.iter().any(|acl| !acl.name.is_empty()),
+            Err(_e) => false,
         }
     }
     #[cfg(not(feature = "feat_acl"))]
@@ -3217,6 +3237,36 @@ fn get_time(md: &Metadata, config: &LsConfig) -> Option<chrono::DateTime<chrono:
     Some(time.into())
 }
 
+#[cfg(unix)]
+fn ls_format_local_time_strftime(seconds: i64, fmt: &str) -> Option<String> {
+    let time = ctcore::libc::time_t::try_from(seconds).ok()?;
+    let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
+    let c_format = CString::new(fmt).ok()?;
+    let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
+    if tm_ptr.is_null() {
+        return None;
+    }
+
+    let mut capacity = 128usize;
+    while capacity <= 8192 {
+        let mut buf = vec![0u8; capacity];
+        let written = unsafe {
+            ctcore::libc::strftime(
+                buf.as_mut_ptr() as *mut ctcore::libc::c_char,
+                capacity,
+                c_format.as_ptr(),
+                &tm as *const _,
+            )
+        };
+        if written > 0 {
+            buf.truncate(written);
+            return String::from_utf8(buf).ok();
+        }
+        capacity *= 2;
+    }
+    None
+}
+
 fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
     match get_time(metadata, config) {
         Some(time) => {
@@ -3224,33 +3274,53 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
             let now = chrono::Local::now();
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
             let six_months = chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap();
-            let recent = time > now - six_months && time < now;
+            let is_recent = time > now - six_months && time < now;
 
             match &config.time_style {
-                LsTimeStyle::LsFullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
-                LsTimeStyle::LsLongIso => time.format("%Y-%m-%d %H:%M"),
-                LsTimeStyle::LsIso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
+                LsTimeStyle::LsFullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
+                LsTimeStyle::LsLongIso => time.format("%Y-%m-%d %H:%M").to_string(),
+                LsTimeStyle::LsIso => time
+                    .format(if is_recent {
+                        "%m-%d %H:%M"
+                    } else {
+                        "%Y-%m-%d "
+                    })
+                    .to_string(),
                 LsTimeStyle::LsLocale => {
                     if rust_i18n::locale().starts_with("zh") {
-                        let fmt = if recent {
+                        let fmt = if is_recent {
                             "%_m月%e日 %H:%M"
                         } else {
                             "%Y年%_m月%e日"
                         };
-                        time.format(fmt)
+                        time.format(fmt).to_string()
                     } else {
-                        let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
+                        let fmt = if is_recent {
+                            "%b %e %H:%M"
+                        } else {
+                            "%b %e  %Y"
+                        };
 
                         //在这个版本的 chrono 中可以进行翻译。函数是 chrono::datetime::DateTime::format_localized
                         //然而，目前仍很难获得当前的 pure-rust-locale 语言。
                         //所以还没有实现
 
-                        time.format(fmt)
+                        time.format(fmt).to_string()
                     }
                 }
-                LsTimeStyle::LsFormat(e) => time.format(e),
+                LsTimeStyle::LsFormat { non_recent, recent } => {
+                    let fmt = if is_recent { recent } else { non_recent };
+                    #[cfg(unix)]
+                    {
+                        ls_format_local_time_strftime(time.timestamp(), fmt)
+                            .unwrap_or_else(|| time.format(fmt).to_string())
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        time.format(fmt).to_string()
+                    }
+                }
             }
-            .to_string()
         }
         None => "???".into(),
     }
@@ -3621,7 +3691,7 @@ fn has_capability(path: &Path) -> bool {
         let res = unsafe {
             ctcore::libc::getxattr(
                 c_path.as_ptr(),
-                b"security.capability\0".as_ptr() as *const ctcore::libc::c_char,
+                c"security.capability".as_ptr(),
                 std::ptr::null_mut(),
                 0,
             )
@@ -3758,14 +3828,14 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
                         if must_dereference {
                             ctcore::libc::getxattr(
                                 c_path.as_ptr(),
-                                b"security.selinux\0".as_ptr() as *const ctcore::libc::c_char,
+                                c"security.selinux".as_ptr(),
                                 std::ptr::null_mut(),
                                 0,
                             )
                         } else {
                             ctcore::libc::lgetxattr(
                                 c_path.as_ptr(),
-                                b"security.selinux\0".as_ptr() as *const ctcore::libc::c_char,
+                                c"security.selinux".as_ptr(),
                                 std::ptr::null_mut(),
                                 0,
                             )
@@ -3938,5 +4008,45 @@ mod tests {
             result4,
             std::cmp::Ordering::Less | std::cmp::Ordering::Greater | std::cmp::Ordering::Equal
         ));
+    }
+
+    #[test]
+    fn test_parse_time_style_custom_format() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "-l",
+                "--time-style=+%Y-%m-%d %H:%M:%S %z (%Z)",
+            ])
+            .unwrap();
+        assert_eq!(
+            ls_parse_time_style(&matches).unwrap(),
+            LsTimeStyle::LsFormat {
+                non_recent: "%Y-%m-%d %H:%M:%S %z (%Z)".to_string(),
+                recent: "%Y-%m-%d %H:%M:%S %z (%Z)".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_time_style_custom_dual_format() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-l", "--time-style=+OLD\nNEW"])
+            .unwrap();
+        assert_eq!(
+            ls_parse_time_style(&matches).unwrap(),
+            LsTimeStyle::LsFormat {
+                non_recent: "OLD".to_string(),
+                recent: "NEW".to_string(),
+            }
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ls_format_local_time_strftime_percent_z() {
+        let out = ls_format_local_time_strftime(0, "%Z").unwrap();
+        assert!(!out.is_empty());
+        assert!(!out.contains(':'));
     }
 }

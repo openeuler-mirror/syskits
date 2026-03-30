@@ -11,7 +11,7 @@
 
 extern crate rust_i18n;
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::borrow::{Borrow, Cow};
 use std::cmp::max;
 use std::ffi::OsString;
@@ -24,7 +24,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_error::{CTError, CTResult, FromIo};
-use ctcore::ct_quoting_style::{escape_name, CtQuotingStyle};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_show;
 
 use crate::count_fast::{count_bytes_chars_lines_from_stream, count_bytes_handle};
@@ -596,7 +596,7 @@ fn process_chunk<
                 *in_word = false;
             } else if !(*in_word) {
                 *in_word = true;
-                total.words += 1;
+                total.words = total.words.saturating_add(1);
             }
         }
         if SHOW_MAX_LINE_LENGTH {
@@ -607,28 +607,28 @@ fn process_chunk<
                 }
                 '\t' => {
                     *current_len -= *current_len % 8;
-                    *current_len += 8;
+                    *current_len = (*current_len).saturating_add(8);
                 }
                 _ => {
-                    *current_len += ch.width().unwrap_or(0);
+                    *current_len = (*current_len).saturating_add(ch.width().unwrap_or(0));
                 }
             }
         }
         if SHOW_LINES && ch == '\n' {
-            total.lines += 1;
+            total.lines = total.lines.saturating_add(1);
         }
         if SHOW_CHARS {
-            total.chars += 1;
+            total.chars = total.chars.saturating_add(1);
         }
     }
-    total.bytes += text.len();
+    total.bytes = total.bytes.saturating_add(text.len());
 
     total.max_line_length = max(*current_len, total.max_line_length);
 }
 
 fn handle_error(error: ReadBufDecoderError<'_>, total: &mut WcWordCount) -> Option<io::Error> {
     if let ReadBufDecoderError::InvalidByteSequence(bytes) = error {
-        total.bytes += bytes.len();
+        total.bytes = total.bytes.saturating_add(bytes.len());
     } else if let ReadBufDecoderError::Io(e) = error {
         return Some(e);
     }
@@ -717,7 +717,7 @@ fn compute_number_width(inputs: &WcInputs, settings: &WcSettings) -> usize {
                 } else if let WcInput::Path(path) = input {
                     if let Ok(meta) = fs::metadata(path) {
                         if meta.is_file() {
-                            total += meta.len();
+                            total = total.saturating_add(meta.len());
                         } else {
                             minimum_width = WC_MINIMUM_WIDTH;
                         }
@@ -925,8 +925,8 @@ mod tests {
     use std::path::PathBuf;
 
     use clap::ArgMatches;
-    use tempfile::tempfile;
     use tempfile::NamedTempFile;
+    use tempfile::tempfile;
 
     use super::*;
     use rust_i18n::set_locale;

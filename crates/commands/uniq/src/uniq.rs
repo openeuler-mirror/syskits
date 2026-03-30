@@ -110,19 +110,43 @@ impl UniqFlags {
 
         let w = &mut writer;
 
-        // 比较当前的 `line` 和输入中的连续行（`next_line`），如果需要，根据提供的命令行选项打印 `line`
+        // 如果不需要统计数量，也不需要过滤唯一/重复行，
+        // 我们就可以在遇到新组的第一行时立刻打印，而不需要等待下一行。
+        // 这完美解决了 stdbuf 时序测试中 uniq 扣留第一行不输出的 bug。
+        let print_immediately = !self.is_show_counts 
+            && !self.is_repeats_only 
+            && !self.is_uniques_only 
+            && !self.is_all_repeated;
+
+        if print_immediately {
+            self.print_line(w, &line, 1, is_first_line_printed)?;
+            is_first_line_printed = true;
+        }
+
+        // 比较当前的 `line` 和输入中的连续行（`next_line`）
         for next_line in lines {
             let next_line = next_line?;
             if self.cmp_keys(&line, &next_line) {
-                if (group_cnt == 1 && !self.is_repeats_only)
-                    || (group_cnt > 1 && !self.is_uniques_only)
-                {
-                    self.print_line(w, &line, group_cnt, is_first_line_printed)?;
-                    is_first_line_printed = true;
+                // 两行不同（新组开始）
+                if !print_immediately {
+                    if (group_cnt == 1 && !self.is_repeats_only)
+                        || (group_cnt > 1 && !self.is_uniques_only)
+                    {
+                        self.print_line(w, &line, group_cnt, is_first_line_printed)?;
+                        is_first_line_printed = true;
+                    }
                 }
+                
                 line = next_line;
                 group_cnt = 1;
+
+                // 立刻释放“人质”
+                if print_immediately {
+                    self.print_line(w, &line, 1, is_first_line_printed)?;
+                    is_first_line_printed = true;
+                }
             } else {
+                // 两行相同（组内重复）
                 if self.is_all_repeated {
                     self.print_line(w, &line, group_cnt, is_first_line_printed)?;
                     is_first_line_printed = true;
@@ -131,10 +155,15 @@ impl UniqFlags {
                 group_cnt += 1;
             }
         }
-        if (group_cnt == 1 && !self.is_repeats_only) || (group_cnt > 1 && !self.is_uniques_only) {
-            self.print_line(w, &line, group_cnt, is_first_line_printed)?;
-            is_first_line_printed = true;
+        
+        // 扫尾工作
+        if !print_immediately {
+            if (group_cnt == 1 && !self.is_repeats_only) || (group_cnt > 1 && !self.is_uniques_only) {
+                self.print_line(w, &line, group_cnt, is_first_line_printed)?;
+                is_first_line_printed = true;
+            }
         }
+        
         if (self.delimiters == UniqDelimiters::Append || self.delimiters == UniqDelimiters::Both)
             && is_first_line_printed
         {

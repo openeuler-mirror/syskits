@@ -24,7 +24,7 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Path, PathBuf, StripPrefixError, Component};
+use std::path::{Component, Path, PathBuf, StripPrefixError};
 
 // 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
 use crate::copydir::copy_directory;
@@ -183,6 +183,7 @@ pub struct CpAttributes {
     pub context: CpPreserve,
     pub links: CpPreserve,
     pub xattr: CpPreserve,
+    pub selinux_context: Option<Option<String>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -795,6 +796,7 @@ impl CpAttributes {
         },
         links: CpPreserve::Yes { required: true },
         xattr: CpPreserve::Yes { required: false },
+        selinux_context: None,
     };
 
     pub const NONE: Self = Self {
@@ -805,6 +807,7 @@ impl CpAttributes {
         context: CpPreserve::No { explicit: false },
         links: CpPreserve::No { explicit: false },
         xattr: CpPreserve::No { explicit: false },
+        selinux_context: None,
     };
 
     // 待办事项：若用户是 root，则要求所有权；对于非 root 用户，所有权不是必需的。
@@ -814,11 +817,13 @@ impl CpAttributes {
         mode: CpPreserve::Yes { required: true },
         timestamps: CpPreserve::Yes { required: true },
         xattr: CpPreserve::Yes { required: true },
+        selinux_context: None,
         ..Self::NONE
     };
 
     pub const LINKS: Self = Self {
         links: CpPreserve::Yes { required: true },
+        selinux_context: None,
         ..Self::NONE
     };
 
@@ -831,6 +836,9 @@ impl CpAttributes {
             mode: self.mode.max(other.mode),
             links: self.links.max(other.links),
             xattr: self.xattr.max(other.xattr),
+            selinux_context: self
+                .selinux_context
+                .or_else(|| other.selinux_context.clone()),
         }
     }
 
@@ -1027,23 +1035,115 @@ impl CpOptions {
 
     // 解析要保留的属性
     fn cp_get_attributes(args_match: &ArgMatches) -> Result<CpAttributes, CpError> {
-        let cp_attr = if args_match.get_flag(opt_flags::ARCHIVE) {
-            // --archive 标志优先级最高，设定基础为 ALL
-            CpAttributes::ALL
-        } else if let Some(att_strs) = args_match.get_many::<String>(opt_flags::PRESERVE) {
-            if att_strs.len() == 0 {
-                CpAttributes::DEFAULT
+        let mut ownership = CpPreserve::No { explicit: false };
+        let mut mode = CpPreserve::No { explicit: false };
+        let mut timestamps = CpPreserve::No { explicit: false };
+        let mut context = CpPreserve::No { explicit: false };
+        let mut links = CpPreserve::No { explicit: false };
+        let mut xattr = CpPreserve::No { explicit: false };
+        let mut selinux_context = None;
+
+        // 跟踪用户是否显式指定了保留 SELinux 上下文
+        let mut explicit_preserve_context = false;
+
+        if args_match.get_flag(opt_flags::ARCHIVE) {
+            #[cfg(unix)]
+            {
+                ownership = CpPreserve::Yes { required: true };
+            }
+            mode = CpPreserve::Yes { required: true };
+            timestamps = CpPreserve::Yes { required: true };
+            context = {
+                #[cfg(feature = "feat_selinux")]
+                {
+                    CpPreserve::Yes { required: false }
+                }
+                #[cfg(not(feature = "feat_selinux"))]
+                {
+                    CpPreserve::No { explicit: false }
+                }
+            };
+            links = CpPreserve::Yes { required: true };
+            xattr = CpPreserve::Yes { required: false };
+        } else if args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS) {
+            links = CpPreserve::Yes { required: true };
+        }
+
+        if let Some(att_strs) = args_match.get_many::<String>(opt_flags::PRESERVE) {
+            // 需要克隆迭代器以便既能进行手动判断，又能传递给 cp_parse_iter
+            let att_strs_clone: Vec<String> = att_strs.cloned().collect();
+            if att_strs_clone.is_empty() {
+                // If user used --preserve without arguments, use DEFAULT
+                #[cfg(unix)]
+                {
+                    ownership = ownership.max(CpPreserve::Yes { required: true });
+                }
+                mode = mode.max(CpPreserve::Yes { required: true });
+                timestamps = timestamps.max(CpPreserve::Yes { required: true });
+                xattr = xattr.max(CpPreserve::Yes { required: true });
             } else {
-                CpAttributes::cp_parse_iter(att_strs)?
+                // 标记是否显式声明了 context 或 all
+                for val in &att_strs_clone {
+                    if val.to_lowercase() == "context" || val.to_lowercase() == "all" {
+                        explicit_preserve_context = true;
+                    }
+                }
+                let parsed_attrs = CpAttributes::cp_parse_iter(att_strs_clone.iter())?;
+                #[cfg(unix)]
+                {
+                    ownership = ownership.max(parsed_attrs.ownership);
+                }
+                mode = mode.max(parsed_attrs.mode);
+                timestamps = timestamps.max(parsed_attrs.timestamps);
+                context = context.max(parsed_attrs.context);
+                links = links.max(parsed_attrs.links);
+                xattr = xattr.max(parsed_attrs.xattr);
             }
         } else if args_match.get_flag(opt_flags::PRESERVE_DEFAULT_ATTRIBUTES) {
-            CpAttributes::DEFAULT
-        } else if args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS) {
-            CpAttributes::LINKS
-        } else {
-            CpAttributes::NONE
-        };
-        Ok(cp_attr)
+            #[cfg(unix)]
+            {
+                ownership = ownership.max(CpPreserve::Yes { required: true });
+            }
+            mode = mode.max(CpPreserve::Yes { required: true });
+            timestamps = timestamps.max(CpPreserve::Yes { required: true });
+            xattr = xattr.max(CpPreserve::Yes { required: true });
+        }
+
+        if args_match.get_flag(opt_flags::Z) {
+            selinux_context = Some(None);
+        }
+        if let Some(ctx) = args_match.get_one::<String>(opt_flags::CONTEXT) {
+            selinux_context = Some(Some(ctx.clone()));
+        }
+
+        if selinux_context.is_some() && matches!(context, CpPreserve::Yes { .. }) {
+            // 如果是显式的，严格报错；如果是 -a 带来的隐式，则被 -Z 覆盖，不报错
+            if explicit_preserve_context {
+                let conflict_flag = if args_match.get_one::<String>(opt_flags::CONTEXT).is_some() {
+                    "--context"
+                } else {
+                    "-Z"
+                };
+                return Err(CpError::Error(format!(
+                    "cannot force both --preserve=context and {}",
+                    conflict_flag
+                )));
+            } else {
+                // -Z 或 --context 覆盖隐式的 context 属性继承
+                context = CpPreserve::No { explicit: true };
+            }
+        }
+
+        Ok(CpAttributes {
+            #[cfg(unix)]
+            ownership,
+            mode,
+            timestamps,
+            links,
+            context,
+            xattr,
+            selinux_context,
+        })
     }
 
     fn cp_dereference(&self, in_command_line: bool) -> bool {

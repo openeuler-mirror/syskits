@@ -1,0 +1,389 @@
+/*
+ * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
+//! 运行 timeout <命令>，若该命令在 <持续时间> 后仍在运行，则将其杀死。
+//! timeout 退出码定义：
+//! 如果命令超时且未设置 --preserve-status，程序退出的状态值将为 124。
+//! 否则将使用所运行程序的退出状态值作为退出状态值。
+//! 如果没有指定信号则默认使用 TERM 信号。TERM 信号在进程没有捕获此信号时将
+//! 杀死进程。对于另一些进程可能需要使用 KILL (9)信号。因此信号无法被捕获，
+//! 退出返回值将为 128+9 而非 124。
+
+mod exit_status;
+
+use crate::exit_status::ExitStatus;
+use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
+use ctcore::ct_process::CtChildExt;
+use std::io::ErrorKind;
+use std::os::unix::process::ExitStatusExt;
+use std::process::{self, Child, Stdio};
+use std::time::Duration;
+
+#[cfg(unix)]
+use ctcore::ct_signals::enable_pipe_errors;
+
+use ctcore::{
+    ct_format_usage, ct_help_about, ct_help_usage, ct_show_error,
+    ct_signals::{get_ct_signal_by_name_or_value, get_ct_signal_name_by_value},
+};
+
+const TIMEOUT_ABOUT: &str = ct_help_about!("timeout.md");
+const TIMEOUT_USAGE: &str = ct_help_usage!("timeout.md");
+
+pub mod timeout_flags {
+    pub static TIMEOUT_FOREGROUND: &str = "foreground";
+    pub static TIMEOUT_KILL_AFTER: &str = "kill-after";
+    pub static TIMEOUT_SIGNAL: &str = "signal";
+    pub static TIMEOUT_PRESERVE_STATUS: &str = "preserve-status";
+    pub static TIMEOUT_VERBOSE: &str = "verbose";
+
+    // Positional args.
+    pub static TIMEOUT_DURATION: &str = "duration";
+    pub static TIMEOUT_COMMAND: &str = "command";
+}
+
+struct TimeoutFlags {
+    is_foreground: bool,
+    kill_after: Option<Duration>,
+    signal: usize,
+    duration: Duration,
+    is_preserve_status: bool,
+    is_verbose: bool,
+
+    command: Vec<String>,
+}
+
+impl TimeoutFlags {
+    // 根据提供的命令行参数创建一个新的CTimeout实例
+    // 参数: options - 包含命令行参数的ArgMatches引用
+    // 返回值: CTResult<CTimeout> - 返回一个结果类型，包含可能的错误
+    fn new(timeout_flags: &clap::ArgMatches) -> CTResult<Self> {
+        // 获取配置的信号值，如果未提供，则默认为TERM信号
+        let signal = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_SIGNAL) {
+            Some(signal_) => {
+                let signal_result = get_ct_signal_by_name_or_value(signal_);
+                match signal_result {
+                    None => {
+                        // 如果提供的信号无效，返回错误
+                        return Err(CTsageError::new(
+                            ExitStatus::TimeoutFailed.into(),
+                            format!("{}: invalid signal", signal_.quote()),
+                        ));
+                    }
+                    Some(signal_value) => signal_value,
+                }
+            }
+            _ => ctcore::ct_signals::get_ct_signal_by_name_or_value("TERM").unwrap(),
+        };
+
+        // 解析kill_after参数，如果没有提供，则为None
+        let kill_after = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_KILL_AFTER) {
+            None => None,
+            Some(kill_after) => match ctcore::ct_parse_time::ct_from_str(kill_after) {
+                Ok(k) => Some(k),
+                Err(err) => {
+                    // 如果解析失败，返回错误
+                    return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
+                }
+            },
+        };
+
+        // 解析持续时间参数，这是必须的
+        let duration = match ctcore::ct_parse_time::ct_from_str(
+            timeout_flags
+                .get_one::<String>(timeout_flags::TIMEOUT_DURATION)
+                .unwrap(),
+        ) {
+            Ok(duration) => duration,
+            Err(err) => {
+                // 如果解析失败，返回错误
+                return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
+            }
+        };
+
+        let is_preserve_status = timeout_flags.get_flag(timeout_flags::TIMEOUT_PRESERVE_STATUS);
+        let is_foreground = timeout_flags.get_flag(timeout_flags::TIMEOUT_FOREGROUND);
+        let is_verbose = timeout_flags.get_flag(timeout_flags::TIMEOUT_VERBOSE);
+
+        // 获取命令参数，这是必须的
+        let command = timeout_flags
+            .get_many::<String>(timeout_flags::TIMEOUT_COMMAND)
+            .unwrap()
+            .map(String::from)
+            .collect::<Vec<_>>();
+
+        // 成功创建CTimeout实例
+        Ok(Self {
+            is_foreground,
+            kill_after,
+            signal,
+            duration,
+            is_preserve_status,
+            is_verbose,
+            command,
+        })
+    }
+}
+
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    timeout_main(args)
+}
+
+pub fn timeout_main(args: impl ctcore::Args) -> CTResult<()> {
+    // 尝试解析命令行参数，如果失败则返回错误码125
+    let matches = ct_app().try_get_matches_from(args).with_exit_code(125)?;
+
+    // 从命令行参数创建 TimeoutFlags 实例
+    let flags = TimeoutFlags::new(&matches)?;
+
+    // 执行超时命令
+    timeout(&flags)
+}
+
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = TIMEOUT_ABOUT;
+    let usage_description = ct_format_usage(TIMEOUT_USAGE);
+    let args = vec![
+        Arg::new(timeout_flags::TIMEOUT_FOREGROUND)
+            .long(timeout_flags::TIMEOUT_FOREGROUND)
+            .help(
+                "when not running timeout directly from a shell prompt, allow \
+                COMMAND to read from the TTY and get TTY signals; in this mode, \
+                children of COMMAND will not be timed out",
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(timeout_flags::TIMEOUT_KILL_AFTER)
+            .long(timeout_flags::TIMEOUT_KILL_AFTER)
+            .short('k')
+            .value_name("DURATION")
+            .help(
+                "also send a KILL signal if COMMAND is still running this long \
+                after the initial signal was sent",
+            ),
+        Arg::new(timeout_flags::TIMEOUT_PRESERVE_STATUS)
+            .long(timeout_flags::TIMEOUT_PRESERVE_STATUS)
+            .help("exit with the same status as COMMAND, even when the command times out")
+            .action(ArgAction::SetTrue),
+        Arg::new(timeout_flags::TIMEOUT_SIGNAL)
+            .short('s')
+            .long(timeout_flags::TIMEOUT_SIGNAL)
+            .value_name("SIGNAL")
+            .help(
+                "specify the signal to be sent on timeout; SIGNAL may be a name like \
+                'HUP' or a number; see 'kill -l' for a list of signals",
+            ),
+        Arg::new(timeout_flags::TIMEOUT_VERBOSE)
+            .short('v')
+            .long(timeout_flags::TIMEOUT_VERBOSE)
+            .help("diagnose to stderr any signal sent upon timeout")
+            .action(ArgAction::SetTrue),
+        Arg::new(timeout_flags::TIMEOUT_DURATION)
+            .value_name("DURATION")
+            .required(true)
+            .help("maximum time to wait for COMMAND to finish"),
+        Arg::new(timeout_flags::TIMEOUT_COMMAND)
+            .value_name("COMMAND [ARGS]")
+            .required(true)
+            .action(ArgAction::Append)
+            .value_hint(clap::ValueHint::CommandName)
+            .help("command to run and its arguments"),
+    ];
+
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
+        .args(&args)
+}
+
+/// 移除可能使等待子进程退出码失败的预存在SIGCHLD处理程序
+fn timeout_unblock_sigchld() {
+    unsafe {
+        nix::sys::signal::signal(
+            nix::sys::signal::Signal::SIGCHLD,
+            nix::sys::signal::SigHandler::SigDfl,
+        )
+        .unwrap();
+    }
+}
+
+/// 在详细模式下报告超时并发送信号给指定命令
+fn timeout_report_if_verbose(signal: usize, cmd: &str, is_verbose: bool) {
+    if is_verbose {
+        let s = get_ct_signal_name_by_value(signal).unwrap();
+        ct_show_error!("sending signal {} to command {}", s, cmd.quote());
+    }
+}
+
+/// 发送信号给一个带有超时的进程，处理前台和后台进程
+fn timeout_send_signal(process: &mut Child, signal: usize, is_foreground: bool) {
+    match is_foreground {
+        true => _ = process.send_signal(signal),
+        false => {
+            _ = process.send_signal_group(signal);
+            let kill_signal = get_ct_signal_by_name_or_value("KILL").unwrap();
+            let continued_signal = get_ct_signal_by_name_or_value("CONT").unwrap();
+            if signal != kill_signal && signal != continued_signal {
+                _ = process.send_signal_group(continued_signal);
+            }
+        }
+    }
+}
+
+/// 根据指定的超时标志设置进程的超时行为
+///
+/// 此函数负责根据`TimeoutFlags`结构体中的标志，设置进程的超时行为。
+/// 如果进程不是在前台运行，则尝试将其置于后台。此外，它还会处理与Unix系统相关的管道错误，
+/// 并尝试执行指定的命令。如果命令执行失败，它会根据错误类型返回相应的错误代码。
+/// 最后，它会设置信号以防止子进程阻塞，并处理进程的超时逻辑。
+///
+/// # 参数
+/// * `flags`: `&TimeoutFlags` - 包含超时设置和命令信息的引用
+///
+/// # 返回
+/// * `CTResult<()>` - 一个结果类型，包装了可能的错误
+fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
+    if !flags.is_foreground {
+        unsafe { libc::setpgid(0, 0) };
+    }
+
+    #[cfg(unix)]
+    enable_pipe_errors()?;
+
+    let process = &mut process::Command::new(&flags.command[0])
+        .args(&flags.command[1..])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|err| {
+            let status = if err.kind() == ErrorKind::NotFound {
+                ExitStatus::CommandNotFound
+            } else {
+                ExitStatus::CommandNotExecutable
+            };
+            CtSimpleError::new(status.into(), format!("failed to execute process: {err}"))
+        })?;
+
+    timeout_unblock_sigchld();
+    handle_process_timeout(process, flags)
+}
+
+/// 处理进程超时逻辑
+///
+/// 此函数用于在指定时间内监控一个进程的运行状态。如果进程在规定时间内正常退出，
+/// 或者运行时间超过规定时间（超时），此函数将进行相应处理。
+///
+/// # 参数
+/// - `process`: &mut Child - 一个可变引用，指向需要监控的子进程。
+/// - `flags`: &TimeoutFlags - 一个不可变引用，包含超时相关的配置，如持续时间、信号等。
+///
+/// # 返回值
+/// - `CTResult<()>` - 一个结果类型，表示处理是否成功。如果进程正常退出或被处理，
+///   则返回Ok(())；否则返回一个错误状态。
+fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
+    match process.wait_or_timeout(flags.duration) {
+        Ok(Some(status)) => {
+            // 进程在超时前结束
+            if flags.is_preserve_status {
+                // 保留原始退出状态
+                if let Some(signal) = status.signal() {
+                    Err(ExitStatus::SignalTerminated(signal).into())
+                } else {
+                    Err(status.code().unwrap_or(0).into())
+                }
+            } else {
+                // 不保留状态时，返回 124
+                Err(ExitStatus::CommandTimedOut.into())
+            }
+        }
+        Ok(None) => {
+            // 进程超时，发送信号
+            timeout_report_if_verbose(flags.signal, &flags.command[0], flags.is_verbose);
+            timeout_send_signal(process, flags.signal, flags.is_foreground);
+
+            if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
+                // 如果直接使用 KILL 信号，等待进程结束并返回 137 (128 + 9)
+                process.wait()?;
+                Err(ExitStatus::SignalTerminated(9).into())
+            } else {
+                handle_timeout_exceeded(process, flags)
+            }
+        }
+        Err(_) => Err(ExitStatus::TimeoutFailed.into()),
+    }
+}
+
+/// 处理超时情况
+///
+/// 当进程运行时间超过指定的超时限制时，调用此函数来处理超时情况。
+/// 它首先报告超时（如果设置了详细模式），然后向进程发送超时信号，
+/// 最后根据是否设置了kill_after参数来决定下一步的行为。
+///
+/// # 参数
+///
+/// - `process`: &mut Child - 对子进程的引用，用于发送信号。
+/// - `flags`: &TimeoutFlags - 包含超时配置的引用，包括信号类型、命令、是否详细模式等。
+///
+/// # 返回
+///
+/// - `CTResult<()>` - 一个结果类型，表示操作是否成功。
+fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
+    match flags.kill_after {
+        None => {
+            // 等待 TERM 信号的结果
+            let status = process.wait()?;
+            if flags.is_preserve_status {
+                if let Some(signal) = status.signal() {
+                    Err(ExitStatus::SignalTerminated(signal).into())
+                } else {
+                    Err(status.code().unwrap_or(0).into())
+                }
+            } else {
+                Err(ExitStatus::CommandTimedOut.into()) // 124
+            }
+        }
+        Some(kill_after) => {
+            // 等待 kill_after 时间
+            match process.wait_or_timeout(kill_after) {
+                Ok(Some(status)) => {
+                    if flags.is_preserve_status {
+                        if let Some(signal) = status.signal() {
+                            Err(ExitStatus::SignalTerminated(signal).into())
+                        } else {
+                            Err(status.code().unwrap_or(0).into())
+                        }
+                    } else {
+                        Err(ExitStatus::CommandTimedOut.into()) // 124
+                    }
+                }
+                Ok(None) => {
+                    // 发送 KILL 信号
+                    let kill_signal = get_ct_signal_by_name_or_value("KILL").unwrap();
+                    timeout_report_if_verbose(kill_signal, &flags.command[0], flags.is_verbose);
+                    timeout_send_signal(process, kill_signal, flags.is_foreground);
+                    process.wait()?;
+                    // KILL 信号无法被捕获，返回 137 (128 + 9)
+                    Err(ExitStatus::SignalTerminated(9).into())
+                }
+                Err(_) => Err(ExitStatus::TimeoutFailed.into()),
+            }
+        }
+    }
+}
+

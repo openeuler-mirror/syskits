@@ -3018,7 +3018,7 @@ mod tests {
             assert_eq!(opts, "M1");
         }
 
-                #[test]
+        #[test]
         fn test_parse_key_with_conflicting_options() {
             let global_settings = SortGlobalConfigs::default();
             let result = SortFieldSelector::parse("1,2Md,1n", &global_settings); // Assuming 'd' and 'n' are conflicting in this context
@@ -3086,9 +3086,7 @@ mod tests {
                 _ => panic!("Expected string selection"),
             }
         }
-
     }
-
 
     #[cfg(test)]
     mod key_position_tests {
@@ -4523,7 +4521,7 @@ mod tests {
                 }
             }
         }
-    
+
         #[test]
         fn test_ct_main_exist_file_ignore_case_short() {
             let dir = tempdir().unwrap();
@@ -5423,7 +5421,7 @@ mod tests {
                 }
             }
         }
-    
+
         #[test]
         fn test_ct_main_exist_file_version_sort_long() {
             let dir = tempdir().unwrap();
@@ -8204,7 +8202,7 @@ mod tests {
                 }
             }
         }
-    
+
         #[test]
         fn test_ct_main_no_exist_file_check_short_silent() {
             let dir = tempdir().unwrap();
@@ -8692,7 +8690,7 @@ mod tests {
                 }
             }
         }
-    
+
         #[test]
         fn test_ct_main_no_exist_file_field_separator_short_horizontal() {
             let dir = tempdir().unwrap();
@@ -9136,7 +9134,7 @@ mod tests {
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::modes::SORT_MONTH));
         }
-   
+
         #[test]
         fn test_ct_app_sort_numeric() {
             let command = ct_app();

@@ -181,5 +181,3 @@ mod tests {
         assert!(start.elapsed() >= Duration::from_secs(2));
     }
 }
-
-

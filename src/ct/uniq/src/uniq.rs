@@ -1341,7 +1341,7 @@ mod tests {
             assert_eq!(skip_fields_old, Some(123)); // Assuming "123" is extracted despite the trailing characters
         }
     }
-  
+
     #[cfg(test)]
     mod filter_args_tests {
         use super::*;
@@ -2384,7 +2384,6 @@ mod tests {
             assert!(result.is_err());
         }
     }
-
 
     #[cfg(test)]
     mod open_output_file_tests {

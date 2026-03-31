@@ -11,7 +11,7 @@
 
 // spell-checker:ignore (path) eacces inacc
 
-use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version, parser::ValueSource};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::{

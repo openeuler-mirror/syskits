@@ -378,14 +378,14 @@ mod test {
         assert_eq!(input, b"");
     }
 
-      #[test]
+    #[test]
     fn test_parse_code_invalid_input_length_max_octal_2() {
         let mut input: &[u8] = b"12345678";
         assert_eq!(parse_code(&mut input, Base::Oct), Some(83));
         assert_eq!(input, b"45678");
     }
 
-     #[test]
+    #[test]
     fn test_parse_code_invalid_input_length_min_hex_octal() {
         let mut input: &[u8] = b"x1";
         assert_eq!(parse_code(&mut input, Base::Hex), None);
@@ -521,8 +521,7 @@ mod test {
         assert_eq!(parse_unicode(&mut input, 10), None);
     }
 
-
-        #[test]
+    #[test]
     fn test_parse_unicode_invalid_input_length_max_unicode() {
         let mut input: &[u8] = b"\\U{10FFFF}";
         assert_eq!(parse_unicode(&mut input, 17), None);

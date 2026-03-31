@@ -729,7 +729,7 @@ mod tests {
         };
         assert_eq!(parsed_number.into_i64(), Some(0));
     }
- #[test]
+    #[test]
     fn test_into_i64_min_negative() {
         let parsed_number = ParsedNumber {
             base: Base::CtDecimal,

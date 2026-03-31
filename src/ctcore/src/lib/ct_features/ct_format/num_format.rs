@@ -1217,7 +1217,6 @@ mod test {
         assert_eq!(actual, expected);
     }
 
-
     #[test]
     fn test_format_float_shortest_normal_functionality() {
         let f = 123456.789;
@@ -1689,5 +1688,4 @@ mod test {
         assert_eq!(&f("1000.02030"), "1000.0203");
         assert_eq!(&f("1000.00000"), "1000");
     }
-
 }

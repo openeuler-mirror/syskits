@@ -198,7 +198,7 @@ mod tests {
             )
         }
 
-       #[test]
+        #[test]
         fn test_ct_main_file_data_short() {
             let args = vec![ctcore::ct_util_name(), "-d"];
             let result = sync_main(args.iter().map(|s| OsString::from(s)));
@@ -438,6 +438,5 @@ mod tests {
 
             assert!(result.is_ok());
         }
-
     }
 }

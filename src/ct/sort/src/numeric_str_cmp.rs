@@ -403,7 +403,7 @@ mod tests {
                 "Special characters like '&' should be invalid"
             );
         }
-    
+
         #[test]
         fn test_is_invalid_char_with_numeric_and_special_mixture() {
             let mut had_decimal_pt = false;

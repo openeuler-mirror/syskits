@@ -1001,7 +1001,7 @@ mod tests {
         assert_eq!(writer, b"                    ");
     }
 
-   #[test]
+    #[test]
     fn test_write_padded_empty_width() {
         let mut writer = Vec::<u8>::new();
         let text = b"Hello, world!";
@@ -1033,5 +1033,4 @@ mod tests {
         assert_eq!(result.is_ok(), true);
         assert_eq!(writer, b"Hello, world!");
     }
-
 }

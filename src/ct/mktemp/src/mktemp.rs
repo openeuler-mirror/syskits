@@ -1729,7 +1729,7 @@ mod tests {
         }
     }
 
-   #[cfg(test)]
+    #[cfg(test)]
     mod make_temp_file_tests {
         use std::fs;
         use std::path::PathBuf;

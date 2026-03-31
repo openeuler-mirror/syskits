@@ -187,5 +187,4 @@ mod tests {
         // Issue #4479
         assert_eq!("ààà[^", ct_fix_negation("ààà[^"));
     }
-
 }

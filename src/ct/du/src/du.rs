@@ -3183,7 +3183,6 @@ mod tests {
             assert!(matches.get_one::<bool>(DEREFERENCE_ARGS).unwrap());
         }
 
-
         #[test]
         fn test_ct_app_no_dereference() {
             let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();
@@ -4965,7 +4964,7 @@ mod tests {
                 vec!["iso"]
             );
         }
- 
+
         #[test]
         fn test_ct_app_exclude_from_files0_from_time_time_style_iso() {
             let temp_dir = Builder::new().prefix("tests_ct_app_dir").tempdir().unwrap();

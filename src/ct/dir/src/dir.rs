@@ -1542,7 +1542,7 @@ mod tests {
             assert!(matches.unwrap().contains_id(ls_flags::format::LS_LONG));
         }
 
-            #[test]
+        #[test]
         fn test_ct_app_across_short() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-x"];

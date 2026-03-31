@@ -1776,5 +1776,5 @@ mod test {
             Err(e) => eprintln!("Error deleting file: {}", e),
         }
         assert_eq!(s, expected_output);
-    }   
+    }
 }

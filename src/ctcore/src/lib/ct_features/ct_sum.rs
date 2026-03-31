@@ -497,7 +497,7 @@ impl Write for CtDigestWriter<'_> {
 
 #[cfg(test)]
 mod tests {
-     use super::*;
+    use super::*;
 
     #[test]
     fn test_blake2b_with_custom_output_bytes() {
@@ -860,7 +860,7 @@ mod tests {
         algo.hash_update(input);
         println!("test_hash_update:{:?}", input);
     }
-   #[test]
+    #[test]
     fn test_hash_finalize() {
         let mut algo = Shake256::new();
         let input = b"hello world";

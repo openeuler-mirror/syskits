@@ -495,7 +495,7 @@ mod tests {
         // 确保正确解析 %s 指令和 \n 转义序列
     }
 
-   #[test]
+    #[test]
     fn test_sprintf_empty_format() {
         let format_string = "";
         let args = vec![];

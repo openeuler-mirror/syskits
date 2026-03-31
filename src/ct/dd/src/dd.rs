@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2022-2024 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
  *  syskits is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL V2
  * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
@@ -1322,4 +1322,355 @@ pub fn ct_app() -> Command {
         .after_help(DD_AFTER_HELP)
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{calc_bsize, DdOutput, Parser};
+
+    use std::path::Path;
+
+    #[test]
+    fn bsize_test_primes() {
+        let (n, m) = (7901, 7919);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n * m);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_obs_greater() {
+        let (n, m) = (7 * 5119, 13 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_ibs_greater() {
+        let (n, m) = (13 * 5119, 7 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_3fac_rel_prime() {
+        let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 11 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_ibs_greater() {
+        let (n, m) = (512 * 1024, 256 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n);
+    }
+
+    #[test]
+    fn bsize_test_obs_greater() {
+        let (n, m) = (256 * 1024, 512 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn bsize_test_bs_eq() {
+        let (n, m) = (1024, 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
+        let args = &["conv=nocreat", "of=not-a-real.file"];
+        let settings = Parser::new().parse(args).unwrap();
+        assert!(
+            DdOutput::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod dd_copy_tests {
+    use super::*;
+    use std::io::{Read, Seek, SeekFrom};
+    use tempfile::{tempdir, tempfile};
+    use std::fs::File;
+    use std::io::Write;
+
+    // 辅助函数：创建测试用的DdOptions
+    fn create_test_options() -> DdOptions {
+        DdOptions {
+            infile: None,
+            outfile: None,
+            ibs: 512,
+            obs: 512,
+            skip: 0,
+            seek: 0,
+            count: None,
+            iconv: IConvFlags::default(),
+            iflags: IFlags::default(),
+            oconv: OConvFlags::default(),
+            oflags: OFlags::default(),
+            status: None,
+            buffered: false,
+        }
+    }
+
+    // 辅助函数：创建测试用的输入源
+    fn create_test_input<'a>(data: &[u8], settings: &'a DdOptions) -> CTResult<Input<'a>> {
+        let mut temp_file = tempfile()?;
+        temp_file.write_all(data)?;
+        temp_file.seek(SeekFrom::Start(0))?;
+        
+        // 如果设置了skip，需要相应地调整文件位置
+        if settings.skip > 0 {
+            temp_file.seek(SeekFrom::Start(settings.skip as u64))?;
+        }
+        
+        Ok(Input {
+            src: Source::File(temp_file),
+            settings,
+        })
+    }
+
+    // 辅助函数：创建测试用的输出目标
+    fn create_test_output<'a>(settings: &'a DdOptions) -> CTResult<(DdOutput<'a>, File)> {
+        let temp_file = tempfile()?;
+        let output = DdOutput {
+            dst: Dest::File(temp_file.try_clone()?, Density::Dense),
+            settings,
+        };
+        Ok((output, temp_file))
+    }
+
+    #[test]
+    fn test_basic_copy() -> CTResult<()> {
+        let input_data = b"Hello, World!";
+        let options = create_test_options();
+        
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_block_size() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 4;
+        options.obs = 4;
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_count() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.count = Some(Num::Blocks(1));
+        options.ibs = 4;
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], b"Hell");
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_skip() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 1;      // 设置输入块大小为1字节
+        options.skip = 7;     // 跳过7个块（包括空格）
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        
+        
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        
+        assert_eq!(&result[..], b"World!");
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_empty_input() -> CTResult<()> {
+        let input_data = b"";
+        let options = create_test_options();
+        
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert!(result.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_seek() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.seek = 3;
+
+        // 创建一个临时目录和文件
+        let dir = tempdir()?;
+        let file_path = dir.path().join("test.txt");
+
+        // 创建并写入初始内容
+        {
+            let mut file = File::create(&file_path)?;
+            file.write_all(b"XXXXXXXXXXXXX")?;
+        }
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let output = DdOutput::new_file(&file_path, &options)?;
+
+        dd_copy(input, output)?;
+
+        // 读取并验证结果
+        let mut result = Vec::new();
+        File::open(&file_path)?.read_to_end(&mut result)?;
+        assert_eq!(&result[..], b"XXXHello, World!");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_nocache() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.iflags.nocache = true;
+        options.oflags.nocache = true;
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_progress() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.status = Some(StatusLevel::Progress);
+
+        let input_data = b"Hello, World!";
+        let input = create_test_input(input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        // 验证结果
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests_input_new_stdin {
+    use super::*;
+
+    // 辅助函数：创建测试用的 DdOptions
+    fn create_test_options() -> DdOptions {
+        DdOptions {
+            infile: None,
+            outfile: None,
+            ibs: 512,
+            obs: 512,
+            skip: 0,
+            seek: 0,
+            count: None,
+            iconv: IConvFlags::default(),
+            iflags: IFlags::default(),
+            oconv: OConvFlags::default(),
+            oflags: OFlags::default(),
+            status: None,
+            buffered: false,
+        }
+    }
+
+    #[test]
+    fn test_new_stdin_basic() {
+        let settings = create_test_options();
+        let result = Input::new_stdin(&settings);
+        assert!(result.is_ok(), "Should successfully create Input from stdin");
+    }
+
+    #[test]
+    fn test_new_stdin_with_directory_flag() {
+        let mut settings = create_test_options();
+        settings.iflags.directory = true;
+        
+        #[cfg(unix)]
+        {
+            let result = Input::new_stdin(&settings);
+            assert!(result.is_ok(), "Should succeed when stdin is not a regular file");
+        }
+    }
 }

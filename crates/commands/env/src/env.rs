@@ -3304,6 +3304,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -3332,6 +3340,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -3391,6 +3407,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3448,6 +3472,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3506,6 +3538,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3554,6 +3594,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3602,6 +3650,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3650,6 +3706,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3699,6 +3763,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3757,6 +3829,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3815,6 +3895,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3852,6 +3940,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3889,6 +3985,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -3948,6 +4052,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4007,6 +4119,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4066,6 +4186,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4098,6 +4226,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -4129,6 +4265,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -4192,6 +4336,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4253,6 +4405,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4315,6 +4475,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4367,6 +4535,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4419,6 +4595,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4471,6 +4655,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4524,6 +4716,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4586,6 +4786,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4648,6 +4856,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4689,6 +4905,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4730,6 +4954,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4793,6 +5025,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4856,6 +5096,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4919,6 +5167,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -4955,6 +5211,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -4986,6 +5250,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -5049,6 +5321,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5110,6 +5390,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5172,6 +5460,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5224,6 +5520,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5276,6 +5580,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5328,6 +5640,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5381,6 +5701,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5443,6 +5771,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5505,6 +5841,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5546,6 +5890,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5587,6 +5939,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5650,6 +6010,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5713,6 +6081,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5776,6 +6152,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5812,6 +6196,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -5845,6 +6237,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -5910,6 +6310,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -5973,6 +6381,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6037,6 +6453,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6091,6 +6515,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6145,6 +6577,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: [].to_vec(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6199,6 +6639,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6254,6 +6702,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6318,6 +6774,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6382,6 +6846,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6425,6 +6897,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6468,6 +6948,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6533,6 +7021,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6598,6 +7094,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6663,6 +7167,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut opts = env_make_options(&matches).unwrap();
@@ -6701,6 +7213,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -6735,6 +7255,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let mut env_app_data = EnvAppData::default();
@@ -6801,6 +7329,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -6865,6 +7401,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -6930,6 +7474,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -6985,6 +7537,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7041,6 +7601,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7106,6 +7674,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7171,6 +7747,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7215,6 +7799,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7259,6 +7851,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: ["arch", "env"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7325,6 +7925,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7391,6 +7999,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();
@@ -7457,6 +8073,14 @@ mod tests {
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
                 program: binding.iter().map(OsStr::new).collect::<Vec<_>>(),
+                #[cfg(unix)]
+                default_signals: None,
+                #[cfg(unix)]
+                ignore_signals: None,
+                #[cfg(unix)]
+                block_signals: None,
+                #[cfg(unix)]
+                list_signal_handling: false,
             };
 
             let opts = env_make_options(&matches).unwrap();

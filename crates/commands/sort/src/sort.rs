@@ -2515,7 +2515,7 @@ mod tests {
         fn test_general_f64_parse_valid_number() {
             assert_eq!(
                 sort_general_f64_parse("123.45"),
-                SortGeneralF64ParseResult::SortNumber(123.45),
+                SortGeneralF64ParseResult::SortNumber(BigDecimal::from_str("123.45").unwrap()),
                 "Test case 1 failed for input: '123.45'"
             );
         }
@@ -2524,7 +2524,7 @@ mod tests {
         fn test_general_f64_parse_negative_number() {
             assert_eq!(
                 sort_general_f64_parse("-123.45"),
-                SortGeneralF64ParseResult::SortNumber(-123.45),
+                SortGeneralF64ParseResult::SortNumber(BigDecimal::from_str("-123.45").unwrap()),
                 "Test case 2 failed for input: '-123.45'"
             );
         }
@@ -2688,10 +2688,12 @@ mod tests {
         fn test_basic_string_comparison() {
             let a = SortLine {
                 line: "apple",
+                raw_bytes: b"apple",
                 index: 0,
             };
             let b = SortLine {
                 line: "banana",
+                raw_bytes: b"banana",
                 index: 1,
             };
             let global_settings = SortGlobalConfigs {
@@ -2719,10 +2721,12 @@ mod tests {
         fn test_numeric_comparison() {
             let a = SortLine {
                 line: "10",
+                raw_bytes: b"10",
                 index: 0,
             };
             let b = SortLine {
                 line: "2",
+                raw_bytes: b"2",
                 index: 1,
             };
             let global_settings = SortGlobalConfigs {
@@ -2756,10 +2760,12 @@ mod tests {
         fn test_general_numeric_comparison() {
             let a = SortLine {
                 line: "3.141592653589793",
+                raw_bytes: b"3.141592653589793",
                 index: 0,
             };
             let b = SortLine {
                 line: "2.718281828459045",
+                raw_bytes: b"2.718281828459045",
                 index: 1,
             };
             let global_settings = SortGlobalConfigs {
@@ -2771,12 +2777,16 @@ mod tests {
             let a_line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
-                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(std::f64::consts::PI)],
+                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(
+                    BigDecimal::from_str("3.141592653589793").unwrap(),
+                )],
             };
             let b_line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
-                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(std::f64::consts::E)],
+                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(
+                    BigDecimal::from_str("2.718281828459045").unwrap(),
+                )],
             };
 
             let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);
@@ -2787,10 +2797,12 @@ mod tests {
         fn test_reversed_sorting() {
             let a = SortLine {
                 line: "apple",
+                raw_bytes: b"apple",
                 index: 0,
             };
             let b = SortLine {
                 line: "banana",
+                raw_bytes: b"banana",
                 index: 1,
             };
             let global_settings = SortGlobalConfigs {
@@ -2818,10 +2830,12 @@ mod tests {
         fn test_combination_of_sort_modes() {
             let a = SortLine {
                 line: "10 apples",
+                raw_bytes: b"10 apples",
                 index: 0,
             };
             let b = SortLine {
                 line: "2 bananas",
+                raw_bytes: b"2 bananas",
                 index: 1,
             };
             let g_settings = SortGlobalConfigs {
@@ -2877,10 +2891,12 @@ mod tests {
         fn test_ignore_case_sorting() {
             let a = SortLine {
                 line: "apple",
+                raw_bytes: b"apple",
                 index: 0,
             };
             let b = SortLine {
                 line: "Banana",
+                raw_bytes: b"Banana",
                 index: 1,
             };
             let settings = SortGlobalConfigs {
@@ -2916,10 +2932,12 @@ mod tests {
         fn test_ignore_non_printing_characters() {
             let a = SortLine {
                 line: "\x01\x02b",
+                raw_bytes: b"\x01\x02b",
                 index: 0,
             };
             let b = SortLine {
                 line: "a",
+                raw_bytes: b"a",
                 index: 1,
             };
             let settings = SortGlobalConfigs {
@@ -2955,10 +2973,12 @@ mod tests {
         fn test_edge_cases_for_numeric_sorting() {
             let a = SortLine {
                 line: "-10000000000",
+                raw_bytes: b"-10000000000",
                 index: 0,
             };
             let b = SortLine {
                 line: "9999999999",
+                raw_bytes: b"9999999999",
                 index: 1,
             };
             let g_settings = SortGlobalConfigs {
@@ -3031,14 +3051,17 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "apple",
+                    raw_bytes: b"apple",
                     index: 1,
                 },
                 SortLine {
                     line: "banana",
+                    raw_bytes: b"banana",
                     index: 2,
                 },
                 SortLine {
                     line: "apricot",
+                    raw_bytes: b"apricot",
                     index: 3,
                 },
             ];
@@ -3060,14 +3083,17 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "cucumber",
+                    raw_bytes: b"cucumber",
                     index: 1,
                 },
                 SortLine {
                     line: "banana",
+                    raw_bytes: b"banana",
                     index: 2,
                 },
                 SortLine {
                     line: "apple",
+                    raw_bytes: b"apple",
                     index: 3,
                 },
             ];
@@ -3093,14 +3119,17 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "apple",
+                    raw_bytes: b"apple",
                     index: 1,
                 },
                 SortLine {
                     line: "apple",
+                    raw_bytes: b"apple",
                     index: 2,
                 },
                 SortLine {
                     line: "banana",
+                    raw_bytes: b"banana",
                     index: 3,
                 },
             ];
@@ -3126,14 +3155,17 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "apple",
+                    raw_bytes: b"apple",
                     index: 2,
                 },
                 SortLine {
                     line: "apple",
+                    raw_bytes: b"apple",
                     index: 1,
                 },
                 SortLine {
                     line: "banana",
+                    raw_bytes: b"banana",
                     index: 3,
                 },
             ];
@@ -3175,10 +3207,12 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "2.3",
+                    raw_bytes: b"2.3",
                     index: 1,
                 },
                 SortLine {
                     line: "1.1",
+                    raw_bytes: b"1.1",
                     index: 2,
                 },
             ];
@@ -3202,14 +3236,17 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "münchen",
+                    raw_bytes: "münchen".as_bytes(),
                     index: 2,
                 },
                 SortLine {
                     line: "zürich",
+                    raw_bytes: "zürich".as_bytes(),
                     index: 1,
                 },
                 SortLine {
                     line: "köln",
+                    raw_bytes: "köln".as_bytes(),
                     index: 3,
                 },
             ];
@@ -3232,14 +3269,17 @@ mod tests {
             let mut lines = vec![
                 SortLine {
                     line: "repeat",
+                    raw_bytes: b"repeat",
                     index: 1,
                 },
                 SortLine {
                     line: "repeat",
+                    raw_bytes: b"repeat",
                     index: 2,
                 },
                 SortLine {
                     line: "repeat",
+                    raw_bytes: b"repeat",
                     index: 3,
                 },
             ];
@@ -3860,6 +3900,7 @@ mod tests {
 
             let line = SortLine::create(
                 "Hello, world",
+                b"Hello, world",
                 0,
                 &mut line_data,
                 &mut token_buffer,
@@ -3874,6 +3915,7 @@ mod tests {
         fn test_print_non_debug() {
             let line = SortLine {
                 line: "Hello, world",
+                raw_bytes: b"Hello, world",
                 index: 0,
             };
             let settings = SortGlobalConfigs {
@@ -3891,6 +3933,7 @@ mod tests {
         fn test_print_debug() {
             let line = SortLine {
                 line: "Hello, world",
+                raw_bytes: b"Hello, world",
                 index: 0,
             };
             let settings = SortGlobalConfigs {
@@ -3949,6 +3992,7 @@ mod tests {
 
             let line = SortLine::create(
                 "123 main st",
+                b"123 main st",
                 1,
                 &mut line_data,
                 &mut token_buffer,
@@ -3974,6 +4018,7 @@ mod tests {
 
             let _line = SortLine::create(
                 "No tokens needed",
+                b"No tokens needed",
                 2,
                 &mut line_data,
                 &mut token_buffer,
@@ -3986,6 +4031,7 @@ mod tests {
         fn test_print_debug_with_numeric_mode() {
             let line = SortLine {
                 line: "100 apples",
+                raw_bytes: b"100 apples",
                 index: 5,
             };
             let settings = SortGlobalConfigs {
@@ -4367,16 +4413,17 @@ mod tests {
             let _ = fs::remove_file(test_file_name); // Ensure the file does not exist before the test
             let output = SortOutput::new(Some(test_file_name)).unwrap();
             assert!(output.file.is_some());
-            // Ensure the file exists but has not been truncated or written to
-            assert_eq!(fs::metadata(test_file_name).unwrap().len(), 0);
-            // delete the file
-            fs::remove_file(test_file_name).unwrap();
+            // File is not created until into_write is called
+            assert!(!Path::new(test_file_name).exists());
         }
 
         #[test]
         fn test_output_new_failure() {
+            // SortOutput::new now only stores the filename, it doesn't try to open the file
+            // so invalid paths don't cause errors at creation time
             let output = SortOutput::new(Some("/invalid/path/to/file.txt"));
-            assert!(output.is_err());
+            // Now it succeeds because validation happens later in into_write
+            assert!(output.is_ok());
         }
 
         #[test]
@@ -4423,7 +4470,6 @@ mod tests {
 
             // Test without a file name
             let output = SortOutput::new(None).unwrap();
-            fs::remove_file("test.txt").unwrap();
             assert_eq!(output.as_output_name(), None);
         }
 
@@ -10004,7 +10050,7 @@ mod tests {
         fn test_line_size() {
             // We should make sure to not regress the size of the Line struct because
             // it is unconditional overhead for every line we sort.
-            assert_eq!(std::mem::size_of::<SortLine>(), 24);
+            assert_eq!(std::mem::size_of::<SortLine>(), 40);
         }
 
         #[test]

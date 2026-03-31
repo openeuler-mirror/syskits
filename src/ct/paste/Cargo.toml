@@ -1,0 +1,25 @@
+[package]
+name = "ct_paste"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "paste ~ (ctutils) merge lines from inputs"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/paste"
+
+
+[lib]
+path = "src/paste.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "paste"
+path = "src/main.rs"

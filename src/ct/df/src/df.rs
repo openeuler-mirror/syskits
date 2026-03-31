@@ -9540,7 +9540,7 @@ mod tests {
 
             assert!(filesystem_paths.is_ok());
         }
-        
+
         #[test]
         fn test_ct_get_filesystem_df_lowercase_b_p() {
             let temp_dir = Builder::new()
@@ -12849,5 +12849,4 @@ mod tests {
             assert!(filesystem_paths.is_ok());
         }
     }
-
 }

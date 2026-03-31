@@ -664,7 +664,7 @@ mod test {
         assert_eq!(result, 1);
     }
 
-   // 对于布尔选项，例如 --verbose
+    // 对于布尔选项，例如 --verbose
     #[test]
     fn test_verbose_ctmain() {
         // 测试用例：有效输入 --verbose

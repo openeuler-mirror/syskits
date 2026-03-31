@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(split_name.get(2), "xxcst-002-");
     }
 
-   #[test]
+    #[test]
     fn zero_padding_decimal5() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03u-")), None).unwrap();
         assert_eq!(split_name.get(2), "xxcst-002-");

@@ -136,6 +136,11 @@ feat_common_core = [
   "id",
   "fold",
   "realpath",
+  "pathchk",
+  "dd",
+  "tail",
+  "nl",
+  "stat",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -162,6 +167,9 @@ feat_os_unix = [
   "who",
   "kill",
   "stty",
+  "link",
+  "paste",
+  "timeout",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -356,9 +364,16 @@ fold = { optional = true, package = "ct_fold", path = "src/ct/fold" }
 kill = { optional = true, package = "ct_kill", path = "src/ct/kill" }
 realpath = { optional = true, package = "ct_realpath", path = "src/ct/realpath"}
 stty = { optional = true, package = "ct_stty", path = "src/ct/stty"}
+link = { optional = true, package = "ct_link", path = "src/ct/link"}
+paste = { optional = true, package = "ct_paste", path = "src/ct/paste"}
+timeout = { optional = true, package = "ct_timeout", path = "src/ct/timeout"}
+pathchk = { optional = true, package = "ct_pathchk", path = "src/ct/pathchk"}
+dd = { optional = true, package = "ct_dd", path = "src/ct/dd" }
+tail = { optional = true, package = "ct_tail", path = "src/ct/tail" }
+nl = { optional = true, package = "ct_nl", path = "src/ct/nl"}
+stat = { optional = true, package = "ct_stat", path = "src/ct/stat" }
 
 [dev-dependencies]
-chrono = { workspace = true }
 conv = "0.3"
 filetime = { workspace = true }
 glob = { workspace = true }

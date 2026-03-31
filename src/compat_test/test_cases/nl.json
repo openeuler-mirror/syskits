@@ -1,0 +1,486 @@
+{
+    "tests": [
+      {
+        "command": "nl",
+        "description": "测试基本行号功能",
+        "setup_commands": [
+          "echo -e 'Line 1\\nLine 2\\nLine 3' > test.txt"
+        ],
+        "args": ["test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tLine 1\n     2\tLine 2\n     3\tLine 3\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["basic", "default-options"]
+      },
+      {
+        "command": "nl",
+        "description": "测试空行处理",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\n\\n\\nLine 4' > test.txt"
+        ],
+        "args": ["test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tLine 1\n       \n       \n     2\tLine 4\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["empty-lines", "non-empty-numbering"]
+      },
+      {
+        "command": "nl",
+        "description": "测试所有行编号样式",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\n\\nLine 3' > test.txt"
+        ],
+        "args": ["-ba", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tLine 1\n     2\t\n     3\tLine 3\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["numbering-style", "all-lines"]
+      },
+      {
+        "command": "nl",
+        "description": "测试不编号样式",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2' > test.txt"
+        ],
+        "args": ["-bn", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "       Line 1\n       Line 2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["numbering-style", "no-numbers"]
+      },
+      {
+        "command": "nl",
+        "description": "测试正则表达式匹配行编号",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e '123\\nabc\\n456' > test.txt"
+        ],
+        "args": ["-bp", "[0-9]+", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 1
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["regex", "pattern-matching"]
+      },
+      {
+        "command": "nl",
+        "description": "测试分节符功能",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e '\\:\\:\\:\\nHeader\\n\\:\\:\\nBody\\n\\:\\nFooter' > test.txt"
+        ],
+        "args": ["-ha", "-ba", "-fa", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n     1\tHeader\n\n     1\tBody\n\n     1\tFooter\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["section-delimiter", "headers-footers"]
+      },
+      {
+        "command": "nl",
+        "description": "测试行号格式化选项",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2' > test.txt"
+        ],
+        "args": ["-nrz", "-w", "3", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "001\tLine 1\n002\tLine 2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["number-format", "width"]
+      },
+      {
+        "command": "nl",
+        "description": "测试行号增量和起始行号",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2\\nLine 3' > test.txt"
+        ],
+        "args": ["-v", "100", "-i", "2", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "   100\tLine 1\n   102\tLine 2\n   104\tLine 3\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["increment", "starting-number"]
+      },
+      {
+        "command": "nl",
+        "description": "测试空行合并功能",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\n\\n\\n\\nLine 5' > test.txt"
+        ],
+        "args": ["-ba", "-l", "2", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tLine 1\n       \n     2\t\n       \n     3\tLine 5\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["join-blank-lines"]
+      },
+      {
+        "command": "nl",
+        "description": "测试自定义分隔符",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2' > test.txt"
+        ],
+        "args": ["-s", " | ", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1 | Line 1\n     2 | Line 2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["separator"]
+      },
+      {
+        "command": "nl",
+        "description": "测试不存在的文件处理",
+        "args": ["nonexistent.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "nl: nonexistent.txt: No such file or directory\n"
+          }
+        },
+        "tags": ["error-handling", "file-not-found"]
+      },
+      {
+        "command": "nl",
+        "description": "测试标准输入处理",
+        "args": ["-"],
+        "input": "Line 1\nLine 2\n",
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tLine 1\n     2\tLine 2\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["stdin", "input-handling"]
+      },
+      {
+        "command": "nl",
+        "description": "测试不重置各节编号（-p选项）",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e '\\:\\:\\:\\nHeader\\n\\:\\:\\nBody\\n\\:\\nFooter' > test.txt"
+        ],
+        "args": ["-ha", "-ba", "-fa", "-p", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n     1\tHeader\n\n     2\tBody\n\n     3\tFooter\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["section-delimiter", "no-renumber"]
+      },
+      {
+        "command": "nl",
+        "description": "测试左对齐无前导零格式（-nln选项）",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2' > test.txt"
+        ],
+        "args": ["-nln", "-w", "4", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "1   \tLine 1\n2   \tLine 2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["number-format", "left-justified"]
+      },
+      {
+        "command": "nl",
+        "description": "测试右对齐无前导零格式（-nrn选项，默认选项）",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2' > test.txt"
+        ],
+        "args": ["-nrn", "-w", "4", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "   1\tLine 1\n   2\tLine 2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["number-format", "right-justified"]
+      },
+      {
+        "command": "nl",
+        "description": "测试自定义分节符",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e '@@@@\\nHeader\\n@@\\nBody\\n@\\nFooter' > test.txt"
+        ],
+        "args": ["-d", "@@", "-ha", "-ba", "-fa", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n     1\tHeader\n\n     1\tBody\n\n     1\tFooter\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["section-delimiter", "custom-delimiter"]
+      },
+      {
+        "command": "nl",
+        "description": "测试正则表达式匹配编号正确用法",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'abc\\n123\\ndef\\n456' > test.txt"
+        ],
+        "args": ["-bp", "^[0-9]", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "     1\tabc\n     2\t123\n     3\tdef\n     4\t456\n"
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["regex", "pattern-matching", "body-numbering"]
+      },
+      {
+        "command": "nl",
+        "description": "测试页眉编号样式",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e '\\:\\:\\:\\nHeader1\\nHeader2\\n\\:\\:\\nBody' > test.txt"
+        ],
+        "args": ["-ht", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n     1\tHeader1\n     2\tHeader2\n\n     1\tBody\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["header-numbering", "nonempty-lines"]
+      },
+      {
+        "command": "nl",
+        "description": "测试页脚编号样式",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e '\\:\\nFooter1\\n\\nFooter3' > test.txt"
+        ],
+        "args": ["-ft", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n     1\tFooter1\n       \n     2\tFooter3\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["footer-numbering", "nonempty-lines"]
+      },
+      {
+        "command": "nl",
+        "description": "测试超大行宽（-w选项）",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2' > test.txt"
+        ],
+        "args": ["-w", "20", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "                   1\tLine 1\n                   2\tLine 2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["number-width", "large-width"]
+      },
+      {
+        "command": "nl",
+        "description": "测试多文件处理",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'File1 Line1\\nFile1 Line2' > file1.txt",
+          "echo -e 'File2 Line1\\nFile2 Line2' > file2.txt"
+        ],
+        "args": ["file1.txt", "file2.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tFile1 Line1\n     2\tFile1 Line2\n     3\tFile2 Line1\n     4\tFile2 Line2\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["multiple-files"]
+      },
+      {
+        "command": "nl",
+        "description": "测试负数起始行号",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'Line 1\\nLine 2\\nLine 3' > test.txt"
+        ],
+        "args": ["-v", "-10", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "   -10\tLine 1\n    -9\tLine 2\n    -8\tLine 3\n",
+            "stderr": ""
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["negative-starting-number"]
+      },
+      {
+        "command": "nl",
+        "description": "测试多文件处理包含不存在的文件",
+        "setup_commands": [
+          "mkdir -p test_dir",
+          "cd test_dir",
+          "echo -e 'File1 Line1\\nFile1 Line2' > file1.txt",
+          "echo -e 'File3 Line1\\nFile3 Line2' > file3.txt"
+        ],
+        "args": ["file1.txt", "nonexistent.txt", "file3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "     1\tFile1 Line1\n     2\tFile1 Line2\n     3\tFile3 Line1\n     4\tFile3 Line2\n",
+            "stderr": "nl: nonexistent.txt: No such file or directory\n"
+          }
+        },
+        "cleanup_commands": [
+          "cd ..",
+          "rm -rf test_dir"
+        ],
+        "tags": ["multiple-files", "error-handling", "file-not-found"]
+      }
+    ]
+  }

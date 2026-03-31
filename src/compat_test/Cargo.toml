@@ -33,7 +33,7 @@ rayon = { workspace = true }
 crossbeam = "0.8"
 signal-hook = "0.3"
 once_cell = { workspace = true }
-
+rand = { workspace = true }
 [dev-dependencies]
 assert_fs = "1.0"
 predicates = "3.0"

@@ -885,7 +885,7 @@ mod tests {
             assert_eq!(sorted_lines, vec!["Line 1", "Line 2"]);
         }
 
-                #[test]
+        #[test]
         fn test_read_function_debug_false() {
             let (sender, receiver): (SyncSender<Chunk>, Receiver<Chunk>) = mpsc::sync_channel(1);
             let (sorted_sender, sorted_receiver): (SyncSender<Chunk>, Receiver<Chunk>) =
@@ -2288,7 +2288,7 @@ mod tests {
 
             assert!(result.is_ok());
         }
-    
+
         #[test]
         fn test_ext_sort_check_silent_true() {
             let input = "line1\nline2\nline3";
@@ -3087,7 +3087,6 @@ mod tests {
 
             assert!(result.is_ok());
         }
-    
     }
     mod write_tests {
         use std::fs;

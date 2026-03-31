@@ -251,6 +251,98 @@
                     "exit_code": 0
                 }
             }
+        },
+        {
+            "command": "fold",
+            "description": "测试指定宽度20的折叠功能 - 存在的文件",
+            "setup_commands": [
+                "echo -e 'This is a test file with content that should be folded at width 20.\\nThis is another line that should also be folded properly.' > test.txt",
+                "cat test.txt"
+            ],
+            "args": [
+                "-w",
+                "20",
+                "test.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "This is a test file\nwith content that\nshould be folded at\nwidth 20.\nThis is another line\nthat should also be\nfolded properly.",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f test.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ],
+            "tags": [
+                "basic",
+                "width-option"
+            ]
+        },
+        {
+            "command": "fold",
+            "description": "测试指定宽度20的折叠功能 - 不存在的文件",
+            "args": [
+                "-w",
+                "20",
+                "nonexistent_file.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "fold: nonexistent_file.txt: No such file or directory"
+                }
+            },
+            "tags": [
+                "error-handling",
+                "width-option"
+            ]
+        },
+        {
+            "command": "fold",
+            "description": "测试同时处理存在和不存在的文件",
+            "setup_commands": [
+                "echo -e 'This is a test file\\nwith multiple lines\\nthat should be folded.' > existing_file.txt",
+                "cat existing_file.txt"
+            ],
+            "args": [
+                "-w",
+                "20",
+                "existing_file.txt",
+                "nonexistent_file.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "This is a test file\nwith multiple lines\nthat should be folde\nd.",
+                    "stderr": "fold: nonexistent_file.txt: Cannot open file"
+                },
+                "verifications": [
+                    {
+                        "command": "test -f existing_file.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f existing_file.txt"
+            ],
+            "tags": [
+                "error-handling",
+                "width-option",
+                "multiple-files"
+            ]
         }
     ]
 }

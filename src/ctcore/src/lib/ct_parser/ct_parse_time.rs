@@ -209,7 +209,7 @@ mod tests {
         );
     }
 
- #[test]
+    #[test]
     fn test_basic_no_units() {
         assert_eq!(ct_from_str("123"), Ok(Duration::from_secs(123)));
     }
@@ -257,5 +257,4 @@ mod tests {
         assert!(ct_from_str("1H").is_err());
         assert!(ct_from_str("1D").is_err());
     }
-
 }

@@ -270,7 +270,7 @@ mod tests {
             writer.flush()
         }
     }
-        #[cfg(test)]
+    #[cfg(test)]
     mod ct_main_tests {
         use super::*;
         use std::ffi::OsString;
@@ -355,7 +355,6 @@ mod tests {
             assert!(result.is_ok());
         }
 
-        
         #[test]
         fn test_readlink_main_canonicalize_existing_long() {
             let filename = "test_readlink_main_canonicalize_existing_long";
@@ -698,7 +697,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-z", file_name];
             let result = readlink_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
-        }     
+        }
     }
     #[cfg(test)]
     mod ct_app_tests {

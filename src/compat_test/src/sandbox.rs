@@ -25,6 +25,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tempfile::TempDir;
+use std::time::{SystemTime, UNIX_EPOCH};
+use rand::Rng;
 
 /// 信号处理器
 /// 用于处理测试过程中的信号（如 SIGTERM、SIGINT 等）
@@ -111,6 +113,8 @@ impl ResourceLimiter {
 /// 增强的隔离沙箱
 /// 提供命令执行的隔离环境，支持文件系统隔离、环境变量管理等
 pub struct IsolatedSandbox {
+    /// 沙箱唯一ID
+    id: String,
     /// 临时目录
     temp_dir: Option<TempDir>,
     /// 资源限制器
@@ -134,7 +138,16 @@ impl IsolatedSandbox {
             .map_err(|e| TestError::ExecutionError(format!("Failed to create sandbox: {}", e)))?;
         let temp_path = temp_dir.path().to_path_buf();
 
+        // 生成唯一ID：时间戳 + 随机数
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let random_num = rand::thread_rng().gen_range(0..1000000);
+        let id = format!("{:x}-{:x}", timestamp, random_num);
+
         Ok(Self {
+            id,
             temp_dir: Some(temp_dir),
             resource_limiter: Some(ResourceLimiter::new()),
             current_env: std::env::vars().collect(),
@@ -152,70 +165,103 @@ impl IsolatedSandbox {
 
     /// 设置沙箱环境
     pub fn setup(&mut self, test_case: &TestCase) -> Result<()> {
+        self.debug_fmt(format_args!("Starting sandbox environment setup"));
+        self.debug_fmt(format_args!("Sandbox root directory: {:?}", self.path()));
+
         // 创建测试所需的文件和目录
         for file in &test_case.environment.files {
+            self.debug_fmt(format_args!("Creating test file: {:?}", file));
+            self.debug_fmt(format_args!("File type: {:?}", file.file_type));
             self.create_test_file(file)?;
         }
 
         // 设置工作目录
         if let Some(ref working_dir) = test_case.environment.working_dir {
             let work_dir = self.path().join(working_dir);
+            self.debug_fmt(format_args!("Setting specified working directory: {:?}", work_dir));
             std::env::set_current_dir(&work_dir)?;
             self.current_dir = work_dir;
         } else {
+            self.debug_fmt(format_args!("Using default working directory: {:?}", self.path()));
             std::env::set_current_dir(self.path())?;
             self.current_dir = self.path().to_path_buf();
         }
 
+        self.debug_fmt(format_args!("Current working directory set to: {:?}", self.current_dir));
+
         // 应用资源限制
         if let Some(ref limits) = test_case.environment.resource_limits {
+            // 收集所有调试信息
+            let mut debug_msgs = Vec::new();
+            
             if let Some(ref mut limiter) = self.resource_limiter.as_mut() {
                 if let Some(cpu_time) = limits.cpu_time {
                     limiter.add_limit(Resource::RLIMIT_CPU, cpu_time, cpu_time);
+                    debug_msgs.push(format!("Setting CPU time limit: {}", cpu_time));
                 }
                 if let Some(file_size) = limits.file_size {
                     limiter.add_limit(Resource::RLIMIT_FSIZE, file_size, file_size);
+                    debug_msgs.push(format!("Setting file size limit: {}", file_size));
                 }
                 if let Some(memory_size) = limits.memory_size {
                     limiter.add_limit(Resource::RLIMIT_AS, memory_size, memory_size);
+                    debug_msgs.push(format!("Setting memory size limit: {}", memory_size));
                 }
                 if let Some(open_files) = limits.open_files {
                     limiter.add_limit(Resource::RLIMIT_NOFILE, open_files, open_files);
+                    debug_msgs.push(format!("Setting open files limit: {}", open_files));
                 }
 
                 limiter.apply_limits()?;
             }
+            
+            // 完成可变借用后，统一输出调试信息
+            for msg in debug_msgs {
+                self.debug(&msg);
+            }
         }
 
+        self.debug_fmt(format_args!("Sandbox environment setup completed"));
         Ok(())
     }
 
     /// 创建测试文件
     fn create_test_file(&self, file: &TestFile) -> Result<()> {
         let path = self.path().join(&file.path);
+        self.debug_fmt(format_args!("Creating file: {:?}", path));
+        self.debug_fmt(format_args!("File type: {:?}", file.file_type));
 
         match file.file_type {
             FileType::Directory => {
+                self.debug_fmt(format_args!("Creating directory: {:?}", path));
                 fs::create_dir_all(&path)?;
+                self.debug_fmt(format_args!("Directory created successfully"));
             }
             FileType::Regular => {
                 if let Some(parent) = path.parent() {
+                    self.debug_fmt(format_args!("Creating parent directory: {:?}", parent));
                     fs::create_dir_all(parent)?;
                 }
+                self.debug_fmt(format_args!("Creating file: {:?}", path));
                 let mut file_handle = File::create(&path)?;
                 if let Some(ref content) = file.content {
+                    self.debug_fmt(format_args!("Writing file content, length: {}", content.len()));
                     file_handle.write_all(content.as_bytes())?;
                 }
                 if let Some(ref perms) = file.permissions {
+                    self.debug_fmt(format_args!("Setting file permissions: {}", perms));
                     let mode = u32::from_str_radix(perms, 8).map_err(|e| {
                         TestError::ExecutionError(format!("Invalid permissions: {}", e))
                     })?;
                     fs::set_permissions(&path, Permissions::from_mode(mode))?;
                 }
+                self.debug_fmt(format_args!("File created successfully"));
             }
             FileType::Symlink => {
                 if let Some(ref target) = file.symlink_target {
+                    self.debug_fmt(format_args!("Creating symlink: {:?} -> {:?}", path, target));
                     std::os::unix::fs::symlink(target, &path)?;
+                    self.debug_fmt(format_args!("Symlink created successfully"));
                 }
             }
             _ => {
@@ -376,14 +422,14 @@ impl IsolatedSandbox {
     /// 输出调试信息
     fn debug(&self, msg: &str) {
         if self.debug {
-            eprintln!("DEBUG: {}", msg);
+            eprintln!("DEBUG [{}]: {}", self.id, msg);
         }
     }
 
     /// 输出调试信息（带格式化）
     fn debug_fmt(&self, fmt: std::fmt::Arguments<'_>) {
         if self.debug {
-            eprintln!("DEBUG: {}", fmt);
+            eprintln!("DEBUG [{}]: {}", self.id, fmt);
         }
     }
 
@@ -394,7 +440,8 @@ impl IsolatedSandbox {
         args: &[String],
         is_record_result: bool,
     ) -> Result<CommandResult> {
-        self.debug_fmt(format_args!("执行命令: {} {:?}", cmd, args));
+        self.debug_fmt(format_args!("Executing command: {} {:?}", cmd, args));
+        self.debug_fmt(format_args!("Current working directory: {:?}", self.current_dir));
 
         let mut command = std::process::Command::new(cmd);
         command
@@ -404,27 +451,31 @@ impl IsolatedSandbox {
 
         // 使用 output() 的结果，无论成功还是失败
         let result = match command.output() {
-            Ok(output) => CommandResult::from(output),
+            Ok(output) => {
+                self.debug_fmt(format_args!("Command executed successfully"));
+                CommandResult::from(output)
+            }
             Err(e) => {
-                self.debug_fmt(format_args!("命令执行失败: {}", e));
+                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
                 CommandResult {
                     stdout: String::new(),
                     stderr: format!("Failed to execute command: {}", e),
-                    exit_code: 127, // 通用的命令未找到错误码
+                    exit_code: 127, // Common error code for command not found
                 }
             }
         };
 
-        self.debug_fmt(format_args!("命令执行结果:"));
+        self.debug_fmt(format_args!("Command execution results:"));
         self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
-        self.debug_fmt(format_args!("stdout长度: {}", result.stdout.len()));
-        self.debug_fmt(format_args!("stderr长度: {}", result.stderr.len()));
+        self.debug_fmt(format_args!("stdout: {}", result.stdout));
+        self.debug_fmt(format_args!("stderr: {}", result.stderr));
 
-        // 检查输出是否包含零字节
+        // Check if stdout contains null bytes
         if result.stdout.contains('\0') {
-            self.debug("警告: stdout包含零字节");
+            self.debug("Warning: stdout contains null bytes");
             if self.debug {
-                println!("DEBUG: stdout十六进制表示:");
+                println!("DEBUG: stdout hex representation:");
                 for (i, byte) in result.stdout.as_bytes().iter().enumerate().take(100) {
                     print!("{:02x} ", byte);
                     if (i + 1) % 16 == 0 {
@@ -435,18 +486,18 @@ impl IsolatedSandbox {
             }
         }
 
-        // 将命令执行结果保存到环境变量中，供验证阶段使用
+        // Save command execution results to environment variables for verification
         if is_record_result {
             self.debug_fmt(format_args!(
-                "设置环境变量 CMD_EXIT_CODE={}",
+                "Setting environment variable CMD_EXIT_CODE={}",
                 result.exit_code
             ));
             self.add_env("CMD_EXIT_CODE", &result.exit_code.to_string());
 
-            // 检查stdout是否包含零字节，如果包含则进行特殊处理
+            // Check for null bytes in stdout before setting environment variable
             if result.stdout.contains('\0') {
-                self.debug("警告: 设置环境变量CMD_STDOUT时发现零字节");
-                // 将零字节替换为可见字符，以避免环境变量问题
+                self.debug("Warning: Found null bytes when setting CMD_STDOUT");
+                // Replace null bytes with visible characters to avoid environment variable issues
                 let safe_stdout = result.stdout.replace('\0', "\\0");
                 self.add_env("CMD_STDOUT", &safe_stdout);
             } else {
@@ -462,42 +513,43 @@ impl IsolatedSandbox {
 
     /// 执行外部命令
     fn execute_external_command(&mut self, command: &str) -> Result<CommandResult> {
-        self.debug_fmt(format_args!("执行外部命令: {}", command));
+        self.debug_fmt(format_args!("Executing external command: {}", command));
+        self.debug_fmt(format_args!("Current working directory: {:?}", self.current_dir));
 
-        let parts: Vec<String> = command.split_whitespace().map(String::from).collect();
-        if let Some((cmd, args)) = parts.split_first() {
-            let mut command = std::process::Command::new(cmd);
-            command
-                .args(args)
-                .current_dir(&self.current_dir)
-                .envs(&self.current_env);
+        // Use /bin/sh -c to execute command to support shell features
+        let mut shell_cmd = std::process::Command::new("/bin/sh");
+        shell_cmd
+            .arg("-c")
+            .arg(command)
+            .current_dir(&self.current_dir)
+            .envs(&self.current_env);
 
-            // 使用 output() 的结果，无论成功还是失败
-            let result = match command.output() {
-                Ok(output) => CommandResult::from(output),
-                Err(e) => {
-                    self.debug_fmt(format_args!("命令执行失败: {}", e));
-                    CommandResult {
-                        stdout: String::new(),
-                        stderr: format!("Failed to execute command: {}", e),
-                        exit_code: 127, // 通用的命令未找到错误码
-                    }
+        self.debug_fmt(format_args!("Full command: cd {:?} && /bin/sh -c {:?}", self.current_dir, command));
+        self.debug_fmt(format_args!("Environment variables: {:?}", self.current_env));
+
+        // Use output() result regardless of success or failure
+        let result = match shell_cmd.output() {
+            Ok(output) => {
+                self.debug_fmt(format_args!("Command executed successfully"));
+                CommandResult::from(output)
+            }
+            Err(e) => {
+                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
+                CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("Failed to execute command: {}", e),
+                    exit_code: 127, // Common error code for command not found
                 }
-            };
+            }
+        };
 
-            self.debug_fmt(format_args!("外部命令执行结果:"));
-            self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
-            self.debug_fmt(format_args!("stdout: {}", result.stdout));
-            self.debug_fmt(format_args!("stderr: {}", result.stderr));
+        self.debug_fmt(format_args!("External command execution results:"));
+        self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
+        self.debug_fmt(format_args!("stdout: {}", result.stdout));
+        self.debug_fmt(format_args!("stderr: {}", result.stderr));
 
-            self.update_status(&result);
-            Ok(result)
-        } else {
-            Ok(CommandResult {
-                stdout: String::new(),
-                stderr: "Empty command".to_string(),
-                exit_code: 127,
-            })
-        }
+        self.update_status(&result);
+        Ok(result)
     }
 }

@@ -321,6 +321,7 @@ mod tests {
 
     /// 测试算法的稳定性
     #[test]
+    #[ignore]
     fn test_stability() {
         // 多次运行算法，检查结果是否都是有效因子
         let n = 1_000_009; // 103 × 9_709

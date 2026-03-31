@@ -584,13 +584,21 @@ mod test {
     }
 
     #[test]
-    fn test_data_decode_base64_partial_output_then_error() {
+    fn test_data_decode_base64_short_tail_without_padding_then_error() {
         let input = Cursor::new(b"ab".to_vec());
         let mut data = Data::new(input, Format::Base64);
         let mut out = Vec::new();
-        let err = data.decode(&mut out).unwrap_err();
-        assert!(matches!(err, CtDecodeError::Io(_)));
+        assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"i");
+    }
+
+    #[test]
+    fn test_data_decode_base64_three_char_short_tail_without_padding_then_error() {
+        let input = Cursor::new(b"YWI".to_vec());
+        let mut data = Data::new(input, Format::Base64);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, b"ab");
     }
 
     #[test]

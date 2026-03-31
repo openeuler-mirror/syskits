@@ -517,3 +517,169 @@ pub(crate) fn gen_prog_updater(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use std::io::Cursor;
+    use std::time::Duration;
+
+    use super::{ProgUpdate, ReadStat, WriteStat};
+
+    fn prog_update_write(n: u128) -> ProgUpdate {
+        ProgUpdate {
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat {
+                bytes_total: n,
+                ..Default::default()
+            },
+            duration: Duration::new(1, 0), // one second
+            complete: false,
+        }
+    }
+
+    fn prog_update_duration(duration: Duration) -> ProgUpdate {
+        ProgUpdate {
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
+            duration,
+            complete: false,
+        }
+    }
+
+    #[test]
+    fn test_read_stat_report() {
+        let read_stat = ReadStat::new(1, 2, 3, 4);
+        let mut cursor = Cursor::new(vec![]);
+        read_stat.report(&mut cursor).unwrap();
+        assert_eq!(cursor.get_ref(), b"1+2 records in\n");
+    }
+
+    #[test]
+    fn test_write_stat_report() {
+        let write_stat = WriteStat::new(1, 2, 3);
+        let mut cursor = Cursor::new(vec![]);
+        write_stat.report(&mut cursor).unwrap();
+        assert_eq!(cursor.get_ref(), b"1+2 records out\n");
+    }
+
+    #[test]
+    fn test_prog_update_write_io_lines() {
+        let read_stat = ReadStat::new(1, 2, 3, 4);
+        let write_stat = WriteStat::new(4, 5, 6);
+        let duration = Duration::new(789, 0);
+        let complete = false;
+        let prog_update = ProgUpdate {
+            read_stat,
+            write_stat,
+            duration,
+            complete,
+        };
+
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_io_lines(&mut cursor).unwrap();
+        assert_eq!(
+            cursor.get_ref(),
+            b"1+2 records in\n4+5 records out\n3 truncated records\n"
+        );
+    }
+
+    #[test]
+    fn test_prog_update_write_prog_line() {
+        let prog_update = ProgUpdate {
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
+            duration: Duration::new(1, 0), // one second
+            complete: false,
+        };
+
+        let mut cursor = Cursor::new(vec![]);
+        let rewrite = false;
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.00000 s, 0.0 B/s\n");
+
+        let prog_update = prog_update_write(1);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"1 byte copied, 1.00000 s, 1.0 B/s\n");
+
+        let prog_update = prog_update_write(999);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"999 bytes copied, 1.00000 s, 999 B/s\n");
+
+        let prog_update = prog_update_write(1000);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(
+            cursor.get_ref(),
+            b"1000 bytes (1.0 kB) copied, 1.00000 s, 1.0 kB/s\n"
+        );
+
+        let prog_update = prog_update_write(1023);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(
+            cursor.get_ref(),
+            b"1023 bytes (1.0 kB) copied, 1.00000 s, 1.0 kB/s\n"
+        );
+
+        let prog_update = prog_update_write(1024);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(
+            cursor.get_ref(),
+            b"1024 bytes (1.0 kB, 1.0 KiB) copied, 1.00000 s, 1.0 kB/s\n"
+        );
+    }
+
+    #[test]
+    fn write_transfer_stats() {
+        let prog_update = ProgUpdate {
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
+            duration: Duration::new(1, 0), // one second
+            complete: false,
+        };
+        let mut cursor = Cursor::new(vec![]);
+        prog_update
+            .write_transfer_stats(&mut cursor, false)
+            .unwrap();
+        let mut iter = cursor.get_ref().split(|v| *v == b'\n');
+        assert_eq!(iter.next().unwrap(), b"0+0 records in");
+        assert_eq!(iter.next().unwrap(), b"0+0 records out");
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.00000 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), b"");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn write_final_transfer_stats() {
+        let prog_update = ProgUpdate {
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
+            duration: Duration::new(1, 0), // one second
+            complete: false,
+        };
+        let mut cursor = Cursor::new(vec![]);
+        let rewrite = true;
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        prog_update.write_transfer_stats(&mut cursor, true).unwrap();
+        let mut iter = cursor.get_ref().split(|v| *v == b'\n');
+        assert_eq!(iter.next().unwrap(), b"\r0 bytes copied, 1.00000 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), b"0+0 records in");
+        assert_eq!(iter.next().unwrap(), b"0+0 records out");
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.00000 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), b"");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_duration_precision() {
+        let prog_update = prog_update_duration(Duration::from_nanos(123));
+        let mut cursor = Cursor::new(vec![]);
+        let rewrite = false;
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 0.000000123000 s, 0.0 B/s\n");
+    }
+}

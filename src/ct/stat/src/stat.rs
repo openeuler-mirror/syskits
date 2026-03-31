@@ -1136,3 +1136,241 @@ mod tests {
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
 }
+
+#[cfg(test)]
+mod test_stat_all {
+    use super::*;
+    use clap::ArgMatches;
+    use std::fs::File;
+    use tempfile::tempdir;
+
+    fn create_test_matches(files: Vec<&str>, show_fs: bool, format: Option<&str>, use_printf: bool) -> ArgMatches {
+        let mut cmd = ct_app();
+        let mut args = vec!["stat"]; // 添加程序名称作为第一个参数
+        
+        if show_fs {
+            args.push("-f");
+        }
+        
+        if let Some(fmt) = format {
+            if use_printf {
+                args.extend_from_slice(&["--printf", fmt]);
+            } else {
+                args.extend_from_slice(&["-c", fmt]);
+            }
+        }
+        
+        // 添加文件参数
+        args.extend(files);
+        
+        cmd.try_get_matches_from(args).unwrap()
+    }
+
+    #[test]
+    fn test_get_files() {
+        // Test empty files
+        let matches = create_test_matches(vec![], false, None, false);
+        assert!(Stater::get_files(&matches).is_err());
+
+        // Test single file
+        let matches = create_test_matches(vec!["file.txt"], false, None, false);
+        let files = Stater::get_files(&matches).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0], OsString::from("file.txt"));
+
+        // Test multiple files
+        let matches = create_test_matches(vec!["file1.txt", "file2.txt"], false, None, false);
+        let files = Stater::get_files(&matches).unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0], OsString::from("file1.txt"));
+        assert_eq!(files[1], OsString::from("file2.txt"));
+    }
+
+    #[test]
+    fn test_configure_format() {
+        // Test default format
+        let matches = create_test_matches(vec!["file.txt"], false, None, false);
+        let (tokens, dev_tokens) = Stater::configure_format(&matches).unwrap();
+        assert!(!tokens.is_empty());
+        assert!(!dev_tokens.is_empty());
+
+        // Test custom format
+        let matches = create_test_matches(vec!["file.txt"], false, Some("%n %s"), false);
+        let (tokens, _) = Stater::configure_format(&matches).unwrap();
+        // %n + space + %s + newline = 4 tokens
+        assert_eq!(tokens.len(), 4); 
+
+        // Test printf format
+        let matches = create_test_matches(vec!["file.txt"], false, Some("%n\\n"), true);
+        let (tokens, _) = Stater::configure_format(&matches).unwrap();
+        // %n + \n = 2 tokens (printf mode doesn't add extra newline)
+        assert_eq!(tokens.len(), 2); 
+
+        // Additional test cases to verify token parsing
+        let matches = create_test_matches(vec!["file.txt"], false, Some("simple"), false);
+        let (tokens, _) = Stater::configure_format(&matches).unwrap();
+        // "simple" + newline = 7 tokens
+        assert_eq!(tokens.len(), 7);
+
+        let matches = create_test_matches(vec!["file.txt"], false, Some(""), false);
+        let (tokens, _) = Stater::configure_format(&matches).unwrap();
+        // Empty format uses default format
+        assert!(!tokens.is_empty());
+    }
+
+    #[test]
+    fn test_get_mount_list() {
+        let mount_list = Stater::get_mount_list().unwrap();
+        assert!(mount_list.is_some());
+        let list = mount_list.unwrap();
+        assert!(!list.is_empty());
+
+        // 验证列表已排序
+        let mut sorted_list = list.clone();
+        sorted_list.sort();
+        sorted_list.reverse();
+        assert_eq!(list, sorted_list, "Mount list should be sorted in reverse order");
+
+        // 打印挂载点列表以便调试
+        #[cfg(test)]
+        {
+            println!("Mount points (sorted by length):");
+            for path in list.iter() {
+                println!("{}: {}", path.len(), path);
+            }
+        }
+    }
+
+    #[test]
+    fn test_find_mount_point() {
+        let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.path();
+        
+        let matches = create_test_matches(vec![temp_path.to_str().unwrap()], false, None, false);
+        let stater = Stater::new(&matches).unwrap();
+        
+        let mount_point = stater.find_mount_point(temp_path);
+        assert!(mount_point.is_some());
+    }
+
+    #[test]
+    fn test_resolve_file_path() {
+        let matches = create_test_matches(vec!["file.txt"], false, None, false);
+        let stater = Stater::new(&matches).unwrap();
+
+        // Test normal file
+        let result = stater.resolve_file_path(&"file.txt".into(), false);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), OsString::from("file.txt"));
+
+        // Test stdin in filesystem mode
+        let stater = Stater::new(&create_test_matches(vec!["-"], true, None, false)).unwrap();
+        let result = stater.resolve_file_path(&"-".into(), true);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_handle_filesystem_stat() {
+        let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.path();
+        
+        let matches = create_test_matches(vec![temp_path.to_str().unwrap()], true, None, false);
+        let stater = Stater::new(&matches).unwrap();
+        
+        let result = stater.handle_filesystem_stat(
+            &OsString::from(temp_path.as_os_str()),
+            &temp_path.to_string_lossy()
+        );
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_handle_file_stat() {
+        let temp_dir = tempdir().unwrap();
+        let temp_file = temp_dir.path().join("test.txt");
+        File::create(&temp_file).unwrap();
+
+        let file_path = temp_file.to_str().unwrap();
+        
+        // 确保文件路径被正确添加到参数中
+        let matches = create_test_matches(
+            vec![file_path], 
+            false, 
+            None,
+            false
+        );
+        
+        // 创建 Stater 实例前先验证参数
+        assert!(matches.contains_id(stat_options::STAT_FILES));
+        
+        let stater = Stater::new(&matches).unwrap();
+
+        let result = stater.handle_file_stat(
+            &OsString::from(temp_file.as_os_str()),
+            &temp_file.to_string_lossy(),
+            false
+        );
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_select_tokens() {
+        let temp_dir = tempdir().unwrap();
+        let temp_file = temp_dir.path().join("test.txt");
+        File::create(&temp_file).unwrap();
+
+        let matches = create_test_matches(
+            vec![temp_file.to_str().unwrap()],
+            false,
+            Some("%n %s"),
+            false
+        );
+        let stater = Stater::new(&matches).unwrap();
+        
+        let metadata = fs::metadata(&temp_file).unwrap();
+        let tokens = stater.select_tokens(&metadata);
+        assert!(!tokens.is_empty());
+    }
+
+    #[test]
+    fn test_get_filesystem_output() {
+        let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.path();
+        
+        let matches = create_test_matches(vec![temp_path.to_str().unwrap()], true, None, false);
+        let stater = Stater::new(&matches).unwrap();
+        
+        let fs_meta = statfs(temp_path.as_os_str().as_bytes()).unwrap();
+        
+        // Test various format specifiers
+        let output = stater.get_filesystem_output(&fs_meta, 'b');
+        assert!(matches!(output, StatOutputType::Unsigned(_)));
+        
+        let output = stater.get_filesystem_output(&fs_meta, 'T');
+        assert!(matches!(output, StatOutputType::Str(_)));
+    }
+
+    #[test]
+    fn test_get_file_output() {
+        let temp_dir = tempdir().unwrap();
+        let temp_file = temp_dir.path().join("test.txt");
+        File::create(&temp_file).unwrap();
+
+        let matches = create_test_matches(
+            vec![temp_file.to_str().unwrap()],
+            false,
+            None,
+            false
+        );
+        let stater = Stater::new(&matches).unwrap();
+        
+        let metadata = fs::metadata(&temp_file).unwrap();
+        
+        // Test various format specifiers
+        let output = stater.get_file_output(&metadata, 'n');
+        assert!(matches!(output, StatOutputType::Str(_)));
+        
+        let output = stater.get_file_output(&metadata, 's');
+        assert!(matches!(output, StatOutputType::Integer(_)));
+    }
+}

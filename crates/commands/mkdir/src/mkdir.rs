@@ -874,7 +874,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -895,7 +895,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path1.exists());
             assert!(test_path1.is_dir());
@@ -917,7 +917,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, true, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, true, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -937,7 +937,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, true, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, true, true, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -950,7 +950,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
         }
 
@@ -965,7 +965,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -983,7 +983,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -1003,7 +1003,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, true, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, true, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -1016,7 +1016,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
         }
 
@@ -1027,7 +1027,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
         }
 
@@ -1048,7 +1048,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, true, 0o755, false, None, false, false);
+            let result = mkdir_exec(dirs, true, 0o755, false, false, None, false, false);
             assert!(result.is_ok());
             assert!(nested_path.exists());
             assert!(nested_path.is_dir());
@@ -1069,7 +1069,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o755, true, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o755, true, true, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -1090,7 +1090,7 @@ mod tests {
                 .get_many::<OsString>(mkdir_flags::DIRS)
                 .unwrap_or_default();
 
-            let result = mkdir_exec(dirs, false, 0o700, false, None, false, false);
+            let result = mkdir_exec(dirs, false, 0o700, true, false, None, false, false);
             assert!(result.is_ok());
             assert!(test_path.exists());
             assert!(test_path.is_dir());
@@ -1122,7 +1122,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, true, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1140,7 +1140,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, true, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1158,7 +1158,7 @@ mod tests {
                 fs::create_dir(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_err());
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_err());
 
             fs::remove_dir_all(test_dir).unwrap();
         }
@@ -1170,7 +1170,7 @@ mod tests {
                 fs::remove_dir_all(test_dir.parent().unwrap()).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, false, None, false, false).is_ok());
             assert!(!test_dir.parent().unwrap().exists());
             assert!(!test_dir.parent().unwrap().is_dir());
             let remove_dir = Path::new("test_mkdir_with_dot");
@@ -1187,7 +1187,7 @@ mod tests {
             }
 
             let output = std::panic::catch_unwind(|| {
-                mkdir(test_dir, false, 0o755, true, None, false, false).unwrap();
+                mkdir(test_dir, false, 0o755, true, true, None, false, false).unwrap();
             });
             assert!(output.is_ok());
             assert!(test_dir.exists());
@@ -1211,7 +1211,7 @@ mod tests {
             }
 
             for dir in &dirs {
-                assert!(mkdir(dir, false, 0o755, false, None, false, false).is_ok());
+                assert!(mkdir(dir, false, 0o755, false, false, None, false, false).is_ok());
                 assert!(dir.exists());
                 assert!(dir.is_dir());
             }
@@ -1228,7 +1228,7 @@ mod tests {
                 fs::File::create(test_file).unwrap();
             }
 
-            assert!(mkdir(test_file, false, 0o755, false, None, false, false).is_err());
+            assert!(mkdir(test_file, false, 0o755, false, false, None, false, false).is_err());
 
             fs::remove_file(test_file).unwrap();
         }
@@ -1246,7 +1246,7 @@ mod tests {
             no_write_permissions.set_mode(original_permissions.mode() & !0o222);
             fs::set_permissions(&parent_dir, no_write_permissions).unwrap();
 
-            let result = mkdir(&test_dir, false, 0o755, false, None, false, false);
+            let result = mkdir(&test_dir, false, 0o755, false, false, None, false, false);
 
             fs::set_permissions(&parent_dir, original_permissions).unwrap();
             if !is_root {
@@ -1262,10 +1262,10 @@ mod tests {
                 fs::remove_dir_all(parent_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_err());
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_err());
 
-            assert!(mkdir(parent_dir, false, 0o755, false, None, false, false).is_ok());
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(parent_dir, false, 0o755, false, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_ok());
 
             fs::remove_dir_all(parent_dir).unwrap();
         }
@@ -1281,7 +1281,7 @@ mod tests {
             fs::create_dir(parent_dir).unwrap();
             fs::create_dir(parent_dir.join("child_dir1")).unwrap();
 
-            assert!(mkdir(&child_dir, true, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(&child_dir, true, 0o755, false, false, None, false, false).is_ok());
             assert!(child_dir.exists());
 
             fs::remove_dir_all(parent_dir).unwrap();
@@ -1294,7 +1294,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o700, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o700, true, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1312,7 +1312,7 @@ mod tests {
                 fs::remove_dir_all(test_dir.parent().unwrap()).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, false, None, false, false).is_ok());
             assert!(!test_dir.parent().unwrap().exists());
             assert!(!test_dir.parent().unwrap().is_dir());
 
@@ -1329,7 +1329,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1339,7 +1339,8 @@ mod tests {
         #[test]
         fn test_mkdir_with_empty_string() {
             let test_dir = Path::new("");
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_err());
+            // 空路径现在被直接返回 Ok(())，不创建任何目录也不报错
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_ok());
         }
 
         #[test]
@@ -1349,7 +1350,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, true, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, true, 0o755, false, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1363,7 +1364,7 @@ mod tests {
                 fs::remove_dir_all(test_dir).unwrap();
             }
 
-            assert!(mkdir(test_dir, false, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_ok());
             assert!(test_dir.exists());
             assert!(test_dir.is_dir());
 
@@ -1386,7 +1387,7 @@ mod tests {
             fs::create_dir(parent_dir).unwrap();
             std::os::unix::fs::symlink(parent_dir, test_symlink).unwrap();
 
-            assert!(mkdir(&child_dir, true, 0o755, false, None, false, false).is_ok());
+            assert!(mkdir(&child_dir, true, 0o755, false, false, None, false, false).is_ok());
             assert!(child_dir.exists());
 
             fs::remove_dir_all(test_symlink).unwrap();

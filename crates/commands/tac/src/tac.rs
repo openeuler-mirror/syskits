@@ -891,7 +891,8 @@ mod tests {
             let data = b"line1\nline2\nline3";
             let pattern = Regex::new(r"\n").unwrap();
             tac_buffer_regex(&mut output, data, &pattern, true).unwrap();
-            assert_eq!(output, b"line3\nline2\nline1");
+            // before 模式：分隔符属于后面的记录，输出为 "\nline3\nline2line1"
+            assert_eq!(output, b"\nline3\nline2line1");
         }
 
         #[test]
@@ -1067,7 +1068,8 @@ mod tests {
             let mut output = Vec::new();
             let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
-            assert_eq!(output, b"3::2::1");
+            // before 模式：分隔符属于后面的记录，输出为 "::3::21"
+            assert_eq!(output, b"::3::21");
         }
 
         #[test]
@@ -1084,8 +1086,8 @@ mod tests {
             ];
             let mut output = Vec::new();
             let result = tac_main(&mut output, args.iter().map(OsString::from));
-            assert!(result.is_ok()); // Main should still return Ok even if file processing fails
-            assert!(output.is_empty());
+            // 无效的正则表达式会导致错误返回
+            assert!(result.is_err());
         }
 
         #[test]

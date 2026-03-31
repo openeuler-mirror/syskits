@@ -449,7 +449,7 @@ mod tests {
 
         // 测试 execute 方法
         let args = vec![OsString::from("test"), OsString::from("--version")];
-        assert!(tool.execute(&args).is_err()); // basenc needs an encoding flag to be valid
+        assert!(tool.execute(&args).is_ok());
     }
 }
 

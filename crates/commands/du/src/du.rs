@@ -9118,11 +9118,13 @@ mod tests_fn {
         assert!(!out.contains(':'));
     }
 
+    // 用于同步访问 TIME_STYLE 环境变量的全局锁
+    static TEST_TIME_STYLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[cfg(unix)]
     #[test]
     fn test_time_style_from_env_when_time_enabled() {
-        static TIME_STYLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = TIME_STYLE_LOCK
+        let _guard = TEST_TIME_STYLE_LOCK
             .lock()
             .expect("failed to lock TIME_STYLE test mutex");
         let saved_time_style = std::env::var("TIME_STYLE").ok();
@@ -9158,8 +9160,7 @@ mod tests_fn {
     #[cfg(unix)]
     #[test]
     fn test_time_style_ignored_without_time() {
-        static TIME_STYLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = TIME_STYLE_LOCK
+        let _guard = TEST_TIME_STYLE_LOCK
             .lock()
             .expect("failed to lock TIME_STYLE test mutex");
         let saved_time_style = std::env::var("TIME_STYLE").ok();

@@ -1510,7 +1510,7 @@ mod tests {
                 local_line_nr: 1,
                 position: 0,
                 position_end: 4,
-                filename: "test.txt".to_string(),
+                file_index: 0,
             };
 
             let word2 = WordRef {
@@ -1519,7 +1519,7 @@ mod tests {
                 local_line_nr: 1,
                 position: 0,
                 position_end: 4,
-                filename: "test.txt".to_string(),
+                file_index: 0,
             };
 
             assert!(word1 < word2);
@@ -1560,7 +1560,7 @@ mod tests {
                 local_line_nr: 1,
                 position: 6,
                 position_end: 10,
-                filename: "test.txt".to_string(),
+                file_index: 0,
             };
 
             let line = "hello test world";
@@ -1596,7 +1596,7 @@ mod tests {
                 local_line_nr: 0,
                 position: 4,
                 position_end: 7,
-                filename: "test.txt".to_string(),
+                file_index: 0,
             };
             let context_reg = compile_regex_lossy(&config.context_regex);
             let got =
@@ -1618,7 +1618,7 @@ mod tests {
                 local_line_nr: 0,
                 position: 7,
                 position_end: 11,
-                filename: "test.txt".to_string(),
+                file_index: 0,
             };
             let context_reg = compile_regex_lossy(&config.context_regex);
             let got =
@@ -1642,14 +1642,12 @@ mod tests {
                 },
                 file_map: {
                     let mut map = FileMap::new();
-                    map.insert(
-                        "test.txt".to_string(),
-                        FileContent {
-                            lines: vec!["hello test world".to_string()],
-                            chars_lines: vec!["hello test world".chars().collect()],
-                            offset: 0,
-                        },
-                    );
+                    map.push(FileContent {
+                        filename: "test.txt".to_string(),
+                        lines: vec!["hello test world".to_string()],
+                        chars_lines: vec!["hello test world".chars().collect()],
+                        offset: 0,
+                    });
                     map
                 },
                 words: {
@@ -1660,7 +1658,7 @@ mod tests {
                         local_line_nr: 0,
                         position: 6,
                         position_end: 10,
-                        filename: "test.txt".to_string(),
+                        file_index: 0,
                     });
                     set
                 },
@@ -1685,14 +1683,12 @@ mod tests {
                 },
                 file_map: {
                     let mut map = FileMap::new();
-                    map.insert(
-                        "test.txt".to_string(),
-                        FileContent {
-                            lines: vec!["test".to_string()],
-                            chars_lines: vec!["test".chars().collect()],
-                            offset: 0,
-                        },
-                    );
+                    map.push(FileContent {
+                        filename: "test.txt".to_string(),
+                        lines: vec!["test".to_string()],
+                        chars_lines: vec!["test".chars().collect()],
+                        offset: 0,
+                    });
                     map
                 },
                 words: {
@@ -1703,7 +1699,7 @@ mod tests {
                         local_line_nr: 0,
                         position: 0,
                         position_end: 4,
-                        filename: "test.txt".to_string(),
+                        file_index: 0,
                     });
                     set
                 },
@@ -1826,7 +1822,7 @@ mod tests {
             let result = ptx_read_input(&input_files, &config).unwrap();
 
             assert_eq!(result.len(), 1);
-            let content = result.get(file.path().to_str().unwrap()).unwrap();
+            let content = &result[0];
             assert_eq!(content.lines, vec!["line one", "line two"]);
             assert_eq!(content.offset, 0);
         }
@@ -1873,14 +1869,12 @@ mod tests {
             };
 
             let mut file_map = FileMap::new();
-            file_map.insert(
-                "test.txt".to_string(),
-                FileContent {
-                    lines: vec!["hello world".to_string()],
-                    chars_lines: vec!["hello world".chars().collect()],
-                    offset: 0,
-                },
-            );
+            file_map.push(FileContent {
+                filename: "test.txt".to_string(),
+                lines: vec!["hello world".to_string()],
+                chars_lines: vec!["hello world".chars().collect()],
+                offset: 0,
+            });
 
             let word_set = ptx_create_word_set(&config, &filter, &file_map);
 
@@ -1902,14 +1896,12 @@ mod tests {
             };
 
             let mut file_map = FileMap::new();
-            file_map.insert(
-                "test.txt".to_string(),
-                FileContent {
-                    lines: vec!["Hello WORLD".to_string()],
-                    chars_lines: vec!["Hello WORLD".chars().collect()],
-                    offset: 0,
-                },
-            );
+            file_map.push(FileContent {
+                filename: "test.txt".to_string(),
+                lines: vec!["Hello WORLD".to_string()],
+                chars_lines: vec!["Hello WORLD".chars().collect()],
+                offset: 0,
+            });
 
             let word_set = ptx_create_word_set(&config, &filter, &file_map);
 
@@ -1931,7 +1923,7 @@ mod tests {
 
             let word_ref = WordRef {
                 word: "test".to_string(),
-                filename: "test.txt".to_string(),
+                file_index: 0,
                 local_line_nr: 0,
                 global_line_nr: 1,
                 position: 0,
@@ -1939,7 +1931,8 @@ mod tests {
             };
 
             let context_reg = Regex::new(&config.context_regex).unwrap();
-            let reference = ptx_get_reference(&config, &word_ref, "test line", &context_reg);
+            let reference =
+                ptx_get_reference(&config, &word_ref, "test.txt", "test line", &context_reg);
 
             assert_eq!(reference, "test.txt:1");
         }
@@ -1955,7 +1948,13 @@ mod tests {
 
             let word_ref = WordRef::default();
             let context_reg = Regex::new(&config.context_regex).unwrap();
-            let reference = ptx_get_reference(&config, &word_ref, "word 123 text", &context_reg);
+            let reference = ptx_get_reference(
+                &config,
+                &word_ref,
+                "test.txt",
+                "word 123 text",
+                &context_reg,
+            );
 
             assert_eq!(reference, "123");
         }

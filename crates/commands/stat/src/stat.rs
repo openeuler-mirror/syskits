@@ -1405,9 +1405,9 @@ mod tests {
 
     #[test]
     fn test_scanners() {
-        assert_eq!(Some(('a', 3)), "141zxc".scan_char(8));
-        assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
-        assert_eq!(Some(('\r', 1)), "dqzxc".scan_char(16)); // spell-checker:disable-line
+        assert_eq!(Some((b'a', 3)), "141zxc".scan_char(8));
+        assert_eq!(Some((b'\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
+        assert_eq!(Some((b'\r', 1)), "dqzxc".scan_char(16)); // spell-checker:disable-line
         assert_eq!(None, "z2qzxc".scan_char(8)); // spell-checker:disable-line
     }
 
@@ -1497,7 +1497,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 5,
-                precision: Some(0),
+                precision: Some(-1),
                 modifier: None,
                 format: 'w',
             },
@@ -1522,15 +1522,15 @@ mod tests {
                 modifier: None,
                 format: 'a',
             },
-            StatToken::Char('\t'),
-            StatToken::Char('\r'),
+            StatToken::Byte(b'\t'),
+            StatToken::Byte(b'\r'),
             StatToken::Char('"'),
             StatToken::Char('\\'),
-            StatToken::Char('\x07'),
-            StatToken::Char('\x08'),
-            StatToken::Char('\x1B'),
-            StatToken::Char('\x0C'),
-            StatToken::Char('\x0B'),
+            StatToken::Byte(b'\x07'),
+            StatToken::Byte(b'\x08'),
+            StatToken::Byte(b'\x1B'),
+            StatToken::Byte(b'\x0C'),
+            StatToken::Byte(b'\x0B'),
             StatToken::Directive {
                 flag: StatFlags {
                     is_sign: true,
@@ -1542,11 +1542,11 @@ mod tests {
                 modifier: None,
                 format: 'w',
             },
-            StatToken::Char('\x12'),
-            StatToken::Char('w'),
-            StatToken::Char('Z'),
-            StatToken::Char('J'),
-            StatToken::Char('\n'),
+            StatToken::Byte(b'\x12'),
+            StatToken::Byte(b'w'),
+            StatToken::Byte(b'Z'),
+            StatToken::Byte(b'J'),
+            StatToken::Byte(b'\n'),
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
@@ -1761,10 +1761,10 @@ mod test_stat_all {
         let fs_meta = statfs(temp_path.as_os_str().as_bytes()).unwrap();
 
         // Test various format specifiers
-        let output = stater.get_filesystem_output(&fs_meta, 'b');
+        let output = stater.get_filesystem_output(&fs_meta, 'b', temp_path.to_str().unwrap());
         assert!(matches!(output, StatOutputType::Unsigned(_)));
 
-        let output = stater.get_filesystem_output(&fs_meta, 'T');
+        let output = stater.get_filesystem_output(&fs_meta, 'T', temp_path.to_str().unwrap());
         assert!(matches!(output, StatOutputType::Str(_)));
     }
 
@@ -1780,10 +1780,22 @@ mod test_stat_all {
         let metadata = fs::metadata(&temp_file).unwrap();
 
         // Test various format specifiers
-        let output = stater.get_file_output(&metadata, 'n', temp_file.as_os_str(), None);
+        let output = stater.get_file_output(
+            &metadata,
+            'n',
+            temp_file.as_os_str(),
+            temp_file.to_str().unwrap(),
+            None,
+        );
         assert!(matches!(output, StatOutputType::Str(_)));
 
-        let output = stater.get_file_output(&metadata, 's', temp_file.as_os_str(), None);
+        let output = stater.get_file_output(
+            &metadata,
+            's',
+            temp_file.as_os_str(),
+            temp_file.to_str().unwrap(),
+            None,
+        );
         assert!(matches!(output, StatOutputType::Integer(_)));
     }
 }

@@ -285,7 +285,8 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         return Err(CtSimpleError::new(1, BASH_KILL_USAGE));
     }
 
-    let mut index = 0usize;
+    // Skip the program name (args[0]) and start processing from args[1]
+    let mut index = 1usize;
     let mut listing = false;
     let mut listing_count = 0; // 新增：统计列表选项数量
     let mut saw_signal = false;
@@ -409,6 +410,7 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         return kill_list_bash(writer, operands);
     }
 
+    // Check for invalid signal BEFORE checking for operands
     if sig_value == BASH_NO_SIGNAL {
         return Err(CtSimpleError::new(
             1,
@@ -416,12 +418,12 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         ));
     }
 
-    // 关键修复：区分无参数和只有信号没有pid的情况
+    // 区分无参数和只有信号没有pid的情况
     if operands.is_empty() {
         if saw_signal {
-            // 有信号但没有pid，返回1（测试期望）
+            // 有信号但没有pid，返回2（bash usage error）
             return Err(CtSimpleError::new(
-                1,
+                2,
                 "arguments must be process or job IDs",
             ));
         } else {

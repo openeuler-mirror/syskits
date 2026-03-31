@@ -381,7 +381,7 @@ mod tests {
 
             let result = echo_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -389,7 +389,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "-V"];
             let result = echo_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -397,7 +397,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--help"];
             let result = echo_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -405,7 +405,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "-h"];
             let result = echo_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]

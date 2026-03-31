@@ -57,3 +57,87 @@ impl From<ExitStatus> for Box<dyn CTError> {
         Box::from(i32::from(exit_status))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_command_timed_out() {
+        assert_eq!(i32::from(ExitStatus::CommandTimedOut), 124);
+        let error: Box<dyn CTError> = ExitStatus::CommandTimedOut.into();
+        assert_eq!(error.code(), 124);
+    }
+
+    #[test]
+    fn test_timeout_failed() {
+        assert_eq!(i32::from(ExitStatus::TimeoutFailed), 125);
+        let error: Box<dyn CTError> = ExitStatus::TimeoutFailed.into();
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_command_not_executable() {
+        assert_eq!(i32::from(ExitStatus::CommandNotExecutable), 126);
+        let error: Box<dyn CTError> = ExitStatus::CommandNotExecutable.into();
+        assert_eq!(error.code(), 126);
+    }
+
+    #[test]
+    fn test_command_not_found() {
+        assert_eq!(i32::from(ExitStatus::CommandNotFound), 127);
+        let error: Box<dyn CTError> = ExitStatus::CommandNotFound.into();
+        assert_eq!(error.code(), 127);
+    }
+
+    #[test]
+    fn test_signal_terminated() {
+        // Test SIGTERM (15)
+        assert_eq!(i32::from(ExitStatus::SignalTerminated(15)), 143); // 128 + 15
+        let error: Box<dyn CTError> = ExitStatus::SignalTerminated(15).into();
+        assert_eq!(error.code(), 143);
+
+        // Test SIGKILL (9)
+        assert_eq!(i32::from(ExitStatus::SignalTerminated(9)), 137); // 128 + 9
+        let error: Box<dyn CTError> = ExitStatus::SignalTerminated(9).into();
+        assert_eq!(error.code(), 137);
+
+        // Test SIGHUP (1)
+        assert_eq!(i32::from(ExitStatus::SignalTerminated(1)), 129); // 128 + 1
+        let error: Box<dyn CTError> = ExitStatus::SignalTerminated(1).into();
+        assert_eq!(error.code(), 129);
+    }
+
+    #[test]
+    fn test_error_conversion() {
+        // Test converting each status to CTError
+        let statuses = vec![
+            (ExitStatus::CommandTimedOut, 124),
+            (ExitStatus::TimeoutFailed, 125),
+            (ExitStatus::CommandNotExecutable, 126),
+            (ExitStatus::CommandNotFound, 127),
+            (ExitStatus::SignalTerminated(9), 137),
+        ];
+
+        for (status, expected_code) in statuses {
+            let error: Box<dyn CTError> = status.into();
+            assert_eq!(error.code(), expected_code);
+        }
+    }
+
+    #[test]
+    fn test_i32_conversion() {
+        // Test converting each status to i32
+        let statuses = vec![
+            (ExitStatus::CommandTimedOut, 124),
+            (ExitStatus::TimeoutFailed, 125),
+            (ExitStatus::CommandNotExecutable, 126),
+            (ExitStatus::CommandNotFound, 127),
+            (ExitStatus::SignalTerminated(9), 137),
+        ];
+
+        for (status, expected_code) in statuses {
+            assert_eq!(i32::from(status), expected_code);
+        }
+    }
+}

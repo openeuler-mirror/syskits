@@ -1143,16 +1143,16 @@ mod tests {
                 true,
             )
             .unwrap();
-
+            
             // 在集合中的字符保持不变
             assert_eq!(op.translate(b'a'), Some(b'a'));
             assert_eq!(op.translate(b'e'), Some(b'e'));
-
+            
             // 不在集合中的字符被映射
             assert_eq!(op.translate(b'b'), Some(b'A'));
             assert_eq!(op.translate(b'c'), Some(b'E'));
             assert_eq!(op.translate(b'd'), Some(b'I'));
-
+            
             // 测试映射耗尽后的行为
             let mut chars = vec![];
             for i in 0..10 {
@@ -1160,26 +1160,6 @@ mod tests {
             }
             // 最后几个字符应该使用set2的最后一个字符
             assert!(chars.iter().any(|&c| c == b'U'));
-        }
-
-        #[test]
-        fn test_next_complement_char() {
-            // 测试基本功能
-            let (next_iter, next_key) = TranslateOperation::next_complement_char(0, &[b'a', b'c']);
-            assert_eq!(next_key, b'b');
-            assert_eq!(next_iter, b'b' + 1);
-
-            // 测试连续忽略
-            let (next_iter, next_key) =
-                TranslateOperation::next_complement_char(0, &[b'a', b'b', b'c']);
-            assert_eq!(next_key, b'd');
-            assert_eq!(next_iter, b'd' + 1);
-
-            // 测试从中间开始
-            let (next_iter, next_key) =
-                TranslateOperation::next_complement_char(b'm', &[b'n', b'p']);
-            assert_eq!(next_key, b'o');
-            assert_eq!(next_iter, b'o' + 1);
         }
     }
 

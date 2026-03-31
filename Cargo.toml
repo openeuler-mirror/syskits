@@ -164,6 +164,7 @@ feat_os_unix = [
   "stty",
   "link",
   "paste",
+  "timeout",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -360,6 +361,7 @@ realpath = { optional = true, package = "ct_realpath", path = "src/ct/realpath"}
 stty = { optional = true, package = "ct_stty", path = "src/ct/stty"}
 link = { optional = true, package = "ct_link", path = "src/ct/link"}
 paste = { optional = true, package = "ct_paste", path = "src/ct/paste"}
+timeout = { optional = true, package = "ct_timeout", path = "src/ct/timeout"}
 
 [dev-dependencies]
 chrono = { workspace = true }

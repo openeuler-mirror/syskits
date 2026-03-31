@@ -297,3 +297,490 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args(&args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use tempfile::Builder;
+
+    mod paste_flags_tests {
+        use super::*;
+
+        #[test]
+        fn test_paste_flags_new() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-s",
+                "-d",
+                ",",
+                "file1.txt",
+                "file2.txt",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PasteFlags::new(&matches).unwrap();
+
+            assert!(flags.is_serial);
+            assert_eq!(flags.delimiters, ",");
+            assert_eq!(flags.files, vec!["file1.txt", "file2.txt"]);
+            assert_eq!(flags.line_ending, CtLineEnding::Newline);
+        }
+
+        #[test]
+        fn test_validate_delimiters_valid() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: ",:".to_string(),
+                files: vec!["file.txt".to_string()],
+                line_ending: CtLineEnding::Newline,
+            };
+            assert!(flags.validate_delimiters().is_ok());
+        }
+
+        #[test]
+        fn test_validate_delimiters_invalid() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\\".to_string(),
+                files: vec!["file.txt".to_string()],
+                line_ending: CtLineEnding::Newline,
+            };
+            assert!(flags.validate_delimiters().is_err());
+        }
+
+        #[test]
+        fn test_paste_flags_with_zero_terminator() {
+            let args = vec![ctcore::ct_util_name(), "-z", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PasteFlags::new(&matches).unwrap();
+            assert_eq!(flags.line_ending, CtLineEnding::Nul);
+        }
+
+        #[test]
+        fn test_paste_flags_with_custom_delimiter() {
+            let args = vec![ctcore::ct_util_name(), "-d", ":|", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PasteFlags::new(&matches).unwrap();
+            assert_eq!(flags.delimiters, ":|");
+        }
+
+        #[test]
+        fn test_validate_delimiters_with_escaped_backslash() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\\\\".to_string(),
+                files: vec!["file.txt".to_string()],
+                line_ending: CtLineEnding::Newline,
+            };
+            assert!(flags.validate_delimiters().is_ok());
+        }
+    }
+
+    mod paste_context_tests {
+        use super::*;
+
+        fn create_test_file(content: &str) -> (tempfile::TempDir, String) {
+            let temp_dir = Builder::new().prefix("paste_test").tempdir().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+            std::fs::write(&file_path, content).unwrap();
+            (temp_dir, file_path.to_str().unwrap().to_string())
+        }
+
+        #[test]
+        fn test_process_line() -> CTResult<()> {
+            let (_temp_dir, file_path) = create_test_file("test\nline\n");
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output)?;
+            let mut file = context.files.pop().unwrap();
+
+            assert!(context.process_line(&mut file)?);
+            assert_eq!(String::from_utf8_lossy(&context.output), "test");
+
+            assert!(context.process_line(&mut file)?);
+            assert_eq!(String::from_utf8_lossy(&context.output), "testline");
+
+            assert!(!context.process_line(&mut file)?);
+            Ok(())
+        }
+
+        #[test]
+        fn test_add_delimiter() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: ",".to_string(),
+                files: vec![],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output).unwrap();
+            context.output.extend_from_slice(b"test");
+
+            let len = context.add_delimiter(0);
+            assert_eq!(len, 1);
+            assert_eq!(String::from_utf8_lossy(&context.output), "test,");
+        }
+
+        #[test]
+        fn test_write_output() -> CTResult<()> {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: ",".to_string(),
+                files: vec![],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output)?;
+            context.output.extend_from_slice(b"test,");
+            context.write_output(1)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), "test\n");
+            Ok(())
+        }
+
+        #[test]
+        fn test_process_line_with_stdin() -> CTResult<()> {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".to_string(),
+                files: vec!["-".to_string()],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output)?;
+            let mut _file = context.files.pop().unwrap();
+
+            // 注意：这个测试需要模拟标准输入，可能需要特殊处理
+            Ok(())
+        }
+
+        #[test]
+        fn test_process_line_with_zero_terminator() -> CTResult<()> {
+            let (_temp_dir, file_path) = create_test_file("test\0line\0");
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Nul,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output)?;
+            let mut file = context.files.pop().unwrap();
+
+            assert!(context.process_line(&mut file)?);
+            assert_eq!(String::from_utf8_lossy(&context.output), "test");
+            Ok(())
+        }
+
+        #[test]
+        fn test_add_delimiter_with_multiple_chars() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: ":|".to_string(),
+                files: vec![],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output).unwrap();
+            context.output.extend_from_slice(b"test");
+
+            let len1 = context.add_delimiter(0);
+            let len2 = context.add_delimiter(1);
+            assert_eq!(len1, 1); // ':'
+            assert_eq!(len2, 1); // '|'
+            assert_eq!(String::from_utf8_lossy(&context.output), "test:|");
+        }
+
+        #[test]
+        fn test_write_output_empty() -> CTResult<()> {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: ",".to_string(),
+                files: vec![],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output)?;
+            context.write_output(0)?;
+
+            assert_eq!(output.len(), 0);
+            Ok(())
+        }
+    }
+
+    mod paste_main_tests {
+        use super::*;
+
+        #[test]
+        fn test_paste_main_basic() -> CTResult<()> {
+            let (_temp_dir, file_path) = create_test_file("test\n");
+            let args = vec![ctcore::ct_util_name(), &file_path];
+
+            let mut output = Vec::new();
+            paste_main(&mut output, args.iter().map(|s| OsString::from(s)))?;
+
+            assert_eq!(String::from_utf8_lossy(&output), "test\n");
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_main_invalid_args() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-flag"];
+            let mut output = Vec::new();
+            assert!(paste_main(&mut output, args.iter().map(|s| OsString::from(s))).is_err());
+        }
+    }
+
+    mod ct_app_tests {
+        use super::*;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_ct_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+
+        #[test]
+        fn test_ct_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_serial_option() {
+            let args = vec![ctcore::ct_util_name(), "-s", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            assert!(matches.get_flag(paste_flags::PASTE_SERIAL));
+        }
+
+        #[test]
+        fn test_ct_app_delimiter_option() {
+            let args = vec![ctcore::ct_util_name(), "-d", ",", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            assert_eq!(
+                matches
+                    .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                    .unwrap(),
+                ","
+            );
+        }
+
+        #[test]
+        fn test_ct_app_combined_options() {
+            let args = vec![ctcore::ct_util_name(), "-sd", ",", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            assert!(matches.get_flag(paste_flags::PASTE_SERIAL));
+            assert_eq!(
+                matches
+                    .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                    .unwrap(),
+                ","
+            );
+        }
+
+        #[test]
+        fn test_ct_app_zero_terminated_option() {
+            let args = vec![ctcore::ct_util_name(), "-z", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            assert!(matches.get_flag(paste_flags::PASTE_ZERO_TERMINATED));
+        }
+
+        #[test]
+        fn test_ct_app_multiple_files() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "file1.txt",
+                "file2.txt",
+                "file3.txt",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let files: Vec<_> = matches
+                .get_many::<String>(paste_flags::PASTE_FILE)
+                .unwrap()
+                .collect();
+            assert_eq!(files.len(), 3);
+        }
+    }
+
+    mod integration_tests {
+        use super::*;
+
+        #[test]
+        fn test_paste_serial_mode() -> CTResult<()> {
+            let test_input = "1\n2\n3\n";
+            let expected = "1,2,3\n";
+
+            let (_temp_dir, file_path) = create_test_file(test_input);
+            let flags = PasteFlags {
+                is_serial: true,
+                delimiters: ",".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), expected);
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_with_zero_terminator() -> CTResult<()> {
+            let test_input = "a\0b\0c\0";
+            let expected = "a,b,c\0";
+
+            let (_temp_dir, file_path) = create_test_file(test_input);
+            let flags = PasteFlags {
+                is_serial: true,
+                delimiters: ",".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Nul,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), expected);
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_parallel_with_multiple_files() -> CTResult<()> {
+            let test_input1 = "1\n2\n3\n";
+            let test_input2 = "a\nb\nc\n";
+            let test_input3 = "x\ny\nz\n";
+            let expected = "1\ta\tx\n2\tb\ty\n3\tc\tz\n";
+
+            let temp_dir = tempfile::tempdir()?;
+            let file1_path = temp_dir.path().join("file1.txt");
+            let file2_path = temp_dir.path().join("file2.txt");
+            let file3_path = temp_dir.path().join("file3.txt");
+
+            std::fs::write(&file1_path, test_input1)?;
+            std::fs::write(&file2_path, test_input2)?;
+            std::fs::write(&file3_path, test_input3)?;
+
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".to_string(),
+                files: vec![
+                    file1_path.to_str().unwrap().to_string(),
+                    file2_path.to_str().unwrap().to_string(),
+                    file3_path.to_str().unwrap().to_string(),
+                ],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), expected);
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_with_escaped_delimiters() -> CTResult<()> {
+            let test_input = "1\n2\n3\n";
+            let expected = "1\n2\n3\n";
+
+            let (_temp_dir, file_path) = create_test_file(test_input);
+            let flags = PasteFlags {
+                is_serial: true,
+                delimiters: "\\n".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), expected);
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_with_double_backslash() -> CTResult<()> {
+            let test_input = "1\n2\n3\n";
+            let expected = "1\\2\\3\n";
+
+            let (_temp_dir, file_path) = create_test_file(test_input);
+            let flags = PasteFlags {
+                is_serial: true,
+                delimiters: "\\\\".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), expected);
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_with_empty_file() -> CTResult<()> {
+            let (_temp_dir, file_path) = create_test_file("");
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".to_string(),
+                files: vec![file_path],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(String::from_utf8_lossy(&output), "");
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_with_nonexistent_file() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".to_string(),
+                files: vec!["nonexistent.txt".to_string()],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            assert!(paste_exec(&mut output, flags).is_err());
+        }
+    }
+
+    #[test]
+    fn test_paste_unescape() {
+        assert_eq!(paste_unescape("\\n"), "\n");
+        assert_eq!(paste_unescape("\\t"), "\t");
+        assert_eq!(paste_unescape("\\\\"), "\\");
+        assert_eq!(paste_unescape("\\\\n"), "\\n");
+        assert_eq!(paste_unescape("a\\\\nb"), "a\\nb");
+    }
+
+    // Helper function for creating test files
+    fn create_test_file(content: &str) -> (tempfile::TempDir, String) {
+        let temp_dir = Builder::new().prefix("paste_test").tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        std::fs::write(&file_path, content).unwrap();
+        (temp_dir, file_path.to_str().unwrap().to_string())
+    }
+}

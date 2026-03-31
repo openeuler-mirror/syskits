@@ -128,16 +128,14 @@ pub fn rm_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let options = RMOptions::new(&matches)?;
 
-    if should_remove_file(&files, &options) {
-        if remove(&files, &options) {
-            return Err(1.into());
-        }
+    if should_remove_file(&files, &options) && remove(&files, &options) {
+        return Err(1.into());
     }
     Ok(())
 }
 
 fn should_remove_file(files: &[&OsStr], options: &RMOptions) -> bool {
-    if should_prompt_user(&options, &files) {
+    if should_prompt_user(options, files) {
         // 获取第一个文件的名称
         let first_file = Path::new(files[0]).display().to_string();
 
@@ -146,22 +144,23 @@ fn should_remove_file(files: &[&OsStr], options: &RMOptions) -> bool {
 
         match (options.recursive, has_multiple_files) {
             (true, true) => {
-                return ct_prompt_yes!("remove files recursively starting from '{}'?", first_file);
+                ct_prompt_yes!("remove files recursively starting from '{}'?", first_file)
             }
             (true, false) => {
-                return ct_prompt_yes!("remove '{}' and its contents recursively?", first_file);
+                ct_prompt_yes!("remove '{}' and its contents recursively?", first_file)
             }
             (false, true) => {
-                return ct_prompt_yes!("remove files starting from '{}'?", first_file);
+                ct_prompt_yes!("remove files starting from '{}'?", first_file)
             }
             (false, false) => {
-                return ct_prompt_yes!("remove '{}'?", first_file);
+                ct_prompt_yes!("remove '{}'?", first_file)
             }
-        };
+        }
     } else {
-        return true;
+        true
     }
 }
+
 fn extract_files(matches: &clap::ArgMatches) -> Vec<&OsStr> {
     matches
         .get_many::<OsString>(rm_flags::RM_ARG_FILES)

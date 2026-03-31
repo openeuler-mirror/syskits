@@ -209,20 +209,18 @@ pub struct HeadOptions {
 impl HeadOptions {
     ///Construct options from matches
     pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
-        let mut options = Self::default();
-
-        options.quiet = matches.get_flag(head_flags::QUIET_NAME);
-        options.verbose = matches.get_flag(head_flags::VERBOSE_NAME);
-        options.line_ending = CtLineEnding::from_zero_flag(matches.get_flag(head_flags::ZERO_NAME));
-        options.presume_input_pipe = matches.get_flag(head_flags::PRESUME_INPUT_PIPE);
-
-        options.mode = Mode::from(matches)?;
-
-        options.files = match matches.get_many::<String>(head_flags::FILES_NAME) {
-            Some(v) => v.cloned().collect(),
-            None => vec!["-".to_owned()],
+        let options = Self {
+            quiet: matches.get_flag(head_flags::QUIET_NAME),
+            verbose: matches.get_flag(head_flags::VERBOSE_NAME),
+            line_ending: CtLineEnding::from_zero_flag(matches.get_flag(head_flags::ZERO_NAME)),
+            presume_input_pipe: matches.get_flag(head_flags::PRESUME_INPUT_PIPE),
+            mode: Mode::from(matches)?,
+            files: match matches.get_many::<String>(head_flags::FILES_NAME) {
+                Some(v) => v.cloned().collect(),
+                None => vec!["-".to_owned()],
+            },
         };
-        //println!("{:#?}", options);
+
         Ok(options)
     }
 }
@@ -300,7 +298,7 @@ fn read_but_last_n_bytes(
 ) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
-        return read_n_bytes(input, std::u64::MAX, buffer);
+        return read_n_bytes(input, u64::MAX, buffer);
     }
 
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {

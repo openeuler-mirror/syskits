@@ -14,10 +14,10 @@ use crate::chunks::TailBytesChunkBuffer;
 use crate::paths::{TailHeaderPrinter, TailPathExt};
 use crate::text;
 use ctcore::ct_error::CTResult;
-use std::collections::hash_map::Keys;
 use std::collections::HashMap;
+use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{stdout, BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, stdout};
 use std::path::{Path, PathBuf};
 
 /// 现在记录这个单词是否以标点符号结尾

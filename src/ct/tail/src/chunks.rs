@@ -631,7 +631,7 @@ impl TailLinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{TailBytesChunk, TAIL_BUFFER_SIZE};
+    use crate::chunks::{TAIL_BUFFER_SIZE, TailBytesChunk};
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {

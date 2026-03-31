@@ -638,3 +638,732 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    /// 测试参数标准化函数
+    #[test]
+    fn test_standardize_nl_args() {
+        // 测试 -v 后面跟负数的情况
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-v"),
+            OsString::from("-10"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(processed.len(), 3);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "-v=-10");
+        assert_eq!(processed[2].to_string_lossy(), "test.txt");
+
+        // 测试 -v 后面跟负数的情况（有额外参数）
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-b"),
+            OsString::from("a"),
+            OsString::from("-v"),
+            OsString::from("-10"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(processed.len(), 5);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "-b");
+        assert_eq!(processed[2].to_string_lossy(), "a");
+        assert_eq!(processed[3].to_string_lossy(), "-v=-10");
+        assert_eq!(processed[4].to_string_lossy(), "test.txt");
+
+        // 测试 --starting-line-number 后面跟负数的情况
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("--starting-line-number"),
+            OsString::from("-10"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(processed.len(), 3);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "--starting-line-number=-10");
+        assert_eq!(processed[2].to_string_lossy(), "test.txt");
+
+        // 测试已经带等号的情况
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-v=-10"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(processed.len(), 3);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "-v=-10");
+        assert_eq!(processed[2].to_string_lossy(), "test.txt");
+
+        // 测试 -v 后面跟非负数的情况
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-v"),
+            OsString::from("10"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(processed.len(), 4);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "-v");
+        assert_eq!(processed[2].to_string_lossy(), "10");
+        assert_eq!(processed[3].to_string_lossy(), "test.txt");
+
+        // 测试-v后面跟一个以-开头但不是数字的参数
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-v"),
+            OsString::from("-abc"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(processed.len(), 4);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "-v");
+        assert_eq!(processed[2].to_string_lossy(), "-abc");
+        assert_eq!(processed[3].to_string_lossy(), "test.txt");
+
+        // 测试普通参数不受影响
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-ft"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+
+        assert_eq!(processed.len(), 3);
+        assert_eq!(processed[0].to_string_lossy(), "nl");
+        assert_eq!(processed[1].to_string_lossy(), "-ft");
+        assert_eq!(processed[2].to_string_lossy(), "test.txt");
+    }
+
+    /// 测试NlFlags相关功能
+    mod nl_flags_tests {
+        use super::*;
+
+        /// 创建测试用的命令行参数匹配
+        fn create_test_matches(args: &[&str]) -> ArgMatches {
+            ct_app().try_get_matches_from(args).unwrap()
+        }
+
+        /// 测试编号样式的解析
+        #[test]
+        fn test_flags_numbering_styles() {
+            let test_cases = [
+                ("a", Ok(NlNumberingStyle::All)),
+                ("t", Ok(NlNumberingStyle::NonEmpty)),
+                ("n", Ok(NlNumberingStyle::None)),
+                (
+                    "p[0-9]+",
+                    Ok(NlNumberingStyle::Regex(Box::new(
+                        regex::Regex::new("[0-9]+").unwrap(),
+                    ))),
+                ),
+                (
+                    "invalid",
+                    Err("invalid numbering style: 'invalid'".to_string()),
+                ),
+            ];
+
+            for (input, expected_result) in test_cases {
+                let result = NlNumberingStyle::try_from(input);
+                match (result, expected_result) {
+                    (Ok(style), Ok(expected)) => {
+                        assert_eq!(style, expected, "Failed for input: {}", input);
+                    }
+                    (Err(e), Err(expected)) => {
+                        assert_eq!(e, expected, "Failed for input: {}", input);
+                    }
+                    (Ok(_), Err(_)) => {
+                        panic!("Expected error but got success for input: {}", input);
+                    }
+                    (Err(_), Ok(_)) => {
+                        panic!("Expected success but got error for input: {}", input);
+                    }
+                }
+            }
+        }
+
+        /// 测试基本标志设置
+        #[test]
+        fn test_flags_basic() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "test.txt"]);
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.line_increment, 1);
+            assert_eq!(flags.join_blank_lines, 1);
+            assert_eq!(flags.starting_line_number, 1);
+            assert_eq!(flags.number_width, 6);
+            assert_eq!(flags.files, vec!["test.txt"]);
+            assert_eq!(flags.section_delimiter, "\\:");
+            assert_eq!(flags.number_separator, "\t");
+            assert!(matches!(flags.number_format, NlNumberFormat::Right));
+            assert!(matches!(flags.header_numbering, NlNumberingStyle::None));
+            assert!(matches!(flags.body_numbering, NlNumberingStyle::NonEmpty));
+            assert!(matches!(flags.footer_numbering, NlNumberingStyle::None));
+            assert!(flags.is_renumber);
+        }
+
+        /// 测试行号格式设置
+        #[test]
+        fn test_flags_number_format() {
+            let test_cases = [
+                ("ln", NlNumberFormat::Left),
+                ("rn", NlNumberFormat::Right),
+                ("rz", NlNumberFormat::RightZero),
+            ];
+
+            for (input, expected_format) in test_cases {
+                let matches =
+                    create_test_matches(&[ctcore::ct_util_name(), "-n", input, "test.txt"]);
+                let flags = NlFlags::new(matches).unwrap();
+                assert_eq!(
+                    &flags.number_format, &expected_format,
+                    "Failed for input: {}",
+                    input
+                );
+            }
+        }
+
+        /// 测试分节符设置
+        #[test]
+        fn test_flags_section_delimiter() {
+            let test_cases = [
+                ("\\", "\\:"),    // 单字符自动添加 :
+                ("\\\\", "\\\\"), // 多字符保持原样
+                ("%%", "%%"),
+            ];
+
+            for (input, expected) in test_cases {
+                let matches =
+                    create_test_matches(&[ctcore::ct_util_name(), "-d", input, "test.txt"]);
+                let flags = NlFlags::new(matches).unwrap();
+                assert_eq!(flags.section_delimiter, expected);
+            }
+        }
+
+        /// 测试数值选项设置
+        #[test]
+        fn test_flags_numeric_options() {
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "-i",
+                "2", // line increment
+                "-l",
+                "3", // join blank lines
+                "-v",
+                "100", // starting line number
+                "-w",
+                "10", // number width
+                "test.txt",
+            ]);
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.line_increment, 2);
+            assert_eq!(flags.join_blank_lines, 3);
+            assert_eq!(flags.starting_line_number, 100);
+            assert_eq!(flags.number_width, 10);
+        }
+
+        /// 测试无效数值选项处理
+        #[test]
+        fn test_flags_invalid_numeric_options() {
+            // 测试无效的数值选项
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "-w",
+                "0", // invalid width
+                "test.txt",
+            ]);
+            assert!(NlFlags::new(matches).is_err());
+
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "-l",
+                "0", // invalid join blank lines
+                "test.txt",
+            ]);
+            assert!(NlFlags::new(matches).is_err());
+        }
+
+        /// 测试多文件处理
+        #[test]
+        fn test_flags_multiple_files() {
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "file1.txt",
+                "file2.txt",
+                "file3.txt",
+            ]);
+            let flags = NlFlags::new(matches).unwrap();
+            assert_eq!(flags.files, vec!["file1.txt", "file2.txt", "file3.txt"]);
+        }
+
+        /// 测试标准输入处理
+        #[test]
+        fn test_flags_default_stdin() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "-"]);
+            let flags = NlFlags::new(matches).unwrap();
+            assert_eq!(flags.files, vec!["-"]);
+        }
+
+        /// 测试编号样式选项设置
+        #[test]
+        fn test_flags_numbering_style_options() {
+            let matches = create_test_matches(&[
+                ctcore::ct_util_name(),
+                "-h",
+                "a", // header: all
+                "-b",
+                "t", // body: non-empty
+                "-f",
+                "n", // footer: none
+                "test.txt",
+            ]);
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert!(matches!(flags.header_numbering, NlNumberingStyle::All));
+            assert!(matches!(flags.body_numbering, NlNumberingStyle::NonEmpty));
+            assert!(matches!(flags.footer_numbering, NlNumberingStyle::None));
+        }
+
+        /// 测试无效编号样式处理
+        #[test]
+        fn test_flags_invalid_numbering_style() {
+            let matches =
+                create_test_matches(&[ctcore::ct_util_name(), "-h", "invalid", "test.txt"]);
+            assert!(NlFlags::new(matches).is_err());
+        }
+
+        /// 测试负数起始行号设置
+        #[test]
+        fn test_flags_negative_starting_line_number() {
+            let processed_args = standardize_nl_args(
+                [ctcore::ct_util_name(), "-v", "-10", "test.txt"]
+                    .into_iter()
+                    .map(|s| OsString::from(s)),
+            );
+
+            let matches = ct_app().try_get_matches_from(processed_args).unwrap();
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.starting_line_number, -10);
+        }
+
+        /// 测试带等号的负数起始行号
+        #[test]
+        fn test_flags_negative_starting_line_number_with_equals() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "-v=-10", "test.txt"]);
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.starting_line_number, -10);
+        }
+
+        /// 测试长选项名的负数起始行号
+        #[test]
+        fn test_flags_negative_starting_line_number_long_option() {
+            let processed_args = standardize_nl_args(
+                [
+                    ctcore::ct_util_name(),
+                    "--starting-line-number",
+                    "-10",
+                    "test.txt",
+                ]
+                .into_iter()
+                .map(|s| OsString::from(s)),
+            );
+
+            let matches = ct_app().try_get_matches_from(processed_args).unwrap();
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.starting_line_number, -10);
+        }
+
+        /// 测试极端负数值
+        #[test]
+        fn test_flags_extreme_negative_starting_line_number() {
+            let processed_args = standardize_nl_args(
+                [
+                    ctcore::ct_util_name(),
+                    "-v",
+                    "-2147483648", // min value for i32
+                    "test.txt",
+                ]
+                .into_iter()
+                .map(|s| OsString::from(s)),
+            );
+
+            let matches = ct_app().try_get_matches_from(processed_args).unwrap();
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.starting_line_number, -2147483648);
+        }
+    }
+
+    /// 测试nl函数的核心功能
+    mod nl_function_tests {
+        use super::*;
+
+        /// 测试基本行号功能
+        #[test]
+        fn test_basic_numbering() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n     2\tLine 2\n     3\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试空行处理
+        #[test]
+        fn test_empty_lines() {
+            let input = "Line 1\n\n\nLine 4\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n       \n       \n     2\tLine 4\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试分节符处理
+        #[test]
+        fn test_section_delimiter() {
+            let input = "\\:\nLine 1\n\\:\\:\nLine 2\n\\:\\:\\:\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "\n       Line 1\n\n     1\tLine 2\n\n       Line 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试行号格式化
+        #[test]
+        fn test_number_format() {
+            let input = "Line 1\nLine 2\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.number_format = NlNumberFormat::RightZero;
+            flags.number_width = 3;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "001\tLine 1\n002\tLine 2\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试空行合并功能
+        #[test]
+        fn test_join_blank_lines() {
+            let input = "Line 1\n\n\n\nLine 5\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.join_blank_lines = 2;
+            flags.body_numbering = NlNumberingStyle::All;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n       \n     2\t\n       \n     3\tLine 5\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试行号增量功能
+        #[test]
+        fn test_line_increment() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.line_increment = 2;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n     3\tLine 2\n     5\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试起始行号设置
+        #[test]
+        fn test_starting_line_number() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = 100;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n     2\tLine 2\n     3\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试行号分隔符
+        #[test]
+        fn test_number_separator() {
+            let input = "Line 1\nLine 2\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.number_separator = String::from(" | ");
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1 | Line 1\n     2 | Line 2\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试正则表达式编号功能
+        #[test]
+        fn test_regex_numbering() {
+            let input = "123\nabc\n456\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.body_numbering =
+                NlNumberingStyle::Regex(Box::new(regex::Regex::new("[0-9]+").unwrap()));
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\t123\n       abc\n     2\t456\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试全部编号样式
+        #[test]
+        fn test_all_numbering_style() {
+            let input = "Line 1\n\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.body_numbering = NlNumberingStyle::All;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n     2\t\n     3\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试无编号样式
+        #[test]
+        fn test_no_numbering_style() {
+            let input = "Line 1\nLine 2\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.body_numbering = NlNumberingStyle::None;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "       Line 1\n       Line 2\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数起始行号
+        #[test]
+        fn test_negative_starting_line_number() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -10;
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "   -10\tLine 1\n    -9\tLine 2\n    -8\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数起始行号与行号增量
+        #[test]
+        fn test_negative_starting_line_number_with_increment() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -10;
+            flags.line_increment = 2;
+            flags.section_delimiter = " ".to_string();
+            flags.body_numbering = NlNumberingStyle::All;
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "   -10\tLine 1\n    -8\tLine 2\n    -6\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数起始行号与格式化
+        #[test]
+        fn test_negative_starting_line_number_with_formatting() {
+            let input = "Line 1\nLine 2\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -10;
+            flags.number_format = NlNumberFormat::RightZero;
+            flags.number_width = 3;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "001\tLine 1\n002\tLine 2\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数起始行号跨越0边界
+        #[test]
+        fn test_negative_starting_line_number_crossing_zero() {
+            let input = "Line 1\nLine 2\nLine 3\nLine 4\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -2;
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "    -2\tLine 1\n    -1\tLine 2\n     0\tLine 3\n     1\tLine 4\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数行号左对齐
+        #[test]
+        fn test_negative_line_number_left_aligned() {
+            let input = "Line 1\nLine 2\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -10;
+            flags.number_format = NlNumberFormat::Left;
+            flags.number_width = 5;
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "-10  \tLine 1\n-9   \tLine 2\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+    }
+
+    /// 测试特殊边界情况
+    mod nl_edge_cases {
+        use super::*;
+
+        /// 测试空输入
+        #[test]
+        fn test_empty_input_with_negative_starting_line() {
+            let input = "";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -10;
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            // 空输入不应该输出任何内容
+            let expected = "";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试只有空行的输入
+        #[test]
+        fn test_only_empty_lines() {
+            let input = "\n\n\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.body_numbering = NlNumberingStyle::All; // 对所有行编号
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\t\n     2\t\n     3\t\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数起始行号与大的行号增量
+        #[test]
+        fn test_negative_starting_line_with_large_increment() {
+            let input = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -100;
+            flags.line_increment = 50;
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected =
+                "  -100\tLine 1\n   -50\tLine 2\n     0\tLine 3\n    50\tLine 4\n   100\tLine 5\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负数起始行号与较窄宽度
+        #[test]
+        fn test_negative_starting_line_with_narrow_width() {
+            let input = "Line 1\nLine 2\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -100;
+            flags.number_width = 3; // 宽度比行号短
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            // 行号应该超出设定的宽度
+            let expected = "-100\tLine 1\n-99\tLine 2\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负行号增量
+        #[test]
+        fn test_with_negative_line_increment() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = 5;
+            flags.line_increment = -1; // 负数增量
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "     1\tLine 1\n     0\tLine 2\n    -1\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        /// 测试负起始行号与负行号增量
+        #[test]
+        fn test_negative_starting_line_with_negative_increment() {
+            let input = "Line 1\nLine 2\nLine 3\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.starting_line_number = -5;
+            flags.line_increment = -1; // 负数增量
+            flags.stats = NlStats::new(flags.starting_line_number);
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            let expected = "    -5\tLine 1\n    -6\tLine 2\n    -7\tLine 3\n";
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+    }
+}

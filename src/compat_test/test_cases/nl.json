@@ -427,7 +427,7 @@
         "expectation": {
           "execution": {
             "exit_code": 0,
-            "stdout": "     1\tFile1 Line1\n     2\tFile1 Line2\n     1\tFile2 Line1\n     2\tFile2 Line2\n",
+            "stdout": "     1\tFile1 Line1\n     2\tFile1 Line2\n     3\tFile2 Line1\n     4\tFile2 Line2\n",
             "stderr": ""
           }
         },
@@ -472,7 +472,7 @@
         "expectation": {
           "execution": {
             "exit_code": 1,
-            "stdout": "     1\tFile1 Line1\n     2\tFile1 Line2\n     1\tFile3 Line1\n     2\tFile3 Line2\n",
+            "stdout": "     1\tFile1 Line1\n     2\tFile1 Line2\n     3\tFile3 Line1\n     4\tFile3 Line2\n",
             "stderr": "nl: nonexistent.txt: No such file or directory\n"
           }
         },

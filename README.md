@@ -84,3 +84,31 @@ rust-gdb --args target/debug/syskits ls
 (gdb) b ls.rs:79
 (gdb) run
 ```
+
+### 国际化和本地化
+* 配置文件
+
+locales/en-US/en-US.yml
+提供英文帮助信息
+
+locales/zh-CN/zh-CN.yml
+提供中文帮助信息
+
+* 支持中文和英文
+
+* 支持语言设置/切换
+
+```shell
+unset LC_ALL && unset LANG && export LANG=en_US.UTF-8/zh_CN.UTF-8
+```
+
+*库及API接口
+
+获取当前环境语言信息
+sys-locale::get_locale()
+
+设置当前环境语言信息
+rust-i18n::set_locale()
+
+字符串翻译
+rust-i18n::t!(&str)

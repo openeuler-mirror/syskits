@@ -143,6 +143,7 @@ feat_common_core = [
   "stat",
   "tac",
   "tr",
+  "factor",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -214,6 +215,8 @@ hostname = "0.3"
 indicatif = "0.17"
 itertools = "0.12.1"
 libc = "0.2.153"
+num-modular = "0.6.1"
+num-prime = "0.4.3"
 lscolors = { version = "0.16.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -378,6 +381,7 @@ nl = { optional = true, package = "ct_nl", path = "src/ct/nl"}
 stat = { optional = true, package = "ct_stat", path = "src/ct/stat" }
 tac = { optional = true, package = "ct_tac", path = "src/ct/tac" }
 tr = { optional = true, package = "ct_tr", path = "src/ct/tr" }
+factor = { optional = true, package = "ct_factor", path = "src/ct/factor"}
 
 [dev-dependencies]
 conv = "0.3"

@@ -14,12 +14,12 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{TailInput, TailInputKind, TailMetadataExt, TailPathExt};
 use crate::{platform, text};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code};
 use ctcore::ct_show_error;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, channel, Receiver};
+use std::sync::mpsc::{self, Receiver, channel};
 
 pub struct WatcherRx {
     watcher: Box<dyn Watcher>,
@@ -570,7 +570,7 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
                 return Err(CtSimpleError::new(
                     1,
                     format!("{} resources exhausted", text::TAIL_BACKEND),
-                ))
+                ));
             }
             Ok(Err(e)) => return Err(CtSimpleError::new(1, format!("NotifyError: {e}"))),
             Err(mpsc::RecvTimeoutError::Timeout) => {

@@ -18,17 +18,17 @@ mod platform;
 pub mod text;
 
 pub use args::ct_app;
-use args::{tail_parse_args, TailFilterMode, TailOptions, TailSignum};
+use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
 use chunks::TailReverseChunks;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code};
 use ctcore::{ct_show, ct_show_error};
 use follow::Observer;
 use paths::{TailFileExtTail, TailHeaderPrinter, TailInput, TailInputKind, TailMetadataExt};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 
 #[ctcore::main]
@@ -46,7 +46,7 @@ pub fn tail_main(args: impl ctcore::Args) -> CTResult<()> {
             return Err(CtSimpleError::new(
                 1,
                 format!("cannot follow {} by name", text::TAIL_DASH.quote()),
-            ))
+            ));
         }
         // Exit early if we do not output anything. Note, that this may break a pipe
         // when tail is on the receiving side.
@@ -149,7 +149,11 @@ fn handle_directory(
     observer.add_bad_path(path, input.display_name.as_str(), false)?;
 
     if options.follow.is_some() {
-        let msg = if options.retry { "" } else { "; giving up on this name" };
+        let msg = if options.retry {
+            ""
+        } else {
+            "; giving up on this name"
+        };
         ct_show_error!(
             "{}: cannot follow end of this type of file{}",
             input.display_name,
@@ -184,7 +188,7 @@ fn handle_tailable_file(
                 BufReader::new(file)
             } else {
                 let mut reader = BufReader::new(file);
-                tail_unbounded(&mut reader, options,None)?;
+                tail_unbounded(&mut reader, options, None)?;
                 reader
             };
 
@@ -203,16 +207,21 @@ fn handle_tailable_file(
     Ok(())
 }
 
-fn handle_file_open_error(e: std::io::Error, input: &TailInput, path: &Path, observer: &mut Observer) -> CTResult<()> {
+fn handle_file_open_error(
+    e: std::io::Error,
+    input: &TailInput,
+    path: &Path,
+    observer: &mut Observer,
+) -> CTResult<()> {
     observer.add_bad_path(path, input.display_name.as_str(), false)?;
     if e.kind() == std::io::ErrorKind::PermissionDenied {
-        ct_show!(e.map_err_context(|| {
-            format!("cannot open '{}' for reading", input.display_name)
-        }));
+        ct_show!(
+            e.map_err_context(|| { format!("cannot open '{}' for reading", input.display_name) })
+        );
     } else {
-        return Err(e.map_err_context(|| {
-            format!("cannot open '{}' for reading", input.display_name)
-        }));
+        return Err(
+            e.map_err_context(|| format!("cannot open '{}' for reading", input.display_name))
+        );
     }
     Ok(())
 }
@@ -247,7 +256,7 @@ fn handle_pipe_stdin(
     observer: &mut Observer,
 ) -> CTResult<()> {
     header_printer.print_input(input);
-    
+
     if paths::tail_stdin_is_bad_fd() {
         handle_bad_stdin_fd(options, input)?;
         return Ok(());
@@ -353,7 +362,7 @@ where
 
     for _ in 0..num_delimiters {
         match reader.read_until(delimiter, &mut buf) {
-            Ok(0) => break,  // EOF reached
+            Ok(0) => break, // EOF reached
             Ok(n) => {
                 total += n;
                 buf.clear();
@@ -361,7 +370,7 @@ where
             Err(e) => return Err(e),
         }
     }
-    
+
     Ok(total)
 }
 
@@ -420,13 +429,17 @@ fn tail_backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8)
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn tail_bounded(file: &mut File, options: &TailOptions, buffer: Option<&mut Vec<u8>>) -> CTResult<()> {
+fn tail_bounded(
+    file: &mut File,
+    options: &TailOptions,
+    buffer: Option<&mut Vec<u8>>,
+) -> CTResult<()> {
     let stdout = stdout();
     let mut multi_writer = MultiWriter::new();
-    
+
     // 添加标准输出 writer
     multi_writer.add_writer(BufWriter::new(stdout.lock()));
-    
+
     // 如果提供了 buffer，添加到 multi_writer
     if let Some(buf) = buffer {
         multi_writer.add_writer(BufWriter::new(buf));
@@ -492,7 +505,9 @@ struct MultiWriter<'a> {
 
 impl<'a> MultiWriter<'a> {
     fn new() -> Self {
-        MultiWriter { writers: Vec::new() }
+        MultiWriter {
+            writers: Vec::new(),
+        }
     }
 
     fn add_writer<W: Write + 'a>(&mut self, writer: W) {
@@ -500,7 +515,7 @@ impl<'a> MultiWriter<'a> {
     }
 }
 
-impl<'a> Write for MultiWriter<'a> {
+impl Write for MultiWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         for writer in &mut self.writers {
             writer.write_all(buf)?;
@@ -517,16 +532,16 @@ impl<'a> Write for MultiWriter<'a> {
 }
 
 fn tail_unbounded<T: Read>(
-    reader: &mut BufReader<T>, 
+    reader: &mut BufReader<T>,
     options: &TailOptions,
     buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     let stdout = stdout();
     let mut multi_writer = MultiWriter::new();
-    
+
     // 添加标准输出 writer
     multi_writer.add_writer(BufWriter::new(stdout.lock()));
-    
+
     // 如果提供了 buffer，添加到 multi_writer
     if let Some(buf) = buffer {
         multi_writer.add_writer(BufWriter::new(buf));
@@ -596,15 +611,15 @@ fn tail_unbounded<T: Read>(
 #[cfg(test)]
 mod tests {
 
-    use crate::tail_forwards_thru_file;
-    use std::io::Cursor;
     use super::*;
+    use crate::follow::Observer;
+    use crate::paths::{TailHeaderPrinter, TailInput};
+    use crate::tail_forwards_thru_file;
+    use std::fs::File;
+    use std::io::Cursor;
     use std::io::{self, Read, Write};
     use std::os::unix::io::{AsRawFd, FromRawFd};
-    use std::fs::File;
     use tempfile::NamedTempFile;
-    use crate::paths::{TailInput, TailHeaderPrinter};
-    use crate::follow::Observer;
 
     /// 辅助函数：在 Unix 平台中捕获标准输出
     fn capture_stdout<F, R>(f: F) -> String
@@ -669,7 +684,8 @@ mod tests {
             let mut observer = Observer::from(&options);
 
             // 测试从标准输入读取
-            let output = capture_stdout(|| tail_stdin(&options, &mut printer, &input, &mut observer));
+            let output =
+                capture_stdout(|| tail_stdin(&options, &mut printer, &input, &mut observer));
             assert_eq!(output.trim(), content);
         }
 
@@ -802,15 +818,14 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod test_tail_bounded_unbounded {
     use super::*;
-    use std::io::Write;
+    use serial_test::serial;
     use std::fs::File;
+    use std::io::Write;
     use std::time::Duration;
     use tempfile::NamedTempFile;
-    use serial_test::serial;
 
     /// 辅助函数：创建临时文件并写入内容
     fn create_temp_file(content: &str) -> NamedTempFile {
@@ -893,7 +908,10 @@ mod test_tail_bounded_unbounded {
 
         tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line3\nline4\nline5");
+        assert_eq!(
+            String::from_utf8(buffer).unwrap().trim(),
+            "line3\nline4\nline5"
+        );
     }
 
     #[test]
@@ -950,7 +968,10 @@ mod test_tail_bounded_unbounded {
 
         tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line3\nline4\nline5");
+        assert_eq!(
+            String::from_utf8(buffer).unwrap().trim(),
+            "line3\nline4\nline5"
+        );
     }
 
     #[test]
@@ -1012,7 +1033,7 @@ mod test_tail_bounded_unbounded {
     #[test]
     #[serial]
     fn test_tail_unbounded_no_final_newline() {
-        let content = "line1\nline2\nline3";  // 注意没有最后的换行符
+        let content = "line1\nline2\nline3"; // 注意没有最后的换行符
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
@@ -1051,4 +1072,3 @@ mod test_tail_bounded_unbounded {
         assert_eq!(String::from_utf8(buffer).unwrap(), "record2\0record3\0");
     }
 }
-

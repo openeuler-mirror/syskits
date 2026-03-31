@@ -13,17 +13,17 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use clap::{crate_version, value_parser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_warning};
 
 use crate::paths::TailInput;
-use crate::{parse, platform, Quotable};
+use crate::{Quotable, parse, platform};
 
 const TAIL_ABOUT: &str = ct_help_about!("tail.md");
 const TAIL_USAGE: &str = ct_help_usage!("tail.md");
@@ -36,7 +36,7 @@ pub mod tail_flags {
         /// 安静模式标志，禁止输出文件名头部
         /// 使用方式：--quiet 或 -q
         pub const TAIL_QUIET: &str = "quiet";
-        
+
         /// 详细模式标志，总是输出文件名头部
         /// 使用方式：--verbose 或 -v
         pub const TAIL_VERBOSE: &str = "verbose";
@@ -496,16 +496,16 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
 }
 
 /// 解析命令行参数并返回 TailOptions
-/// 
+///
 /// 此函数处理两种语法：
 /// 1. 现代语法：使用标准的命令行选项（如 -n 10, --follow 等）
 /// 2. 过时语法：支持旧式的参数格式（如 -10, +10 等）
 pub fn tail_parse_args(args: impl ctcore::Args) -> CTResult<TailOptions> {
     let args_vec: Vec<OsString> = args.collect();
-    
+
     // 首先尝试使用现代语法解析
     let modern_result = parse_modern_syntax(&args_vec);
-    
+
     // 如果不需要尝试过时语法，直接返回现代语法的结果
     if !should_try_obsolete_syntax(&args_vec, &modern_result) {
         return modern_result;
@@ -547,7 +547,7 @@ fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOp
 fn parse_obsolete_syntax(args: &[OsString]) -> CTResult<Option<TailOptions>> {
     let possible_obsolete_args = &args[1];
     let input = args.get(2);
-    
+
     tail_parse_obsolete(possible_obsolete_args, input)
 }
 
@@ -667,13 +667,13 @@ mod tests {
     mod test_tail_parse_args {
         use super::*;
         use std::ffi::OsString;
-    
+
         fn create_args(args: &[&str]) -> impl ctcore::Args {
             let mut vec = vec![OsString::from("tail")];
             vec.extend(args.iter().map(|s| OsString::from(s)));
             vec.into_iter()
         }
-    
+
         #[test]
         fn test_basic_options() {
             // 测试基本的命令行选项
@@ -684,33 +684,39 @@ mod tests {
                 TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
             );
         }
-    
+
         #[test]
         fn test_bytes_option() {
             // 测试字节数选项
             let args = create_args(&["-c", "20"]);
             let options = tail_parse_args(args).unwrap();
-            assert_eq!(options.mode, TailFilterMode::Bytes(TailSignum::Negative(20)));
-    
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Bytes(TailSignum::Negative(20))
+            );
+
             // 测试带加号的字节数
             let args = create_args(&["-c", "+20"]);
             let options = tail_parse_args(args).unwrap();
-            assert_eq!(options.mode, TailFilterMode::Bytes(TailSignum::Positive(20)));
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Bytes(TailSignum::Positive(20))
+            );
         }
-    
+
         #[test]
         fn test_follow_options() {
             // 测试跟随模式选项
             let args = create_args(&["-f"]);
             let options = tail_parse_args(args).unwrap();
             assert_eq!(options.follow, Some(TailFollowMode::Descriptor));
-    
+
             // 测试指定跟随方式
             let args = create_args(&["--follow=name"]);
             let options = tail_parse_args(args).unwrap();
             assert_eq!(options.follow, Some(TailFollowMode::Name));
         }
-    
+
         #[test]
         fn test_zero_terminated() {
             // 测试零终止符选项
@@ -721,7 +727,7 @@ mod tests {
                 _ => panic!("Expected Lines mode"),
             }
         }
-    
+
         #[test]
         fn test_retry_option() {
             // 测试重试选项
@@ -729,7 +735,7 @@ mod tests {
             let options = tail_parse_args(args).unwrap();
             assert!(options.retry);
         }
-    
+
         #[test]
         fn test_multiple_files() {
             // 测试多文件输入
@@ -737,14 +743,14 @@ mod tests {
             let options = tail_parse_args(args).unwrap();
             assert_eq!(options.inputs.len(), 3);
         }
-    
+
         #[test]
         fn test_invalid_number() {
             // 测试无效的数字输入
             let args = create_args(&["-n", "invalid"]);
             assert!(tail_parse_args(args).is_err());
         }
-    
+
         #[test]
         fn test_combined_options() {
             // 测试组合选项
@@ -757,7 +763,7 @@ mod tests {
             assert_eq!(options.follow, Some(TailFollowMode::Descriptor));
             assert!(options.retry);
         }
-    
+
         #[test]
         fn test_obsolete_syntax() {
             // 测试过时的语法
@@ -767,7 +773,7 @@ mod tests {
                 options.mode,
                 TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
             );
-    
+
             let args = create_args(&["+10"]);
             let options = tail_parse_args(args).unwrap();
             assert_eq!(
@@ -775,7 +781,7 @@ mod tests {
                 TailFilterMode::Lines(TailSignum::Positive(10), b'\n')
             );
         }
-    
+
         #[test]
         fn test_default_values() {
             // 测试默认值

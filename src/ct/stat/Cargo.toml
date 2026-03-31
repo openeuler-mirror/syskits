@@ -1,9 +1,9 @@
 [package]
 name = "ct_stat"
-version = "0.0.2"
-authors = ["CTyunOS linux developers"]
-license = "Mulan PSL v2.0"
 
+version.workspace = true
+authors.workspace = true
+license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
@@ -19,9 +19,9 @@ path = "src/stat.rs"
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
 chrono = { workspace = true }
-tempfile = "3.4" 
-rust-i18n = "2"
-sys-locale = "0.2" 
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true } 
+tempfile = { workspace = true }
 
 [[bin]]
 name = "stat"

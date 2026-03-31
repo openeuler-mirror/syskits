@@ -12,7 +12,7 @@
 #[cfg(test)]
 mod unit_tests;
 
-use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, DdOptions, StatusLevel};
+use super::{ConversionMode, DdOptions, IConvFlags, IFlags, Num, OConvFlags, OFlags, StatusLevel};
 use crate::conversion_tables::ConversionTable;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
@@ -523,7 +523,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
             Ok(n) => (n, 1),
             Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
             Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
-                return Err(ParseError::InvalidNumber(full.to_string()))
+                return Err(ParseError::InvalidNumber(full.to_string()));
             }
         },
         (Some(i), None, None) => (parse_bytes_only(&s[..i])?, 1),
@@ -658,8 +658,8 @@ impl Default for Parser {
 #[cfg(test)]
 mod tests {
 
-    use crate::parseargs::{parse_bytes_with_opt_multiplier, Parser};
     use crate::Num;
+    use crate::parseargs::{Parser, parse_bytes_with_opt_multiplier};
     use std::matches;
     const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 

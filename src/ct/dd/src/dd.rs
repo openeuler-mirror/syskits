@@ -28,7 +28,7 @@ use nix::fcntl::FcntlArg::F_SETFL;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
-use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 
 use std::cmp;
 use std::env;
@@ -46,13 +46,14 @@ use std::os::unix::{
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
 use std::sync::{
+    Arc,
     atomic::{AtomicBool, Ordering::Relaxed},
-    mpsc, Arc,
+    mpsc,
 };
 use std::thread;
 use std::time::{Duration, Instant};
 
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command, crate_version};
 use ctcore::ct_display::Quotable;
 #[cfg(unix)]
 use ctcore::ct_error::set_ct_exit_code;
@@ -64,7 +65,7 @@ use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use nix::{
     errno::Errno,
-    fcntl::{posix_fadvise, PosixFadviseAdvice},
+    fcntl::{PosixFadviseAdvice, posix_fadvise},
 };
 
 const DD_ABOUT: &str = ct_help_about!("dd.md");
@@ -368,11 +369,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag == 0 {
-        None
-    } else {
-        Some(flag)
-    }
+    if flag == 0 { None } else { Some(flag) }
 }
 
 impl<'a> Read for Input<'a> {
@@ -773,10 +770,11 @@ impl<'a> DdOutput<'a> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            ct_show_if_err!(self
-                .dst
-                .discard_cache(offset, len)
-                .map_err_context(|| "failed to discard cache for: 'standard output'".to_string()));
+            ct_show_if_err!(
+                self.dst.discard_cache(offset, len).map_err_context(|| {
+                    "failed to discard cache for: 'standard output'".to_string()
+                })
+            );
         }
         #[cfg(target_os = "linux")]
         {
@@ -917,7 +915,10 @@ struct CopyState<'a> {
 }
 
 /// 初始化复制环境
-fn initialize_copy_environment<'a>(input: Input<'a>, output: DdOutput<'a>) -> (CopyState<'a>, BlockWriter<'a>) {
+fn initialize_copy_environment<'a>(
+    input: Input<'a>,
+    output: DdOutput<'a>,
+) -> (CopyState<'a>, BlockWriter<'a>) {
     let bsize = calc_bsize(input.settings.ibs, output.settings.obs);
     let buffer = vec![BUF_INIT_BYTE; bsize];
     let read_stat = ReadStat::default();
@@ -968,7 +969,10 @@ fn perform_copy_loop(state: &mut CopyState, output: &mut BlockWriter) -> std::io
 }
 
 /// 读取并处理一个数据块
-fn read_and_process_block(state: &mut CopyState, output: &mut BlockWriter) -> std::io::Result<bool> {
+fn read_and_process_block(
+    state: &mut CopyState,
+    output: &mut BlockWriter,
+) -> std::io::Result<bool> {
     // 计算本次读取的缓冲区大小
     let loop_bsize = calc_loop_bsize(
         &state.input.settings.count,
@@ -1030,12 +1034,7 @@ fn handle_cache_updates(
 /// 更新进度信息
 fn update_progress(state: &mut CopyState) {
     if state.alarm.is_triggered() {
-        let prog_update = ProgUpdate::new(
-            state.read_stat,
-            state.write_stat,
-            state.duration,
-            false,
-        );
+        let prog_update = ProgUpdate::new(state.read_stat, state.write_stat, state.duration, false);
         state.prog_tx.send(prog_update).unwrap_or(());
     }
 }
@@ -1044,7 +1043,7 @@ fn update_progress(state: &mut CopyState) {
 fn finalize_copy<T>(mut output: BlockWriter, state: CopyState) -> std::io::Result<()> {
     let mut dur = state.duration;
     let start_time = Instant::now();
-    
+
     // 刷新输出缓冲
     let wstat_update = output.flush()?;
     output.sync()?;
@@ -1061,7 +1060,8 @@ fn finalize_copy<T>(mut output: BlockWriter, state: CopyState) -> std::io::Resul
     state.prog_tx.send(prog_update).unwrap_or(());
 
     // 等待输出线程完成
-    state.output_thread
+    state
+        .output_thread
         .join()
         .expect("Failed to join with the output thread.");
 
@@ -1102,11 +1102,7 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag == 0 {
-        None
-    } else {
-        Some(flag)
-    }
+    if flag == 0 { None } else { Some(flag) }
 }
 
 /// Read from an input (that is, a source of bytes) into the given buffer.
@@ -1288,7 +1284,9 @@ fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
         #[cfg(unix)]
         Some(ref outfile) if is_fifo(outfile) => DdOutput::new_fifo(Path::new(&outfile), &options)?,
         Some(ref outfile) => DdOutput::new_file(Path::new(&outfile), &options)?,
-        None if is_stdout_redirected_to_seekable_file() => DdOutput::new_file_from_stdout(&options)?,
+        None if is_stdout_redirected_to_seekable_file() => {
+            DdOutput::new_file_from_stdout(&options)?
+        }
         None => DdOutput::new_stdout(&options)?,
     };
     dd_copy(i, o).map_err_context(|| "IO error".to_string())
@@ -1306,7 +1304,7 @@ pub fn ct_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::{calc_bsize, DdOutput, Parser};
+    use crate::{DdOutput, Parser, calc_bsize};
 
     use std::path::Path;
 
@@ -1393,10 +1391,10 @@ mod tests {
 #[cfg(test)]
 mod dd_copy_tests {
     use super::*;
-    use std::io::{Read, Seek, SeekFrom};
-    use tempfile::{tempdir, tempfile};
     use std::fs::File;
     use std::io::Write;
+    use std::io::{Read, Seek, SeekFrom};
+    use tempfile::{tempdir, tempfile};
 
     // 辅助函数：创建测试用的DdOptions
     fn create_test_options() -> DdOptions {
@@ -1422,12 +1420,12 @@ mod dd_copy_tests {
         let mut temp_file = tempfile()?;
         temp_file.write_all(data)?;
         temp_file.seek(SeekFrom::Start(0))?;
-        
+
         // 如果设置了skip，需要相应地调整文件位置
         if settings.skip > 0 {
             temp_file.seek(SeekFrom::Start(settings.skip as u64))?;
         }
-        
+
         Ok(Input {
             src: Source::File(temp_file),
             settings,
@@ -1448,7 +1446,7 @@ mod dd_copy_tests {
     fn test_basic_copy() -> CTResult<()> {
         let input_data = b"Hello, World!";
         let options = create_test_options();
-        
+
         let input = create_test_input(input_data, &options)?;
         let (output, mut result_file) = create_test_output(&options)?;
 
@@ -1505,13 +1503,12 @@ mod dd_copy_tests {
     #[test]
     fn test_copy_with_skip() -> CTResult<()> {
         let mut options = create_test_options();
-        options.ibs = 1;      // 设置输入块大小为1字节
-        options.skip = 7;     // 跳过7个块（包括空格）
+        options.ibs = 1; // 设置输入块大小为1字节
+        options.skip = 7; // 跳过7个块（包括空格）
 
         let input_data = b"Hello, World!";
         let input = create_test_input(input_data, &options)?;
-        
-        
+
         let (output, mut result_file) = create_test_output(&options)?;
 
         dd_copy(input, output)?;
@@ -1520,7 +1517,7 @@ mod dd_copy_tests {
         let mut result = Vec::new();
         result_file.seek(SeekFrom::Start(0))?;
         result_file.read_to_end(&mut result)?;
-        
+
         assert_eq!(&result[..], b"World!");
         Ok(())
     }
@@ -1529,7 +1526,7 @@ mod dd_copy_tests {
     fn test_copy_empty_input() -> CTResult<()> {
         let input_data = b"";
         let options = create_test_options();
-        
+
         let input = create_test_input(input_data, &options)?;
         let (output, mut result_file) = create_test_output(&options)?;
 
@@ -1639,18 +1636,24 @@ mod tests_input_new_stdin {
     fn test_new_stdin_basic() {
         let settings = create_test_options();
         let result = Input::new_stdin(&settings);
-        assert!(result.is_ok(), "Should successfully create Input from stdin");
+        assert!(
+            result.is_ok(),
+            "Should successfully create Input from stdin"
+        );
     }
 
     #[test]
     fn test_new_stdin_with_directory_flag() {
         let mut settings = create_test_options();
         settings.iflags.directory = true;
-        
+
         #[cfg(unix)]
         {
             let result = Input::new_stdin(&settings);
-            assert!(result.is_ok(), "Should succeed when stdin is not a regular file");
+            assert!(
+                result.is_ok(),
+                "Should succeed when stdin is not a regular file"
+            );
         }
     }
 }

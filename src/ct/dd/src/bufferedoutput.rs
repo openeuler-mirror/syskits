@@ -109,7 +109,7 @@ impl<'a> DDBufferedOutput<'a> {
 #[cfg(test)]
 mod tests {
     use crate::bufferedoutput::DDBufferedOutput;
-    use crate::{Dest, DdOutput, DdOptions};
+    use crate::{DdOptions, DdOutput, Dest};
 
     #[test]
     fn test_buffered_output_write_blocks_empty() {
@@ -212,13 +212,13 @@ mod tests {
 #[cfg(test)]
 mod tests_write_blocks {
     use super::*;
-    use crate::{Dest, DdOptions};
+    use crate::{DdOptions, Dest};
 
     // 修改测试用例
     #[test]
     fn test_write_blocks_small_obs() {
         let settings = DdOptions {
-            obs: 1,  // 改为最小有效块大小
+            obs: 1, // 改为最小有效块大小
             ..Default::default()
         };
         let inner = DdOutput {
@@ -227,10 +227,10 @@ mod tests_write_blocks {
         };
         let mut output = DDBufferedOutput::new(inner);
         let wstat = output.dd_write_blocks(b"abc").unwrap();
-        assert_eq!(wstat.writes_complete, 3);  // 每个字节作为一个完整块
+        assert_eq!(wstat.writes_complete, 3); // 每个字节作为一个完整块
         assert_eq!(wstat.writes_partial, 0);
         assert_eq!(wstat.bytes_total, 3);
-        assert_eq!(output.buf, vec![]);  // 所有数据都被写入
+        assert_eq!(output.buf, vec![]); // 所有数据都被写入
     }
 
     #[test]
@@ -266,15 +266,20 @@ mod tests_write_blocks {
             buf: b"a".to_vec(),
         };
 
-        
         let wstat = output.dd_write_blocks(b"bcdef").unwrap();
-        
+
         // 修改断言以匹配实际行为
-        assert_eq!(wstat.writes_complete, 2, "Expected two complete writes (abc, def)");
+        assert_eq!(
+            wstat.writes_complete, 2,
+            "Expected two complete writes (abc, def)"
+        );
         assert_eq!(wstat.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat.bytes_total, 6, "Expected 6 bytes written (abc + def)");
-        assert_eq!(output.buf, vec![], "Buffer should be empty after writing complete blocks");
-        
+        assert_eq!(
+            output.buf,
+            vec![],
+            "Buffer should be empty after writing complete blocks"
+        );
     }
 
     #[test]
@@ -290,7 +295,10 @@ mod tests_write_blocks {
         let mut output = DDBufferedOutput::new(inner);
 
         let wstat1 = output.dd_write_blocks(b"ab").unwrap();
-        assert_eq!(wstat1.writes_complete, 0, "Expected no complete writes for first partial write");
+        assert_eq!(
+            wstat1.writes_complete, 0,
+            "Expected no complete writes for first partial write"
+        );
         assert_eq!(wstat1.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat1.bytes_total, 0, "Expected no bytes written");
         assert_eq!(output.buf, b"ab", "Buffer should contain 'ab'");
@@ -306,7 +314,10 @@ mod tests_write_blocks {
 
         let wstat3 = output.dd_write_blocks(b"def").unwrap();
 
-        assert_eq!(wstat3.writes_complete, 1, "Expected one complete write for full block");
+        assert_eq!(
+            wstat3.writes_complete, 1,
+            "Expected one complete write for full block"
+        );
         assert_eq!(wstat3.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat3.bytes_total, 4, "Expected 4 bytes written");
         assert_eq!(output.buf, vec![], "Buffer should be empty after write");
@@ -328,11 +339,13 @@ mod tests_write_blocks {
             inner,
             buf: b"ab".to_vec(),
         };
-        
-        
+
         // 第一次写入：空缓冲区;
         let wstat = output.dd_write_blocks(&[]).unwrap();
-        assert_eq!(wstat.writes_complete, 0, "Expected no complete writes for partial buffer");
+        assert_eq!(
+            wstat.writes_complete, 0,
+            "Expected no complete writes for partial buffer"
+        );
         assert_eq!(wstat.writes_partial, 1, "Expected one partial write");
         assert_eq!(wstat.bytes_total, 2, "Expected 2 bytes written");
         assert_eq!(output.buf, vec![], "Buffer should be empty after write");
@@ -350,8 +363,11 @@ mod tests_write_blocks {
         assert_eq!(wstat.writes_complete, 1, "Expected one complete write");
         assert_eq!(wstat.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat.bytes_total, 3, "Expected 3 bytes written");
-        assert_eq!(output.buf, vec![], "Buffer should be empty after complete write");
-        
+        assert_eq!(
+            output.buf,
+            vec![],
+            "Buffer should be empty after complete write"
+        );
     }
 
     #[test]
@@ -365,7 +381,7 @@ mod tests_write_blocks {
             settings: &settings,
         };
         let mut output = DDBufferedOutput::new(inner);
-        
+
         // Write small amount of data with large block size
         let wstat = output.dd_write_blocks(b"hello").unwrap();
         assert_eq!(wstat.writes_complete, 0);

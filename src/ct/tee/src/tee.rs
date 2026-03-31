@@ -384,3 +384,305 @@ impl Read for NamedReader {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stat_options_default() {
+        let options = StatOptions::default();
+        assert!(!options.is_append);
+        assert!(!options.is_ignore_interrupts);
+        assert!(options.files.is_empty());
+        assert!(options.output_error.is_none());
+    }
+
+    #[test]
+    fn test_stat_options_new() {
+        let matches = ct_app()
+            .try_get_matches_from(["tee", "-a", "file.txt"])
+            .unwrap();
+        let options = StatOptions::new(&matches);
+
+        assert!(options.is_append);
+        assert!(!options.is_ignore_interrupts);
+        assert_eq!(options.files, vec!["file.txt"]);
+        assert!(options.output_error.is_none());
+    }
+
+    #[cfg(test)]
+    mod named_writer_tests {
+        use super::*;
+        use std::io::{self, Cursor};
+
+        #[test]
+        fn test_named_writer_write_success() {
+            let data = b"Hello, world!";
+            let mut writer = NamedWriter {
+                inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let result = writer.write(data);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), data.len());
+        }
+
+        #[test]
+        fn test_named_writer_write_error() {
+            struct ErrorWriter;
+
+            impl Write for ErrorWriter {
+                fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+                    Err(io::Error::new(io::ErrorKind::Other, "write error"))
+                }
+
+                fn flush(&mut self) -> Result<()> {
+                    Ok(())
+                }
+            }
+
+            let mut writer = NamedWriter {
+                inner: Box::new(ErrorWriter) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let data = b"Hello, world!";
+            let result = writer.write(data);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
+        }
+
+        #[test]
+        fn test_named_writer_flush_success() {
+            let mut writer = NamedWriter {
+                inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let result = writer.flush();
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_named_writer_flush_error() {
+            struct ErrorWriter;
+
+            impl Write for ErrorWriter {
+                fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+                    Ok(_buf.len())
+                }
+
+                fn flush(&mut self) -> Result<()> {
+                    Err(io::Error::new(io::ErrorKind::Other, "flush error"))
+                }
+            }
+
+            let mut writer = NamedWriter {
+                inner: Box::new(ErrorWriter) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let result = writer.flush();
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
+        }
+    }
+    #[cfg(test)]
+    mod named_reader_tests {
+        use super::*;
+        use std::io::{self, Cursor};
+
+        #[test]
+        fn test_named_reader_read_success() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 13];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 13);
+            assert_eq!(&buffer, data);
+        }
+
+        #[test]
+        fn test_named_reader_read_partial() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 5];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 5);
+            assert_eq!(&buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_named_reader_read_error() {
+            struct ErrorReader;
+
+            impl Read for ErrorReader {
+                fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
+                    Err(io::Error::new(io::ErrorKind::Other, "read error"))
+                }
+            }
+
+            let mut reader = NamedReader {
+                inner: Box::new(ErrorReader) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 10];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
+        }
+
+        #[test]
+        fn test_named_reader_read_empty() {
+            let data = b"";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 10];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_named_reader_read_buffer_smaller_than_data() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 5];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 5);
+            assert_eq!(&buffer, b"Hello");
+        }
+
+        #[test]
+        fn test_named_reader_read_buffer_larger_than_data() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer = [0; 20];
+            let result = reader.read(&mut buffer);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 13);
+            assert_eq!(&buffer[..13], data);
+        }
+
+        #[test]
+        fn test_named_reader_read_multiple_times() {
+            let data = b"Hello, world!";
+            let mut reader = NamedReader {
+                inner: Box::new(Cursor::new(data.to_vec())) as Box<dyn Read>,
+            };
+            let mut buffer1 = [0; 5];
+            let result1 = reader.read(&mut buffer1);
+            assert!(result1.is_ok());
+            assert_eq!(result1.unwrap(), 5);
+            assert_eq!(&buffer1, b"Hello");
+
+            let mut buffer2 = [0; 8];
+            let result2 = reader.read(&mut buffer2);
+            assert!(result2.is_ok());
+            assert_eq!(result2.unwrap(), 8);
+            assert_eq!(&buffer2, b", world!");
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_basic {
+    use super::*;
+    use std::io::Cursor;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_ct_app() {
+        let mut app = ct_app();
+
+        // 测试基本命令行参数
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == stat_flags::TEE_APPEND)
+        );
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == stat_flags::TEE_IGNORE_INTERRUPTS)
+        );
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == stat_flags::TEE_FILE)
+        );
+
+        // 测试帮助信息
+        let help_text = app.render_help().to_string();
+        assert!(help_text.contains("append to the given FILEs"));
+        assert!(help_text.contains("ignore interrupt signals"));
+    }
+
+    #[test]
+    fn test_open() {
+        // 测试正常打开文件
+        let temp_file = NamedTempFile::new().unwrap();
+        let result = open(temp_file.path().to_string_lossy().to_string(), false, None);
+        assert!(result.is_ok());
+
+        // 测试追加模式
+        let result = open(temp_file.path().to_string_lossy().to_string(), true, None);
+        assert!(result.is_ok());
+
+        // 测试打开不存在的文件
+        let result = open(
+            "/nonexistent/file".to_string(),
+            false,
+            Some(&OutputErrorMode::Warn),
+        );
+        assert!(result.is_ok()); // 应该返回 sink writer
+
+        // 测试错误模式
+        let result = open(
+            "/nonexistent/file".to_string(),
+            false,
+            Some(&OutputErrorMode::Exit),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_error() {
+        let writer = NamedWriter {
+            name: "test".to_string(),
+            inner: Box::new(Cursor::new(Vec::new())),
+        };
+        let mut ignored_errors = 0;
+
+        // 测试 Warn 模式
+        let result = process_error(
+            Some(&OutputErrorMode::Warn),
+            Error::new(ErrorKind::Other, "test error"),
+            &writer,
+            &mut ignored_errors,
+        );
+        assert!(result.is_ok());
+        assert_eq!(ignored_errors, 1);
+
+        // 测试 Exit 模式
+        ignored_errors = 0;
+        let result = process_error(
+            Some(&OutputErrorMode::Exit),
+            Error::new(ErrorKind::Other, "test error"),
+            &writer,
+            &mut ignored_errors,
+        );
+        assert!(result.is_err());
+        assert_eq!(ignored_errors, 0);
+    }
+}

@@ -485,5 +485,4 @@ mod tests {
             assert_eq!(String::from_utf8(v).unwrap(), "fooa barb    bazz quxw\n");
         }
     }
-
 }

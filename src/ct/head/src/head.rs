@@ -11,7 +11,7 @@
 
 // spell-checker:ignore (vars) BUFWRITER seekable
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
@@ -159,21 +159,19 @@ fn arg_iterate<'a>(
                     result.extend(args);
                     Ok(Box::new(result.into_iter()))
                 }
-                Some(Err(e)) => {
-                    match e {
-                        parse::ParseError::Syntax => Err(CtSimpleError::new(
-                            1,
-                            format!("bad argument format: {}", s.quote()),
-                        )),
-                        parse::ParseError::Overflow => Err(CtSimpleError::new(
-                            1,
-                            format!(
-                                "invalid argument: {} Value too large for defined datatype",
-                                s.quote()
-                            ),
-                        )),
-                    }
-                }
+                Some(Err(e)) => match e {
+                    parse::ParseError::Syntax => Err(CtSimpleError::new(
+                        1,
+                        format!("bad argument format: {}", s.quote()),
+                    )),
+                    parse::ParseError::Overflow => Err(CtSimpleError::new(
+                        1,
+                        format!(
+                            "invalid argument: {} Value too large for defined datatype",
+                            s.quote()
+                        ),
+                    )),
+                },
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {

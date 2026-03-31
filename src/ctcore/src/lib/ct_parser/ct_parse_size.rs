@@ -452,8 +452,7 @@ mod tests {
 
     use crate::ct_parse_size::{CtParser, ParseSizeError, parse_size_u64, parse_size_u128};
 
-
-     #[test]
+    #[test]
     fn all_suffixes() {
         let suffixes = [
             ('K', 1u32),
@@ -740,7 +739,7 @@ mod tests {
         assert_eq!(parse_size_u64("2GB"), Ok(2_000_000_000));
     }
 
-  #[test]
+    #[test]
     #[cfg(target_pointer_width = "64")]
     fn xtest_base_64() {
         assert_eq!(parse_size_u64("1T"), Ok(1_099_511_627_776));
@@ -839,5 +838,4 @@ mod tests {
         assert_eq!(parse_size_u64("0x17203"), Ok(94723));
         assert_eq!(parse_size_u128("0xACDCK"), Ok(44252 * 1024));
     }
-
 }

@@ -1165,7 +1165,7 @@ mod tests {
             let result = merge(&mut files, &settings, None, &mut tmp_dir);
             assert!(result.is_ok());
         }
-    
+
         #[test]
         fn test_merge_unique_lines_true() {
             let input = "line\nline\nline";
@@ -1915,7 +1915,7 @@ mod tests {
             let result = merge(&mut files, &settings, None, &mut tmp_dir);
             assert!(result.is_ok());
         }
-    
+
         #[test]
         fn test_merge_threads_qq() {
             let input = "line1\nline2\nline23\nline31";
@@ -2678,7 +2678,7 @@ mod tests {
             let merger = merge(&mut files, &settings, None, &mut tmp_dir_wrapper);
             assert!(merger.is_ok());
         }
-    
+
         #[test]
         fn test_merge_global_setting_different_line_endings_newline() {
             let settings = SortGlobalConfigs {

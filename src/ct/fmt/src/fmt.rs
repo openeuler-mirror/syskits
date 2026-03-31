@@ -19581,7 +19581,7 @@ mod tests {
             );
         }
 
-                #[test]
+        #[test]
         fn test_ct_app_prefix_short_with_record_separator() {
             let command = ct_app();
             let cmd_args = vec![ctcore::ct_util_name(), "-p", "\u{001e}"];

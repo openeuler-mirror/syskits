@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use std::ffi::OsString;
 
 #[derive(PartialEq, Eq, Debug)]
@@ -147,7 +147,10 @@ mod tests {
         let r = parse_obsolete(src);
         match r {
             Some(s) => match s {
-                Ok(v) => Some(Ok(v.iter().map(|s| s.to_str().unwrap().to_owned()).collect())),
+                Ok(v) => Some(Ok(v
+                    .iter()
+                    .map(|s| s.to_str().unwrap().to_owned())
+                    .collect())),
                 Err(e) => Some(Err(e)),
             },
             None => None,

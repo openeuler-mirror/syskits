@@ -415,7 +415,7 @@ mod tests {
         let output = basename(input, suffix);
 
         assert_eq!(output, expected_result);
-    }    
+    }
 
     #[test]
     fn test_basename_suffix_containing_dots() {

@@ -739,7 +739,7 @@ impl Display for ClapErrorWrapper {
 mod tests {
     use super::*;
 
-   #[test]
+    #[test]
     fn test_get_exit_code() {
         // 测试默认退出码是否为0
         set_ct_exit_code(0);
@@ -846,5 +846,4 @@ mod tests {
                 .to_string()
         );
     }
-
 }

@@ -1057,7 +1057,7 @@ mod tests {
         }
     }
 
-   #[test]
+    #[test]
     fn test_from_nix_error_to_io_error_esrmnt() {
         let nix_error = nix::Error::ESRMNT;
         let custom_error: SpliceError = nix_error.into();
@@ -1460,7 +1460,7 @@ mod tests {
         ));
     }
 
-   #[test]
+    #[test]
     fn test_maybe_unsupported_with_eaddrinuse() {
         let error = Errno::EADDRINUSE.into(); // Address already in use error
         assert!(matches!(
@@ -1477,5 +1477,4 @@ mod tests {
             SpliceError::Io(_)
         ));
     }
-
 }

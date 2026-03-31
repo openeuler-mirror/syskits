@@ -34,7 +34,7 @@ pub(crate) enum ConversionMode {
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct IConvFlags {
     pub mode: Option<ConversionMode>,
-    pub swab: bool,
+    pub is_swab: bool,
     pub sync: Option<u8>,
     pub noerror: bool,
 }
@@ -42,53 +42,53 @@ pub(crate) struct IConvFlags {
 /// Stores all Conv Flags that apply to the output
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct OConvFlags {
-    pub sparse: bool,
-    pub excl: bool,
-    pub nocreat: bool,
-    pub notrunc: bool,
-    pub fdatasync: bool,
-    pub fsync: bool,
+    pub is_sparse: bool,
+    pub is_excl: bool,
+    pub is_nocreat: bool,
+    pub is_notrunc: bool,
+    pub is_fdatasync: bool,
+    pub is_fsync: bool,
 }
 
 /// Stores all Flags that apply to the input
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct IFlags {
-    pub cio: bool,
-    pub direct: bool,
-    pub directory: bool,
-    pub dsync: bool,
-    pub sync: bool,
-    pub nocache: bool,
-    pub nonblock: bool,
-    pub noatime: bool,
-    pub noctty: bool,
-    pub nofollow: bool,
-    pub nolinks: bool,
-    pub binary: bool,
-    pub text: bool,
-    pub fullblock: bool,
-    pub count_bytes: bool,
-    pub skip_bytes: bool,
+    pub is_cio: bool,
+    pub is_direct: bool,
+    pub is_directory: bool,
+    pub is_dsync: bool,
+    pub is_sync: bool,
+    pub is_nocache: bool,
+    pub is_nonblock: bool,
+    pub is_noatime: bool,
+    pub is_noctty: bool,
+    pub is_nofollow: bool,
+    pub is_nolinks: bool,
+    pub is_binary: bool,
+    pub is_text: bool,
+    pub is_fullblock: bool,
+    pub is_count_bytes: bool,
+    pub is_skip_bytes: bool,
 }
 
 /// Stores all Flags that apply to the output
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct OFlags {
-    pub append: bool,
-    pub cio: bool,
-    pub direct: bool,
-    pub directory: bool,
-    pub dsync: bool,
-    pub sync: bool,
-    pub nocache: bool,
-    pub nonblock: bool,
-    pub noatime: bool,
-    pub noctty: bool,
-    pub nofollow: bool,
-    pub nolinks: bool,
-    pub binary: bool,
-    pub text: bool,
-    pub seek_bytes: bool,
+    pub is_append: bool,
+    pub is_cio: bool,
+    pub is_direct: bool,
+    pub is_directory: bool,
+    pub is_dsync: bool,
+    pub is_sync: bool,
+    pub is_nocache: bool,
+    pub is_nonblock: bool,
+    pub is_noatime: bool,
+    pub is_noctty: bool,
+    pub is_nofollow: bool,
+    pub is_nolinks: bool,
+    pub is_binary: bool,
+    pub is_text: bool,
+    pub is_seek_bytes: bool,
 }
 
 pub mod options {

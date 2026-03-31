@@ -586,7 +586,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -600,7 +603,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -614,7 +620,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -628,7 +637,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -642,7 +654,10 @@ mod tests {
             alignment: NumberAlignment::Left,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -656,7 +671,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::Plus,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -670,7 +688,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::Space,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -684,7 +705,10 @@ mod tests {
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -698,7 +722,10 @@ mod tests {
             alignment: NumberAlignment::RightZero,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Ok(expected));
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -713,7 +740,7 @@ mod tests {
             alignment: NumberAlignment::Left,
             positive_sign: PositiveSign::None,
         };
-        assert_eq!(Spec::parse(&mut input), Err(rest));
+        assert_eq!(IndexedSpec::parse(&mut input), Err(rest));
         // assert_eq!(Spec::parse(&mut input), Err([Spec::EscapedString, 100]));
     }
 
@@ -725,7 +752,7 @@ mod tests {
             width: None,
             align_left: true,
         };
-        assert_eq!(Spec::parse(&mut input), Err(rest));
+        assert_eq!(IndexedSpec::parse(&mut input), Err(rest));
     }
 
     #[test]
@@ -736,7 +763,7 @@ mod tests {
             align_left: true,
         };
         let rest: &[u8] = b"2.3L";
-        assert_eq!(Spec::parse(&mut input), Err(rest));
+        assert_eq!(IndexedSpec::parse(&mut input), Err(rest));
     }
 
     #[test]
@@ -747,7 +774,7 @@ mod tests {
             width: None,
             align_left: false,
         };
-        assert_eq!(Spec::parse(&mut input), Err(rest));
+        assert_eq!(IndexedSpec::parse(&mut input), Err(rest));
     }
 
     #[test]
@@ -861,7 +888,7 @@ mod tests {
         let mut rest: &[u8] = &mut [b'*', b'3', b'5', b'7'];
         let mut index = 0;
         assert_eq!(
-            eat_asterisk_or_number(&mut rest, &mut index),
+            eat_asterisk_or_number(&mut rest, &mut index).map(|(v, _)| v),
             Some(CanAsterisk::Asterisk)
         );
     }
@@ -870,7 +897,9 @@ mod tests {
     fn test_eat_asterisk_or_number_negative() {
         let mut rest: &[u8] = &mut [b'2', b'5', b'7'];
         let mut index = 0;
-        if let Some(eat_asterisk_or_number_value) = eat_asterisk_or_number(&mut rest, &mut index) {
+        if let Some((eat_asterisk_or_number_value, _)) =
+            eat_asterisk_or_number(&mut rest, &mut index)
+        {
             assert_eq!(eat_asterisk_or_number_value, CanAsterisk::Fixed(257));
         }
     }
@@ -881,7 +910,7 @@ mod tests {
         let mut index = 0;
 
         assert_eq!(
-            eat_asterisk_or_number(&mut rest, &mut index),
+            eat_asterisk_or_number(&mut rest, &mut index).map(|(v, _)| v),
             Some(CanAsterisk::Fixed(357))
         );
     }
@@ -914,7 +943,7 @@ mod tests {
         let mut rest: &[u8] = &mut [b'*', b'a'];
         let mut index = 0;
         assert_eq!(
-            eat_asterisk_or_number(&mut rest, &mut index),
+            eat_asterisk_or_number(&mut rest, &mut index).map(|(v, _)| v),
             Some(CanAsterisk::Asterisk)
         );
         assert_eq!(index, 1); // 索引不应该增加
@@ -925,7 +954,7 @@ mod tests {
         let mut rest: &[u8] = &mut [b'*', b' ', b'a'];
         let mut index = 0;
         assert_eq!(
-            eat_asterisk_or_number(&mut rest, &mut index),
+            eat_asterisk_or_number(&mut rest, &mut index).map(|(v, _)| v),
             Some(CanAsterisk::Asterisk)
         );
         assert_eq!(index, 1); // 索引不应该增加
@@ -936,7 +965,7 @@ mod tests {
         let mut rest: &[u8] = &mut [b'*', b'b', b'a'];
         let mut index = 0;
         assert_eq!(
-            eat_asterisk_or_number(&mut rest, &mut index),
+            eat_asterisk_or_number(&mut rest, &mut index).map(|(v, _)| v),
             Some(CanAsterisk::Asterisk)
         );
         assert_eq!(index, 1); // 索引不应该增加

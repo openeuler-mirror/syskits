@@ -302,6 +302,7 @@ impl<F: Formatter> Format<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ct_format::spec::Spec;
     use std::fmt::Write as FmtWrite;
     use std::io;
     use std::io::Cursor;
@@ -396,7 +397,9 @@ mod tests {
     #[test]
     fn test_parse_escape_only() {
         let format_string = b"Hello, \\nWorld!";
-        let result: Vec<_> = parse_escape_only(format_string).collect();
+        let result: Vec<_> = parse_escape_only(format_string)
+            .map(|r| r.unwrap())
+            .collect();
         assert_eq!(
             result,
             vec![
@@ -483,7 +486,9 @@ mod tests {
     #[test]
     fn test_can_parse_escape_only_invalid_escape() {
         let format_string = b"Hello \\xZZ";
-        let result: Vec<_> = parse_escape_only(format_string).collect();
+        let result: Vec<_> = parse_escape_only(format_string)
+            .map(|r| r.unwrap())
+            .collect();
         // println!("{:?}", result);
         assert_eq!(
             result,

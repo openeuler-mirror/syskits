@@ -367,3 +367,273 @@ fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResul
     }
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::io::Cursor;
+
+    mod pathchk_flags_tests {
+        use super::*;
+
+        #[test]
+        fn test_flags_basic() {
+            let args = vec![ctcore::ct_util_name(), "-p", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PathchkFlags::new(&matches).unwrap();
+
+            assert!(matches!(flags.mode, PathchkMode::Basic));
+            assert_eq!(flags.paths, vec!["file.txt"]);
+        }
+
+        #[test]
+        fn test_flags_extra() {
+            let args = vec![ctcore::ct_util_name(), "-P", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PathchkFlags::new(&matches).unwrap();
+
+            assert!(matches!(flags.mode, PathchkMode::Extra));
+        }
+
+        #[test]
+        fn test_flags_both() {
+            let args = vec![ctcore::ct_util_name(), "--portability", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PathchkFlags::new(&matches).unwrap();
+
+            assert!(matches!(flags.mode, PathchkMode::Both));
+        }
+
+        #[test]
+        fn test_flags_missing_path() {
+            let args = vec![ctcore::ct_util_name(), "-p"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = PathchkFlags::new(&matches);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_flags_default_mode() {
+            let args = vec![ctcore::ct_util_name(), "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PathchkFlags::new(&matches).unwrap();
+            assert!(matches!(flags.mode, PathchkMode::Default));
+        }
+
+        #[test]
+        fn test_flags_both_with_posix_and_special() {
+            let args = vec![ctcore::ct_util_name(), "-p", "-P", "file.txt"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PathchkFlags::new(&matches).unwrap();
+            assert!(matches!(flags.mode, PathchkMode::Both));
+        }
+    }
+
+    mod pathchk_execution_tests {
+        use super::*;
+
+        #[test]
+        fn test_nonportable_character() {
+            let args = vec![ctcore::ct_util_name(), "-p", "special#file"];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(
+                output_str
+                    .contains("pathchk: nonportable character ‘#’ in file name 'special#file'")
+            );
+        }
+
+        #[test]
+        fn test_component_too_long() {
+            let long_name = "a".repeat(15);
+            let args = vec![ctcore::ct_util_name(), "-p", &long_name];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("limit 14 exceeded by length 15"));
+        }
+
+        #[test]
+        fn test_leading_hyphen() {
+            let args = vec![ctcore::ct_util_name(), "-P", "-"];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("leading '-' in a component of file name '-'"));
+        }
+
+        #[test]
+        fn test_empty_filename() {
+            let args = vec![ctcore::ct_util_name(), "-P", ""];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+
+            assert!(output_str.contains("pathchk: empty file name"));
+        }
+
+        #[test]
+        fn test_filename_too_long() {
+            let long_name = "a".repeat(300);
+            let args = vec![ctcore::ct_util_name(), "-P", &long_name];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("File name too long"));
+            assert!(output_str.contains(&long_name));
+        }
+
+        #[test]
+        fn test_path_with_multiple_components() {
+            let args = vec![ctcore::ct_util_name(), "-p", "dir1/dir2/file"];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_multiple_paths() {
+            let args = vec![ctcore::ct_util_name(), "-p", "file1", "file2"];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_path_with_dots() {
+            let args = vec![ctcore::ct_util_name(), "-p", "../file"];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_path_with_special_chars() {
+            let args = vec![ctcore::ct_util_name(), "-p", "file@name"];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("pathchk: nonportable character ‘@’"));
+        }
+
+        #[test]
+        fn test_path_with_long_component() {
+            let long_component = format!("dir/{}", "a".repeat(15));
+            let args = vec![ctcore::ct_util_name(), "-p", &long_component];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("limit 14 exceeded"));
+        }
+
+        #[test]
+        fn test_path_with_long_total_length() {
+            let long_path = format!("{}/file", "a".repeat(255));
+            let args = vec![ctcore::ct_util_name(), "-p", &long_path];
+            let mut output = Cursor::new(Vec::new());
+            let result = pathchk_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+
+            assert!(output_str.contains("exceeded by length 255 of file"));
+        }
+    }
+
+    mod check_functions_tests {
+        use super::*;
+
+        #[test]
+        fn test_check_portable_chars() {
+            let mut output = Cursor::new(Vec::new());
+            assert!(check_portable_chars(&mut output, "valid-name.txt").unwrap());
+            assert!(!check_portable_chars(&mut output, "invalid#name").unwrap());
+            assert!(!check_portable_chars(&mut output, "name@domain").unwrap());
+        }
+
+        #[test]
+        fn test_check_searchable() {
+            let mut output = Cursor::new(Vec::new());
+            assert!(check_searchable(&mut output, ".").unwrap());
+            assert!(check_searchable(&mut output, "nonexistent_file").unwrap());
+        }
+
+        #[test]
+        fn test_check_extra_with_multiple_components() {
+            let mut output = Cursor::new(Vec::new());
+            let path = vec!["-bad".to_string(), "name".to_string()];
+            assert!(!check_extra(&mut output, &path).unwrap());
+        }
+
+        #[test]
+        fn test_check_basic_with_valid_path() {
+            let mut output = Cursor::new(Vec::new());
+            let path = vec!["valid".to_string(), "path.txt".to_string()];
+            assert!(check_basic(&mut output, &path).unwrap());
+        }
+
+        #[test]
+        fn test_check_default_with_valid_path() {
+            let mut output = Cursor::new(Vec::new());
+            let path = vec!["valid".to_string(), "path.txt".to_string()];
+            assert!(check_default(&mut output, &path).unwrap());
+        }
+    }
+
+    mod ct_app_tests {
+        use super::*;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn test_app_all_options() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-p",
+                "-P",
+                "--portability",
+                "file.txt",
+            ];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_app_minimal_options() {
+            let args = vec![ctcore::ct_util_name(), "file.txt"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_app_invalid_option() {
+            let args = vec![ctcore::ct_util_name(), "--invalid-option", "file.txt"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_app_help() {
+            let args = vec![ctcore::ct_util_name(), "--help"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_app_version() {
+            let args = vec![ctcore::ct_util_name(), "--version"];
+            let result = ct_app().try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        }
+    }
+}

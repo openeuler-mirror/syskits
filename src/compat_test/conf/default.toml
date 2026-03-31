@@ -15,7 +15,14 @@ commands_dir = "target/debug"
 test_cases_dir = "src/compat_test/test_cases"
 # 默认测试的命令列表
 default_commands = [
-    "chmod"     # chmod 命令测试
+    "chmod",     # chmod 命令测试
+    "fold",
+    "id",
+    "hostid",
+    "pathchk",
+    "realpath",
+    "timeout",    
+    "nl"
 ]
 
 # 测试环境配置
@@ -29,7 +36,7 @@ cleanup = true
 # 是否显示测试进度
 show_progress = true
 # 报告格式：text, json, html
-report_format = "text"
+report_format = "html"
 # 报告输出目录
 report_dir = "test_reports"
 # 是否显示详细输出

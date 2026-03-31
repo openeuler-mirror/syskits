@@ -144,6 +144,7 @@ feat_common_core = [
   "tac",
   "tr",
   "factor",
+  "tee",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -382,6 +383,7 @@ stat = { optional = true, package = "ct_stat", path = "src/ct/stat" }
 tac = { optional = true, package = "ct_tac", path = "src/ct/tac" }
 tr = { optional = true, package = "ct_tr", path = "src/ct/tr" }
 factor = { optional = true, package = "ct_factor", path = "src/ct/factor"}
+tee = { optional = true, package = "ct_tee", path = "src/ct/tee" }
 
 [dev-dependencies]
 conv = "0.3"

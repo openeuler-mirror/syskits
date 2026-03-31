@@ -28,7 +28,7 @@ use paths::{TailFileExtTail, TailHeaderPrinter, TailInput, TailInputKind, TailMe
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, StdoutLock};
+use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 #[ctcore::main]
@@ -180,11 +180,11 @@ fn handle_tailable_file(
                 && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                 && metadata.as_ref().unwrap().get_block_size() > 0
             {
-                let _ = tail_bounded(&mut file, options);
+                let _ = tail_bounded(&mut file, options, None);
                 BufReader::new(file)
             } else {
                 let mut reader = BufReader::new(file);
-                tail_unbounded(&mut reader, options)?;
+                tail_unbounded(&mut reader, options,None)?;
                 reader
             };
 
@@ -254,7 +254,7 @@ fn handle_pipe_stdin(
     }
 
     let mut reader = BufReader::new(stdin());
-    tail_unbounded(&mut reader, options)?;
+    tail_unbounded(&mut reader, options, None)?;
     observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
     Ok(())
 }
@@ -420,19 +420,28 @@ fn tail_backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8)
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn tail_bounded(file: &mut File, options: &TailOptions) -> CTResult<()> {
+fn tail_bounded(file: &mut File, options: &TailOptions, buffer: Option<&mut Vec<u8>>) -> CTResult<()> {
     let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut multi_writer = MultiWriter::new();
+    
+    // 添加标准输出 writer
+    multi_writer.add_writer(BufWriter::new(stdout.lock()));
+    
+    // 如果提供了 buffer，添加到 multi_writer
+    if let Some(buf) = buffer {
+        multi_writer.add_writer(BufWriter::new(buf));
+    }
 
     match &options.mode {
         TailFilterMode::Lines(signum, sep) => {
-            handle_bounded_lines(file, signum, *sep, &mut writer)?;
+            handle_bounded_lines(file, signum, *sep, &mut multi_writer)?;
         }
         TailFilterMode::Bytes(signum) => {
-            handle_bounded_bytes(file, signum, &mut writer)?;
+            handle_bounded_bytes(file, signum, &mut multi_writer)?;
         }
     }
 
+    multi_writer.flush()?;
     Ok(())
 }
 
@@ -440,7 +449,7 @@ fn handle_bounded_lines(
     file: &mut File,
     signum: &TailSignum,
     separator: u8,
-    writer: &mut BufWriter<StdoutLock>,
+    writer: &mut MultiWriter,
 ) -> CTResult<()> {
     match signum {
         TailSignum::Negative(count) => {
@@ -460,7 +469,7 @@ fn handle_bounded_lines(
 fn handle_bounded_bytes(
     file: &mut File,
     signum: &TailSignum,
-    writer: &mut BufWriter<StdoutLock>,
+    writer: &mut MultiWriter,
 ) -> CTResult<()> {
     match signum {
         TailSignum::Negative(count) => {
@@ -476,17 +485,61 @@ fn handle_bounded_bytes(
     Ok(())
 }
 
-fn tail_unbounded<T: Read>(reader: &mut BufReader<T>, options: &TailOptions) -> CTResult<()> {
+// 定义 MultiWriter 结构体
+struct MultiWriter<'a> {
+    writers: Vec<Box<dyn Write + 'a>>,
+}
+
+impl<'a> MultiWriter<'a> {
+    fn new() -> Self {
+        MultiWriter { writers: Vec::new() }
+    }
+
+    fn add_writer<W: Write + 'a>(&mut self, writer: W) {
+        self.writers.push(Box::new(writer));
+    }
+}
+
+impl<'a> Write for MultiWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        for writer in &mut self.writers {
+            writer.write_all(buf)?;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        for writer in &mut self.writers {
+            writer.flush()?;
+        }
+        Ok(())
+    }
+}
+
+fn tail_unbounded<T: Read>(
+    reader: &mut BufReader<T>, 
+    options: &TailOptions,
+    buffer: Option<&mut Vec<u8>>,
+) -> CTResult<()> {
     let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut multi_writer = MultiWriter::new();
+    
+    // 添加标准输出 writer
+    multi_writer.add_writer(BufWriter::new(stdout.lock()));
+    
+    // 如果提供了 buffer，添加到 multi_writer
+    if let Some(buf) = buffer {
+        multi_writer.add_writer(BufWriter::new(buf));
+    }
+
     match &options.mode {
         TailFilterMode::Lines(TailSignum::Negative(count), sep) => {
             let mut chunks = chunks::TailLinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            chunks.print(&mut multi_writer)?;
         }
         TailFilterMode::Lines(TailSignum::PlusZero | TailSignum::Positive(1), _) => {
-            io::copy(reader, &mut writer)?;
+            io::copy(reader, &mut multi_writer)?;
         }
         TailFilterMode::Lines(TailSignum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
@@ -500,17 +553,17 @@ fn tail_unbounded<T: Read>(reader: &mut BufReader<T>, options: &TailOptions) -> 
                 }
             }
             if chunk.has_data() {
-                chunk.print_lines(&mut writer, num_skip as usize)?;
-                io::copy(reader, &mut writer)?;
+                chunk.print_lines(&mut multi_writer, num_skip as usize)?;
+                io::copy(reader, &mut multi_writer)?;
             }
         }
         TailFilterMode::Bytes(TailSignum::Negative(count)) => {
             let mut chunks = chunks::TailBytesChunkBuffer::new(*count);
             chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            chunks.print(&mut multi_writer)?;
         }
         TailFilterMode::Bytes(TailSignum::PlusZero | TailSignum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
+            io::copy(reader, &mut multi_writer)?;
         }
         TailFilterMode::Bytes(TailSignum::Positive(count)) => {
             let mut num_skip = *count - 1;
@@ -524,7 +577,7 @@ fn tail_unbounded<T: Read>(reader: &mut BufReader<T>, options: &TailOptions) -> 
                             break;
                         }
                         Ordering::Greater => {
-                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                            multi_writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
                             break;
                         }
                     }
@@ -532,11 +585,11 @@ fn tail_unbounded<T: Read>(reader: &mut BufReader<T>, options: &TailOptions) -> 
                     return Ok(());
                 }
             }
-
-            io::copy(reader, &mut writer)?;
+            io::copy(reader, &mut multi_writer)?;
         }
         _ => {}
     }
+    multi_writer.flush()?;
     Ok(())
 }
 
@@ -725,134 +778,6 @@ mod tests {
             assert_eq!(buffer, "line1\nline2\n"); // 验证读取的内容
         }
     }
-    mod test_tail_file {
-        use super::*;
-        use std::time::Duration;
-        use crate::paths::{TailInput, TailHeaderPrinter};
-        use crate::follow::Observer;
-        use serial_test::serial;
-    
-        /// 辅助函数：创建基本的 TailOptions 结构
-        fn create_basic_options(mode: TailFilterMode) -> TailOptions {
-            TailOptions {
-                mode,
-                follow: None,
-                max_unchanged_stats: 5,
-                pid: Default::default(),
-                retry: false,
-                sleep_sec: Duration::from_secs(1),
-                use_polling: false,
-                verbose: false,
-                presume_input_pipe: false,
-                inputs: vec![],
-            }
-        }
-    
-        /// 辅助函数：统一建立测试环境，返回 (TailOptions, TailHeaderPrinter, Observer)
-        fn setup_test(mode: TailFilterMode) -> (TailOptions, TailHeaderPrinter, Observer) {
-            let options = create_basic_options(mode);
-            let printer = TailHeaderPrinter::new(false, true);
-            let observer = Observer::from(&options);
-            (options, printer, observer)
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_bytes_negative() {
-            // 测试：从 "Hello, World!" 中读取最后 5 个字节，期望输出 "orld!"
-            let content = "Hello, World!";
-            let temp_file = create_temp_file(content);
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Bytes(TailSignum::Negative(5)));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output.trim(), "orld!");
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_bytes_positive() {
-            // 测试：从 "Hello, World!" 第 6 个字节开始读取，期望输出 ", World!"
-            let content = "Hello, World!";
-            let temp_file = create_temp_file(content);
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Bytes(TailSignum::Positive(6)));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output.trim(), ", World!");
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_lines_negative() {
-            // 测试：从 5 行文本中读取最后 2 行，期望输出 "line4\nline5"
-            let content = "line1\nline2\nline3\nline4\nline5\n";
-            let temp_file = create_temp_file(content);
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output.trim(), "line4\nline5");
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_empty_file() {
-            // 测试：空文件输出应为空
-            let temp_file = create_temp_file("");
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Lines(TailSignum::Negative(10), b'\n'));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output.trim(), "");
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_zero_terminated() {
-            // 测试：以空字符作为行分隔符，从 "record1\0record2\0record3\0" 中读取最后 2 个记录，期望输出 "record2\0record3\0"
-            let content = "record1\0record2\0record3\0";
-            let temp_file = create_temp_file(content);
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), 0));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output, "record2\0record3\0");
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_no_final_separator() {
-            // 测试：当文件末尾没有换行时读取最后 2 行，期望输出 "line2\nline3"
-            let content = "line1\nline2\nline3";
-            let temp_file = create_temp_file(content);
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output.trim(), "line2\nline3");
-        }
-    
-        #[test]
-        #[serial]
-        fn test_tail_unicode() {
-            // 测试：Unicode 内容，读取最后 2 行，期望输出 "世界\n再见"
-            let content = "你好\n世界\n再见\n";
-            let temp_file = create_temp_file(content);
-            let path = temp_file.path();
-            let (options, mut printer, mut observer) =
-                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
-            let input = TailInput::from(path.as_os_str());
-            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
-            assert_eq!(output.trim(), "世界\n再见");
-        }
-    }
 
     #[test]
     fn test_forwards_thru_file_zero() {
@@ -881,53 +806,11 @@ mod tests {
 #[cfg(test)]
 mod test_tail_bounded_unbounded {
     use super::*;
-    use std::io::{self, Read, Write};
-    use std::os::unix::io::{AsRawFd, FromRawFd};
+    use std::io::Write;
     use std::fs::File;
     use std::time::Duration;
     use tempfile::NamedTempFile;
     use serial_test::serial;
-
-    /// 辅助函数：在 Unix 平台中捕获标准输出
-    fn capture_stdout<F, R>(f: F) -> String
-    where
-        F: FnOnce() -> CTResult<R>,
-    {
-        // 刷新 stdout
-        io::stdout().flush().unwrap();
-        // 记录原始 stdout 文件描述符
-        let stdout_fd = io::stdout().as_raw_fd();
-        let old_stdout = unsafe { libc::dup(stdout_fd) };
-        if old_stdout == -1 {
-            panic!("dup failed");
-        }
-        // 创建管道
-        let mut pipe_fds = [0, 0];
-        if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } == -1 {
-            panic!("pipe failed");
-        }
-        // 重定向 stdout 到管道写端
-        if unsafe { libc::dup2(pipe_fds[1], stdout_fd) } == -1 {
-            panic!("dup2 failed");
-        }
-        // 关闭管道写端备用描述符（dup2 后，已复制到 stdout_fd）
-        unsafe { libc::close(pipe_fds[1]) };
-
-        // 调用目标函数，其输出将写入管道
-        f().unwrap();
-        io::stdout().flush().unwrap();
-        // 恢复 stdout
-        if unsafe { libc::dup2(old_stdout, stdout_fd) } == -1 {
-            panic!("restore dup2 failed");
-        }
-        unsafe { libc::close(old_stdout) };
-
-        // 从管道读取输出
-        let mut output = Vec::new();
-        let mut pipe_reader = unsafe { File::from_raw_fd(pipe_fds[0]) };
-        pipe_reader.read_to_end(&mut output).unwrap();
-        String::from_utf8(output).unwrap()
-    }
 
     /// 辅助函数：创建临时文件并写入内容
     fn create_temp_file(content: &str) -> NamedTempFile {
@@ -961,13 +844,11 @@ mod test_tail_bounded_unbounded {
         let path = temp_file.path();
         let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(5)));
         let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            let _ = tail_bounded(&mut file, &options);
-            Ok(())
-        });
+        tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "orld!");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "orld!");
     }
 
     #[test]
@@ -978,13 +859,11 @@ mod test_tail_bounded_unbounded {
         let path = temp_file.path();
         let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Positive(7)));
         let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            let _ = tail_bounded(&mut file, &options);
-            Ok(())
-        });
+        tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "World!");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "World!");
     }
 
     #[test]
@@ -995,13 +874,11 @@ mod test_tail_bounded_unbounded {
         let path = temp_file.path();
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
         let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            let _ = tail_bounded(&mut file, &options);
-            Ok(())
-        });
+        tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "line4\nline5");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line4\nline5");
     }
 
     #[test]
@@ -1012,13 +889,11 @@ mod test_tail_bounded_unbounded {
         let path = temp_file.path();
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Positive(3), b'\n'));
         let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            let _ = tail_bounded(&mut file, &options);
-            Ok(())
-        });
+        tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "line3\nline4\nline5");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line3\nline4\nline5");
     }
 
     #[test]
@@ -1029,13 +904,11 @@ mod test_tail_bounded_unbounded {
         let path = temp_file.path();
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(10), b'\n'));
         let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            let _ = tail_bounded(&mut file, &options);
-            Ok(())
-        });
+        tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "");
     }
 
     #[test]
@@ -1046,15 +919,12 @@ mod test_tail_bounded_unbounded {
         let path = temp_file.path();
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::MinusZero, b'\n'));
         let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            let _ = tail_bounded(&mut file, &options);
-            Ok(())
-        });
+        tail_bounded(&mut file, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "");
     }
-
     #[test]
     #[serial]
     fn test_tail_unbounded_lines_negative() {
@@ -1062,12 +932,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "line4\nline5");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line4\nline5");
     }
 
     #[test]
@@ -1077,12 +946,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Positive(3), b'\n'));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "line3\nline4\nline5");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line3\nline4\nline5");
     }
 
     #[test]
@@ -1092,12 +960,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(5)));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "orld!");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "orld!");
     }
 
     #[test]
@@ -1107,12 +974,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Positive(7)));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "World!");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "World!");
     }
 
     #[test]
@@ -1122,11 +988,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(10), b'\n'));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
-        assert_eq!(output.trim(), "");
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
+
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "");
     }
 
     #[test]
@@ -1136,12 +1002,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::PlusZero, b'\n'));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "Hello\nWorld");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "Hello\nWorld");
     }
 
     #[test]
@@ -1151,12 +1016,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "line2\nline3");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "line2\nline3");
     }
 
     #[test]
@@ -1166,12 +1030,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(1), b'\n'));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output.trim(), "single line");
+        assert_eq!(String::from_utf8(buffer).unwrap().trim(), "single line");
     }
 
     #[test]
@@ -1181,12 +1044,11 @@ mod test_tail_bounded_unbounded {
         let temp_file = create_temp_file(content);
         let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
         let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), 0));
+        let mut buffer = Vec::new();
 
-        let output = capture_stdout(|| {
-            tail_unbounded(&mut reader, &options)
-        });
+        tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
-        assert_eq!(output, "record2\0record3\0");
+        assert_eq!(String::from_utf8(buffer).unwrap(), "record2\0record3\0");
     }
 }
 

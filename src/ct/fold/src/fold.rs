@@ -159,8 +159,6 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 ///
 /// - 如果折叠成功，返回`Ok(())`；如果发生错误，返回`Err`。
 fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
-    // filenames
-    // fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> CTResult<()> {
     for filename in &fold_flags.files {
         let filename: &str = filename;
         let mut stdin_buf;
@@ -171,8 +169,21 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
             &mut stdin_buf as &mut dyn Read
         } else {
             // 否则，从指定的文件中读取内容
-            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
-            &mut file_buf as &mut dyn Read
+            match File::open(Path::new(filename)) {
+                Ok(f) => {
+                    file_buf = f;
+                    &mut file_buf as &mut dyn Read
+                }
+                Err(e) => {
+                    let error_msg = match e.kind() {
+                        std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
+                        std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                        _ => e.to_string()
+                    };
+                    eprintln!("fold: {}: {}", filename, error_msg);
+                    continue;
+                }
+            }
         });
 
         let spaces = fold_flags.spaces;
@@ -812,13 +823,6 @@ mod tests {
 
     #[cfg(test)]
     mod fold_tests {
-        /*
-            文件名是 "-"： 测试从标准输入读取内容。
-            文件名不是 "-"：测试从指定文件读取内容。
-            fold_flags.bytes 为 true：测试按字节进行折叠。
-            fold_flags.bytes 为 false：测试按列进行折叠。
-            文件读取错误：测试文件不存在或无法读取的情况。
-        */
         use super::*;
         use ctcore::ct_error::CTResult;
         use std::io::{BufWriter, Write};
@@ -829,6 +833,55 @@ mod tests {
             let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
             write!(temp_file, "{}", content).expect("Failed to write to temp file");
             temp_file
+        }
+
+        #[test]
+        fn test_fold_nonexistent_file_with_width() {
+            let fold_flags = FoldFlags {
+                bytes: false,
+                spaces: false,
+                width: 20,
+                files: vec!["nonexistent_file.txt".to_string()],
+            };
+
+            let mut writer = Vec::new();
+            let result = fold(&mut writer, &fold_flags);
+
+            // 验证执行成功（因为错误被处理了）
+            assert!(result.is_ok());
+
+            // 验证输出为空（因为文件不存在）
+            assert_eq!(String::from_utf8(writer).unwrap(), "");
+        }
+
+        #[test]
+        fn test_fold_existing_file_with_width() -> CTResult<()> {
+            // 创建一个临时文件并写入测试内容
+            let content = "This is a test file with content that should be folded at width 20.\nThis is another line that should also be folded properly.";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                spaces: false,
+                width: 20,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            println!("output: {}", output);
+            // 验证输出是否按照20个字符宽度正确折行
+            assert!(output.contains("This is a test file"));
+            assert!(output.contains("with content that sh"));
+            assert!(output.contains("ould be folded at wi"));
+            assert!(output.contains("dth 20."));
+            assert!(output.contains("This is another line"));
+            assert!(output.contains(" that should also be"));
+            assert!(output.contains(" folded properly."));
+
+            Ok(())
         }
 
         #[test]
@@ -977,11 +1030,11 @@ mod tests {
             let mut writer = BufWriter::new(Vec::new());
             // fold 应该返回错误
             let result = fold(&mut writer, &fold_flags);
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
-        fn fold_files_file_not_found_returns_error() {
+        fn fold_files_file_not_found_returns_ok() {
             let mut output = Vec::new();
             let fold_flags = FoldFlags {
                 files: vec!["nonexistent.txt".to_string()],
@@ -994,7 +1047,7 @@ mod tests {
             let result = fold(&mut output, &fold_flags);
 
             // 验证错误
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
     }
 

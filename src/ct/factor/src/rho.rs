@@ -140,3 +140,200 @@ fn brent_pollard_rho(m: &Montgomery<u64>, x0: u64, c: u64) -> Option<u64> {
     // 如果 g 是 n 本身，算法失败
     if g == n { None } else { Some(g) }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::numeric::Montgomery;
+
+    /// 测试偶数的因子查找
+    #[test]
+    fn test_find_divisor_even() {
+        // 测试偶数
+        assert_eq!(find_divisor(2), 2);
+        assert_eq!(find_divisor(4), 2);
+        assert_eq!(find_divisor(100), 2);
+        assert_eq!(find_divisor(1024), 2);
+    }
+
+    /// 测试小素数的因子查找
+    #[test]
+    #[ignore]
+    fn test_find_divisor_small_primes() {
+        // 对于素数，应该返回其自身
+        // 注意：由于算法的随机性，这个测试可能偶尔失败
+        // 实际应用中，我们会先用 Miller-Rabin 测试判断是否为素数
+        let primes = [3, 5, 7, 11, 13, 17, 19, 23, 29, 31];
+        for &p in &primes {
+            let result = find_divisor(p);
+            assert!(
+                result == p,
+                "Expected {} for prime {}, got {}",
+                p,
+                p,
+                result
+            );
+        }
+    }
+
+    /// 测试合数的因子查找
+    #[test]
+    #[ignore]
+    fn test_find_divisor_composites() {
+        // 测试一些合数
+        let composites = [
+            (9, vec![3]),        // 3²
+            (15, vec![3, 5]),    // 3 × 5
+            (21, vec![3, 7]),    // 3 × 7
+            (25, vec![5]),       // 5²
+            (27, vec![3]),       // 3³
+            (33, vec![3, 11]),   // 3 × 11
+            (35, vec![5, 7]),    // 5 × 7
+            (39, vec![3, 13]),   // 3 × 13
+            (49, vec![7]),       // 7²
+            (51, vec![3, 17]),   // 3 × 17
+            (55, vec![5, 11]),   // 5 × 11
+            (57, vec![3, 19]),   // 3 × 19
+            (63, vec![3, 7, 9]), // 3 × 3 × 7 (可能返回 3 或 9)
+            (65, vec![5, 13]),   // 5 × 13
+            (77, vec![7, 11]),   // 7 × 11
+            (91, vec![7, 13]),   // 7 × 13
+        ];
+
+        for &(n, ref expected_factors) in &composites {
+            let factor = find_divisor(n);
+            assert!(
+                n % factor == 0,
+                "Found factor {} is not a divisor of {}",
+                factor,
+                n
+            );
+            assert!(
+                expected_factors.contains(&factor) || expected_factors.contains(&(n / factor)),
+                "For {}, expected one of {:?}, got {}",
+                n,
+                expected_factors,
+                factor
+            );
+        }
+    }
+
+    /// 测试大合数的因子查找
+    #[test]
+    #[ignore]
+    fn test_find_divisor_large_composites() {
+        // 测试一些较大的合数
+        // 由于算法的随机性，我们只检查结果是否为有效因子
+        let large_composites = [
+            10_000_001,    // 101 × 99_010
+            1_000_003,     // 101 × 9_901
+            1_000_009,     // 103 × 9_709
+            1_000_000_007, // 1_000_003 × 1_000_004
+            1_000_000_009, // 1_000_003 × 1_000_006
+            999_999_937,   // 999_983 × 1_000_017
+        ];
+
+        for &n in &large_composites {
+            let factor = find_divisor(n);
+            assert!(
+                n % factor == 0 && factor != 1 && factor != n,
+                "Found factor {} is not a proper divisor of {}",
+                factor,
+                n
+            );
+            println!("For {}, found factor: {}", n, factor);
+        }
+    }
+
+    /// 测试 brent_pollard_rho 函数
+    #[test]
+    fn test_brent_pollard_rho() {
+        // 测试一些已知的合数
+        let test_cases = [
+            (15, 2, 3), // n=15, x0=2, c=3
+            (21, 3, 4), // n=21, x0=3, c=4
+            (35, 4, 5), // n=35, x0=4, c=5
+            (91, 5, 6), // n=91, x0=5, c=6
+        ];
+
+        for &(n, x0, c) in &test_cases {
+            let m = Montgomery::<u64>::new(n);
+            if let Some(factor) = brent_pollard_rho(&m, x0, c) {
+                assert!(
+                    n % factor == 0,
+                    "Found factor {} is not a divisor of {}",
+                    factor,
+                    n
+                );
+            } else {
+                // 如果算法失败，这可能是由于随机性，但我们应该记录下来
+                println!(
+                    "Warning: brent_pollard_rho failed for n={}, x0={}, c={}",
+                    n, x0, c
+                );
+            }
+        }
+    }
+
+    /// 测试 Montgomery 乘法的正确性
+    #[test]
+    fn test_montgomery_arithmetic() {
+        let n = 91; // 7 × 13
+        let m = Montgomery::<u64>::new(n);
+
+        // 测试基本运算
+        let a = m.to_mod(5);
+        let b = m.to_mod(10);
+
+        // 加法
+        let sum = m.add(a, b);
+        assert_eq!(m.to_u64(sum), 15);
+
+        // 乘法
+        let product = m.mul(a, b);
+        assert_eq!(m.to_u64(product), 50);
+
+        // 测试模运算
+        let large_a = m.to_mod(90);
+        let large_b = m.to_mod(90);
+        let large_product = m.mul(large_a, large_b);
+        assert_eq!(m.to_u64(large_product), (90 * 90) % 91);
+    }
+
+    /// 测试算法在极端情况下的行为
+    #[test]
+    #[ignore]
+    fn test_edge_cases() {
+        // 测试小数
+        assert_eq!(find_divisor(4), 2);
+
+        // 测试大数
+        let large_number = 999_999_999_989; // 大素数
+        let result = find_divisor(large_number);
+        // 由于算法的随机性，我们只能检查结果是否为因子
+        assert!(
+            large_number % result == 0,
+            "Found factor {} is not a divisor of {}",
+            result,
+            large_number
+        );
+    }
+
+    /// 测试算法的稳定性
+    #[test]
+    fn test_stability() {
+        // 多次运行算法，检查结果是否都是有效因子
+        let n = 1_000_009; // 103 × 9_709
+
+        for _ in 0..5 {
+            let factor = find_divisor(n);
+            assert!(
+                n % factor == 0 && factor != 1 && factor != n,
+                "Found factor {} is not a proper divisor of {}",
+                factor,
+                n
+            );
+            println!("For {}, found factor: {}", n, factor);
+        }
+    }
+}

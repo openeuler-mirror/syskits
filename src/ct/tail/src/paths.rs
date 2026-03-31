@@ -97,7 +97,7 @@ impl TailInput {
     pub fn is_tailable(&self) -> bool {
         match &self.kind {
             TailInputKind::File(path) => path_is_tailable(path),
-            TailInputKind::Stdin => self.resolve().map_or(false, |path| path_is_tailable(&path)),
+            TailInputKind::Stdin => self.resolve().is_some_and(|path| path_is_tailable(&path)),
         }
     }
 }
@@ -237,7 +237,7 @@ impl TailPathExt for Path {
 }
 
 pub fn path_is_tailable(path: &Path) -> bool {
-    path.is_file() || path.exists() && path.metadata().map_or(false, |meta| meta.is_tailable())
+    path.is_file() || path.exists() && path.metadata().is_ok_and(|meta| meta.is_tailable())
 }
 
 #[inline]

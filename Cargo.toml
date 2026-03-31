@@ -163,6 +163,7 @@ feat_os_unix = [
   "kill",
   "stty",
   "link",
+  "paste",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -358,6 +359,7 @@ kill = { optional = true, package = "ct_kill", path = "src/ct/kill" }
 realpath = { optional = true, package = "ct_realpath", path = "src/ct/realpath"}
 stty = { optional = true, package = "ct_stty", path = "src/ct/stty"}
 link = { optional = true, package = "ct_link", path = "src/ct/link"}
+paste = { optional = true, package = "ct_paste", path = "src/ct/paste"}
 
 [dev-dependencies]
 chrono = { workspace = true }

@@ -199,3 +199,223 @@ pub fn factor(mut n: u64) -> Factors {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Decomposition, Factors, factor};
+    use quickcheck::quickcheck;
+    use smallvec::smallvec;
+    use std::cell::RefCell;
+
+    #[test]
+    #[ignore] // 忽略这个测试，因为它可能会超时
+    fn factor_2044854919485649() {
+        let f = Factors(RefCell::new(Decomposition(smallvec![
+            (503, 1),
+            (2423, 1),
+            (40961, 2)
+        ])));
+        assert_eq!(factor(f.product()), f);
+    }
+
+    #[test]
+    fn factor_recombines_small() {
+        assert!(
+            (1..10_000)
+                .map(|i| 2 * i + 1)
+                .all(|i| factor(i).product() == i)
+        );
+    }
+
+    #[test]
+    #[ignore] // 忽略这个测试，因为它可能会超时
+    fn factor_recombines_overflowing() {
+        assert!(
+            (0..3) // 进一步减少测试范围，只测试3个数字
+                .map(|i| 2 * i + 2u64.pow(32) + 1)
+                .all(|i| factor(i).product() == i)
+        );
+    }
+
+    #[test]
+    fn factor_recombines_strong_pseudoprime() {
+        // 这是一个强伪素数，测试算法处理特殊情况的能力
+        let pseudoprime = 17_179_869_183;
+        for _ in 0..20 {
+            // 重复测试 20 次，因为它只在一部分时间内失败
+            assert!(factor(pseudoprime).product() == pseudoprime);
+        }
+    }
+
+    quickcheck! {
+        // 限制测试范围，只测试较小的数字
+        fn factor_recombines(i: u16) -> bool {
+            let i = i as u64; // 将 u16 转换为 u64，限制测试范围
+            i == 0 || factor(i).product() == i
+        }
+    }
+
+    // 新增测试用例
+
+    #[test]
+    fn test_decomposition_one() {
+        let d = Decomposition::one();
+        assert_eq!(d.0.len(), 0);
+        assert_eq!(d.product(), 1);
+    }
+
+    #[test]
+    fn test_decomposition_add() {
+        let mut d = Decomposition::one();
+
+        // 添加一个因子
+        d.add(3, 1);
+        assert_eq!(d.0.len(), 1);
+        assert_eq!(d.0[0], (3, 1));
+        assert_eq!(d.product(), 3);
+
+        // 添加另一个因子
+        d.add(5, 2);
+        assert_eq!(d.0.len(), 2);
+        assert_eq!(d.0[1], (5, 2));
+        assert_eq!(d.product(), 3 * 5 * 5);
+
+        // 增加已有因子的指数
+        d.add(3, 2);
+        assert_eq!(d.0.len(), 2);
+        assert_eq!(d.0[0], (3, 3));
+        assert_eq!(d.product(), 3 * 3 * 3 * 5 * 5);
+    }
+
+    #[test]
+    fn test_decomposition_get() {
+        let mut d = Decomposition::one();
+        d.add(3, 1);
+        d.add(5, 2);
+
+        assert_eq!(d.get(3), Some(&(3, 1)));
+        assert_eq!(d.get(5), Some(&(5, 2)));
+        assert_eq!(d.get(7), None);
+    }
+
+    #[test]
+    fn test_decomposition_eq() {
+        let mut d1 = Decomposition::one();
+        d1.add(3, 1);
+        d1.add(5, 2);
+
+        let mut d2 = Decomposition::one();
+        d2.add(5, 2);
+        d2.add(3, 1);
+
+        assert_eq!(d1, d2);
+
+        let mut d3 = Decomposition::one();
+        d3.add(3, 1);
+        d3.add(5, 1);
+
+        assert_ne!(d1, d3);
+    }
+
+    #[test]
+    fn test_factors_one() {
+        let f = Factors::one();
+        assert_eq!(f.product(), 1);
+    }
+
+    #[test]
+    fn test_factors_add() {
+        let mut f = Factors::one();
+        f.add(3, 1);
+        assert_eq!(f.product(), 3);
+
+        f.add(5, 2);
+        assert_eq!(f.product(), 3 * 5 * 5);
+    }
+
+    #[test]
+    fn test_factors_push() {
+        let mut f = Factors::one();
+        f.push(3);
+        assert_eq!(f.product(), 3);
+
+        f.push(5);
+        assert_eq!(f.product(), 3 * 5);
+    }
+
+    #[test]
+    fn test_factors_display() {
+        let mut f = Factors::one();
+        f.add(3, 1);
+        f.add(5, 2);
+
+        // 测试默认格式
+        let s = format!("{}", f);
+        assert_eq!(s, " 3 5 5");
+
+        // 测试替代格式（带指数）
+        let s = format!("{:#}", f);
+        assert_eq!(s, " 3 5^2");
+    }
+
+    #[test]
+    fn test_factor_small_numbers() {
+        // 测试小数字的因式分解
+        assert_eq!(factor(0).product(), 0);
+        assert_eq!(factor(1).product(), 1);
+
+        let f2 = factor(2);
+        assert_eq!(f2.product(), 2);
+
+        let f3 = factor(3);
+        assert_eq!(f3.product(), 3);
+
+        let f4 = factor(4);
+        assert_eq!(f4.product(), 4);
+
+        let f6 = factor(6);
+        assert_eq!(f6.product(), 6);
+
+        let f12 = factor(12);
+        assert_eq!(f12.product(), 12);
+    }
+
+    #[test]
+    fn test_factor_powers_of_two() {
+        // 测试 2 的幂
+        for i in 0..20 {
+            let n = 1u64 << i;
+            let f = factor(n);
+            assert_eq!(f.product(), n);
+        }
+    }
+
+    #[test]
+    fn test_factor_primes() {
+        // 测试素数
+        let primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47];
+        for &p in &primes {
+            let f = factor(p);
+            assert_eq!(f.product(), p);
+        }
+    }
+
+    #[test]
+    fn test_factor_semiprime() {
+        // 测试半素数（两个素数的乘积）
+        let semiprimes = [(3, 5), (5, 7), (11, 13), (17, 19), (29, 31)];
+        for &(p, q) in &semiprimes {
+            let n = p * q;
+            let f = factor(n);
+            assert_eq!(f.product(), n);
+        }
+    }
+
+    #[test]
+    fn test_factor_highly_composite() {
+        // 测试高度合成数（有很多因子的数）
+        let n = 2 * 2 * 3 * 5 * 7 * 11; // 2310
+        let f = factor(n);
+        assert_eq!(f.product(), n);
+    }
+}

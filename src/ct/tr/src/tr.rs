@@ -277,3 +277,300 @@ pub fn ct_app() -> Command {
         .trailing_var_arg(true)
         .args(&args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::io::Cursor;
+
+    /// 测试命令行参数解析相关功能
+    mod cli_tests {
+        use super::*;
+
+        #[test]
+        fn test_ct_app() {
+            let app = ct_app();
+
+            // 验证基本参数
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_DELETE)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_SQUEEZE)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_TRUNCATE_SET1)
+            );
+
+            // 验证参数别名
+            let complement_arg = app
+                .get_arguments()
+                .find(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT)
+                .unwrap();
+            assert!(complement_arg.get_short().unwrap() == 'c');
+        }
+    }
+
+    /// 测试配置标志相关功能
+    mod flags_tests {
+        use super::*;
+        use clap::ArgMatches;
+
+        fn create_matches(args: &[&str]) -> ArgMatches {
+            ct_app().get_matches_from(args)
+        }
+
+        #[test]
+        fn test_tr_flags_validation() {
+            // 测试空参数
+            let matches = create_matches(&["tr"]);
+            assert!(matches!(
+                TrFlags::new(&matches).unwrap_err().to_string(),
+                s if s.contains("missing operand")
+            ));
+
+            // 测试单个参数（需要两个参数时）
+            let matches = create_matches(&["tr", "set1"]);
+            assert!(matches!(
+                TrFlags::new(&matches).unwrap_err().to_string(),
+                s if s.contains("missing operand after") && s.contains("Two strings must be given when translating")
+            ));
+
+            // 测试删除操作（只需要一个参数）
+            let matches = create_matches(&["tr", "-d", "set1"]);
+            let flags = TrFlags::new(&matches).unwrap();
+            assert!(!flags.is_complement_flag);
+            assert!(flags.is_delete_flag);
+            assert!(!flags.is_squeeze_flag);
+            assert!(!flags.is_truncate_set1_flag);
+            assert_eq!(flags.sets, vec!["set1"]);
+
+            // 测试所有标志
+            let matches = create_matches(&["tr", "-c", "-d", "-s", "-t", "set1", "set2"]);
+            let flags = TrFlags::new(&matches).unwrap();
+            assert!(flags.is_complement_flag);
+            assert!(flags.is_delete_flag);
+            assert!(flags.is_squeeze_flag);
+            assert!(flags.is_truncate_set1_flag);
+            assert_eq!(flags.sets, vec!["set1", "set2"]);
+        }
+
+        #[test]
+        fn test_validate_sets_not_empty() {
+            // 测试空集合
+            // let matches = create_matches(&["tr"]);
+            let flags = TrFlags {
+                sets: vec![],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_not_empty().unwrap_err().to_string(),
+                s if s.contains("missing operand")
+            ));
+        }
+
+        #[test]
+        fn test_validate_sets_count() {
+            // 测试删除和压缩时需要两个集合
+            let flags = TrFlags {
+                is_delete_flag: true,
+                is_squeeze_flag: true,
+                sets: vec!["set1".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("Two strings must be given when deleting and squeezing")
+            ));
+
+            // 测试翻译时需要两个集合
+            let flags = TrFlags {
+                sets: vec!["set1".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("Two strings must be given when translating")
+            ));
+
+            // 测试仅删除时不能有第二个集合
+            let flags = TrFlags {
+                is_delete_flag: true,
+                sets: vec!["set1".to_string(), "set2".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("Only one string may be given when deleting without squeezing")
+            ));
+
+            // 测试不能有第三个集合
+            let flags = TrFlags {
+                sets: vec!["set1".to_string(), "set2".to_string(), "set3".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("extra operand")
+            ));
+        }
+
+        #[test]
+        fn test_validate_backslash_ending() {
+            // 测试反斜杠结尾的警告
+            let flags = TrFlags {
+                sets: vec!["set1\\".to_string()],
+                ..Default::default()
+            };
+            assert!(flags.validate_backslash_ending().is_ok());
+        }
+    }
+
+    /// 测试主要处理逻辑
+    mod process_tests {
+        use super::*;
+
+        #[test]
+        fn test_tr_process_delete() {
+            let mut input = Cursor::new(b"hello world");
+            let mut output = Vec::new();
+
+            // 测试删除操作
+            let flags = TrFlags {
+                is_delete_flag: true,
+                sets: vec!["aeiou".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"hll wrld");
+        }
+
+        #[test]
+        fn test_tr_process_translate() {
+            let mut input = Cursor::new(b"hello");
+            let mut output = Vec::new();
+
+            // 测试转换操作
+            let flags = TrFlags {
+                sets: vec!["el".to_string(), "12".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"h122o");
+        }
+
+        #[test]
+        fn test_tr_process_squeeze() {
+            let mut input = Cursor::new(b"hello  world");
+            let mut output = Vec::new();
+
+            // 测试压缩操作
+            let flags = TrFlags {
+                is_squeeze_flag: true,
+                sets: vec![" ".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"hello world");
+        }
+
+        #[test]
+        fn test_tr_process_complex() {
+            let mut input = Cursor::new(b"hello  world");
+            let mut output = Vec::new();
+
+            // 测试组合操作：删除元音并压缩空格
+            let flags = TrFlags {
+                is_delete_flag: true,
+                is_squeeze_flag: true,
+                sets: vec!["aeiou".to_string(), " ".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"hll wrld");
+        }
+
+        #[test]
+        fn test_tr_process_complement() {
+            let mut input = Cursor::new(b"hello123");
+            let mut output = Vec::new();
+
+            // 测试补集操作
+            let flags = TrFlags {
+                is_complement_flag: true,
+                sets: vec!["0-9".to_string(), "x".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"xxxxx123");
+        }
+
+        #[test]
+        fn test_tr_process_truncate() {
+            let mut input = Cursor::new(b"hello");
+            let mut output = Vec::new();
+
+            // 测试截断操作
+            let flags = TrFlags {
+                is_truncate_set1_flag: true,
+                sets: vec!["helo".to_string(), "123".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"1233o");
+        }
+    }
+
+    /// 测试主函数入口
+    mod main_tests {
+        use super::*;
+
+        #[test]
+        fn test_tr_main() {
+            let mut input = Cursor::new(b"hello world");
+            let mut output = Vec::new();
+
+            // 测试基本功能
+            let args = vec!["tr", "aeiou", "12345"];
+            tr_main(
+                &mut input,
+                &mut output,
+                args.iter().map(|s| OsString::from(s)),
+            )
+            .unwrap();
+
+            assert_eq!(output, b"h2ll4 w4rld");
+        }
+
+        #[test]
+        fn test_tr_main_invalid_args() {
+            let mut input = Cursor::new(b"");
+            let mut output = Vec::new();
+
+            // 测试无效参数
+            let args = vec!["tr"];
+            assert!(
+                tr_main(
+                    &mut input,
+                    &mut output,
+                    args.iter().map(|s| OsString::from(s))
+                )
+                .is_err()
+            );
+        }
+    }
+}

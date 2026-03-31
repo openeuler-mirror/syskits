@@ -180,7 +180,7 @@ fn handle_tailable_file(
                 && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                 && metadata.as_ref().unwrap().get_block_size() > 0
             {
-                tail_bounded(&mut file, options);
+                let _ = tail_bounded(&mut file, options);
                 BufReader::new(file)
             } else {
                 let mut reader = BufReader::new(file);
@@ -270,7 +270,7 @@ fn get_stdin_offset() -> u64 {
     0
 }
 
-fn handle_bad_stdin_fd(options: &TailOptions, input: &TailInput) -> CTResult<()> {
+fn handle_bad_stdin_fd(options: &TailOptions, _input: &TailInput) -> CTResult<()> {
     set_ct_exit_code(1);
     ct_show_error!(
         "cannot fstat {}: {}",

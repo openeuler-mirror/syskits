@@ -105,3 +105,91 @@ pub fn tail_parse_obsolete(src: &OsString) -> Option<Result<TailObsoleteArgs, Ta
     }))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_parse_numbers_obsolete() {
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("+2c")),
+            Some(Ok(TailObsoleteArgs {
+                num: 2,
+                plus: true,
+                lines: false,
+                follow: false,
+            }))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-5")),
+            Some(Ok(TailObsoleteArgs {
+                num: 5,
+                plus: false,
+                lines: true,
+                follow: false,
+            }))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("+100f")),
+            Some(Ok(TailObsoleteArgs {
+                num: 100,
+                plus: true,
+                lines: true,
+                follow: true,
+            }))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-2b")),
+            Some(Ok(TailObsoleteArgs {
+                num: 1024,
+                plus: false,
+                lines: false,
+                follow: false,
+            }))
+        );
+    }
+    #[test]
+    fn test_parse_errors_obsolete() {
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-5n")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-5c5")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-1vzc")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-5m")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-1k")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-1mmk")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-105kzm")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-1vz")),
+            Some(Err(TailParseError::Context))
+        );
+        assert_eq!(
+            tail_parse_obsolete(&OsString::from("-1vzqvq")), // spell-checker:disable-line
+            Some(Err(TailParseError::Context))
+        );
+    }
+    #[test]
+    fn test_parse_obsolete_no_match() {
+        assert_eq!(tail_parse_obsolete(&OsString::from("-k")), None);
+        assert_eq!(tail_parse_obsolete(&OsString::from("asd")), None);
+        assert_eq!(tail_parse_obsolete(&OsString::from("-cc")), None);
+    }
+}

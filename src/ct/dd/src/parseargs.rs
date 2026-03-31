@@ -234,7 +234,9 @@ impl Parser {
             .force_bytes_if(self.oflag.is_seek_bytes)
             .to_bytes(obs as u64);
 
-        let count = self.count.map(|c| c.force_bytes_if(self.iflag.is_count_bytes));
+        let count = self
+            .count
+            .map(|c| c.force_bytes_if(self.iflag.is_count_bytes));
 
         Ok(DdOptions {
             skip,

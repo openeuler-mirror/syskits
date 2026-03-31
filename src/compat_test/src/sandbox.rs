@@ -17,6 +17,7 @@ use crate::test_case::{FileType, TestCase, TestFile};
 use crate::{Result, TestError};
 use nix::sys::resource::{self, Resource};
 use nix::sys::signal::{self};
+use rand::Rng;
 use std::collections::HashMap;
 use std::fs::{self, File, Permissions};
 use std::io::Write;
@@ -24,9 +25,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tempfile::TempDir;
 use std::time::{SystemTime, UNIX_EPOCH};
-use rand::Rng;
+use tempfile::TempDir;
 
 /// 信号处理器
 /// 用于处理测试过程中的信号（如 SIGTERM、SIGINT 等）
@@ -178,22 +178,31 @@ impl IsolatedSandbox {
         // 设置工作目录
         if let Some(ref working_dir) = test_case.environment.working_dir {
             let work_dir = self.path().join(working_dir);
-            self.debug_fmt(format_args!("Setting specified working directory: {:?}", work_dir));
+            self.debug_fmt(format_args!(
+                "Setting specified working directory: {:?}",
+                work_dir
+            ));
             std::env::set_current_dir(&work_dir)?;
             self.current_dir = work_dir;
         } else {
-            self.debug_fmt(format_args!("Using default working directory: {:?}", self.path()));
+            self.debug_fmt(format_args!(
+                "Using default working directory: {:?}",
+                self.path()
+            ));
             std::env::set_current_dir(self.path())?;
             self.current_dir = self.path().to_path_buf();
         }
 
-        self.debug_fmt(format_args!("Current working directory set to: {:?}", self.current_dir));
+        self.debug_fmt(format_args!(
+            "Current working directory set to: {:?}",
+            self.current_dir
+        ));
 
         // 应用资源限制
         if let Some(ref limits) = test_case.environment.resource_limits {
             // 收集所有调试信息
             let mut debug_msgs = Vec::new();
-            
+
             if let Some(ref mut limiter) = self.resource_limiter.as_mut() {
                 if let Some(cpu_time) = limits.cpu_time {
                     limiter.add_limit(Resource::RLIMIT_CPU, cpu_time, cpu_time);
@@ -214,7 +223,7 @@ impl IsolatedSandbox {
 
                 limiter.apply_limits()?;
             }
-            
+
             // 完成可变借用后，统一输出调试信息
             for msg in debug_msgs {
                 self.debug(&msg);
@@ -245,7 +254,10 @@ impl IsolatedSandbox {
                 self.debug_fmt(format_args!("Creating file: {:?}", path));
                 let mut file_handle = File::create(&path)?;
                 if let Some(ref content) = file.content {
-                    self.debug_fmt(format_args!("Writing file content, length: {}", content.len()));
+                    self.debug_fmt(format_args!(
+                        "Writing file content, length: {}",
+                        content.len()
+                    ));
                     file_handle.write_all(content.as_bytes())?;
                 }
                 if let Some(ref perms) = file.permissions {
@@ -441,7 +453,10 @@ impl IsolatedSandbox {
         is_record_result: bool,
     ) -> Result<CommandResult> {
         self.debug_fmt(format_args!("Executing command: {} {:?}", cmd, args));
-        self.debug_fmt(format_args!("Current working directory: {:?}", self.current_dir));
+        self.debug_fmt(format_args!(
+            "Current working directory: {:?}",
+            self.current_dir
+        ));
 
         let mut command = std::process::Command::new(cmd);
         command
@@ -514,7 +529,10 @@ impl IsolatedSandbox {
     /// 执行外部命令
     fn execute_external_command(&mut self, command: &str) -> Result<CommandResult> {
         self.debug_fmt(format_args!("Executing external command: {}", command));
-        self.debug_fmt(format_args!("Current working directory: {:?}", self.current_dir));
+        self.debug_fmt(format_args!(
+            "Current working directory: {:?}",
+            self.current_dir
+        ));
 
         // Use /bin/sh -c to execute command to support shell features
         let mut shell_cmd = std::process::Command::new("/bin/sh");
@@ -524,8 +542,14 @@ impl IsolatedSandbox {
             .current_dir(&self.current_dir)
             .envs(&self.current_env);
 
-        self.debug_fmt(format_args!("Full command: cd {:?} && /bin/sh -c {:?}", self.current_dir, command));
-        self.debug_fmt(format_args!("Environment variables: {:?}", self.current_env));
+        self.debug_fmt(format_args!(
+            "Full command: cd {:?} && /bin/sh -c {:?}",
+            self.current_dir, command
+        ));
+        self.debug_fmt(format_args!(
+            "Environment variables: {:?}",
+            self.current_env
+        ));
 
         // Use output() result regardless of success or failure
         let result = match shell_cmd.output() {

@@ -303,7 +303,7 @@ impl<'a> Input<'a> {
         if let Source::StdinFile(f) = &src {
             // GNU compatibility:
             // this will check whether stdin points to a folder or not
-            if f.metadata()?.is_file() && settings.iflags.directory {
+            if f.metadata()?.is_file() && settings.iflags.is_directory {
                 ct_show_error!("standard input: not a directory");
                 return Err(1.into());
             }
@@ -355,28 +355,28 @@ impl<'a> Input<'a> {
 fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
-    if iflags.direct {
+    if iflags.is_direct {
         flag |= libc::O_DIRECT;
     }
-    if iflags.directory {
+    if iflags.is_directory {
         flag |= libc::O_DIRECTORY;
     }
-    if iflags.dsync {
+    if iflags.is_dsync {
         flag |= libc::O_DSYNC;
     }
-    if iflags.noatime {
+    if iflags.is_noatime {
         flag |= libc::O_NOATIME;
     }
-    if iflags.noctty {
+    if iflags.is_noctty {
         flag |= libc::O_NOCTTY;
     }
-    if iflags.nofollow {
+    if iflags.is_nofollow {
         flag |= libc::O_NOFOLLOW;
     }
-    if iflags.nonblock {
+    if iflags.is_nonblock {
         flag |= libc::O_NONBLOCK;
     }
-    if iflags.sync {
+    if iflags.is_sync {
         flag |= libc::O_SYNC;
     }
 
@@ -390,7 +390,7 @@ impl Read for Input<'_> {
         loop {
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => return Ok(base_idx),
-                Ok(rlen) if self.settings.iflags.fullblock => {
+                Ok(rlen) if self.settings.iflags.is_fullblock => {
                     base_idx += rlen;
 
                     if base_idx >= target_len {
@@ -681,9 +681,9 @@ impl<'a> DdOutput<'a> {
         fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
-                .create(!cflags.nocreat)
-                .create_new(cflags.excl)
-                .append(oflags.append);
+                .create(!cflags.is_nocreat)
+                .create_new(cflags.is_excl)
+                .append(oflags.is_append);
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if let Some(libc_flags) = make_linux_oflags(oflags) {
@@ -704,7 +704,7 @@ impl<'a> DdOutput<'a> {
         // suppress the error by calling `Result::ok()`. This matches
         // the behavior of GNU `dd` when given the command-line
         // argument `of=/dev/null`.
-        if !settings.oconv.notrunc {
+        if !settings.oconv.is_notrunc {
             dst.set_len(settings.seek).ok();
         }
 
@@ -712,7 +712,7 @@ impl<'a> DdOutput<'a> {
     }
 
     fn prepare_file(dst: File, settings: &'a DdOptions) -> CTResult<Self> {
-        let density = if settings.oconv.sparse {
+        let density = if settings.oconv.is_sparse {
             Density::Sparse
         } else {
             Density::Dense
@@ -761,9 +761,9 @@ impl<'a> DdOutput<'a> {
         // to the output, so we open the file for writing.
         let mut opts = OpenOptions::new();
         opts.write(true)
-            .create(!settings.oconv.nocreat)
-            .create_new(settings.oconv.excl)
-            .append(settings.oflags.append);
+            .create(!settings.oconv.is_nocreat)
+            .create_new(settings.oconv.is_excl)
+            .append(settings.oflags.is_append);
         #[cfg(any(target_os = "linux", target_os = "android"))]
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
         let dst = Dest::Fifo(opts.open(filename)?);
@@ -823,9 +823,9 @@ impl<'a> DdOutput<'a> {
 
     /// Flush the output to disk, if configured to do so.
     fn sync(&mut self) -> std::io::Result<()> {
-        if self.settings.oconv.fsync {
+        if self.settings.oconv.is_fsync {
             self.dst.fsync()
-        } else if self.settings.oconv.fdatasync {
+        } else if self.settings.oconv.is_fdatasync {
             self.dst.fdatasync()
         } else {
             // Intentionally do nothing in this case.
@@ -1024,14 +1024,14 @@ fn handle_cache_updates(
     output: &mut BlockWriter,
 ) -> std::io::Result<()> {
     // 处理输入缓存
-    if state.input.settings.iflags.nocache {
+    if state.input.settings.iflags.is_nocache {
         let offset = state.read_offset as i64;
         let len = rstat_update.bytes_total as i64;
         state.input.discard_cache(offset, len);
     }
 
     // 处理输出缓存
-    if state.input.settings.oflags.nocache {
+    if state.input.settings.oflags.is_nocache {
         let offset = state.write_offset as i64;
         let len = wstat_update.bytes_total as i64;
         output.discard_cache(offset, len);
@@ -1058,7 +1058,7 @@ fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<(
     output.sync()?;
 
     // 如果需要，截断文件
-    if !state.input.settings.oconv.notrunc {
+    if !state.input.settings.oconv.is_notrunc {
         output.truncate();
     }
 
@@ -1083,31 +1083,31 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
     // oflag=FLAG
-    if oflags.append {
+    if oflags.is_append {
         flag |= libc::O_APPEND;
     }
-    if oflags.direct {
+    if oflags.is_direct {
         flag |= libc::O_DIRECT;
     }
-    if oflags.directory {
+    if oflags.is_directory {
         flag |= libc::O_DIRECTORY;
     }
-    if oflags.dsync {
+    if oflags.is_dsync {
         flag |= libc::O_DSYNC;
     }
-    if oflags.noatime {
+    if oflags.is_noatime {
         flag |= libc::O_NOATIME;
     }
-    if oflags.noctty {
+    if oflags.is_noctty {
         flag |= libc::O_NOCTTY;
     }
-    if oflags.nofollow {
+    if oflags.is_nofollow {
         flag |= libc::O_NOFOLLOW;
     }
-    if oflags.nonblock {
+    if oflags.is_nonblock {
         flag |= libc::O_NONBLOCK;
     }
-    if oflags.sync {
+    if oflags.is_sync {
         flag |= libc::O_SYNC;
     }
 
@@ -1142,7 +1142,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Resul
     }
 
     // Perform any conv=x[,x...] options
-    if i.settings.iconv.swab {
+    if i.settings.iconv.is_swab {
         perform_swab(buf);
     }
 
@@ -1581,8 +1581,8 @@ mod dd_copy_tests {
     #[test]
     fn test_copy_with_nocache() -> CTResult<()> {
         let mut options = create_test_options();
-        options.iflags.nocache = true;
-        options.oflags.nocache = true;
+        options.iflags.is_nocache = true;
+        options.oflags.is_nocache = true;
 
         let input_data = b"Hello, World!";
         let input = create_test_input(input_data, &options)?;
@@ -1644,7 +1644,7 @@ mod tests_input_new_stdin {
     #[test]
     fn test_new_stdin_with_directory_flag() {
         let mut settings = create_test_options();
-        settings.iflags.directory = true;
+        settings.iflags.is_directory = true;
 
         #[cfg(unix)]
         {
@@ -1707,7 +1707,7 @@ mod tests_input_additional {
             src: Source::File(temp_file.reopen().unwrap()),
             settings: &DdOptions {
                 iflags: IFlags {
-                    fullblock: true,
+                    is_fullblock: true,
                     ..Default::default()
                 },
                 ..Default::default()

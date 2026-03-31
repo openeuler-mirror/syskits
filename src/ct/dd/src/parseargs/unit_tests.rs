@@ -168,8 +168,8 @@ fn test_all_top_level_args_no_leading_dashes() {
     assert_eq!(
         settings.iflags,
         IFlags {
-            count_bytes: true,
-            skip_bytes: true,
+            is_count_bytes: true,
+            is_skip_bytes: true,
             ..IFlags::default()
         },
     );
@@ -178,8 +178,8 @@ fn test_all_top_level_args_no_leading_dashes() {
     assert_eq!(
         settings.oflags,
         OFlags {
-            append: true,
-            seek_bytes: true,
+            is_append: true,
+            is_seek_bytes: true,
             ..OFlags::default()
         },
     );
@@ -220,9 +220,9 @@ fn test_multiple_flags_options() {
     assert_eq!(
         settings.iflags,
         IFlags {
-            fullblock: true,
-            count_bytes: true,
-            skip_bytes: true,
+            is_fullblock: true,
+            is_count_bytes: true,
+            is_skip_bytes: true,
             ..Default::default()
         }
     );
@@ -231,8 +231,8 @@ fn test_multiple_flags_options() {
     assert_eq!(
         settings.oflags,
         OFlags {
-            append: true,
-            seek_bytes: true,
+            is_append: true,
+            is_seek_bytes: true,
             ..Default::default()
         }
     );
@@ -380,9 +380,9 @@ fn parse_iflag_tokens() {
         Parser::new().read(args),
         Ok(Parser {
             iflag: IFlags {
-                fullblock: true,
-                count_bytes: true,
-                skip_bytes: true,
+                is_fullblock: true,
+                is_count_bytes: true,
+                is_skip_bytes: true,
                 ..Default::default()
             },
             ..Default::default()
@@ -397,8 +397,8 @@ fn parse_oflag_tokens() {
         Parser::new().read(args),
         Ok(Parser {
             oflag: OFlags {
-                append: true,
-                seek_bytes: true,
+                is_append: true,
+                is_seek_bytes: true,
                 ..Default::default()
             },
             ..Default::default()
@@ -414,14 +414,14 @@ fn parse_iflag_tokens_linux() {
         Parser::new().read(args),
         Ok(Parser {
             iflag: IFlags {
-                direct: true,
-                directory: true,
-                dsync: true,
-                sync: true,
-                nonblock: true,
-                noatime: true,
-                noctty: true,
-                nofollow: true,
+                is_direct: true,
+                is_directory: true,
+                is_dsync: true,
+                is_sync: true,
+                is_nonblock: true,
+                is_noatime: true,
+                is_noctty: true,
+                is_nofollow: true,
                 ..Default::default()
             },
             ..Default::default()
@@ -437,14 +437,14 @@ fn parse_oflag_tokens_linux() {
         Parser::new().read(args),
         Ok(Parser {
             oflag: OFlags {
-                direct: true,
-                directory: true,
-                dsync: true,
-                sync: true,
-                nonblock: true,
-                noatime: true,
-                noctty: true,
-                nofollow: true,
+                is_direct: true,
+                is_directory: true,
+                is_dsync: true,
+                is_sync: true,
+                is_nonblock: true,
+                is_noatime: true,
+                is_noctty: true,
+                is_nofollow: true,
                 ..Default::default()
             },
             ..Default::default()

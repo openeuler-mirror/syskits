@@ -182,7 +182,7 @@ impl Parser {
 
         let iconv = IConvFlags {
             mode: conversion_mode(conversion_table, block, non_ascii, conv.sync),
-            swab: conv.swab,
+            is_swab: conv.swab,
             sync: if conv.sync {
                 if block.is_some() {
                     Some(b' ')
@@ -196,12 +196,12 @@ impl Parser {
         };
 
         let oconv = OConvFlags {
-            sparse: conv.sparse,
-            excl: conv.excl,
-            nocreat: conv.nocreat,
-            notrunc: conv.notrunc,
-            fdatasync: conv.fdatasync,
-            fsync: conv.fsync,
+            is_sparse: conv.sparse,
+            is_excl: conv.excl,
+            is_nocreat: conv.nocreat,
+            is_notrunc: conv.notrunc,
+            is_fdatasync: conv.fdatasync,
+            is_fsync: conv.fsync,
         };
 
         // Input and output block sizes.
@@ -226,15 +226,15 @@ impl Parser {
 
         let skip = self
             .skip
-            .force_bytes_if(self.iflag.skip_bytes)
+            .force_bytes_if(self.iflag.is_skip_bytes)
             .to_bytes(ibs as u64);
 
         let seek = self
             .seek
-            .force_bytes_if(self.oflag.seek_bytes)
+            .force_bytes_if(self.oflag.is_seek_bytes)
             .to_bytes(obs as u64);
 
-        let count = self.count.map(|c| c.force_bytes_if(self.iflag.count_bytes));
+        let count = self.count.map(|c| c.force_bytes_if(self.iflag.is_count_bytes));
 
         Ok(DdOptions {
             skip,
@@ -310,23 +310,23 @@ impl Parser {
             match f {
                 // Common flags
                 "cio" => return Err(ParseError::Unimplemented(f.to_string())),
-                "direct" => linux_only!(f, i.direct = true),
-                "directory" => linux_only!(f, i.directory = true),
-                "dsync" => linux_only!(f, i.dsync = true),
-                "sync" => linux_only!(f, i.sync = true),
-                "nocache" => linux_only!(f, i.nocache = true),
-                "nonblock" => linux_only!(f, i.nonblock = true),
-                "noatime" => linux_only!(f, i.noatime = true),
-                "noctty" => linux_only!(f, i.noctty = true),
-                "nofollow" => linux_only!(f, i.nofollow = true),
+                "direct" => linux_only!(f, i.is_direct = true),
+                "directory" => linux_only!(f, i.is_directory = true),
+                "dsync" => linux_only!(f, i.is_dsync = true),
+                "sync" => linux_only!(f, i.is_sync = true),
+                "nocache" => linux_only!(f, i.is_nocache = true),
+                "nonblock" => linux_only!(f, i.is_nonblock = true),
+                "noatime" => linux_only!(f, i.is_noatime = true),
+                "noctty" => linux_only!(f, i.is_noctty = true),
+                "nofollow" => linux_only!(f, i.is_nofollow = true),
                 "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
                 "binary" => return Err(ParseError::Unimplemented(f.to_string())),
                 "text" => return Err(ParseError::Unimplemented(f.to_string())),
 
                 // Input-only flags
-                "fullblock" => i.fullblock = true,
-                "count_bytes" => i.count_bytes = true,
-                "skip_bytes" => i.skip_bytes = true,
+                "fullblock" => i.is_fullblock = true,
+                "count_bytes" => i.is_count_bytes = true,
+                "skip_bytes" => i.is_skip_bytes = true,
                 // GNU silently ignores oflags given as iflag.
                 "append" | "seek_bytes" => {}
                 _ => return Err(ParseError::FlagNoMatch(f.to_string())),
@@ -342,22 +342,22 @@ impl Parser {
             match f {
                 // Common flags
                 "cio" => return Err(ParseError::Unimplemented(val.to_string())),
-                "direct" => linux_only!(f, o.direct = true),
-                "directory" => linux_only!(f, o.directory = true),
-                "dsync" => linux_only!(f, o.dsync = true),
-                "sync" => linux_only!(f, o.sync = true),
-                "nocache" => linux_only!(f, o.nocache = true),
-                "nonblock" => linux_only!(f, o.nonblock = true),
-                "noatime" => linux_only!(f, o.noatime = true),
-                "noctty" => linux_only!(f, o.noctty = true),
-                "nofollow" => linux_only!(f, o.nofollow = true),
+                "direct" => linux_only!(f, o.is_direct = true),
+                "directory" => linux_only!(f, o.is_directory = true),
+                "dsync" => linux_only!(f, o.is_dsync = true),
+                "sync" => linux_only!(f, o.is_sync = true),
+                "nocache" => linux_only!(f, o.is_nocache = true),
+                "nonblock" => linux_only!(f, o.is_nonblock = true),
+                "noatime" => linux_only!(f, o.is_noatime = true),
+                "noctty" => linux_only!(f, o.is_noctty = true),
+                "nofollow" => linux_only!(f, o.is_nofollow = true),
                 "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
                 "binary" => return Err(ParseError::Unimplemented(f.to_string())),
                 "text" => return Err(ParseError::Unimplemented(f.to_string())),
 
                 // Output-only flags
-                "append" => o.append = true,
-                "seek_bytes" => o.seek_bytes = true,
+                "append" => o.is_append = true,
+                "seek_bytes" => o.is_seek_bytes = true,
                 // GNU silently ignores iflags given as oflag.
                 "fullblock" | "count_bytes" | "skip_bytes" => {}
                 _ => return Err(ParseError::FlagNoMatch(f.to_string())),

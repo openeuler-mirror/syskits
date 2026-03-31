@@ -540,5 +540,653 @@ fn tail_unbounded<T: Read>(reader: &mut BufReader<T>, options: &TailOptions) -> 
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
 
+    use crate::tail_forwards_thru_file;
+    use std::io::Cursor;
+    use super::*;
+    use std::io::{self, Read, Write};
+    use std::os::unix::io::{AsRawFd, FromRawFd};
+    use std::fs::File;
+    use tempfile::NamedTempFile;
+    use crate::paths::{TailInput, TailHeaderPrinter};
+    use crate::follow::Observer;
+
+    /// 辅助函数：在 Unix 平台中捕获标准输出
+    fn capture_stdout<F, R>(f: F) -> String
+    where
+        F: FnOnce() -> CTResult<R>,
+    {
+        // 刷新 stdout
+        io::stdout().flush().unwrap();
+        // 记录原始 stdout 文件描述符
+        let stdout_fd = io::stdout().as_raw_fd();
+        let old_stdout = unsafe { libc::dup(stdout_fd) };
+        if old_stdout == -1 {
+            panic!("dup failed");
+        }
+        // 创建管道
+        let mut pipe_fds = [0, 0];
+        if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } == -1 {
+            panic!("pipe failed");
+        }
+        // 重定向 stdout 到管道写端
+        if unsafe { libc::dup2(pipe_fds[1], stdout_fd) } == -1 {
+            panic!("dup2 failed");
+        }
+        // 关闭管道写端备用描述符（dup2 后，已复制到 stdout_fd）
+        unsafe { libc::close(pipe_fds[1]) };
+
+        // 调用目标函数，其输出将写入管道
+        f().unwrap();
+        io::stdout().flush().unwrap();
+        // 恢复 stdout
+        if unsafe { libc::dup2(old_stdout, stdout_fd) } == -1 {
+            panic!("restore dup2 failed");
+        }
+        unsafe { libc::close(old_stdout) };
+
+        // 从管道读取输出
+        let mut output = Vec::new();
+        let mut pipe_reader = unsafe { File::from_raw_fd(pipe_fds[0]) };
+        pipe_reader.read_to_end(&mut output).unwrap();
+        String::from_utf8(output).unwrap()
+    }
+
+    /// 辅助函数：创建临时文件并写入内容
+    fn create_temp_file(content: &str) -> NamedTempFile {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "{}", content).unwrap();
+        file.flush().unwrap();
+        file
+    }
+
+    mod test_tail_function {
+        use super::*;
+
+        #[test]
+        fn test_tail_stdin() {
+            let content = "Hello, World!\nThis is a test.";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let options = TailOptions::default();
+            let mut printer = TailHeaderPrinter::new(false, true);
+            let input = TailInput::from(path.as_os_str());
+            let mut observer = Observer::from(&options);
+
+            // 测试从标准输入读取
+            let output = capture_stdout(|| tail_stdin(&options, &mut printer, &input, &mut observer));
+            assert_eq!(output.trim(), content);
+        }
+
+        #[test]
+        fn test_tail_forwards_thru_file() {
+            let content = "line1\nline2\nline3\nline4\nline5\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 测试读取前两行
+            let result = tail_forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+            assert_eq!(result, 12); // 读取到的字节数
+        }
+        #[test]
+        fn test_tail_forwards_thru_file_valid() {
+            let content = "line1\nline2\nline3\nline4\nline5\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 测试读取前两行
+            let result = tail_forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+            assert_eq!(result, 12); // 读取到的字节数
+        }
+
+        #[test]
+        fn test_tail_forwards_thru_file_zero_delimiters() {
+            let content = "line1\nline2\nline3\nline4\nline5\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 测试读取零个分隔符
+            let result = tail_forwards_thru_file(&mut reader, 0, b'\n').unwrap();
+            assert_eq!(result, 0); // 读取到的字节数
+        }
+
+        #[test]
+        fn test_tail_forwards_thru_file_not_enough_delimiters() {
+            let content = "line1\nline2\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 测试读取超过实际行数
+            let result = tail_forwards_thru_file(&mut reader, 5, b'\n').unwrap();
+            assert_eq!(result, 12); // 读取到的字节数
+        }
+
+        #[test]
+        fn test_tail_backwards_thru_file_valid() {
+            let content = "line1\nline2\nline3\nline4\nline5\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 提取底层的 File
+            let file_ref = reader.get_mut(); // 获取 &mut File
+
+            // 测试读取最后两行
+            tail_backwards_thru_file(file_ref, 2, b'\n');
+
+            // 这里可以根据具体的实现来验证输出
+            // 例如，您可以检查 reader 的状态或内容
+            let mut buffer = String::new();
+            reader.read_to_string(&mut buffer).unwrap();
+            assert_eq!(buffer, "line4\nline5\n"); // 验证读取的内容
+        }
+
+        #[test]
+        fn test_tail_backwards_thru_file_zero_delimiters() {
+            let content = "line1\nline2\nline3\nline4\nline5\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 提取底层的 File
+            let file_ref = reader.get_mut(); // 获取 &mut File
+
+            // 测试读取零个分隔符
+            tail_backwards_thru_file(file_ref, 0, b'\n');
+
+            // 验证没有读取任何内容
+            let mut buffer = String::new();
+            reader.read_to_string(&mut buffer).unwrap();
+            assert_eq!(buffer, "line5\n"); // 验证读取的内容为空
+        }
+
+        #[test]
+        fn test_tail_backwards_thru_file_not_enough_lines() {
+            let content = "line1\nline2\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let mut reader = BufReader::new(File::open(path).unwrap());
+
+            // 提取底层的 File
+            let file_ref = reader.get_mut(); // 获取 &mut File
+
+            // 测试读取超过实际行数
+            tail_backwards_thru_file(file_ref, 5, b'\n');
+
+            // 验证读取的内容
+            let mut buffer = String::new();
+            reader.read_to_string(&mut buffer).unwrap();
+            assert_eq!(buffer, "line1\nline2\n"); // 验证读取的内容
+        }
+    }
+    mod test_tail_file {
+        use super::*;
+        use std::time::Duration;
+        use crate::paths::{TailInput, TailHeaderPrinter};
+        use crate::follow::Observer;
+        use serial_test::serial;
+    
+        /// 辅助函数：创建基本的 TailOptions 结构
+        fn create_basic_options(mode: TailFilterMode) -> TailOptions {
+            TailOptions {
+                mode,
+                follow: None,
+                max_unchanged_stats: 5,
+                pid: Default::default(),
+                retry: false,
+                sleep_sec: Duration::from_secs(1),
+                use_polling: false,
+                verbose: false,
+                presume_input_pipe: false,
+                inputs: vec![],
+            }
+        }
+    
+        /// 辅助函数：统一建立测试环境，返回 (TailOptions, TailHeaderPrinter, Observer)
+        fn setup_test(mode: TailFilterMode) -> (TailOptions, TailHeaderPrinter, Observer) {
+            let options = create_basic_options(mode);
+            let printer = TailHeaderPrinter::new(false, true);
+            let observer = Observer::from(&options);
+            (options, printer, observer)
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_bytes_negative() {
+            // 测试：从 "Hello, World!" 中读取最后 5 个字节，期望输出 "orld!"
+            let content = "Hello, World!";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Bytes(TailSignum::Negative(5)));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output.trim(), "orld!");
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_bytes_positive() {
+            // 测试：从 "Hello, World!" 第 6 个字节开始读取，期望输出 ", World!"
+            let content = "Hello, World!";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Bytes(TailSignum::Positive(6)));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output.trim(), ", World!");
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_lines_negative() {
+            // 测试：从 5 行文本中读取最后 2 行，期望输出 "line4\nline5"
+            let content = "line1\nline2\nline3\nline4\nline5\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output.trim(), "line4\nline5");
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_empty_file() {
+            // 测试：空文件输出应为空
+            let temp_file = create_temp_file("");
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Lines(TailSignum::Negative(10), b'\n'));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output.trim(), "");
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_zero_terminated() {
+            // 测试：以空字符作为行分隔符，从 "record1\0record2\0record3\0" 中读取最后 2 个记录，期望输出 "record2\0record3\0"
+            let content = "record1\0record2\0record3\0";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), 0));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output, "record2\0record3\0");
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_no_final_separator() {
+            // 测试：当文件末尾没有换行时读取最后 2 行，期望输出 "line2\nline3"
+            let content = "line1\nline2\nline3";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output.trim(), "line2\nline3");
+        }
+    
+        #[test]
+        #[serial]
+        fn test_tail_unicode() {
+            // 测试：Unicode 内容，读取最后 2 行，期望输出 "世界\n再见"
+            let content = "你好\n世界\n再见\n";
+            let temp_file = create_temp_file(content);
+            let path = temp_file.path();
+            let (options, mut printer, mut observer) =
+                setup_test(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+            let input = TailInput::from(path.as_os_str());
+            let output = capture_stdout(|| tail_file(&options, &mut printer, &input, path, &mut observer, 0));
+            assert_eq!(output.trim(), "世界\n再见");
+        }
+    }
+
+    #[test]
+    fn test_forwards_thru_file_zero() {
+        let mut reader = Cursor::new("a\n");
+        let i = tail_forwards_thru_file(&mut reader, 0, b'\n').unwrap();
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_forwards_thru_file_basic() {
+        //                   01 23 45 67 89
+        let mut reader = Cursor::new("a\nb\nc\nd\ne\n");
+        let i = tail_forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+        assert_eq!(i, 4);
+    }
+
+    #[test]
+    fn test_forwards_thru_file_past_end() {
+        let mut reader = Cursor::new("x\n");
+        let i = tail_forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+        assert_eq!(i, 2);
+    }
+}
+
+
+#[cfg(test)]
+mod test_tail_bounded_unbounded {
+    use super::*;
+    use std::io::{self, Read, Write};
+    use std::os::unix::io::{AsRawFd, FromRawFd};
+    use std::fs::File;
+    use std::time::Duration;
+    use tempfile::NamedTempFile;
+    use serial_test::serial;
+
+    /// 辅助函数：在 Unix 平台中捕获标准输出
+    fn capture_stdout<F, R>(f: F) -> String
+    where
+        F: FnOnce() -> CTResult<R>,
+    {
+        // 刷新 stdout
+        io::stdout().flush().unwrap();
+        // 记录原始 stdout 文件描述符
+        let stdout_fd = io::stdout().as_raw_fd();
+        let old_stdout = unsafe { libc::dup(stdout_fd) };
+        if old_stdout == -1 {
+            panic!("dup failed");
+        }
+        // 创建管道
+        let mut pipe_fds = [0, 0];
+        if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } == -1 {
+            panic!("pipe failed");
+        }
+        // 重定向 stdout 到管道写端
+        if unsafe { libc::dup2(pipe_fds[1], stdout_fd) } == -1 {
+            panic!("dup2 failed");
+        }
+        // 关闭管道写端备用描述符（dup2 后，已复制到 stdout_fd）
+        unsafe { libc::close(pipe_fds[1]) };
+
+        // 调用目标函数，其输出将写入管道
+        f().unwrap();
+        io::stdout().flush().unwrap();
+        // 恢复 stdout
+        if unsafe { libc::dup2(old_stdout, stdout_fd) } == -1 {
+            panic!("restore dup2 failed");
+        }
+        unsafe { libc::close(old_stdout) };
+
+        // 从管道读取输出
+        let mut output = Vec::new();
+        let mut pipe_reader = unsafe { File::from_raw_fd(pipe_fds[0]) };
+        pipe_reader.read_to_end(&mut output).unwrap();
+        String::from_utf8(output).unwrap()
+    }
+
+    /// 辅助函数：创建临时文件并写入内容
+    fn create_temp_file(content: &str) -> NamedTempFile {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "{}", content).unwrap();
+        file.flush().unwrap();
+        file
+    }
+
+    /// 辅助函数：创建基本的 TailOptions 结构
+    fn create_basic_options(mode: TailFilterMode) -> TailOptions {
+        TailOptions {
+            mode,
+            follow: None,
+            max_unchanged_stats: 5,
+            pid: Default::default(),
+            retry: false,
+            sleep_sec: Duration::from_secs(1),
+            use_polling: false,
+            verbose: false,
+            presume_input_pipe: false,
+            inputs: vec![],
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_bounded_bytes_negative() {
+        let content = "Hello, World!";
+        let temp_file = create_temp_file(content);
+        let path = temp_file.path();
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(5)));
+        let mut file = File::open(path).unwrap();
+
+        let output = capture_stdout(|| {
+            tail_bounded(&mut file, &options);
+            Ok(())
+        });
+
+        assert_eq!(output.trim(), "orld!");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_bounded_bytes_positive() {
+        let content = "Hello, World!";
+        let temp_file = create_temp_file(content);
+        let path = temp_file.path();
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Positive(7)));
+        let mut file = File::open(path).unwrap();
+
+        let output = capture_stdout(|| {
+            tail_bounded(&mut file, &options);
+            Ok(())
+        });
+
+        assert_eq!(output.trim(), "World!");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_bounded_lines_negative() {
+        let content = "line1\nline2\nline3\nline4\nline5\n";
+        let temp_file = create_temp_file(content);
+        let path = temp_file.path();
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+        let mut file = File::open(path).unwrap();
+
+        let output = capture_stdout(|| {
+            tail_bounded(&mut file, &options);
+            Ok(())
+        });
+
+        assert_eq!(output.trim(), "line4\nline5");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_bounded_lines_positive() {
+        let content = "line1\nline2\nline3\nline4\nline5\n";
+        let temp_file = create_temp_file(content);
+        let path = temp_file.path();
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Positive(3), b'\n'));
+        let mut file = File::open(path).unwrap();
+
+        let output = capture_stdout(|| {
+            tail_bounded(&mut file, &options);
+            Ok(())
+        });
+
+        assert_eq!(output.trim(), "line3\nline4\nline5");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_bounded_empty_file() {
+        let content = "";
+        let temp_file = create_temp_file(content);
+        let path = temp_file.path();
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(10), b'\n'));
+        let mut file = File::open(path).unwrap();
+
+        let output = capture_stdout(|| {
+            tail_bounded(&mut file, &options);
+            Ok(())
+        });
+
+        assert_eq!(output.trim(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_bounded_minus_zero() {
+        let content = "Hello\nWorld\n";
+        let temp_file = create_temp_file(content);
+        let path = temp_file.path();
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::MinusZero, b'\n'));
+        let mut file = File::open(path).unwrap();
+
+        let output = capture_stdout(|| {
+            tail_bounded(&mut file, &options);
+            Ok(())
+        });
+
+        assert_eq!(output.trim(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_lines_negative() {
+        let content = "line1\nline2\nline3\nline4\nline5\n";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "line4\nline5");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_lines_positive() {
+        let content = "line1\nline2\nline3\nline4\nline5\n";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Positive(3), b'\n'));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "line3\nline4\nline5");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_bytes_negative() {
+        let content = "Hello, World!";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(5)));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "orld!");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_bytes_positive() {
+        let content = "Hello, World!";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Positive(7)));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "World!");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_empty_file() {
+        let content = "";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(10), b'\n'));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+        assert_eq!(output.trim(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_plus_zero() {
+        let content = "Hello\nWorld\n";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::PlusZero, b'\n'));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "Hello\nWorld");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_no_final_newline() {
+        let content = "line1\nline2\nline3";  // 注意没有最后的换行符
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), b'\n'));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "line2\nline3");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_single_line() {
+        let content = "single line";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(1), b'\n'));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output.trim(), "single line");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_zero_byte_delimiter() {
+        let content = "record1\0record2\0record3\0";
+        let temp_file = create_temp_file(content);
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::Negative(2), 0));
+
+        let output = capture_stdout(|| {
+            tail_unbounded(&mut reader, &options)
+        });
+
+        assert_eq!(output, "record2\0record3\0");
+    }
+}
 

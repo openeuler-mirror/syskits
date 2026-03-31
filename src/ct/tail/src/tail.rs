@@ -69,11 +69,11 @@ fn tail_exec(options: &TailOptions) -> CTResult<()> {
             TailInputKind::File(path)
                 if cfg!(not(unix)) || path != &PathBuf::from(text::TAIL_DEV_STDIN) =>
             {
-                tail_file(options, &mut printer, input, path, &mut observer, 0)?;
+                tail_file(options, &mut printer, input, path, &mut observer, 0, None)?;
             }
             // File points to /dev/stdin here
             TailInputKind::File(_) | TailInputKind::Stdin => {
-                tail_stdin(options, &mut printer, input, &mut observer)?;
+                tail_stdin(options, &mut printer, input, &mut observer, None)?;
             }
         }
     }
@@ -107,6 +107,7 @@ fn tail_file(
     path: &Path,
     observer: &mut Observer,
     offset: u64,
+    buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     // 检查文件是否存在
     if !path.exists() {
@@ -120,7 +121,15 @@ fn tail_file(
 
     // 检查路径是否可追踪
     if input.is_tailable() {
-        return handle_tailable_file(options, header_printer, input, path, observer, offset);
+        return handle_tailable_file(
+            options,
+            header_printer,
+            input,
+            path,
+            observer,
+            offset,
+            buffer,
+        );
     }
 
     observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -175,6 +184,7 @@ fn handle_tailable_file(
     path: &Path,
     observer: &mut Observer,
     offset: u64,
+    buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     let metadata = path.metadata().ok();
     match File::open(path) {
@@ -184,11 +194,11 @@ fn handle_tailable_file(
                 && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                 && metadata.as_ref().unwrap().get_block_size() > 0
             {
-                let _ = tail_bounded(&mut file, options, None);
+                let _ = tail_bounded(&mut file, options, buffer);
                 BufReader::new(file)
             } else {
                 let mut reader = BufReader::new(file);
-                tail_unbounded(&mut reader, options, None)?;
+                tail_unbounded(&mut reader, options, buffer)?;
                 reader
             };
 
@@ -231,10 +241,11 @@ fn tail_stdin(
     header_printer: &mut TailHeaderPrinter,
     input: &TailInput,
     observer: &mut Observer,
+    buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     match input.resolve() {
-        Some(path) => handle_fifo_stdin(options, header_printer, input, observer, &path),
-        None => handle_pipe_stdin(options, header_printer, input, observer),
+        Some(path) => handle_fifo_stdin(options, header_printer, input, observer, &path, buffer),
+        None => handle_pipe_stdin(options, header_printer, input, observer, buffer),
     }
 }
 
@@ -244,9 +255,18 @@ fn handle_fifo_stdin(
     input: &TailInput,
     observer: &mut Observer,
     path: &Path,
+    buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     let stdin_offset = get_stdin_offset();
-    tail_file(options, header_printer, input, path, observer, stdin_offset)
+    tail_file(
+        options,
+        header_printer,
+        input,
+        path,
+        observer,
+        stdin_offset,
+        buffer,
+    )
 }
 
 fn handle_pipe_stdin(
@@ -254,6 +274,7 @@ fn handle_pipe_stdin(
     header_printer: &mut TailHeaderPrinter,
     input: &TailInput,
     observer: &mut Observer,
+    buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
     header_printer.print_input(input);
 
@@ -263,7 +284,7 @@ fn handle_pipe_stdin(
     }
 
     let mut reader = BufReader::new(stdin());
-    tail_unbounded(&mut reader, options, None)?;
+    tail_unbounded(&mut reader, options, buffer)?;
     observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
     Ok(())
 }
@@ -617,50 +638,8 @@ mod tests {
     use crate::tail_forwards_thru_file;
     use std::fs::File;
     use std::io::Cursor;
-    use std::io::{self, Read, Write};
-    use std::os::unix::io::{AsRawFd, FromRawFd};
+    use std::io::{Read, Write};
     use tempfile::NamedTempFile;
-
-    /// 辅助函数：在 Unix 平台中捕获标准输出
-    fn capture_stdout<F, R>(f: F) -> String
-    where
-        F: FnOnce() -> CTResult<R>,
-    {
-        // 刷新 stdout
-        io::stdout().flush().unwrap();
-        // 记录原始 stdout 文件描述符
-        let stdout_fd = io::stdout().as_raw_fd();
-        let old_stdout = unsafe { libc::dup(stdout_fd) };
-        if old_stdout == -1 {
-            panic!("dup failed");
-        }
-        // 创建管道
-        let mut pipe_fds = [0, 0];
-        if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } == -1 {
-            panic!("pipe failed");
-        }
-        // 重定向 stdout 到管道写端
-        if unsafe { libc::dup2(pipe_fds[1], stdout_fd) } == -1 {
-            panic!("dup2 failed");
-        }
-        // 关闭管道写端备用描述符（dup2 后，已复制到 stdout_fd）
-        unsafe { libc::close(pipe_fds[1]) };
-
-        // 调用目标函数，其输出将写入管道
-        f().unwrap();
-        io::stdout().flush().unwrap();
-        // 恢复 stdout
-        if unsafe { libc::dup2(old_stdout, stdout_fd) } == -1 {
-            panic!("restore dup2 failed");
-        }
-        unsafe { libc::close(old_stdout) };
-
-        // 从管道读取输出
-        let mut output = Vec::new();
-        let mut pipe_reader = unsafe { File::from_raw_fd(pipe_fds[0]) };
-        pipe_reader.read_to_end(&mut output).unwrap();
-        String::from_utf8(output).unwrap()
-    }
 
     /// 辅助函数：创建临时文件并写入内容
     fn create_temp_file(content: &str) -> NamedTempFile {
@@ -682,11 +661,18 @@ mod tests {
             let mut printer = TailHeaderPrinter::new(false, true);
             let input = TailInput::from(path.as_os_str());
             let mut observer = Observer::from(&options);
+            let mut buffer = Vec::new();
 
             // 测试从标准输入读取
-            let output =
-                capture_stdout(|| tail_stdin(&options, &mut printer, &input, &mut observer));
-            assert_eq!(output.trim(), content);
+            tail_stdin(
+                &options,
+                &mut printer,
+                &input,
+                &mut observer,
+                Some(&mut buffer),
+            )
+            .unwrap();
+            assert_eq!(String::from_utf8(buffer).unwrap().trim(), content);
         }
 
         #[test]

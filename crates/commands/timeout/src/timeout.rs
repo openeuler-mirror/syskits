@@ -638,8 +638,10 @@ mod tests {
 
     mod timeout_execution_tests {
         use super::*;
+        use std::fs;
         use std::os::unix::process::CommandExt;
         use std::process::Command;
+        use std::thread;
 
         #[test]
         fn test_timeout_normal_exit() {
@@ -772,6 +774,40 @@ mod tests {
             }
 
             assert_eq!(status.unwrap().signal(), Some(libc::SIGTERM));
+        }
+
+        #[test]
+        fn test_forward_signal_stop_does_not_force_continue() {
+            let mut cmd = Command::new("sleep");
+            cmd.arg("30");
+            unsafe {
+                cmd.pre_exec(|| {
+                    if libc::setpgid(0, 0) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+
+            let mut child = cmd.spawn().unwrap();
+            forward_signal_to_monitored_process(child.id() as i32, libc::SIGSTOP, false);
+            thread::sleep(Duration::from_millis(100));
+
+            let status =
+                fs::read_to_string(format!("/proc/{}/status", child.id())).expect("read status");
+            let state_line = status
+                .lines()
+                .find(|line| line.starts_with("State:"))
+                .expect("state line exists");
+            assert!(
+                state_line.contains("\tT"),
+                "unexpected process state: {state_line}"
+            );
+
+            unsafe {
+                libc::kill(child.id() as i32, libc::SIGKILL);
+            }
+            let _ = child.wait();
         }
     }
 

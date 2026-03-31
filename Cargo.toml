@@ -139,6 +139,7 @@ feat_common_core = [
   "pathchk",
   "dd",
   "tail",
+  "nl",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -368,9 +369,9 @@ timeout = { optional = true, package = "ct_timeout", path = "src/ct/timeout"}
 pathchk = { optional = true, package = "ct_pathchk", path = "src/ct/pathchk"}
 dd = { optional = true, package = "ct_dd", path = "src/ct/dd" }
 tail = { optional = true, package = "ct_tail", path = "src/ct/tail" }
+nl = { optional = true, package = "ct_nl", path = "src/ct/nl"}
 
 [dev-dependencies]
-chrono = { workspace = true }
 conv = "0.3"
 filetime = { workspace = true }
 glob = { workspace = true }

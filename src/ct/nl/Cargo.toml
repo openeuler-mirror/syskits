@@ -1,0 +1,24 @@
+[package]
+name = "ct_nl"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "nl ~ (ctutils) display input with added line numbers"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/nl"
+
+[lib]
+path = "src/nl.rs"
+
+[dependencies]
+clap = { workspace = true }
+regex = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "nl"
+path = "src/main.rs"

@@ -136,6 +136,7 @@ feat_common_core = [
   "id",
   "fold",
   "realpath",
+  "pathchk",
 ]
 
 # "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
@@ -362,6 +363,7 @@ stty = { optional = true, package = "ct_stty", path = "src/ct/stty"}
 link = { optional = true, package = "ct_link", path = "src/ct/link"}
 paste = { optional = true, package = "ct_paste", path = "src/ct/paste"}
 timeout = { optional = true, package = "ct_timeout", path = "src/ct/timeout"}
+pathchk = { optional = true, package = "ct_pathchk", path = "src/ct/pathchk"}
 
 [dev-dependencies]
 chrono = { workspace = true }

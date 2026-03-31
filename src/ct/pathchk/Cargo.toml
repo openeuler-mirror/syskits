@@ -1,0 +1,26 @@
+[package]
+name = "ct_pathchk"
+
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "pathchk ~ (ctutils) diagnose invalid or non-portable PATHNAME"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/pathchk"
+
+
+[lib]
+path = "src/pathchk.rs"
+
+[dependencies]
+clap = { workspace = true }
+libc = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "pathchk"
+path = "src/main.rs"

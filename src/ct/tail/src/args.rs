@@ -656,3 +656,214 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use crate::parse::TailObsoleteArgs;
+
+    use super::*;
+
+    mod test_tail_parse_args {
+        use super::*;
+        use std::ffi::OsString;
+    
+        fn create_args(args: &[&str]) -> impl ctcore::Args {
+            let mut vec = vec![OsString::from("tail")];
+            vec.extend(args.iter().map(|s| OsString::from(s)));
+            vec.into_iter()
+        }
+    
+        #[test]
+        fn test_basic_options() {
+            // 测试基本的命令行选项
+            let args = create_args(&["-n", "10"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
+            );
+        }
+    
+        #[test]
+        fn test_bytes_option() {
+            // 测试字节数选项
+            let args = create_args(&["-c", "20"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(options.mode, TailFilterMode::Bytes(TailSignum::Negative(20)));
+    
+            // 测试带加号的字节数
+            let args = create_args(&["-c", "+20"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(options.mode, TailFilterMode::Bytes(TailSignum::Positive(20)));
+        }
+    
+        #[test]
+        fn test_follow_options() {
+            // 测试跟随模式选项
+            let args = create_args(&["-f"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(options.follow, Some(TailFollowMode::Descriptor));
+    
+            // 测试指定跟随方式
+            let args = create_args(&["--follow=name"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(options.follow, Some(TailFollowMode::Name));
+        }
+    
+        #[test]
+        fn test_zero_terminated() {
+            // 测试零终止符选项
+            let args = create_args(&["-z"]);
+            let options = tail_parse_args(args).unwrap();
+            match options.mode {
+                TailFilterMode::Lines(_, delimiter) => assert_eq!(delimiter, 0),
+                _ => panic!("Expected Lines mode"),
+            }
+        }
+    
+        #[test]
+        fn test_retry_option() {
+            // 测试重试选项
+            let args = create_args(&["--retry"]);
+            let options = tail_parse_args(args).unwrap();
+            assert!(options.retry);
+        }
+    
+        #[test]
+        fn test_multiple_files() {
+            // 测试多文件输入
+            let args = create_args(&["file1", "file2", "file3"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(options.inputs.len(), 3);
+        }
+    
+        #[test]
+        fn test_invalid_number() {
+            // 测试无效的数字输入
+            let args = create_args(&["-n", "invalid"]);
+            assert!(tail_parse_args(args).is_err());
+        }
+    
+        #[test]
+        fn test_combined_options() {
+            // 测试组合选项
+            let args = create_args(&["-n", "10", "-f", "--retry"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
+            );
+            assert_eq!(options.follow, Some(TailFollowMode::Descriptor));
+            assert!(options.retry);
+        }
+    
+        #[test]
+        fn test_obsolete_syntax() {
+            // 测试过时的语法
+            let args = create_args(&["-10"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
+            );
+    
+            let args = create_args(&["+10"]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Lines(TailSignum::Positive(10), b'\n')
+            );
+        }
+    
+        #[test]
+        fn test_default_values() {
+            // 测试默认值
+            let args = create_args(&[]);
+            let options = tail_parse_args(args).unwrap();
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
+            );
+            assert_eq!(options.follow, None);
+            assert!(!options.retry);
+        }
+    }
+    #[test]
+    fn test_parse_num_when_sign_is_given() {
+        let result = tail_parse_num("+0");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), TailSignum::PlusZero);
+
+        let result = tail_parse_num("+1");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), TailSignum::Positive(1));
+
+        let result = tail_parse_num("-0");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), TailSignum::MinusZero);
+
+        let result = tail_parse_num("-1");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), TailSignum::Negative(1));
+    }
+
+    #[test]
+    fn test_parse_num_when_no_sign_is_given() {
+        let result = tail_parse_num("0");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), TailSignum::MinusZero);
+
+        let result = tail_parse_num("1");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), TailSignum::Negative(1));
+    }
+
+    #[test]
+    fn test_parse_obsolete_settings_f() {
+        let args = TailObsoleteArgs {
+            follow: true,
+            ..Default::default()
+        };
+        let result = TailOptions::from_obsolete_args(&args, None);
+        assert_eq!(result.follow, Some(TailFollowMode::Descriptor));
+
+        let result = TailOptions::from_obsolete_args(&args, Some(&"file".into()));
+        assert_eq!(result.follow, Some(TailFollowMode::Name));
+    }
+
+    #[rstest]
+    #[case::default(vec ! [], None, false)]
+    #[case::retry(vec ! ["--retry"], None, true)]
+    #[case::multiple_retry(vec ! ["--retry", "--retry"], None, true)]
+    #[case::follow_long(vec ! ["--follow"], Some(TailFollowMode::Descriptor), false)]
+    #[case::follow_short(vec ! ["-f"], Some(TailFollowMode::Descriptor), false)]
+    #[case::follow_long_with_retry(vec ! ["--follow", "--retry"], Some(TailFollowMode::Descriptor), true)]
+    #[case::follow_short_with_retry(vec ! ["-f", "--retry"], Some(TailFollowMode::Descriptor), true)]
+    #[case::follow_overwrites_previous_selection_1(vec ! ["--follow=name", "--follow=descriptor"], Some(TailFollowMode::Descriptor), false)]
+    #[case::follow_overwrites_previous_selection_2(vec ! ["--follow=descriptor", "--follow=name"], Some(TailFollowMode::Name), false)]
+    #[case::big_f(vec ! ["-F"], Some(TailFollowMode::Name), true)]
+    #[case::multiple_big_f(vec ! ["-F", "-F"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_retry_then_does_not_change(vec ! ["-F", "--retry"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_follow_descriptor_then_change(vec ! ["-F", "--follow=descriptor"], Some(TailFollowMode::Descriptor), true)]
+    #[case::multiple_big_f_with_follow_descriptor_then_no_change(vec ! ["-F", "--follow=descriptor", "-F"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_follow_short_then_change(vec ! ["-F", "-f"], Some(TailFollowMode::Descriptor), true)]
+    #[case::follow_descriptor_with_big_f_then_change(vec ! ["--follow=descriptor", "-F"], Some(TailFollowMode::Name), true)]
+    #[case::follow_short_with_big_f_then_change(vec ! ["-f", "-F"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_follow_name_then_not_change(vec ! ["-F", "--follow=name"], Some(TailFollowMode::Name), true)]
+    #[case::follow_name_with_big_f_then_not_change(vec ! ["--follow=name", "-F"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_multiple_long_follow(vec ! ["--follow=name", "-F", "--follow=descriptor"], Some(TailFollowMode::Descriptor), true)]
+    #[case::big_f_with_multiple_long_follow_name(vec ! ["--follow=name", "-F", "--follow=name"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_multiple_short_follow(vec ! ["-f", "-F", "-f"], Some(TailFollowMode::Descriptor), true)]
+    #[case::multiple_big_f_with_multiple_short_follow(vec ! ["-f", "-F", "-f", "-F"], Some(TailFollowMode::Name), true)]
+    fn test_parse_settings_follow_mode_and_retry(
+        #[case] args: Vec<&str>,
+        #[case] expected_follow_mode: Option<TailFollowMode>,
+        #[case] expected_retry: bool,
+    ) {
+        let settings =
+            TailOptions::from(&ct_app().no_binary_name(true).get_matches_from(args)).unwrap();
+        assert_eq!(settings.follow, expected_follow_mode);
+        assert_eq!(settings.retry, expected_retry);
+    }
+}

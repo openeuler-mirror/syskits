@@ -629,3 +629,80 @@ impl TailLinesChunkBuffer {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::chunks::{TailBytesChunk, TAIL_BUFFER_SIZE};
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_zero() {
+        let mut chunk = TailBytesChunk::new();
+        chunk.bytes = TAIL_BUFFER_SIZE;
+        chunk.buffer[1] = 1;
+        let other = TailBytesChunk::from_chunk(&chunk, 0);
+        assert_eq!(other, chunk);
+
+        chunk.bytes = 2;
+        let other = TailBytesChunk::from_chunk(&chunk, 0);
+        assert_eq!(other, chunk);
+
+        chunk.bytes = 1;
+        let other = TailBytesChunk::from_chunk(&chunk, 0);
+        assert_eq!(other.buffer, [0; TAIL_BUFFER_SIZE]);
+        assert_eq!(other.bytes, chunk.bytes);
+
+        chunk.bytes = TAIL_BUFFER_SIZE;
+        let other = TailBytesChunk::from_chunk(&chunk, 2);
+        assert_eq!(other.buffer, [0; TAIL_BUFFER_SIZE]);
+        assert_eq!(other.bytes, TAIL_BUFFER_SIZE - 2);
+    }
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_not_zero() {
+        let mut chunk = TailBytesChunk::new();
+        chunk.bytes = TAIL_BUFFER_SIZE;
+        chunk.buffer[1] = 1;
+
+        let other = TailBytesChunk::from_chunk(&chunk, 1);
+        let mut expected_buffer = [0; TAIL_BUFFER_SIZE];
+        expected_buffer[0] = 1;
+        assert_eq!(other.buffer, expected_buffer);
+        assert_eq!(other.bytes, TAIL_BUFFER_SIZE - 1);
+
+        let other = TailBytesChunk::from_chunk(&chunk, 2);
+        assert_eq!(other.buffer, [0; TAIL_BUFFER_SIZE]);
+        assert_eq!(other.bytes, TAIL_BUFFER_SIZE - 2);
+    }
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_1() {
+        let mut chunk = TailBytesChunk::new();
+        chunk.bytes = TAIL_BUFFER_SIZE;
+        let new_chunk = TailBytesChunk::from_chunk(&chunk, TAIL_BUFFER_SIZE + 1);
+        assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_2() {
+        let mut chunk = TailBytesChunk::new();
+        chunk.bytes = 0;
+        let new_chunk = TailBytesChunk::from_chunk(&chunk, 1);
+        assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_3() {
+        let mut chunk = TailBytesChunk::new();
+        chunk.bytes = 1;
+        let new_chunk = TailBytesChunk::from_chunk(&chunk, 2);
+        assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_equal_to_chunk_size() {
+        let mut chunk = TailBytesChunk::new();
+        chunk.buffer[0] = 1;
+        chunk.bytes = 1;
+        let new_chunk = TailBytesChunk::from_chunk(&chunk, 1);
+        assert_eq!(0, new_chunk.bytes);
+    }
+}

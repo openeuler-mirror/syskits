@@ -199,16 +199,6 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    /// The length of the data source in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> std::io::Result<i64> {
-        match self {
-            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
-        }
-    }
-
     fn skip(&mut self, n: u64) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
@@ -616,16 +606,6 @@ impl Dest {
             _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
     }
-
-    /// The length of the data destination in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> std::io::Result<i64> {
-        match self {
-            Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
-        }
-    }
 }
 
 /// Decide whether the given buffer is all zeros.
@@ -910,7 +890,7 @@ impl<'a> BlockWriter<'a> {
 }
 
 /// Copy data from input to output with dd functionality
-fn dd_copy(mut input: Input, output: DdOutput) -> std::io::Result<()> {
+fn dd_copy(input: Input, output: DdOutput) -> std::io::Result<()> {
     // 初始化复制环境
     let (mut state, mut output) = initialize_copy_environment(input, output);
 

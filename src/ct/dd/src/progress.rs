@@ -19,7 +19,6 @@ use std::time::Duration;
 
 use ctcore::{
     ct_error::CTResult,
-    ct_format::num_format::{FloatVariant, Formatter},
 };
 
 use crate::numbers::{to_magnitude_and_suffix, SuffixType};

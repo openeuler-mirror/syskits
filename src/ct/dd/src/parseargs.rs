@@ -8,6 +8,10 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+
+#[cfg(test)]
+mod unit_tests;
+
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, DdOptions, StatusLevel};
 use crate::conversion_tables::ConversionTable;
 use ctcore::ct_display::Quotable;

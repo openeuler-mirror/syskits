@@ -68,7 +68,7 @@ impl<'a> TailReverseChunks<'a> {
     }
 }
 
-impl<'a> Iterator for TailReverseChunks<'a> {
+impl Iterator for TailReverseChunks<'_> {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {

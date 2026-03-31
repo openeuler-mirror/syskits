@@ -963,7 +963,7 @@ mod test_tail_bounded_unbounded {
         let mut file = File::open(path).unwrap();
 
         let output = capture_stdout(|| {
-            tail_bounded(&mut file, &options);
+            let _ = tail_bounded(&mut file, &options);
             Ok(())
         });
 
@@ -980,7 +980,7 @@ mod test_tail_bounded_unbounded {
         let mut file = File::open(path).unwrap();
 
         let output = capture_stdout(|| {
-            tail_bounded(&mut file, &options);
+            let _ = tail_bounded(&mut file, &options);
             Ok(())
         });
 
@@ -997,7 +997,7 @@ mod test_tail_bounded_unbounded {
         let mut file = File::open(path).unwrap();
 
         let output = capture_stdout(|| {
-            tail_bounded(&mut file, &options);
+            let _ = tail_bounded(&mut file, &options);
             Ok(())
         });
 
@@ -1014,7 +1014,7 @@ mod test_tail_bounded_unbounded {
         let mut file = File::open(path).unwrap();
 
         let output = capture_stdout(|| {
-            tail_bounded(&mut file, &options);
+            let _ = tail_bounded(&mut file, &options);
             Ok(())
         });
 
@@ -1031,7 +1031,7 @@ mod test_tail_bounded_unbounded {
         let mut file = File::open(path).unwrap();
 
         let output = capture_stdout(|| {
-            tail_bounded(&mut file, &options);
+            let _ = tail_bounded(&mut file, &options);
             Ok(())
         });
 
@@ -1048,7 +1048,7 @@ mod test_tail_bounded_unbounded {
         let mut file = File::open(path).unwrap();
 
         let output = capture_stdout(|| {
-            tail_bounded(&mut file, &options);
+            let _ = tail_bounded(&mut file, &options);
             Ok(())
         });
 

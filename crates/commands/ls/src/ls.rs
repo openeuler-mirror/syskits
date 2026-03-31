@@ -21,7 +21,7 @@ use std::ffi::CString;
 use std::ffi::OsString;
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
-use std::io::{stdout, BufWriter, ErrorKind, Write};
+use std::io::{BufWriter, ErrorKind, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -39,17 +39,17 @@ use sys_locale::get_locale;
 use std::{collections::HashSet, io::IsTerminal};
 
 use clap::builder::{NonEmptyStringValueParser, ValueParser};
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::ct_version_cmp::ct_version_cmp;
-use ctcore::Tool;
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -57,12 +57,12 @@ use ctcore::Tool;
 use ctcore::ct_entries;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_quoting_style;
-use ctcore::ct_quoting_style::escape_name;
 use ctcore::ct_quoting_style::CtQuotingStyle;
-#[cfg(target_os = "linux")]
-use ctcore::libc::{dev_t, major, minor};
+use ctcore::ct_quoting_style::escape_name;
 #[cfg(unix)]
 use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+#[cfg(target_os = "linux")]
+use ctcore::libc::{dev_t, major, minor};
 use ctcore::{ct_parse_glob, ct_show, ct_show_error, ct_show_warning};
 use dired::DiredOutput;
 use glob::{MatchOptions, Pattern};
@@ -2087,13 +2087,13 @@ impl PathData {
                         }
                     }
                 }
-                
+
                 // 只有在使用 -L 且隐式遇到文件且错误为 ELOOP（循环链接）时，才允许静默回退
                 match get_metadata_with_deref_opt(self.p_buf.as_path(), self.is_must_dereference) {
                     Err(err) => {
                         out.flush().unwrap();
                         let errno = err.raw_os_error().unwrap_or(1i32);
-                        
+
                         // EBADF 特殊处理（保留原有逻辑）
                         if self.is_must_dereference && errno == 9i32 {
                             if let Some(dir_entry) = &self.de {
@@ -2105,7 +2105,7 @@ impl PathData {
                             // ELOOP - 循环链接，静默获取 symlink 本身的元数据
                             return self.p_buf.symlink_metadata().ok();
                         }
-                        
+
                         // 其他情况（dangling symlink ENOENT，或其他错误，或显式指定），报错
                         ct_show!(LsError::LsIOErrorContext(
                             err,
@@ -3368,11 +3368,7 @@ fn display_len_or_rdev(mdata: &Metadata, config: &LsConfig) -> SizeOrDeviceId {
     let len_adjusted = {
         let d = mdata.len() / config.file_size_block_size;
         let r = mdata.len() % config.file_size_block_size;
-        if r == 0 {
-            d
-        } else {
-            d + 1
-        }
+        if r == 0 { d } else { d + 1 }
     };
     SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }

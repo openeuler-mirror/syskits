@@ -19,23 +19,23 @@ use rust_i18n::t;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::builder::ValueParser;
 use clap::ArgAction;
+use clap::builder::ValueParser;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
-use ctcore::ct_fsext::read_fs_list;
 use ctcore::ct_fsext::CtMountInfo;
+use ctcore::ct_fsext::read_fs_list;
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::ct_show;
 
-use clap::crate_version;
-use clap::parser::ValueSource;
 use clap::Arg;
 use clap::ArgMatches;
 use clap::Command;
+use clap::crate_version;
+use clap::parser::ValueSource;
 use ctcore::Tool;
 use std::error::Error;
 use std::ffi::OsString;
@@ -44,8 +44,8 @@ use std::path::Path;
 use sys_locale::get_locale;
 use table::TableHeaderMode;
 
-use crate::blocks::block_size_read;
 use crate::blocks::BlockSize;
+use crate::blocks::block_size_read;
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -437,7 +437,7 @@ where
                             let top_mount = full_mounts
                                 .iter()
                                 .filter(|x| x.mount_dir == m.mount_dir)
-                                .last();
+                                .next_back();
 
                             // 如果最新挂载项的设备名与我们查询的设备名不同，说明被覆盖了
                             let overmounted =
@@ -456,10 +456,7 @@ where
                     if totally_overmounted {
                         ct_show!(CtSimpleError::new(
                             1,
-                            format!(
-                                "cannot access '{}': over-mounted by another device",
-                                path_str
-                            )
+                            format!("cannot access '{path_str}': over-mounted by another device")
                         ));
                         continue; // 跳过此设备，不抛出致命异常，对齐 GNU 行为
                     }
@@ -800,10 +797,10 @@ mod tests {
 
     mod tests_ct_app {
         use crate::{
-            ct_app, DF_OPT_ALL, DF_OPT_BLOCKSIZE, DF_OPT_EXCLUDE_TYPE,
-            DF_OPT_HUMAN_READABLE_BINARY, DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_INODES,
-            DF_OPT_LOCAL, DF_OPT_NO_SYNC, DF_OPT_OUTPUT, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE,
-            DF_OPT_SYNC, DF_OPT_TOTAL, DF_OPT_TYPE,
+            DF_OPT_ALL, DF_OPT_BLOCKSIZE, DF_OPT_EXCLUDE_TYPE, DF_OPT_HUMAN_READABLE_BINARY,
+            DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_INODES, DF_OPT_LOCAL, DF_OPT_NO_SYNC,
+            DF_OPT_OUTPUT, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE, DF_OPT_SYNC, DF_OPT_TOTAL,
+            DF_OPT_TYPE, ct_app,
         };
         use clap::error::ErrorKind;
         use std::ffi::OsString;
@@ -8825,7 +8822,7 @@ mod tests {
     */
 
     mod is_included {
-        use crate::{is_included, DfOptions};
+        use crate::{DfOptions, is_included};
         use ctcore::ct_fsext::CtMountInfo;
 
         /// Instantiate a [`CtMountInfo`] with the given fields.
@@ -8970,7 +8967,7 @@ mod tests {
     }
 
     mod filter_mount_list {
-        use crate::{filter_mount_list, DfOptions};
+        use crate::{DfOptions, filter_mount_list};
 
         #[test]
         fn test_empty() {
@@ -8981,10 +8978,10 @@ mod tests {
     }
 
     mod tests_ct_get_filesystem {
-        use crate::ct_app;
-        use crate::get_all_filesystems;
         use crate::DfError;
         use crate::DfOptions;
+        use crate::ct_app;
+        use crate::get_all_filesystems;
 
         use crate::get_filesystem;
         use std::fs;

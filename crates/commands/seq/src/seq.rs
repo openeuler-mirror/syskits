@@ -10,15 +10,15 @@
  */
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::io::{stdout, ErrorKind, Write};
+use std::io::{ErrorKind, Write, stdout};
 rust_i18n::i18n!("locales", fallback = "en-US");
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
 
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_format::{num_format, Format};
 use ctcore::Tool;
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
+use ctcore::ct_format::{Format, num_format};
 use std::ffi::OsString;
 use sys_locale::get_locale;
 mod error;
@@ -51,7 +51,7 @@ impl SeqOptions {
     fn new(matches: &clap::ArgMatches) -> Self {
         let unescape = |s: &str| -> String {
             if let Some(stripped) = s.strip_prefix("CT_NEG_") {
-                format!("-{}", stripped)
+                format!("-{stripped}")
             } else {
                 s.to_string()
             }
@@ -110,7 +110,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
                 continue;
             }
         }
-        modified_args.push(arg.into());
+        modified_args.push(arg);
     }
 
     let matches = ct_app().try_get_matches_from(modified_args)?;
@@ -132,7 +132,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
         ) {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
-            Err(e) => Err(CtSimpleError::new(1, format!("write error: {}", e)).into()),
+            Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
         };
     }
 
@@ -154,7 +154,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     match print_seq((first.number, increment.number, last.number), config) {
         Ok(_) => Ok(()),
         Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
-        Err(e) => Err(CtSimpleError::new(1, format!("write error: {}", e)).into()),
+        Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
     }
 }
 
@@ -164,7 +164,7 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
         .ok_or(SeqError::NoArguments)?
         .map(|s| {
             if let Some(stripped) = s.strip_prefix("CT_NEG_") {
-                format!("-{}", stripped)
+                format!("-{stripped}")
             } else {
                 s.to_string()
             }
@@ -377,27 +377,25 @@ fn write_value_float(
         "-inf".to_string()
     } else if *value == ExtendedBigDecimal::Nan {
         "nan".to_string()
+    } else if precision > 0 {
+        // 保留小数精度
+        format!("{value:.precision$}")
     } else {
-        if precision > 0 {
-            // 保留小数精度
-            format!("{value:.precision$}")
-        } else {
-            // 模拟 C 语言 %g 的智能截断
-            let mut s = value.to_string();
-            if s.contains('.') {
-                s = s.trim_end_matches('0').trim_end_matches('.').to_string();
-            }
-            s
+        // 模拟 C 语言 %g 的智能截断
+        let mut s = value.to_string();
+        if s.contains('.') {
+            s = s.trim_end_matches('0').trim_end_matches('.').to_string();
         }
+        s
     };
 
     // 手动进行前导 0 填充，避开原生 format! 宏对大数类型填充支持不佳的坑
     if s.len() < width {
         let pad_len = width - s.len();
-        if s.starts_with('-') {
-            write!(writer, "-{}{}", "0".repeat(pad_len), &s[1..])
+        if let Some(stripped) = s.strip_prefix('-') {
+            write!(writer, "-{}{stripped}", "0".repeat(pad_len))
         } else {
-            write!(writer, "{}{}", "0".repeat(pad_len), s)
+            write!(writer, "{}{s}", "0".repeat(pad_len))
         }
     } else {
         write!(writer, "{s}")
@@ -452,49 +450,44 @@ fn format_with_zero_padding(
 
                 // ctcore Bug: 处理非负数且要求显示 '+' 或 ' ' 标志时，
                 // 它会在填充完宽度后，硬塞一个符号，导致总字符串超长 1 个字符。
-                if !is_negative && (has_plus || has_space) {
-                    if !num_part.is_empty()
-                        && (num_part.starts_with('+') || num_part.starts_with(' '))
-                    {
-                        if has_minus {
-                            // 左对齐：多余的填充字符在尾部，直接削掉最后一个空格
-                            if num_part.ends_with(' ') {
-                                let fixed_num = &num_part[..num_part.len() - 1];
+                if !is_negative
+                    && (has_plus || has_space)
+                    && !num_part.is_empty()
+                    && (num_part.starts_with('+') || num_part.starts_with(' '))
+                {
+                    if has_minus {
+                        // 左对齐：多余的填充字符在尾部，直接削掉最后一个空格
+                        if let Some(fixed_num) = num_part.strip_suffix(' ') {
+                            formatted =
+                                format!("{}{}{}", &fmt[..prefix_len], fixed_num, &fmt[dir_end..]);
+                        }
+                    } else {
+                        // 右对齐：多余的填充字符在头部（但在符号之后），削掉一个字符并重排位置
+                        let sign_char = num_part.chars().next().unwrap();
+                        let rest = &num_part[1..];
+                        if rest.starts_with(' ') || rest.starts_with('0') {
+                            let fixed_rest = &rest[1..];
+                            if has_zero {
+                                // 零填充：将错误的内部空格替换为 0 (如 "+ 1" -> "+01")
+                                let spaces_to_zeros = fixed_rest.replace(" ", "0");
+                                let fixed_num = format!("{sign_char}{spaces_to_zeros}");
                                 formatted = format!(
                                     "{}{}{}",
                                     &fmt[..prefix_len],
                                     fixed_num,
                                     &fmt[dir_end..]
                                 );
-                            }
-                        } else {
-                            // 右对齐：多余的填充字符在头部（但在符号之后），削掉一个字符并重排位置
-                            let sign_char = num_part.chars().next().unwrap();
-                            let rest = &num_part[1..];
-                            if rest.starts_with(' ') || rest.starts_with('0') {
-                                let fixed_rest = &rest[1..];
-                                if has_zero {
-                                    // 零填充：将错误的内部空格替换为 0 (如 "+ 1" -> "+01")
-                                    let spaces_to_zeros = fixed_rest.replace(" ", "0");
-                                    let fixed_num = format!("{}{}", sign_char, spaces_to_zeros);
-                                    formatted = format!(
-                                        "{}{}{}",
-                                        &fmt[..prefix_len],
-                                        fixed_num,
-                                        &fmt[dir_end..]
-                                    );
-                                } else {
-                                    // 空格填充：将空格推到符号外部 (如 "+  1" -> " +1")
-                                    let trimmed = fixed_rest.trim_start_matches(' ');
-                                    let spaces = " ".repeat(fixed_rest.len() - trimmed.len());
-                                    let fixed_num = format!("{}{}{}", spaces, sign_char, trimmed);
-                                    formatted = format!(
-                                        "{}{}{}",
-                                        &fmt[..prefix_len],
-                                        fixed_num,
-                                        &fmt[dir_end..]
-                                    );
-                                }
+                            } else {
+                                // 空格填充：将空格推到符号外部 (如 "+  1" -> " +1")
+                                let trimmed = fixed_rest.trim_start_matches(' ');
+                                let spaces = " ".repeat(fixed_rest.len() - trimmed.len());
+                                let fixed_num = format!("{spaces}{sign_char}{trimmed}");
+                                formatted = format!(
+                                    "{}{}{}",
+                                    &fmt[..prefix_len],
+                                    fixed_num,
+                                    &fmt[dir_end..]
+                                );
                             }
                         }
                     }
@@ -620,12 +613,14 @@ mod tests {
 
         // 测试基本命令行参数
         assert!(app.get_arguments().any(|arg| arg.get_id() == SEQ_SEPARATOR));
-        assert!(app
-            .get_arguments()
-            .any(|arg| arg.get_id() == SEQ_TERMINATOR));
-        assert!(app
-            .get_arguments()
-            .any(|arg| arg.get_id() == SEQ_EQUAL_WIDTH));
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == SEQ_TERMINATOR)
+        );
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == SEQ_EQUAL_WIDTH)
+        );
         assert!(app.get_arguments().any(|arg| arg.get_id() == SEQ_FORMAT));
 
         // 测试帮助信息

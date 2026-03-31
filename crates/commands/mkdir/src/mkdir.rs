@@ -14,14 +14,14 @@ use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::parser::ValuesRef;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 #[cfg(not(windows))]
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_mode;
 use ctcore::ct_show_if_err;
-use ctcore::Tool;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -29,9 +29,9 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use ctcore::libc;
 #[cfg(target_os = "linux")]
-use selinux::label::{back_end::File as FileBackEnd, Labeler};
-#[cfg(target_os = "linux")]
 use selinux::SecurityContext;
+#[cfg(target_os = "linux")]
+use selinux::label::{Labeler, back_end::File as FileBackEnd};
 #[cfg(target_os = "linux")]
 use std::ffi::{CString, OsStr};
 #[cfg(target_os = "linux")]
@@ -238,6 +238,7 @@ pub fn ct_app() -> Command {
 /**
  * 创建新的目录列表
  */
+#[allow(clippy::too_many_arguments)]
 fn mkdir_exec(
     dirs: ValuesRef<OsString>,
     is_recursive: bool,
@@ -277,6 +278,7 @@ fn mkdir_exec(
 /// ## 尾随点
 ///
 /// 为匹配 GNU 的行为，路径的最后一个目录是单个点（如 `some/path/to/.`）的情况会创建（并去除点）。
+#[allow(clippy::too_many_arguments)]
 pub fn mkdir(
     path: &Path,
     is_recursive: bool,
@@ -1596,17 +1598,19 @@ mod tests {
                 fs::remove_dir_all(test_dir.as_path()).unwrap();
             }
 
-            assert!(mkdir_create_dir(
-                test_dir.as_path(),
-                false,
-                false,
-                false,
-                0o777,
-                None,
-                false,
-                false
-            )
-            .is_err());
+            assert!(
+                mkdir_create_dir(
+                    test_dir.as_path(),
+                    false,
+                    false,
+                    false,
+                    0o777,
+                    None,
+                    false,
+                    false
+                )
+                .is_err()
+            );
         }
 
         #[test]

@@ -29,10 +29,11 @@ use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
+use ctcore::Tool;
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
@@ -41,7 +42,6 @@ use ctcore::ct_fs::{
 use ctcore::ct_fsxattr;
 use ctcore::ct_update_control;
 use ctcore::libc;
-use ctcore::Tool;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -59,11 +59,6 @@ use sys_locale::get_locale;
 // 这些枚举（enums）被暴露出来是为了让其他项目（例如 nushell）能够创建一个 Options 值，这需要这些枚举。
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
 use ctcore::{ct_prompt_yes, ct_show};
-
-use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
-};
 
 use crate::error::MvError;
 
@@ -743,7 +738,13 @@ fn move_files_into_dir(
         }
         #[cfg(not(unix))]
         {
-            match mv_rename(source_path, &targetpath, mv_opts, multi_progress.as_ref(), None) {
+            match mv_rename(
+                source_path,
+                &targetpath,
+                mv_opts,
+                multi_progress.as_ref(),
+                None,
+            ) {
                 Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
                 Err(err) => {
                     let err_str = err.to_string();
@@ -780,7 +781,7 @@ fn move_files_into_dir(
  * 带硬链接追踪的重命名函数（用于 move_files_into_dir）。
  * 在跨设备移动时，会检查源文件是否与其他已移动的文件是硬链接关系，
  * 如果是，则在目标位置创建硬链接而不是复制文件内容。
- * 
+ *
  * @param from_path 原始路径。
  * @param to_path 目标路径。
  * @param options 移动选项。
@@ -802,20 +803,23 @@ fn mv_rename_with_hardlink_tracking(
 
     // 获取源文件的元数据
     let source_metadata = from_path.symlink_metadata()?;
-    
+
     // 只有普通文件（非目录、非符号链接）才需要处理硬链接
     if source_metadata.file_type().is_file() {
         let source_inode = source_metadata.ino();
         let source_dev = source_metadata.dev();
         let key = (source_dev, source_inode);
-        
+
         // 检查这个 inode 是否已经被移动过
         if let Some(existing_dest) = hardlink_map.get(&key) {
             // 检查目标文件系统是否已存在该文件（需要覆盖）
             if to_path.exists() {
                 match options.overwrite {
                     MvOverwriteMode::NoClobber => {
-                        return Err(io::Error::other(format!("not replacing {}", to_path.quote())));
+                        return Err(io::Error::other(format!(
+                            "not replacing {}",
+                            to_path.quote()
+                        )));
                     }
                     MvOverwriteMode::Interactive => {
                         if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
@@ -824,7 +828,7 @@ fn mv_rename_with_hardlink_tracking(
                     }
                     MvOverwriteMode::Force => {}
                 };
-                
+
                 // 处理备份
                 if options.backup != CtBackupMode::NoBackup {
                     let clean_to_os = strip_trailing_slashes(to_path.as_os_str());
@@ -834,19 +838,25 @@ fn mv_rename_with_hardlink_tracking(
                         clean_to_path,
                         &options.suffix,
                     ) {
-                        mv_rename_with_fallback(to_path, &backup_path, options, multi_progress, None)?;
+                        mv_rename_with_fallback(
+                            to_path,
+                            &backup_path,
+                            options,
+                            multi_progress,
+                            None,
+                        )?;
                     }
                 }
-                
+
                 // 删除已存在的目标文件
                 let _ = fs::remove_file(to_path);
             }
-            
+
             // 创建硬链接而不是复制
             fs::hard_link(existing_dest, to_path)?;
             // 删除源文件
             fs::remove_file(from_path)?;
-            
+
             // 输出详细信息
             if options.verbose {
                 let message = format!("renamed {} -> {}", from_path.quote(), to_path.quote());
@@ -855,7 +865,7 @@ fn mv_rename_with_hardlink_tracking(
                     None => println!("{message}"),
                 };
             }
-            
+
             // 设置 SELinux 上下文（如果启用）
             #[cfg(target_os = "linux")]
             if options.set_context {
@@ -867,15 +877,21 @@ fn mv_rename_with_hardlink_tracking(
                     );
                 }
             }
-            
+
             return Ok(());
         }
-        
+
         // 如果 nlink > 1，说明这是一个硬链接，需要记录到映射表中
         if source_metadata.nlink() > 1 {
             // 先执行正常的移动操作，传入 hardlink_map 用于目录递归
             if use_global_hardlink_map {
-                mv_rename(from_path, to_path, options, multi_progress, Some(hardlink_map))?;
+                mv_rename(
+                    from_path,
+                    to_path,
+                    options,
+                    multi_progress,
+                    Some(hardlink_map),
+                )?;
             } else {
                 mv_rename(from_path, to_path, options, multi_progress, None)?;
             }
@@ -884,10 +900,16 @@ fn mv_rename_with_hardlink_tracking(
             return Ok(());
         }
     }
-    
+
     // 对于目录、符号链接或普通单链接文件，使用正常的移动逻辑
     if use_global_hardlink_map {
-        mv_rename(from_path, to_path, options, multi_progress, Some(hardlink_map))
+        mv_rename(
+            from_path,
+            to_path,
+            options,
+            multi_progress,
+            Some(hardlink_map),
+        )
     } else {
         mv_rename(from_path, to_path, options, multi_progress, None)
     }
@@ -966,18 +988,22 @@ fn mv_rename(
         to_path
     };
 
-    if final_target.exists() && final_target.is_dir() {
-        if from_path.is_dir() {
-            if is_empty_dir(final_target) {
-                fs::remove_dir(final_target)?;
-            } else {
-                return Err(io::Error::other("Directory not empty"));
-            }
+    if final_target.exists() && final_target.is_dir() && from_path.is_dir() {
+        if is_empty_dir(final_target) {
+            fs::remove_dir(final_target)?;
+        } else {
+            return Err(io::Error::other("Directory not empty"));
         }
     }
 
     // 执行重命名操作 (使用智能计算出的 final_target)
-    mv_rename_with_fallback(from_path, final_target, options, multi_progress, hardlink_map)?;
+    mv_rename_with_fallback(
+        from_path,
+        final_target,
+        options,
+        multi_progress,
+        hardlink_map,
+    )?;
 
     // 如果设置了详细模式，输出重命名信息 (为了符合 GNU 格式，UI 打印必须保留用户最初输入的 to_path)
     if options.verbose {
@@ -1154,20 +1180,24 @@ fn mv_rename_with_fallback(
             #[cfg(unix)]
             if let Some(map) = hardlink_map {
                 // 使用外部传入的映射表，以便跨目录追踪硬链接
-                if let Err(e) = move_dir_cross_device_with_links_with_global_map(from, to, options, map) {
-                    return Err(io::Error::other(format!("{:?}", e)));
+                if let Err(e) =
+                    move_dir_cross_device_with_links_with_global_map(from, to, options, map)
+                {
+                    return Err(io::Error::other(format!("{e:?}")));
                 }
             } else {
                 let mut inode_map = HashMap::new();
-                if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map) {
-                    return Err(io::Error::other(format!("{:?}", e)));
+                if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map)
+                {
+                    return Err(io::Error::other(format!("{e:?}")));
                 }
             }
             #[cfg(not(unix))]
             {
                 let mut inode_map = HashMap::new();
-                if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map) {
-                    return Err(io::Error::other(format!("{:?}", e)));
+                if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map)
+                {
+                    return Err(io::Error::other(format!("{e:?}")));
                 }
             }
         } else {
@@ -1221,8 +1251,7 @@ fn mv_rename_with_fallback(
                             }
                         } else {
                             // Socket 跨文件系统移动通常不支持或不需要
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
+                            return Err(std::io::Error::other(
                                 "cannot move socket across file systems",
                             ));
                         }
@@ -1425,7 +1454,12 @@ fn move_dir_cross_device_with_links_with_global_map(
 
         if file_type.is_dir() {
             // 递归处理子目录，继续使用全局映射表
-            move_dir_cross_device_with_links_with_global_map(&src_path, &dest_path, options, global_hardlink_map)?;
+            move_dir_cross_device_with_links_with_global_map(
+                &src_path,
+                &dest_path,
+                options,
+                global_hardlink_map,
+            )?;
         } else if file_type.is_symlink() {
             // 符号链接直接转移
             mv_rename_symlink_fallback(&src_path, &dest_path)?;
@@ -2568,7 +2602,7 @@ mod tests {
     }
     #[cfg(test)]
     mod tests_mv_fun {
-        use crate::{mv, mv_parse_paths, MvOpts, MvOverwriteMode};
+        use crate::{MvOpts, MvOverwriteMode, mv, mv_parse_paths};
         use ctcore::ct_backup_control::CtBackupMode;
         use ctcore::ct_update_control::CtUpdateMode;
 

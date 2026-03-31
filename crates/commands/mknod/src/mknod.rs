@@ -16,17 +16,17 @@
 // 使用的库：clap用于命令行参数解析，libc提供Unix系统调用的接口。
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::builder::ValueParser;
 use clap::ArgAction;
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, CtSimpleError};
+use clap::builder::ValueParser;
 use ctcore::Tool;
-use libc::{dev_t, mode_t};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
-use selinux::label::{back_end::File as FileBackEnd, Labeler};
+use libc::{dev_t, mode_t};
+use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use selinux::{self, SecurityContext};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;

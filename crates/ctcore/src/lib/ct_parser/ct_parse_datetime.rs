@@ -89,7 +89,7 @@ pub fn parse_datetime_gnu_compat(
             && bytes[4].is_ascii_digit()
         {
             let tz_char = (bytes[5] as char).to_ascii_uppercase();
-            if tz_char >= 'A' && tz_char <= 'Z' && tz_char != 'J' {
+            if tz_char.is_ascii_uppercase() && tz_char != 'J' {
                 let hour = (bytes[0] - b'0') * 10 + (bytes[1] - b'0');
                 let min = (bytes[3] - b'0') * 10 + (bytes[4] - b'0');
                 let offset_hours = match tz_char {
@@ -124,8 +124,6 @@ pub fn parse_datetime_gnu_compat(
                 -5
             } else if tz_name.starts_with("PST") {
                 -8
-            } else if tz_name.starts_with("UTC") {
-                0
             } else {
                 0
             };
@@ -257,7 +255,7 @@ pub fn parse_datetime_gnu_compat(
                 let (mut secs, mut nanos) = if let Some(dot_idx) = amount_abs.find('.') {
                     let secs = amount_abs[..dot_idx].parse().unwrap_or(0);
                     let frac = &amount_abs[dot_idx + 1..];
-                    let frac_padded = format!("{:0<9}", frac);
+                    let frac_padded = format!("{frac:0<9}");
                     let nanos = frac_padded[..9].parse().unwrap_or(0);
                     (secs, nanos)
                 } else {
@@ -314,8 +312,7 @@ pub fn parse_datetime_gnu_compat(
                                 secs
                             };
                             Some(
-                                (dt.date_naive() + Duration::days(days_to_add as i64))
-                                    .and_time(dt.time()),
+                                (dt.date_naive() + Duration::days(days_to_add)).and_time(dt.time()),
                             )
                         };
 
@@ -362,7 +359,7 @@ pub fn parse_datetime_gnu_compat(
         .replace(" GMT", " +0000");
 
     // 修复简写时区偏移 (如 "+0", "-5" 转换为标准 "+0000", "-0500")
-    if let Some(pos) = normalized_input.rfind(|c| c == '+' || c == '-') {
+    if let Some(pos) = normalized_input.rfind(['+', '-']) {
         let offset_str = &normalized_input[pos + 1..];
         if !offset_str.is_empty()
             && offset_str.chars().all(|c| c.is_ascii_digit())
@@ -415,7 +412,7 @@ pub fn parse_datetime_gnu_compat(
             && tz_str.chars().skip(1).all(|c| c.is_ascii_digit())
         {
             // 强行插入 00:00:00 午夜时间，伪装成标准格式交给 chrono 解析
-            let synthesized = format!("{} 00:00:00 {}", date_str, tz_str);
+            let synthesized = format!("{date_str} 00:00:00 {tz_str}");
             let synth_formats = [
                 "%Y-%m-%d %H:%M:%S %z",
                 "%m/%d/%Y %H:%M:%S %z",

@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::io::{BufRead, Lines};
+use std::io::BufRead;
 use std::iter::Peekable;
 use std::slice::Iter;
 

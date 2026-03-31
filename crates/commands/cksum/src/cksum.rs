@@ -10,17 +10,17 @@
  */
 
 extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
-    ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo},
+    ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code},
     ct_show,
     ct_sum::{
-        div_ceil, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224,
-        Sha256, Sha384, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha512, BSD, SYSV,
+        BSD, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1,
+        Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, div_ceil,
     },
 };
 use hex::decode;
@@ -30,7 +30,7 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -715,19 +715,11 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         }
     }
 
-    if untagged && tag {
-        if last_tag_idx > last_untagged_idx {
-            untagged = false;
-        } else {
-            tag = false;
-        }
+    if untagged && tag && last_tag_idx > last_untagged_idx {
+        untagged = false;
     }
-    if binary && text {
-        if last_text_idx > last_binary_idx {
-            binary = false;
-        } else {
-            text = false;
-        }
+    if binary && text && last_text_idx > last_binary_idx {
+        binary = false;
     }
     if binary && last_tag_idx > last_binary_idx {
         binary = false;
@@ -796,8 +788,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
-                                "digest length for '{}' must be 224, 256, 384, or 512",
-                                algo_display
+                                "digest length for '{algo_display}' must be 224, 256, 384, or 512"
                             ),
                         )
                         .into());
@@ -844,20 +835,20 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     };
 
     if matches.get_flag(opt_flags::CHECK) {
-        if matches.contains_id(opt_flags::ALGORITHM) {
-            if matches!(
+        if matches.contains_id(opt_flags::ALGORITHM)
+            && matches!(
                 opts.algo_name,
                 CKSUM_ALGORITHM_OPTIONS_BSD
                     | CKSUM_ALGORITHM_OPTIONS_SYSV
                     | CKSUM_ALGORITHM_OPTIONS_CRC
                     | CKSUM_ALGORITHM_OPTIONS_CRC32B
-            ) {
-                ctcore::ct_show_error!(
-                    "--check is not supported with --algorithm={}",
-                    opts.algo_name
-                );
-                return Ok(1);
-            }
+            )
+        {
+            ctcore::ct_show_error!(
+                "--check is not supported with --algorithm={}",
+                opts.algo_name
+            );
+            return Ok(1);
         }
 
         let files = match matches.get_many::<String>(opt_flags::FILE) {
@@ -875,7 +866,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     Ok(0)
 }
 
-fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
+fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
     let mut global_properly_formatted = 0;
     let mut bad_format = 0;
     let mut bad_checksum = 0;
@@ -990,8 +981,8 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                             c == '+'
                                 || c == '/'
                                 || c == '='
-                                || (c >= 'g' && c <= 'z')
-                                || (c >= 'G' && c <= 'Z')
+                                || ('g'..='z').contains(&c)
+                                || ('G'..='Z').contains(&c)
                         });
 
                         if is_b64_chars && has_b64_only_chars {
@@ -1064,7 +1055,7 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
             }
 
             let expected_hex_len = current_bits / 4;
-            let expected_b64_len = (((current_bits + 7) / 8) + 2) / 3 * 4;
+            let expected_b64_len = current_bits.div_ceil(8).div_ceil(3) * 4;
 
             let is_hex = digest_str.len() == expected_hex_len
                 && digest_str.chars().all(|c| c.is_ascii_hexdigit());
@@ -1242,10 +1233,8 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
         if missing_files > 0 {
             exit_code = 1;
         }
-    } else {
-        if bad_format > 0 || missing_files > 0 || failed_open > 0 || no_file_verified {
-            exit_code = 1;
-        }
+    } else if bad_format > 0 || missing_files > 0 || failed_open > 0 || no_file_verified {
+        exit_code = 1;
     }
 
     if missing_files > 0 || failed_open > 0 || no_file_verified {
@@ -3041,7 +3030,6 @@ mod tests {
 
     #[cfg(test)]
     mod tests_detect_algo {
-        use crate::cksum_detect_algo;
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
@@ -3053,6 +3041,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
+        use crate::cksum_detect_algo;
 
         #[test]
         fn test_detect_algo_sysv() {
@@ -3165,7 +3154,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::{cksum, cksum_detect_algo, ct_app, opt_flags, CksumOptions, CksumOutputFormat};
+        use crate::{CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, ct_app, opt_flags};
         use std::ffi::OsStr;
         use std::fs;
         use std::fs::File;

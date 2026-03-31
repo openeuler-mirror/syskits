@@ -77,37 +77,37 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches) -> CTResult<Vec<&str>> {
 /// Returns the value in seconds as f64
 fn parse_hex_duration(input: &str) -> Option<f64> {
     let trimmed = input.trim();
-    
+
     // Check for 0x or 0X prefix
     if !trimmed.starts_with("0x") && !trimmed.starts_with("0X") {
         return None;
     }
-    
+
     let rest = &trimmed[2..];
-    
+
     // Find the 'p' or 'P' for the exponent part
-    let (mantissa_part, exp_part) = if let Some(p_pos) = rest.find(|c| c == 'p' || c == 'P') {
+    let (mantissa_part, exp_part) = if let Some(p_pos) = rest.find(['p', 'P']) {
         (&rest[..p_pos], &rest[p_pos + 1..])
     } else {
         (rest, "0")
     };
-    
+
     // Parse the exponent
     let exp: i32 = exp_part.parse().ok()?;
-    
+
     // Parse the mantissa (hexadecimal)
     let mantissa = if mantissa_part.contains('.') {
         let parts: Vec<&str> = mantissa_part.split('.').collect();
         if parts.len() != 2 {
             return None;
         }
-        
+
         let int_part = if parts[0].is_empty() {
             0.0
         } else {
             u64::from_str_radix(parts[0], 16).ok()? as f64
         };
-        
+
         let frac_part = if parts[1].is_empty() {
             0.0
         } else {
@@ -116,12 +116,12 @@ fn parse_hex_duration(input: &str) -> Option<f64> {
             let divisor = 16f64.powi(parts[1].len() as i32);
             frac_val / divisor
         };
-        
+
         int_part + frac_part
     } else {
         u64::from_str_radix(mantissa_part, 16).ok()? as f64
     };
-    
+
     // Calculate final value: mantissa * 2^exp
     let value = mantissa * 2f64.powi(exp);
     Some(value)
@@ -137,14 +137,14 @@ fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
         .iter()
         .filter_map(|input| {
             let trimmed = input.trim();
-            
+
             // Try hexadecimal floating point format first (C99 format like 0x.002p1)
             if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
                 if let Some(seconds) = parse_hex_duration(trimmed) {
                     if seconds >= 0.0 {
                         let secs = seconds.trunc() as u64;
                         let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
-                        return Some(fundu::Duration::positive(secs, nanos as u32));
+                        return Some(fundu::Duration::positive(secs, nanos));
                     } else {
                         arg_error = true;
                         ct_show_error!("invalid time interval '{}'", input);
@@ -152,7 +152,7 @@ fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
                     }
                 }
             }
-            
+
             // Fall back to fundu parser for normal formats
             match dur_parser.parse(trimmed) {
                 Ok(duration) => Some(duration),

@@ -16,17 +16,17 @@
 // 命名管道的使用通常涉及到两个或多个进程，其中一个进程将数据写入管道，另一个或多个进程从管道中读取数据。它们在文件系统中有一个名称，因此可以被多个进程引用。
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
-use ctcore::Tool;
 use libc::mkfifo;
-use selinux::label::{back_end::File as FileBackEnd, Labeler};
 use selinux::SecurityContext;
+use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;

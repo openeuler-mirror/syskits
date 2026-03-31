@@ -32,21 +32,21 @@ extern crate rust_i18n; // spell-checker:ignore (ToDO) rwxr sourcepath targetpat
 /// - `copy()`: 复制文件并设置属性
 mod mode;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{grp2gid, usr2uid};
 use ctcore::ct_error::{CTError, CTIoError, CTResult, FromIo};
 use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_mode::get_umask;
-use ctcore::ct_perms::{wrap_chown, CtVerbosityLevel, Verbosity};
+use ctcore::ct_perms::{CtVerbosityLevel, Verbosity, wrap_chown};
 use ctcore::ct_process::{getegid, geteuid};
-use ctcore::Tool;
 use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff;
-use filetime::{set_file_times, FileTime};
+use filetime::{FileTime, set_file_times};
 #[cfg(target_os = "linux")]
 use selinux::{self, SecurityContext};
 use std::error::Error;

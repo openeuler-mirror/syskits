@@ -12,19 +12,18 @@
 // spell-checker:ignore (path) eacces inacc
 
 extern crate rust_i18n;
-use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version, parser::ValueSource};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
-use ctcore::Tool;
 use ctcore::{ct_prompt_yes, ct_show_error};
-use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -714,10 +713,8 @@ fn interactive_remove_dir_all(
     }
 
     // 3. 询问是否深入目录
-    if options.interactive == InteractiveMode::Always && !is_empty {
-        if !prompt_descend(path) {
-            return had_err; // 用户选择不深入，直接跳过
-        }
+    if options.interactive == InteractiveMode::Always && !is_empty && !prompt_descend(path) {
+        return had_err; // 用户选择不深入，直接跳过
     }
 
     // 4. 严格深度优先：先处理里面的子目录和文件
@@ -784,10 +781,8 @@ fn custom_remove_dir_all(path: &Path, options: &RMOptions, top_dev: u64) -> std:
                                         entry_path.quote()
                                     );
                                     had_error = true;
-                                    last_error = Some(std::io::Error::new(
-                                        std::io::ErrorKind::Other,
-                                        "crosses device boundary",
-                                    ));
+                                    last_error =
+                                        Some(std::io::Error::other("crosses device boundary"));
                                     continue;
                                 }
 
@@ -797,12 +792,10 @@ fn custom_remove_dir_all(path: &Path, options: &RMOptions, top_dev: u64) -> std:
                                     had_error = true;
                                     last_error = Some(e);
                                 }
-                            } else {
-                                if let Err(e) = std::fs::remove_file(&entry_path) {
-                                    ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
-                                    had_error = true;
-                                    last_error = Some(e);
-                                }
+                            } else if let Err(e) = std::fs::remove_file(&entry_path) {
+                                ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
+                                had_error = true;
+                                last_error = Some(e);
                             }
                         }
                         Err(e) => {

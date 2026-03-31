@@ -275,8 +275,7 @@ fn is_format_size_char(
         }
         // 主动捕获不受支持的 128位(L) 以及 16位半精度(H, B) 浮点数，并返回 GNU 格式的错误
         (FormatTypeCategory::Float, Some(c @ ('L' | 'H' | 'B'))) => Err(format!(
-            "this system doesn't provide a 'f{}' floating point type",
-            c
+            "this system doesn't provide a 'f{c}' floating point type"
         )),
         _ => Ok(false),
     }

@@ -23,11 +23,11 @@ mod exit_status;
 use crate::exit_status::ExitStatus;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
-use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
@@ -144,7 +144,7 @@ impl TimeoutFlags {
             Some(kill_after_str) => match ctcore::ct_parse_time::ct_from_str(kill_after_str) {
                 Ok(mut k) => {
                     // 处理正数下溢出。如果解析为0，但输入包含数字(1-9)，说明是极端微小的浮点数，向上取整为1纳秒
-                    if k.is_zero() && kill_after_str.chars().any(|c| c >= '1' && c <= '9') {
+                    if k.is_zero() && kill_after_str.chars().any(|c| ('1'..='9').contains(&c)) {
                         k = Duration::from_nanos(1);
                     }
                     Some(k)
@@ -166,7 +166,7 @@ impl TimeoutFlags {
         };
 
         // 同理，处理主超时的正数下溢出。这使得 1e-10000 变成 1纳秒而不是无限等待
-        if duration.is_zero() && duration_str.chars().any(|c| c >= '1' && c <= '9') {
+        if duration.is_zero() && duration_str.chars().any(|c| ('1'..='9').contains(&c)) {
             duration = Duration::from_nanos(1);
         }
 
@@ -307,7 +307,7 @@ fn timeout_send_signal(process: &mut Child, signal: usize, is_foreground: bool) 
 ///
 /// # 返回
 /// * `CTResult<()>` - 一个结果类型，包装了可能的错误
-/// 根据指定的超时标志设置进程的超时行为
+///     - 根据指定的超时标志设置进程的超时行为
 fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
     #[cfg(unix)]
     enable_pipe_errors()?;
@@ -366,7 +366,7 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 /// # 返回值
 /// - `CTResult<()>` - 一个结果类型，表示处理是否成功。如果进程正常退出或被处理，
 ///   则返回Ok(())；否则返回一个错误状态。
-/// 处理进程超时逻辑
+///     - 处理进程超时逻辑
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
     CHILD_PID.store(process.id() as i32, Ordering::Release);
     TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Release);
@@ -405,7 +405,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
     }
 
     let wait_result = if flags.duration.is_zero() {
-        process.wait().map(|status| Some(status))
+        process.wait().map(Some)
     } else {
         process.wait_or_timeout(flags.duration)
     };
@@ -467,7 +467,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
 /// # 返回
 ///
 /// - `CTResult<()>` - 一个结果类型，表示操作是否成功。
-/// 处理超时情况
+///     - 处理超时情况
 fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
     match flags.kill_after {
         None => {
@@ -494,7 +494,7 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
         Some(kill_after) => {
             // 等待 kill_after 时间
             let wait_result = if kill_after.is_zero() {
-                process.wait().map(|s| Some(s))
+                process.wait().map(Some)
             } else {
                 process.wait_or_timeout(kill_after)
             };

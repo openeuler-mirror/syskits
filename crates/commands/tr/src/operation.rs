@@ -22,13 +22,13 @@
 
 use ctcore::ct_error::CTError;
 use nom::{
+    IResult,
     branch::alt,
     bytes::complete::{tag, take},
     character::complete::{digit1, one_of},
     combinator::{map, map_opt, peek, recognize, value},
-    multi::{many0, many_m_n},
+    multi::{many_m_n, many0},
     sequence::{delimited, preceded, separated_pair},
-    IResult,
 };
 use std::{
     collections::{HashMap, HashSet},

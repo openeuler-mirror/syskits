@@ -71,18 +71,18 @@ use crate::inputdecoder::{OdInputDecoder, OdMemoryDecoder};
 use crate::inputoffset::{OdInputOffset, OdRadix};
 use crate::multifilereader::{HasError, OdInputSource, OdMultifileReader};
 use crate::output_info::{OutputInfo, SpacedFormatterItemInfo};
-use crate::parse_formats::{od_parse_format_flags, ParsedFormatterItemInfo};
-use crate::parse_inputs::{od_parse_inputs, CommandLineInputs};
+use crate::parse_formats::{ParsedFormatterItemInfo, od_parse_format_flags};
+use crate::parse_inputs::{CommandLineInputs, od_parse_inputs};
 use crate::parse_nrofbytes::od_parse_number_of_bytes;
 use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_format::format_ascii_dump;
 use clap::ArgAction;
-use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
-use ctcore::Tool;
 use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -350,9 +350,9 @@ fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<(
     let mut stdout = std::io::stdout().lock();
 
     let address = match radix {
-        OdRadix::Octal => format!("{:07o}", offset),
-        OdRadix::Decimal => format!("{:07}", offset),
-        OdRadix::Hexadecimal => format!("{:06x}", offset),
+        OdRadix::Octal => format!("{offset:07o}"),
+        OdRadix::Decimal => format!("{offset:07}"),
+        OdRadix::Hexadecimal => format!("{offset:06x}"),
         OdRadix::NoPrefix => String::new(),
     };
 
@@ -360,9 +360,9 @@ fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<(
     let s = unsafe { std::str::from_utf8_unchecked(buffer) };
 
     if address.is_empty() {
-        writeln!(stdout, "{}", s).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        writeln!(stdout, "{s}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     } else {
-        writeln!(stdout, "{} {}", address, s).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        writeln!(stdout, "{address} {s}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
     Ok(())
 }

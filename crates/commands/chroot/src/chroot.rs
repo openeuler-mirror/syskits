@@ -15,12 +15,12 @@ mod error;
 use crate::error::ChrootError;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, Command};
-use ctcore::ct_entries::{self, CtPasswd, Locate};
-use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, UClapError};
-use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
-use ctcore::libc::{self, chroot, setgid, setgroups, setuid};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
+use ctcore::ct_entries::{self, Locate};
+use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
+use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
+use ctcore::libc::{self, chroot, setgid, setgroups, setuid};
 use std::io::Error;
 use sys_locale::get_locale;
 
@@ -266,7 +266,7 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
     if let Some(groups_str) = arg_groups {
         // 如果显式传入了 --groups 参数（即便是空字符串代表清空），则直接设置
         chroot_set_groups_from_str(groups_str)?;
-    } else if let Some(_) = final_user {
+    } else if final_user.is_some() {
         // 如果没传 --groups 参数，但指定了用户，我们需要尝试自动补全
         if let Some(pwd) = lookup_pwd.as_ref() {
             // 查到了用户，自动补全其所属的所有附加组

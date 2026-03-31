@@ -12,15 +12,15 @@
 pub(crate) mod error;
 mod parser;
 
-use clap::crate_version;
 use clap::Command;
+use clap::crate_version;
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_process::{getegid, geteuid};
-use ctcore::Tool;
 use error::{ParseError, ParseResult};
-use parser::{test_parse, TestOperator, TestSymbol, TestUnaryOperator};
+use parser::{TestOperator, TestSymbol, TestUnaryOperator, test_parse};
 use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -126,11 +126,7 @@ pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
     // Parse and evaluate the expression
     let result = test_parse(args).map(|mut stack| test_eval(&mut stack))??;
 
-    if result {
-        Ok(())
-    } else {
-        Err(1.into())
-    }
+    if result { Ok(()) } else { Err(1.into()) }
 }
 
 /// 评估符号栈并返回布尔结果
@@ -502,12 +498,14 @@ mod tests_all {
         }
 
         // Test invalid integer
-        assert!(test_integers(
-            OsStr::new("not_a_number"),
-            OsStr::new("0"),
-            OsStr::new("-eq")
-        )
-        .is_err());
+        assert!(
+            test_integers(
+                OsStr::new("not_a_number"),
+                OsStr::new("0"),
+                OsStr::new("-eq")
+            )
+            .is_err()
+        );
 
         // Test invalid operator
         assert!(test_integers(OsStr::new("0"), OsStr::new("0"), OsStr::new("-invalid")).is_err());

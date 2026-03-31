@@ -171,7 +171,7 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
 #[cfg(unix)]
 fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
     use std::os::unix::io::AsRawFd;
-    
+
     let stdin_handle = std::io::stdin();
     let stdout_handle = std::io::stdout();
     let stdin_fd = stdin_handle.as_fd();
@@ -237,20 +237,18 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                             return Err(e);
                         }
                     }
-                }
-                else if stdout_revents.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL) {
+                } else if stdout_revents
+                    .intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
+                {
                     // 人工触发 Broken Pipe 错误，交由 --output-error 策略处理
-                    if let Err(e) = output.report_broken_pipe_for_stdout() {
-                        return Err(e); // Exit 模式下会抛出错误退出
-                    }
+                    output.report_broken_pipe_for_stdout()?; // Exit 模式下会抛出错误退出
                     stdout_active = false;
-                    
+
                     // 如果 stdout 是唯一的输出，那么它挂了我们就可以提前结束进程了
                     if output.is_empty() {
                         return Ok(());
                     }
-                }
-                else if stdin_revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR) {
+                } else if stdin_revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR) {
                     return Ok(());
                 }
             }
@@ -568,6 +566,7 @@ impl Write for NamedWriter {
     }
 }
 
+#[allow(dead_code)]
 struct NamedReader {
     inner: Box<dyn Read>,
 }

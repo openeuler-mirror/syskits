@@ -20,19 +20,19 @@ pub mod variable_parser;
 use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::crate_version;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
+use clap::crate_version;
 use sys_locale::get_locale;
 
 use ini::Ini;
 use native_int_str::{
-    from_native_int_representation_owned, EnvConvert, NCvt, NativeIntStr, NativeIntString,
-    NativeStr,
+    EnvConvert, NCvt, NativeIntStr, NativeIntString, NativeStr,
+    from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
+use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, raise, sigaction};
 
 #[cfg(unix)]
 use nix::libc;
@@ -51,9 +51,9 @@ use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::ExitCode;
 
+use ctcore::Tool;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_show_warning;
-use ctcore::Tool;
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -469,7 +469,7 @@ fn parse_signal(sig_str: &str) -> CTResult<Signal> {
     let s = if sig_str.starts_with("SIG") {
         sig_str.clone()
     } else {
-        format!("SIG{}", sig_str)
+        format!("SIG{sig_str}")
     };
     for sig in Signal::iterator() {
         if sig.as_str() == s {
@@ -587,24 +587,24 @@ fn list_signal_handling() {
         if unsafe { libc::sigaction(sig as libc::c_int, std::ptr::null(), &mut old_act) } == 0 {
             let handler = old_act.sa_sigaction as usize;
 
-            let state_str = if handler == libc::SIG_IGN as usize {
+            let state_str = if handler == libc::SIG_IGN {
                 "IGNORE"
-            } else if handler == libc::SIG_DFL as usize {
+            } else if handler == libc::SIG_DFL {
                 "DEFAULT"
             } else {
                 "HANDLED"
             };
 
             // 精准复刻 GNU env 的 --list-signal-handling 输出格式 (不对默认状态进行报告)
-            if handler != libc::SIG_DFL as usize || is_blocked {
+            if handler != libc::SIG_DFL || is_blocked {
                 let name = sig.as_str().strip_prefix("SIG").unwrap_or(sig.as_str());
                 let num = sig as i32;
-                if handler != libc::SIG_DFL as usize && is_blocked {
-                    eprintln!("{:<10} ({:2}): {}, BLOCKED", name, num, state_str);
-                } else if handler != libc::SIG_DFL as usize {
-                    eprintln!("{:<10} ({:2}): {}", name, num, state_str);
+                if handler != libc::SIG_DFL && is_blocked {
+                    eprintln!("{name:<10} ({num:2}): {state_str}, BLOCKED");
+                } else if handler != libc::SIG_DFL {
+                    eprintln!("{name:<10} ({num:2}): {state_str}");
                 } else if is_blocked {
-                    eprintln!("{:<10} ({:2}): DEFAULT, BLOCKED", name, num);
+                    eprintln!("{name:<10} ({num:2}): DEFAULT, BLOCKED");
                 }
             }
         }
@@ -3283,9 +3283,9 @@ mod tests {
     }
 
     mod tests_make_options {
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_make_options;
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
         use std::fs;
@@ -4075,10 +4075,10 @@ mod tests {
     }
 
     mod tests_apply_change_directory {
-        use crate::env_apply_change_directory;
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_apply_change_directory;
+        use crate::env_make_options;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
@@ -4932,10 +4932,10 @@ mod tests {
     }
 
     mod tests_load_config_file {
-        use crate::env_load_config_file;
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_load_config_file;
+        use crate::env_make_options;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
@@ -5789,10 +5789,10 @@ mod tests {
     }
 
     mod tests_parse_name_value_opt {
-        use crate::env_make_options;
-        use crate::env_parse_name_value_opt;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_make_options;
+        use crate::env_parse_name_value_opt;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::{OsStr, OsString};
@@ -6678,9 +6678,9 @@ mod tests {
     }
 
     mod tests_run_program {
-        use crate::env_make_options;
         use crate::EnvAppData;
         use crate::EnvOptions;
+        use crate::env_make_options;
 
         use ctcore::ct_line_ending::CtLineEnding::Newline;
         use std::ffi::OsStr;

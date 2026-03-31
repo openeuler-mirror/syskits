@@ -27,7 +27,7 @@ use std::ffi::CString;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write, stderr, Error, IsTerminal};
+use std::io::{self, Error, IsTerminal, Write, stderr};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
@@ -93,7 +93,7 @@ impl Display for NohupError {
 
 fn write_nohup_msg(msg: &str) -> io::Result<()> {
     let mut handle = stderr();
-    writeln!(handle, "nohup: {}", msg)?;
+    writeln!(handle, "nohup: {msg}")?;
     handle.flush()
 }
 
@@ -106,7 +106,9 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         EXIT_CANCELED
     };
 
-    let args_match = ct_app().try_get_matches_from(args).with_exit_code(arg_error_code)?;
+    let args_match = ct_app()
+        .try_get_matches_from(args)
+        .with_exit_code(arg_error_code)?;
 
     nohup_replace_fds()?;
 
@@ -128,10 +130,10 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     if result == -1 {
         let err = std::io::Error::last_os_error();
         // 获取命令名用于错误信息
-        let cmd_name = std::str::from_utf8(&cstrings[0].to_bytes())
+        let cmd_name = std::str::from_utf8(cstrings[0].to_bytes())
             .unwrap_or("<unknown>")
             .to_string();
-        let err_msg = format!("cannot run command '{}': {}", cmd_name, err);
+        let err_msg = format!("cannot run command '{cmd_name}': {err}");
         // 尝试输出错误，如果 stderr 写入失败则退出 125
         if write_nohup_msg(&err_msg).is_err() {
             std::process::exit(125);
@@ -173,11 +175,9 @@ fn nohup_replace_fds() -> CTResult<()> {
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
             return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
         }
-        
-        if !stdout_is_tty {
-            if write_nohup_msg("ignoring input").is_err() {
-                std::process::exit(125);
-            }
+
+        if !stdout_is_tty && write_nohup_msg("ignoring input").is_err() {
+            std::process::exit(125);
         }
     }
 
@@ -208,7 +208,10 @@ fn nohup_find_stdout() -> CTResult<File> {
         .open(Path::new(NOHUP_OUT))
     {
         Ok(file) => {
-            let msg = format!("ignoring input and appending output to {}", NOHUP_OUT.quote());
+            let msg = format!(
+                "ignoring input and appending output to {}",
+                NOHUP_OUT.quote()
+            );
             if write_nohup_msg(&msg).is_err() {
                 std::process::exit(125);
             }
@@ -224,7 +227,10 @@ fn nohup_find_stdout() -> CTResult<File> {
             let path_buf_str = path_buf.to_str().unwrap();
             match OpenOptions::new().create(true).append(true).open(&path_buf) {
                 Ok(file) => {
-                    let msg = format!("ignoring input and appending output to {}", NOHUP_OUT.quote());
+                    let msg = format!(
+                        "ignoring input and appending output to {}",
+                        NOHUP_OUT.quote()
+                    );
                     if write_nohup_msg(&msg).is_err() {
                         std::process::exit(125);
                     }

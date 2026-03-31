@@ -18,11 +18,10 @@ use std::io::stdout;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ops::ControlFlow;
 
-use clap::{crate_version, Arg, ArgAction, Command};
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::ct_format::{parse_spec_and_escape, ArgCursor, FormatArgument, FormatItem};
-use ctcore::ct_show_error;
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_format::{ArgCursor, FormatArgument, parse_spec_and_escape};
 use std::ffi::OsString;
 use sys_locale::get_locale;
 

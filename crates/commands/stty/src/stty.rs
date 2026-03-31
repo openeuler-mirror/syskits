@@ -412,10 +412,10 @@ fn get_columns() -> usize {
     }
     let mut size = TermSize::default();
     // 只有在没有 COLUMNS 环境变量时，才通过 ioctl 查询终端真实宽度
-    if unsafe { tiocgwinsz(std::io::stdout().as_raw_fd(), &mut size as *mut _) }.is_ok() {
-        if size.columns > 0 {
-            return size.columns as usize;
-        }
+    if unsafe { tiocgwinsz(std::io::stdout().as_raw_fd(), &mut size as *mut _) }.is_ok()
+        && size.columns > 0
+    {
+        return size.columns as usize;
     }
     80
 }
@@ -437,17 +437,21 @@ impl LineWrapper {
         let suffix = if is_flag { "" } else { ";" };
         let width_needed = text.len() + suffix.len();
 
-        if self.current_col == 0 {
-            print!("{}{}", text, suffix);
-            self.current_col = width_needed;
-        } else if self.current_col + 1 + width_needed > self.columns {
-            println!();
-            print!("{}{}", text, suffix);
-            self.current_col = width_needed;
-        } else {
-            // 只有换行失败，接在后面时，才统一添加一个前导空格
-            print!(" {}{}", text, suffix);
-            self.current_col += 1 + width_needed;
+        match self.current_col {
+            0 => {
+                print!("{text}{suffix}");
+                self.current_col = width_needed;
+            }
+            _ if self.current_col + 1 + width_needed > self.columns => {
+                println!();
+                print!("{text}{suffix}");
+                self.current_col = width_needed;
+            }
+            _ => {
+                // 只有换行失败，接在后面时，才统一添加一个前导空格
+                print!(" {text}{suffix}");
+                self.current_col += 1 + width_needed;
+            }
         }
     }
 
@@ -472,10 +476,14 @@ impl LineWrapper {
 ///
 /// # 返回值
 /// - `CTResult<()>`: 自定义的结果类型，表示成功执行或发生错误。
-fn stty_print_terminal_size(termios: &Termios, opts: &SttyFlags, wrapper: &mut LineWrapper) -> CTResult<()> {
+fn stty_print_terminal_size(
+    termios: &Termios,
+    opts: &SttyFlags,
+    wrapper: &mut LineWrapper,
+) -> CTResult<()> {
     let speed = cfgetospeed(termios);
     let mut speed_text = "0";
-    
+
     for (text, _, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
             speed_text = text;
@@ -515,6 +523,7 @@ fn stty_print_terminal_size(termios: &Termios, opts: &SttyFlags, wrapper: &mut L
 /// # 返回值
 ///
 /// 返回一个 `CTResult`，表示操作是否成功如果成功，返回 `Ok(())`
+#[allow(dead_code)]
 fn stty_print_terminal_rows_columns(opts: &SttyFlags) -> CTResult<()> {
     let mut size = TermSize::default();
 
@@ -581,19 +590,29 @@ fn stty_control_char_to_string(cc: nix::libc::cc_t) -> CTResult<String> {
 /// # 返回值
 ///
 /// 返回一个`CTResult<()>`，表示操作是否成功
-fn stty_print_control_chars(termios: &Termios, opts: &SttyFlags, wrapper: &mut LineWrapper) -> CTResult<()> {
+fn stty_print_control_chars(
+    termios: &Termios,
+    opts: &SttyFlags,
+    wrapper: &mut LineWrapper,
+) -> CTResult<()> {
     if !opts.is_all {
         return Ok(());
     }
-    
+
     let mut items = Vec::new();
     for (text, cc_index) in CONTROL_CHARS {
         let s = stty_control_char_to_string(termios.control_chars[*cc_index as usize])?;
         items.push(format!("{text} = {s}"));
     }
-    
-    items.push(format!("min = {}", termios.control_chars[SpecialCharacterIndices::VMIN as usize]));
-    items.push(format!("time = {}", termios.control_chars[SpecialCharacterIndices::VTIME as usize]));
+
+    items.push(format!(
+        "min = {}",
+        termios.control_chars[SpecialCharacterIndices::VMIN as usize]
+    ));
+    items.push(format!(
+        "time = {}",
+        termios.control_chars[SpecialCharacterIndices::VTIME as usize]
+    ));
 
     for item in items.iter() {
         wrapper.print_item(item, false);
@@ -661,7 +680,12 @@ fn stty_print_settings(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
 /// - `termios`: 一个`Termios`引用，包含终端的当前设置
 /// - `opts`: 一个`SttyFlags`引用，包含命令行选项
 /// - `flags`: 一个`Settings<T>`切片，描述要检查和打印的标志
-fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: &[Settings<T>], wrapper: &mut LineWrapper) {
+fn stty_print_flags<T: TermiosFlag>(
+    termios: &Termios,
+    opts: &SttyFlags,
+    flags: &[Settings<T>],
+    wrapper: &mut LineWrapper,
+) {
     let mut printed_flags = Vec::new();
     for &Settings {
         name,
@@ -1239,7 +1263,7 @@ pub fn ct_app() -> Command {
         .after_help(after_help)
         .infer_long_args(true)
         .color(clap::ColorChoice::Never)
-        .term_width(80) 
+        .term_width(80)
         .args(&args)
 }
 

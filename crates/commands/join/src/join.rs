@@ -37,20 +37,20 @@ use clap::builder::ValueParser;
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_crash_if_err;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
-use ctcore::Tool;
-use memchr::{memchr3_iter, memchr_iter, memmem};
+use memchr::{memchr_iter, memchr3_iter, memmem};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
+use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -769,7 +769,7 @@ fn parse_separator(value_os: &OsString) -> CTResult<Sep> {
         if s.chars().count() == 1 {
             Ok(Sep::Char(value.to_vec()))
         } else {
-            Err(CtSimpleError::new(1, format!("multi-character tab {}", s)))
+            Err(CtSimpleError::new(1, format!("multi-character tab {s}")))
         }
     }
 }

@@ -35,7 +35,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_error::{CTResult, CTsageError};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use sys_locale::get_locale;
 

@@ -28,14 +28,14 @@ use std::path::{Path, PathBuf, StripPrefixError};
 
 // 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
 use crate::copydir::copy_directory;
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CTsageError, UClapError};
-use ctcore::ct_fs::{
-    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
-    paths_refer_to_same_file, CtFileInformation, MissingHandling, ResolveMode,
-};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTError, CTResult, CTsageError, UClapError, set_ct_exit_code};
+use ctcore::ct_fs::{
+    CtFileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
+    is_symlink_loop, path_ends_with_terminator, paths_refer_to_same_file,
+};
 use ctcore::{ct_backup_control, ct_update_control};
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
 use ctcore::{ct_prompt_yes, ct_show_error, ct_show_warning, ct_util_name};
@@ -970,9 +970,8 @@ impl CpOptions {
             } else if args_match.get_flag(opt_flags::NO_DEREFERENCE)
                 || args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
                 || args_match.get_flag(opt_flags::ARCHIVE)
+                || args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS)
             {
-                false
-            } else if args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS) {
                 false
             } else if args_match.get_flag(opt_flags::LINK) {
                 true // --link 的优先级高于 recursive 的默认不展开
@@ -1131,8 +1130,7 @@ impl CpOptions {
                     "-Z"
                 };
                 return Err(CpError::Error(format!(
-                    "cannot force both --preserve=context and {}",
-                    conflict_flag
+                    "cannot force both --preserve=context and {conflict_flag}"
                 )));
             } else {
                 // -Z 或 --context 覆盖隐式的 context 属性继承
@@ -1435,7 +1433,7 @@ fn copy_source(
     symlinked_files: &mut HashSet<CtFileInformation>,
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
 ) -> CopyResult<()> {
-    let source_str = source.as_os_str().to_string_lossy();
+    let _source_str = source.as_os_str().to_string_lossy();
     let source_buf = source.to_path_buf();
     let source_path: &Path = &source_buf;
 
@@ -1456,16 +1454,13 @@ fn copy_source(
         if ends_with_dot {
             // 检查源目录是否为空（过滤掉 . 和 ..）
             let is_empty = match fs::read_dir(source) {
-                Ok(entries) => entries
-                    .filter(|e| match e.as_ref() {
-                        Ok(entry) => {
-                            let name = entry.file_name();
-                            name != "." && name != ".."
-                        }
-                        Err(_) => false,
-                    })
-                    .next()
-                    .is_none(),
+                Ok(mut entries) => !entries.any(|e| match e.as_ref() {
+                    Ok(entry) => {
+                        let name = entry.file_name();
+                        name != "." && name != ".."
+                    }
+                    Err(_) => false,
+                }),
                 Err(_) => false,
             };
 
@@ -1497,10 +1492,8 @@ fn copy_source(
         )
     };
 
-    if res.is_ok() {
-        if is_dir {
-            copy_attributes_with_deref(source_path, dest.as_path(), &options.attributes, true)?;
-        }
+    if res.is_ok() && is_dir {
+        copy_attributes_with_deref(source_path, dest.as_path(), &options.attributes, true)?;
     }
 
     if res.is_ok() && options.parents {
@@ -1565,9 +1558,9 @@ pub(crate) fn copy_attributes_with_deref(
     // 必须先更改所有权以避免干扰模式更改。
     #[cfg(unix)]
     cp_handle_preserve(&attr.ownership, || -> CopyResult<()> {
-        use ctcore::ct_perms::wrap_chown;
         use ctcore::ct_perms::CtVerbosityLevel;
         use ctcore::ct_perms::Verbosity;
+        use ctcore::ct_perms::wrap_chown;
         use std::os::unix::prelude::MetadataExt;
 
         let dest_uid = sour_metadata.uid();
@@ -2272,20 +2265,19 @@ fn copy_file(
 
         let is_copy_contents =
             cp_opts.cp_dereference(source_in_command_line) || !sour_path.is_symlink();
-        if is_copy_contents {
-            if !dest_path.exists()
-                && !matches!(
-                    cp_opts.overwrite,
-                    CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
-                )
-                && !is_symlink_loop(dest_path)
-                && std::env::var_os("POSIXLY_CORRECT").is_none()
-            {
-                return Err(CpError::Error(format!(
-                    "not writing through dangling symlink {}",
-                    dest_path.quote()
-                )));
-            }
+        if is_copy_contents
+            && !dest_path.exists()
+            && !matches!(
+                cp_opts.overwrite,
+                CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
+            )
+            && !is_symlink_loop(dest_path)
+            && std::env::var_os("POSIXLY_CORRECT").is_none()
+        {
+            return Err(CpError::Error(format!(
+                "not writing through dangling symlink {}",
+                dest_path.quote()
+            )));
         }
     }
 
@@ -9046,10 +9038,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::PROGRESS_BAR)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -9075,10 +9069,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::PROGRESS_BAR)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -9104,10 +9100,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::PROGRESS_BAR)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -9139,10 +9137,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::PROGRESS_BAR)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::PROGRESS_BAR)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -9168,10 +9168,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -9197,10 +9199,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -9232,10 +9236,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10581,10 +10587,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::CLI_SYMBOLIC_LINKS)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::CLI_SYMBOLIC_LINKS)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10610,10 +10618,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::DEREFERENCE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::DEREFERENCE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10644,10 +10654,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::DEREFERENCE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::DEREFERENCE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10679,10 +10691,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::DEREFERENCE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::DEREFERENCE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10708,10 +10722,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_DEREFERENCE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_DEREFERENCE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10742,10 +10758,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_DEREFERENCE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_DEREFERENCE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -10777,10 +10795,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_DEREFERENCE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_DEREFERENCE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -11044,10 +11064,12 @@ mod tests {
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ATTRIBUTES_ONLY)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ATTRIBUTES_ONLY)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -11302,10 +11324,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -11337,10 +11361,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -11372,10 +11398,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -11407,10 +11435,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ONE_FILE_SYSTEM)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13129,10 +13159,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13158,10 +13190,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13191,10 +13225,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13225,10 +13261,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::SYMBOLIC_LINK)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13364,10 +13402,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13399,10 +13439,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13428,10 +13470,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13457,10 +13501,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13491,10 +13537,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::STRIP_TRAILING_SLASHES)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::STRIP_TRAILING_SLASHES)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13526,10 +13574,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::STRIP_TRAILING_SLASHES)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::STRIP_TRAILING_SLASHES)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13619,10 +13669,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13654,10 +13706,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13689,10 +13743,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13724,10 +13780,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13760,10 +13818,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13796,10 +13856,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::RECURSIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::RECURSIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13826,10 +13888,12 @@ mod tests {
 
             assert!(result.is_ok());
 
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_CLOBBER)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_CLOBBER)
+                    .unwrap()
+            );
         }
         #[test]
         fn test_ct_app_a_no_clobber_valid_input() {
@@ -13855,10 +13919,12 @@ mod tests {
 
             assert!(result.is_ok());
 
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_CLOBBER)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_CLOBBER)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13883,10 +13949,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_CLOBBER)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_CLOBBER)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -13917,10 +13985,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_CLOBBER)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_CLOBBER)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14048,10 +14118,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::INTERACTIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::INTERACTIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14077,10 +14149,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::INTERACTIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::INTERACTIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14111,10 +14185,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::INTERACTIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::INTERACTIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14146,10 +14222,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::INTERACTIVE)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::INTERACTIVE)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14175,10 +14253,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14204,10 +14284,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14239,10 +14321,12 @@ mod tests {
 
             assert!(result.is_ok());
 
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -14275,10 +14359,12 @@ mod tests {
 
             assert!(result.is_ok());
 
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::NO_TARGET_DIRECTORY)
+                    .unwrap()
+            );
         }
 
         #[test]

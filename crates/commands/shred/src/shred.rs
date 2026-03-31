@@ -35,17 +35,16 @@
 // spell-checker:ignore (words) wipesync prefill
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_parse_size::parse_size_u64;
-use ctcore::Tool;
 use ctcore::{ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -348,7 +347,7 @@ fn parse_shred_size(size_str: &str) -> Result<u64, ()> {
     if suffix.is_empty() {
         Ok(num)
     } else {
-        let decimal_str = format!("{}{}", num, suffix);
+        let decimal_str = format!("{num}{suffix}");
         ctcore::ct_parse_size::parse_size_u64(&decimal_str).map_err(|_| ())
     }
 }
@@ -655,14 +654,16 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
                 pass_name
             );
         }
-        ct_show_if_err!(shred_do_pass(
-            &mut file,
-            &pass_type,
-            settings.exact,
-            size,
-            settings.random_source
-        )
-        .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
+        ct_show_if_err!(
+            shred_do_pass(
+                &mut file,
+                &pass_type,
+                settings.exact,
+                size,
+                settings.random_source
+            )
+            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
+        );
     }
 
     // 如果需要，删除文件
@@ -849,8 +850,8 @@ mod tests {
     use std::fs;
     use std::fs::File;
     use std::io::Write;
-    use tempfile::tempdir;
     use tempfile::Builder;
+    use tempfile::tempdir;
 
     #[test]
     fn test_tool_implementation() {

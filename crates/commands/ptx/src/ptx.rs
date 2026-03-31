@@ -1105,7 +1105,7 @@ pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args: Vec<OsString> = args.collect();
-    let matches = match ct_app().try_get_matches_from(args.into_iter()) {
+    let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
         Err(err) => {
             return match err.kind() {

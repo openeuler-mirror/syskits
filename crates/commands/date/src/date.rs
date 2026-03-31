@@ -178,7 +178,7 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     unsafe {
         setlocale(LC_ALL, c"".as_ptr() as *const c_char);
     }
-    
+
     let args_match = match ct_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => {
@@ -192,14 +192,27 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     let mut sources_count = 0;
-    if args_match.contains_id(DATE_OPT_DATE) { sources_count += 1; }
-    if args_match.contains_id(DATE_OPT_FILE) { sources_count += 1; }
-    if args_match.contains_id(DATE_OPT_REFERENCE) { sources_count += 1; }
-    if args_match.contains_id(DATE_OPT_SET) { sources_count += 1; }
-    if args_match.get_flag(DATE_OPT_RESOLUTION) { sources_count += 1; }
+    if args_match.contains_id(DATE_OPT_DATE) {
+        sources_count += 1;
+    }
+    if args_match.contains_id(DATE_OPT_FILE) {
+        sources_count += 1;
+    }
+    if args_match.contains_id(DATE_OPT_REFERENCE) {
+        sources_count += 1;
+    }
+    if args_match.contains_id(DATE_OPT_SET) {
+        sources_count += 1;
+    }
+    if args_match.get_flag(DATE_OPT_RESOLUTION) {
+        sources_count += 1;
+    }
 
     if sources_count > 1 {
-        return Err(CtSimpleError::new(1, "multiple time sources specified".to_string()));
+        return Err(CtSimpleError::new(
+            1,
+            "multiple time sources specified".to_string(),
+        ));
     }
 
     // 如果指定了 -u/--utc/--universal，设置 TZ 环境变量为 UTC0
@@ -308,9 +321,11 @@ fn date_processing(
                 let lines = BufReader::new(file).lines();
                 let mut iter: Box<dyn Iterator<Item = _>> =
                     Box::new(lines.map_while(Result::ok).map(|line| {
-                        parse_date(&line).map_err(|_| CtSimpleError::new(1, format!("invalid date {}", line.quote())))
+                        parse_date(&line).map_err(|_| {
+                            CtSimpleError::new(1, format!("invalid date {}", line.quote()))
+                        })
                     }));
-                    
+
                 if date_set.utc {
                     iter = Box::new(iter.map(|res| res.map(|dt| dt.with_timezone(&Utc).into())));
                 }
@@ -390,17 +405,15 @@ fn date_processing(
 fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffset>>, CTResult<()>> {
     let set_to_params = match args_match.get_one::<OsString>(DATE_OPT_SET) {
         None => None,
-        Some(input) => {
-            match parse_date(input.to_string_lossy().to_string()) {
-                Err(_) => {
-                    return Err(Err(CtSimpleError::new(
-                        1,
-                        format!("invalid date {}", input.quote()),
-                    )));
-                }
-                Ok(date) => Some(date),
+        Some(input) => match parse_date(input.to_string_lossy().to_string()) {
+            Err(_) => {
+                return Err(Err(CtSimpleError::new(
+                    1,
+                    format!("invalid date {}", input.quote()),
+                )));
             }
-        }
+            Ok(date) => Some(date),
+        },
     };
     Ok(set_to_params)
 }
@@ -408,7 +421,10 @@ fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffse
 fn get_date_source(args_match: &ArgMatches) -> DateSource {
     if args_match.get_flag(DATE_OPT_RESOLUTION) {
         DateSource::Resolution
-    } else if let Some(date) = args_match.get_many::<OsString>(DATE_OPT_DATE).and_then(|mut iter| iter.next_back()) {
+    } else if let Some(date) = args_match
+        .get_many::<OsString>(DATE_OPT_DATE)
+        .and_then(|mut iter| iter.next_back())
+    {
         DateSource::Custom(date.into())
     } else if let Some(file) = args_match.get_one::<OsString>(DATE_OPT_FILE) {
         DateSource::File(file.into())
@@ -586,7 +602,7 @@ fn get_default_format() -> String {
     if lang.starts_with("zh_CN") {
         return "%Y年 %m月 %d日 %A %H:%M:%S %Z".to_string();
     }
-    
+
     // 3. 美式英语环境：完美对齐 GNU 期望输出
     if lang.starts_with("en_US") {
         return "%a %b %e %r %Z %Y".to_string();
@@ -603,7 +619,7 @@ fn get_default_format() -> String {
             }
         }
     }
-    
+
     "%a %b %e %H:%M:%S %Z %Y".to_string()
 }
 
@@ -619,16 +635,16 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
         .or_else(|_| std::env::var("LC_TIME"))
         .or_else(|_| std::env::var("LANG"))
         .unwrap_or_default();
-    
+
     // 是否启用地方历法
     let use_thai_era = lang.starts_with("th_");
     let use_iran_era = lang.starts_with("fa_");
-    let use_ethiopia_era = lang.starts_with("am_") || lang.ends_with("_ET");    
+    let use_ethiopia_era = lang.starts_with("am_") || lang.ends_with("_ET");
     let use_alt_era = use_thai_era || use_iran_era || use_ethiopia_era;
 
     let mut fmt_adjusted = String::with_capacity(fmt.len());
     let mut chars = fmt.chars().peekable();
-    
+
     // 真正的格式化串解析器
     while let Some(c) = chars.next() {
         if c == '%' {
@@ -640,9 +656,19 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
 
             // 提取所有 Flag
             while let Some(&next) = chars.peek() {
-                if next == '-' || next == '_' || next == '0' || next == '^' || next == '#' || next == '+' {
-                    if next == '-' { has_minus = true; }
-                    if next == '+' { has_plus = true; }
+                if next == '-'
+                    || next == '_'
+                    || next == '0'
+                    || next == '^'
+                    || next == '#'
+                    || next == '+'
+                {
+                    if next == '-' {
+                        has_minus = true;
+                    }
+                    if next == '+' {
+                        has_plus = true;
+                    }
                     flags_str.push(next);
                     chars.next();
                 } else {
@@ -690,9 +716,15 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                             let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
                             if pad_char == '0' && s_val.starts_with('-') {
                                 let sign_char = s_val.remove(0);
-                                s_val = format!("{sign_char}{}{s_val}", "0".repeat(w - s_val.len() - 1));
+                                s_val = format!(
+                                    "{sign_char}{}{s_val}",
+                                    "0".repeat(w - s_val.len() - 1)
+                                );
                             } else {
-                                s_val = format!("{}{s_val}", pad_char.to_string().repeat(w - s_val.len()));
+                                s_val = format!(
+                                    "{}{s_val}",
+                                    pad_char.to_string().repeat(w - s_val.len())
+                                );
                             }
                         }
                         fmt_adjusted.push_str(&s_val);
@@ -846,8 +878,8 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
         }
     }
 
-    let c_fmt = CString::new(fmt_adjusted)
-        .map_err(|_| CtSimpleError::new(1, "Invalid format string"))?;
+    let c_fmt =
+        CString::new(fmt_adjusted).map_err(|_| CtSimpleError::new(1, "Invalid format string"))?;
 
     let ts = dt.timestamp();
     let mut tm_val: tm = unsafe { mem::zeroed() };
@@ -911,7 +943,6 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
-
     let input = s.as_ref();
     let ref_time = Local::now().with_nanosecond(0).unwrap();
     if let Ok(dt) = ctcore::ct_parse_datetime::parse_datetime_gnu_compat(input, ref_time) {

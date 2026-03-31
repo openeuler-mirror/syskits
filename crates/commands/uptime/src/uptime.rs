@@ -58,9 +58,9 @@ fn uptime_print_uptime(up_secs: i64) -> String {
         }
         _ => {
             if up_hours == 0 {
-                format!("up {} min,  ", up_mins)
+                format!("up {up_mins} min,  ")
             } else {
-                format!("up {:2}:{:02},  ", up_hours, up_mins)
+                format!("up {up_hours:2}:{up_mins:02},  ")
             }
         }
     }

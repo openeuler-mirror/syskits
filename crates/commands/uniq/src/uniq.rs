@@ -16,16 +16,16 @@ use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_posix::{ct_posix_version, OBSOLETE};
-use ctcore::Tool;
+use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
 use sys_locale::get_locale;
 
 pub mod uniq_flags {
@@ -113,9 +113,9 @@ impl UniqFlags {
         // 如果不需要统计数量，也不需要过滤唯一/重复行，
         // 我们就可以在遇到新组的第一行时立刻打印，而不需要等待下一行。
         // 这完美解决了 stdbuf 时序测试中 uniq 扣留第一行不输出的 bug。
-        let print_immediately = !self.is_show_counts 
-            && !self.is_repeats_only 
-            && !self.is_uniques_only 
+        let print_immediately = !self.is_show_counts
+            && !self.is_repeats_only
+            && !self.is_uniques_only
             && !self.is_all_repeated;
 
         if print_immediately {
@@ -128,15 +128,14 @@ impl UniqFlags {
             let next_line = next_line?;
             if self.cmp_keys(&line, &next_line) {
                 // 两行不同（新组开始）
-                if !print_immediately {
-                    if (group_cnt == 1 && !self.is_repeats_only)
-                        || (group_cnt > 1 && !self.is_uniques_only)
-                    {
-                        self.print_line(w, &line, group_cnt, is_first_line_printed)?;
-                        is_first_line_printed = true;
-                    }
+                if !print_immediately
+                    && ((group_cnt == 1 && !self.is_repeats_only)
+                        || (group_cnt > 1 && !self.is_uniques_only))
+                {
+                    self.print_line(w, &line, group_cnt, is_first_line_printed)?;
+                    is_first_line_printed = true;
                 }
-                
+
                 line = next_line;
                 group_cnt = 1;
 
@@ -155,15 +154,16 @@ impl UniqFlags {
                 group_cnt += 1;
             }
         }
-        
+
         // 扫尾工作
-        if !print_immediately {
-            if (group_cnt == 1 && !self.is_repeats_only) || (group_cnt > 1 && !self.is_uniques_only) {
-                self.print_line(w, &line, group_cnt, is_first_line_printed)?;
-                is_first_line_printed = true;
-            }
+        if !print_immediately
+            && ((group_cnt == 1 && !self.is_repeats_only)
+                || (group_cnt > 1 && !self.is_uniques_only))
+        {
+            self.print_line(w, &line, group_cnt, is_first_line_printed)?;
+            is_first_line_printed = true;
         }
-        
+
         if (self.delimiters == UniqDelimiters::Append || self.delimiters == UniqDelimiters::Both)
             && is_first_line_printed
         {
@@ -805,7 +805,7 @@ struct StdbufWriter<W: Write> {
 impl<W: Write> Write for StdbufWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let n = self.inner.write(buf)?;
-        
+
         // 如果是无缓冲，或者在行缓冲模式下当前写入的切片中包含了换行符
         if self.mode == 0 || (self.mode == 1 && buf[..n].contains(&b'\n')) {
             // 强行调用内层 Writer 的 flush，穿透 Rust stdout 的 8KB 块缓冲，直达 OS 管道
@@ -834,8 +834,14 @@ fn uniq_open_output_file(out_file_name: Option<&OsStr>) -> CTResult<Box<dyn Writ
     // 主动嗅探 stdbuf 注入的缓冲控制环境变量，并套上我们自定义的强制刷新阀门
     if let Ok(stdbuf_o) = std::env::var("_STDBUF_O") {
         match stdbuf_o.as_str() {
-            "0" => Ok(Box::new(StdbufWriter { inner: out, mode: 0 })), // 无缓冲
-            "L" => Ok(Box::new(StdbufWriter { inner: out, mode: 1 })), // 行缓冲
+            "0" => Ok(Box::new(StdbufWriter {
+                inner: out,
+                mode: 0,
+            })), // 无缓冲
+            "L" => Ok(Box::new(StdbufWriter {
+                inner: out,
+                mode: 1,
+            })), // 行缓冲
             size_str => {
                 // 指定大小的块缓冲
                 if let Ok(size) = size_str.parse::<usize>() {
@@ -2306,8 +2312,8 @@ mod tests {
     #[cfg(test)]
     mod map_clap_errors_tests {
         use super::*;
-        use clap::error::ErrorKind as ClapErrorKind;
         use clap::Error as ClapError;
+        use clap::error::ErrorKind as ClapErrorKind;
         // Assuming you use ContextKind elsewhere
 
         fn generate_clap_error(

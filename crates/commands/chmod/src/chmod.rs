@@ -17,8 +17,8 @@ use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, ExitCode, set_ct_ex
 use ctcore::ct_fs::display_permissions_unix;
 #[cfg(not(windows))]
 use ctcore::ct_mode;
+use ctcore::ct_show_error;
 use ctcore::libc::mode_t;
-use ctcore::{ct_show, ct_show_error};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ffi::OsString;
@@ -388,7 +388,7 @@ impl Chmoder {
         let mut r = Ok(());
 
         if let Some(meta) = &target_meta {
-            if !(is_symlink && !should_deref) {
+            if !is_symlink || should_deref {
                 r = self.chmod_meta(file_path, meta).and(r);
             } else if self.verbose && !self.changes {
                 println!(

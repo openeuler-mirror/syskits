@@ -16,10 +16,10 @@ use crate::opt_flags::OPT_ALL;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::opt_flags::OPT_IGNORE;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
-use ctcore::Tool;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::{env, thread};
@@ -132,9 +132,10 @@ fn nproc_parse_ignore_num(args_match: &ArgMatches) -> CTResult<usize> {
             Ok(num) => num,
             Err(_) => {
                 // 直接返回退出码为 1 的标准错误格式，例如 "invalid number: '-1'"
-                return Err(
-                    CtSimpleError::new(1, format!("invalid number: {}", num_str.quote())).into(),
-                );
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("invalid number: {}", num_str.quote()),
+                ));
             }
         },
         None => 0,
@@ -235,7 +236,7 @@ impl Tool for Nproc {
             }
             Err(e) => {
                 // 加上 nproc: 前缀以符合 GNU 规范，并使用 eprintln! 换行
-                eprintln!("nproc: {}", e);
+                eprintln!("nproc: {e}");
                 // 把真实的错误 e 传出去，框架会自动把前面设置的 exit code 1 返回给系统
                 Err(e)
             }

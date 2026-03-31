@@ -12,15 +12,15 @@
 extern crate rust_i18n;
 use chrono::{DateTime, Local};
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
-use ctcore::ct_fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, CtBirthTime, FsMeta};
+use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
 use ctcore::libc::mode_t;
-use ctcore::Tool;
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
-use rustix::fs::{statx, AtFlags, StatxFlags};
+use rustix::fs::{AtFlags, StatxFlags, statx};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -330,7 +330,7 @@ fn print_integer(
         Some(p) => p as usize,
         None => 0,
     };
-    let extended = format!("{prefix}{arg:0>precision$}", precision = prec);
+    let extended = format!("{prefix}{arg:0>prec$}");
     pad_and_print(&extended, flags.is_left, width, padding_char);
 }
 
@@ -361,7 +361,7 @@ fn print_unsigned(
         Some(p) => p as usize,
         None => 0,
     };
-    let s = format!("{s:0>precision$}", precision = prec);
+    let s = format!("{s:0>prec$}");
     pad_and_print(&s, flags.is_left, width, padding_char);
 }
 
@@ -387,7 +387,7 @@ fn print_unsigned_oct(
         Some(p) => p as usize,
         None => 0,
     };
-    let s = format!("{prefix}{num:0>precision$o}", precision = prec);
+    let s = format!("{prefix}{num:0>prec$o}");
     pad_and_print(&s, flags.is_left, width, padding_char);
 }
 
@@ -413,7 +413,7 @@ fn print_unsigned_hex(
         Some(p) => p as usize,
         None => 0,
     };
-    let s = format!("{prefix}{num:0>precision$x}", precision = prec);
+    let s = format!("{prefix}{num:0>prec$x}");
     pad_and_print(&s, flags.is_left, width, padding_char);
 }
 
@@ -426,13 +426,13 @@ fn print_timestamp(sec: i64, nsec: i64, flags: &StatFlags, width: usize, precisi
     if let Some(p) = precision {
         let p = if p == -1 { 9 } else { p as usize }; // 对于时间戳，单独的 '.' 意味着输出完整的 9 位纳秒！
         if p > 0 {
-            let nsec_str = format!("{:09}", nsec);
+            let nsec_str = format!("{nsec:09}");
             let frac = if p <= 9 {
                 nsec_str[..p].to_string()
             } else {
-                format!("{:0<width$}", nsec_str, width = p)
+                format!("{nsec_str:0<p$}")
             };
-            num = format!("{}.{}", num, frac);
+            num = format!("{num}.{frac}");
         }
     }
 
@@ -453,15 +453,15 @@ fn print_timestamp(sec: i64, nsec: i64, flags: &StatFlags, width: usize, precisi
     if !flags.is_left && width > total_len {
         let pad_str = pad_char.to_string().repeat(width - total_len);
         if pad_char == '0' {
-            print!("{}{}{}", prefix, pad_str, num);
+            print!("{prefix}{pad_str}{num}");
         } else {
-            print!("{}{}{}", pad_str, prefix, num);
+            print!("{pad_str}{prefix}{num}");
         }
     } else if flags.is_left && width > total_len {
         let pad_str = ' '.to_string().repeat(width - total_len);
-        print!("{}{}{}", prefix, num, pad_str);
+        print!("{prefix}{num}{pad_str}");
     } else {
-        print!("{}{}", prefix, num);
+        print!("{prefix}{num}");
     }
 }
 

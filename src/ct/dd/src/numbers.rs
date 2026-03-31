@@ -91,3 +91,73 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use crate::numbers::{to_magnitude_and_suffix, SuffixType};
+
+    #[test]
+    fn test_to_magnitude_and_suffix_powers_of_1024() {
+        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec), "1.0 KiB");
+        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec), "2.0 KiB");
+        assert_eq!(to_magnitude_and_suffix(4096, SuffixType::Iec), "4.0 KiB");
+        assert_eq!(
+            to_magnitude_and_suffix(1024 * 1024, SuffixType::Iec),
+            "1.0 MiB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(2 * 1024 * 1024, SuffixType::Iec),
+            "2.0 MiB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1024 * 1024 * 1024, SuffixType::Iec),
+            "1.0 GiB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(34 * 1024 * 1024 * 1024, SuffixType::Iec),
+            "34 GiB"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::cognitive_complexity)]
+    fn test_to_magnitude_and_suffix_not_powers_of_1024() {
+        assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1.0 B");
+        assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si), "999 B");
+
+        assert_eq!(to_magnitude_and_suffix(1000, SuffixType::Si), "1.0 kB");
+        assert_eq!(to_magnitude_and_suffix(1001, SuffixType::Si), "1.0 kB");
+        assert_eq!(to_magnitude_and_suffix(1023, SuffixType::Si), "1.0 kB");
+        assert_eq!(to_magnitude_and_suffix(1025, SuffixType::Si), "1.0 kB");
+        assert_eq!(to_magnitude_and_suffix(10_001, SuffixType::Si), "10 kB");
+        assert_eq!(to_magnitude_and_suffix(999_000, SuffixType::Si), "999 kB");
+
+        assert_eq!(to_magnitude_and_suffix(999_001, SuffixType::Si), "1.0 MB");
+        assert_eq!(to_magnitude_and_suffix(999_999, SuffixType::Si), "1.0 MB");
+        assert_eq!(to_magnitude_and_suffix(1_000_000, SuffixType::Si), "1.0 MB");
+        assert_eq!(to_magnitude_and_suffix(1_000_001, SuffixType::Si), "1.0 MB");
+        assert_eq!(to_magnitude_and_suffix(1_100_000, SuffixType::Si), "1.1 MB");
+        assert_eq!(to_magnitude_and_suffix(1_100_001, SuffixType::Si), "1.1 MB");
+        assert_eq!(to_magnitude_and_suffix(1_900_000, SuffixType::Si), "1.9 MB");
+        assert_eq!(to_magnitude_and_suffix(1_900_001, SuffixType::Si), "1.9 MB");
+        assert_eq!(to_magnitude_and_suffix(9_900_000, SuffixType::Si), "9.9 MB");
+        assert_eq!(to_magnitude_and_suffix(9_900_001, SuffixType::Si), "9.9 MB");
+        assert_eq!(
+            to_magnitude_and_suffix(999_000_000, SuffixType::Si),
+            "999 MB"
+        );
+
+        assert_eq!(
+            to_magnitude_and_suffix(999_000_001, SuffixType::Si),
+            "1.0 GB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_000_000_000, SuffixType::Si),
+            "1.0 GB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_000_000_001, SuffixType::Si),
+            "1.0 GB"
+        );
+    }
+}

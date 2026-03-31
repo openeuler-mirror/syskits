@@ -372,7 +372,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     if flag == 0 { None } else { Some(flag) }
 }
 
-impl<'a> Read for Input<'a> {
+impl Read for Input<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
@@ -395,7 +395,7 @@ impl<'a> Read for Input<'a> {
     }
 }
 
-impl<'a> Input<'a> {
+impl Input<'_> {
     /// Discard the system file cache for the given portion of the input.
     ///
     /// `offset` and `len` specify a contiguous portion of the input.
@@ -614,10 +614,7 @@ impl Write for Dest {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
             Self::File(f, Density::Sparse) if is_sparse(buf) => {
-                let seek_amt: i64 = buf
-                    .len()
-                    .try_into()
-                    .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
+                let seek_amt = buf.len() as i64;
                 f.seek(io::SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
@@ -843,7 +840,7 @@ enum BlockWriter<'a> {
     Unbuffered(DdOutput<'a>),
 }
 
-impl<'a> BlockWriter<'a> {
+impl BlockWriter<'_> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         match self {
             Self::Unbuffered(o) => o.discard_cache(offset, len),
@@ -896,7 +893,7 @@ fn dd_copy(input: Input, output: DdOutput) -> std::io::Result<()> {
     perform_copy_loop(&mut state, &mut output)?;
 
     // 完成复制操作
-    finalize_copy::<BlockWriter>(output, state)
+    finalize_copy(output, state)
 }
 
 /// 复制操作的状态
@@ -996,7 +993,7 @@ fn read_and_process_block(
     handle_cache_updates(state, &rstat_update, &wstat_update, output)?;
 
     //累加用时
-    state.duration = state.duration + state.start_time.elapsed();
+    state.duration += state.start_time.elapsed();
 
     // 更新统计信息
     state.read_stat += rstat_update;
@@ -1016,15 +1013,15 @@ fn handle_cache_updates(
 ) -> std::io::Result<()> {
     // 处理输入缓存
     if state.input.settings.iflags.nocache {
-        let offset = (state.read_offset as i64).try_into().unwrap();
-        let len = (rstat_update.bytes_total as i64).try_into().unwrap();
+        let offset = state.read_offset as i64;
+        let len = rstat_update.bytes_total as i64;
         state.input.discard_cache(offset, len);
     }
 
     // 处理输出缓存
     if state.input.settings.oflags.nocache {
-        let offset = (state.write_offset as i64).try_into().unwrap();
-        let len = (wstat_update.bytes_total as i64).try_into().unwrap();
+        let offset = state.write_offset as i64;
+        let len = wstat_update.bytes_total as i64;
         output.discard_cache(offset, len);
     }
 
@@ -1040,7 +1037,7 @@ fn update_progress(state: &mut CopyState) {
 }
 
 /// 完成复制操作
-fn finalize_copy<T>(mut output: BlockWriter, state: CopyState) -> std::io::Result<()> {
+fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<()> {
     let mut dur = state.duration;
     let start_time = Instant::now();
 
@@ -1053,7 +1050,7 @@ fn finalize_copy<T>(mut output: BlockWriter, state: CopyState) -> std::io::Resul
         output.truncate();
     }
 
-    dur = dur + start_time.elapsed();
+    dur += start_time.elapsed();
     // 发送最终统计信息
     let final_wstat = state.write_stat + wstat_update;
     let prog_update = ProgUpdate::new(state.read_stat, final_wstat, dur, true);

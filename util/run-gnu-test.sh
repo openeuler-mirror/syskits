@@ -14,6 +14,10 @@ echo "REPO_main_dir='${REPO_main_dir}'"
 
 set -e
 
+# 强制 clap 在所有的测试中都使用固定的列宽，
+# 防止因为标准流重定向导致的终端宽度探测不一致。
+export COLUMNS=100
+
 # gnu目录必须和syskits目录平级
 path_SYSKITS=${path_SYSKITS:-${REPO_main_dir}}
 path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_SYSKITS}/../gnu}")"

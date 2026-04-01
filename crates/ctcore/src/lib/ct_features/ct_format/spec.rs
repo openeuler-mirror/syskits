@@ -85,6 +85,7 @@ struct Flags {
     space: bool,
     hash: bool,
     zero: bool,
+    quote: bool,
 }
 
 impl Flags {
@@ -97,18 +98,20 @@ impl Flags {
                 b' ' => flags.space = true,
                 b'#' => flags.hash = true,
                 b'0' => flags.zero = true,
+                b'\'' => flags.quote = true,
                 _ => break,
             }
             *index += 1;
         }
         flags
     }
+
     fn any(&self) -> bool {
         self != &Self::default()
     }
 }
 
-/// 【新增核心】用于包裹 Spec，注入索引支持，防止破坏底层代码
+/// 用于包裹 Spec，注入索引支持，防止破坏底层代码
 #[derive(Debug, PartialEq)]
 pub struct IndexedSpec {
     pub arg_index: Option<usize>,
@@ -180,7 +183,8 @@ impl IndexedSpec {
 
         let spec = match type_spec {
             b'c' => {
-                if flags.hash || flags.zero || precision.is_some() {
+                // 对于字符类型，单引号标志是非法的
+                if flags.hash || flags.zero || flags.quote || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Spec::Char {
@@ -189,7 +193,8 @@ impl IndexedSpec {
                 }
             }
             b's' => {
-                if flags.hash || flags.zero {
+                // 对于字符串类型，单引号标志是非法的
+                if flags.hash || flags.zero || flags.quote {
                     return Err(&start[..index]);
                 }
                 Spec::String {
@@ -225,6 +230,10 @@ impl IndexedSpec {
                 if flags.hash && *c == b'u' {
                     return Err(&start[..index]);
                 }
+                // 千分位分组不支持八进制和十六进制 (o, x, X)
+                if flags.quote && *c != b'u' {
+                    return Err(&start[..index]);
+                }
                 let prefix = if flags.hash { Prefix::Yes } else { Prefix::No };
                 Spec::UnsignedInt {
                     variant: match c {
@@ -257,6 +266,7 @@ impl IndexedSpec {
                     b'g' | b'G' => FloatVariant::Shortest,
                     _ => unreachable!(),
                 };
+                // 注：对于浮点数等支持千分位的，同样的降级处理。
                 Spec::Float {
                     width,
                     precision,

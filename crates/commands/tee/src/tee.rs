@@ -414,8 +414,12 @@ impl MultiWriter {
         self.writers.iter().any(|w| w.name == "'standard output'")
     }
 
-    // 新增：人工模拟 Broken Pipe 错误并交由统一的 process_error 处理
     fn report_broken_pipe_for_stdout(&mut self) -> Result<()> {
+        #[cfg(unix)]
+        if self.output_error_mode.is_none() {
+            let _ = nix::sys::signal::raise(nix::sys::signal::Signal::SIGPIPE);
+        }
+
         let mut errors = 0;
         let mode = self.output_error_mode.clone();
         let mut aborted = None;

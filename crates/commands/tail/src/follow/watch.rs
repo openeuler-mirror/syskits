@@ -700,12 +700,13 @@ impl Observer {
         for new_path in newly_appeared_paths {
             if let Ok(md) = new_path.metadata() {
                 if md.is_tailable() {
-                    let same_file_reappeared = self
-                        .files
-                        .get(&new_path)
+                    let pd = self.files.get(&new_path);
+
+                    // 不仅要判断 inode 相同，还要判断之前是不是一个正常的可读文件。
+                    let same_file_reappeared = pd
                         .metadata
                         .as_ref()
-                        .is_some_and(|old_md| old_md.file_id_eq(&md));
+                        .is_some_and(|old_md| old_md.is_tailable() && old_md.file_id_eq(&md));
 
                     if same_file_reappeared {
                         self.files.update_metadata(&new_path, Some(md));
@@ -716,11 +717,19 @@ impl Observer {
                         continue;
                     }
 
-                    let pd = self.files.get(&new_path);
-                    ct_show_error!(
-                        "{} has appeared;  following new file",
-                        pd.display_name.quote()
-                    );
+                    // 完美匹配 GNU coreutils 的日志语义。
+                    // 如果以前存在过且不是可读文件（比如是个目录），提示 "become accessible"。
+                    // 如果是完全从无到有，或者 inode 发生了更迭，提示 "has appeared"。
+                    let was_tailable = pd.metadata.as_ref().is_some_and(|old| old.is_tailable());
+                    if pd.metadata.is_some() && !was_tailable {
+                        ct_show_error!("{} has become accessible", pd.display_name.quote());
+                    } else {
+                        ct_show_error!(
+                            "{} has appeared;  following new file",
+                            pd.display_name.quote()
+                        );
+                    }
+
                     self.files.update_metadata(&new_path, Some(md));
                     self.files.update_reader(&new_path)?;
                     read_some = self.files.tail_file(&new_path, verbose)? || read_some;

@@ -533,6 +533,10 @@ mod tests {
 
         #[test]
         fn test_open_file_no_permissions() {
+            if ctcore::ct_process::geteuid() != 0 {
+                println!("Skipping test_open_file_no_permissions: requires root privileges");
+                return;
+            }
             // 创建一个临时文件，并移除所有权限
             let file = NamedTempFile::new().unwrap();
             let file_path = file.path().to_str().unwrap();

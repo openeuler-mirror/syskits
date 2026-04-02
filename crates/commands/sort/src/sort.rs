@@ -4518,6 +4518,10 @@ mod tests {
 
         #[test]
         fn test_output_new_read_only_file() {
+            if ctcore::ct_process::geteuid() != 0 {
+                println!("Skipping test_output_new_read_only_file: requires root privileges");
+                return;
+            }
             let temp_dir = tempdir().unwrap();
             let test_file_path = temp_dir.path().join("test_read_only_file.txt");
             let test_file_name = test_file_path.to_str().unwrap();
@@ -4553,6 +4557,10 @@ mod tests {
 
         #[test]
         fn test_into_write_read_only_truncation() {
+            if ctcore::ct_process::geteuid() != 0 {
+                println!("Skipping test_into_write_read_only_truncation: requires root privileges");
+                return;
+            }
             let temp_dir = tempdir().unwrap();
             let test_file_path = temp_dir.path().join("test_read_only_truncation.txt");
             let test_file_name = test_file_path.to_str().unwrap();

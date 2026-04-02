@@ -653,6 +653,10 @@ mod tests {
 
         #[test]
         fn test_id_handle_users_with_rflag() {
+            if ctcore::ct_process::geteuid() != 0 {
+                println!("Skipping test_id_handle_users_with_rflag: requires root privileges");
+                return;
+            }
             // 测试带有 --real (-r) 标志的情况
             let mut state = IdState {
                 is_nflag: false,

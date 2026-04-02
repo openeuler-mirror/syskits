@@ -750,6 +750,10 @@ mod tests {
 
             // fn test_exec_with_environment_tmpdir()
             {
+                if ctcore::ct_process::geteuid() != 0 {
+                    println!("Skipping test_options_by_env: requires root privileges");
+                    return;
+                }
                 unsafe { std::env::set_var("TMPDIR", "/custom/tmpdir") };
                 let tmpdir = PathBuf::from("/custom/tmpdir");
                 fs::create_dir_all(&tmpdir).expect("Failed to create custom tmpdir");

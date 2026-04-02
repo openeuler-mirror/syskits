@@ -1239,8 +1239,7 @@ fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> Result<(), 
 
         if verbose {
             println!(
-                "{}: {} {}",
-                ctcore::ct_util_name(),
+                "install: {} {}",
                 t!("install.verbose_creating_dir"),
                 cur.quote()
             );

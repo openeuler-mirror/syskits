@@ -767,7 +767,7 @@ fn shred_wipe_name(
                         "{}: Couldn't rename to {}: {}",
                         last_path.maybe_quote(),
                         new_path.quote(),
-                        e
+                        strip_errno(&e)
                     );
                     return None;
                 }

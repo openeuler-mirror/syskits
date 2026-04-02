@@ -1134,7 +1134,7 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
         let out_path = Path::new(out_name);
         if out_path.exists() {
             // 使用 append(true) 仅作写权限探测，避免提前 truncate 清空目标文件
-            if let Err(e) = OpenOptions::new().write(true).append(true).open(out_path) {
+            if let Err(e) = OpenOptions::new().append(true).open(out_path) {
                 return Err(SortError::SortOpenFailed {
                     path: out_name.to_string(),
                     error: e,

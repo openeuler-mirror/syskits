@@ -585,7 +585,7 @@ fn list_signal_handling() {
 
         let mut old_act: libc::sigaction = unsafe { std::mem::zeroed() };
         if unsafe { libc::sigaction(sig as libc::c_int, std::ptr::null(), &mut old_act) } == 0 {
-            let handler = old_act.sa_sigaction as usize;
+            let handler = old_act.sa_sigaction;
 
             let state_str = if handler == libc::SIG_IGN {
                 "IGNORE"

@@ -14,7 +14,6 @@ extern crate rust_i18n;
 mod error;
 
 use crate::opt_flags::ARG_FILES;
-use ctcore::ct_error::CTIoError;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::opt_flags::OPT_CONTEXT;
@@ -506,10 +505,8 @@ fn mv_handle_two_paths(
                             source_path.quote(),
                             target_path.quote()
                         );
-                        if err_str.contains("inter-device move failed") {
+                        if err_str.contains("inter-device move failed") || err_str.contains(&msg) {
                             Err(CtSimpleError::new(1, err_str))
-                        } else if err_str.contains(&msg) {
-                            Err(e.map_err_context(|| "".to_string()))
                         } else {
                             Err(e.map_err_context(|| msg))
                         }
@@ -823,7 +820,7 @@ fn move_files_into_dir(
                         };
                     } else {
                         let final_err = if err_str.contains(&msg) {
-                            CTIoError::new(err.kind(), err_str)
+                            CtSimpleError::new(1, err_str)
                         } else {
                             err.map_err_context(|| msg)
                         };
@@ -862,7 +859,7 @@ fn move_files_into_dir(
                         };
                     } else {
                         let final_err = if err_str.contains(&msg) {
-                            CTIoError::new(err.kind(), err_str)
+                            CtSimpleError::new(1, err_str)
                         } else {
                             err.map_err_context(|| msg)
                         };
@@ -1221,7 +1218,7 @@ fn mv_rename_with_fallback(
                 "cannot move {} to {}: {}",
                 from.quote(),
                 to.quote(),
-                rename_error
+                strip_errno(&rename_error)
             );
             return Err(io::Error::new(rename_error.kind(), message));
         }

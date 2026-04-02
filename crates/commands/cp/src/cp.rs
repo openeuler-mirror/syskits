@@ -31,7 +31,7 @@ use crate::copydir::copy_directory;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, UClapError, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, UClapError, set_ct_exit_code, strip_errno};
 use ctcore::ct_fs::{
     CtFileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     is_symlink_loop, path_ends_with_terminator, paths_refer_to_same_file,
@@ -55,11 +55,11 @@ quick_error! {
     #[derive(Debug)]
     pub enum CpError {
         /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() source(err) display("{}", err)}
+        IoErr(err: io::Error) { from() source(err) display("{}", strip_errno(err))}
 
         /// Wrapper for io::Error with path context
         IoErrContext(err: io::Error, path: String) {
-            display("{}: {}", path, err)
+            display("{}: {}", path, strip_errno(err))
             context(path: &'a str, err: io::Error) -> (err, path.to_owned())
             context(context: String, err: io::Error) -> (err, context)
             source(err)

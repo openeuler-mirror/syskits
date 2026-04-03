@@ -584,15 +584,12 @@ fn remove_dir_tree(
         } else {
             e.to_string()
         };
-        ct_show_error!(
-            "cannot read directory {}: {}",
-            display_path.quote(),
-            err_msg
-        );
+        // 【核心修复】将 "cannot read directory" 修正为 GNU 标准的 "cannot remove"
+        ct_show_error!("cannot remove {}: {}", display_path.quote(), err_msg);
         return true;
     }
 
-    // 3. 交互式确认
+    // 4. 交互式确认
     if options.interactive == InteractiveMode::Always && !is_empty && !prompt_descend(display_path)
     {
         if use_chdir {
@@ -601,7 +598,7 @@ fn remove_dir_tree(
         return true;
     }
 
-    // 4. 清理内层所有文件
+    // 5. 清理内层所有文件
     for entry in entries {
         let name = entry.file_name();
         let child_display = display_path.join(&name);
@@ -626,7 +623,7 @@ fn remove_dir_tree(
         }
     }
 
-    // 5. 恢复现场并删除自身
+    // 6. 恢复现场并删除自身
     if use_chdir {
         if let Err(e) = restorer.restore() {
             ct_show_error!("failed to restore directory: {}", e);

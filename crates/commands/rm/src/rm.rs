@@ -416,24 +416,8 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = custom_remove_dir_all(path, options, top_dev) {
-                // GNU compatibility (rm/empty-inacc.sh)
-                if fs::remove_dir(path).is_err() {
-                    had_err = true;
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        ct_show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                    } else if e.to_string() == "crosses device boundary" {
-                        // ignore
-                    } else {
-                        ct_show_error!("cannot remove {}: {}", path.quote(), e);
-                    }
-                }
-            }
-        } else {
-            // 抛弃 WalkDir，使用严格的深度优先递归引擎
-            had_err = interactive_remove_dir_all(path, options, top_dev, true);
-        }
+        // 使用跨平台的、防御 ENAMETOOLONG 长路径异常的单轨递归引擎
+        had_err = remove_dir_tree(path, path, options, top_dev, true);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, path, options).bitor(had_err);
     } else if options.recursive {
@@ -442,6 +426,159 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     } else {
         ct_show_error!("cannot remove {}: Is a directory", path.quote());
         had_err = true;
+    }
+
+    had_err
+}
+
+struct DirRestorer {
+    #[cfg(unix)]
+    fd: File,
+    #[cfg(not(unix))]
+    path: PathBuf,
+}
+
+impl DirRestorer {
+    fn new() -> std::io::Result<Self> {
+        #[cfg(unix)]
+        {
+            Ok(Self {
+                fd: File::open(".")?,
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            Ok(Self {
+                path: std::env::current_dir()?,
+            })
+        }
+    }
+
+    fn restore(&self) -> std::io::Result<()> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            unsafe {
+                if libc::fchdir(self.fd.as_raw_fd()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        }
+        #[cfg(not(unix))]
+        {
+            std::env::set_current_dir(&self.path)
+        }
+    }
+}
+
+/// 核心递归引擎：完美解决深层目录长路径越界 (ENAMETOOLONG) 问题
+/// `local_path`: 供系统调用使用的短路径（总是相对于当前 cwd 的直接子代）
+/// `display_path`: 仅用于内存组装，打印在警告中的完整用户路径
+fn remove_dir_tree(
+    local_path: &Path,
+    display_path: &Path,
+    options: &RMOptions,
+    top_dev: u64,
+    is_top_level: bool,
+) -> bool {
+    let mut had_err = false;
+
+    // 1. 跨文件系统检测
+    if !is_top_level && options.one_fs {
+        if let Ok(meta) = fs::symlink_metadata(local_path) {
+            if get_device(&meta) != top_dev {
+                ct_show_error!(
+                    "skipping {}, since it's on a different device",
+                    display_path.quote()
+                );
+                return true;
+            }
+        }
+    }
+
+    // 2. 准备深入目录。先保存当前目录现场。
+    let restorer = match DirRestorer::new() {
+        Ok(r) => r,
+        Err(e) => {
+            ct_show_error!("cannot open current directory: {}", e);
+            return true;
+        }
+    };
+
+    // 执行 chdir 下沉：规避超长路径崩溃
+    if let Err(e) = std::env::set_current_dir(local_path) {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            ct_show_error!(
+                "cannot read directory {}: {}",
+                display_path.quote(),
+                "Permission denied"
+            );
+        } else {
+            ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
+        }
+        return true;
+    }
+
+    let mut is_empty = true;
+    let mut entries = Vec::new();
+    match fs::read_dir(".") {
+        Ok(iter) => {
+            for entry in iter {
+                match entry {
+                    Ok(e) => {
+                        is_empty = false;
+                        entries.push(e);
+                    }
+                    Err(e) => {
+                        ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
+                        had_err = true;
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
+            had_err = true;
+        }
+    }
+
+    // 3. 交互式确认
+    if options.interactive == InteractiveMode::Always && !is_empty && !prompt_descend(display_path)
+    {
+        let _ = restorer.restore();
+        return had_err;
+    }
+
+    // 4. 清理内层所有文件，此时 entry 仅为一个极短的 local filename
+    for entry in entries {
+        let name = entry.file_name();
+        let child_display = display_path.join(&name);
+        let child_local = Path::new(&name);
+
+        let is_dir = match entry.file_type() {
+            Ok(ft) => ft.is_dir(),
+            Err(_) => fs::symlink_metadata(child_local)
+                .map(|m| m.is_dir())
+                .unwrap_or(false),
+        };
+
+        if is_dir {
+            had_err |= remove_dir_tree(child_local, &child_display, options, top_dev, false);
+        } else {
+            had_err |= remove_file(child_local, &child_display, options);
+        }
+    }
+
+    // 5. 子文件清理完毕。为了删除自己，必须先跳出回到父目录！
+    if let Err(e) = restorer.restore() {
+        ct_show_error!("failed to restore directory: {}", e);
+        return true;
+    }
+
+    // 6. 只要子节点无报错，就在外部（父层）将其彻底移除
+    if !had_err {
+        had_err |= remove_dir(local_path, display_path, options);
     }
 
     had_err

@@ -514,21 +514,75 @@ fn remove_dir_tree(
     };
 
     // 执行 chdir 下沉：规避超长路径崩溃
-    if let Err(e) = std::env::set_current_dir(local_path) {
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            ct_show_error!(
-                "cannot read directory {}: {}",
-                display_path.quote(),
-                "Permission denied"
-            );
-        } else {
-            ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
+    if let Err(chdir_err) = std::env::set_current_dir(local_path) {
+        // 无法 chdir (缺乏 x 权限)。但如果它有 r 权限，我们依然可以在外部读取列表！
+        if let Ok(iter) = fs::read_dir(local_path) {
+            for entry in iter {
+                match entry {
+                    Ok(e) => {
+                        let name = e.file_name();
+                        let child_display = display_path.join(&name);
+                        let child_local = local_path.join(&name);
+
+                        // 我们没有 x 权限，系统不允许解析下级路径，任何操作都会返回 EACCES。
+                        // 强制触发系统的拒绝删除响应，以对齐 GNU 的子文件报警逻辑
+                        if let Err(err) =
+                            fs::remove_file(&child_local).or_else(|_| fs::remove_dir(&child_local))
+                        {
+                            if err.kind() == std::io::ErrorKind::PermissionDenied {
+                                ct_show_error!(
+                                    "cannot remove {}: {}",
+                                    child_display.quote(),
+                                    "Permission denied"
+                                );
+                            } else {
+                                ct_show_error!("cannot remove {}: {}", child_display.quote(), err);
+                            }
+                            had_err = true;
+                        }
+                    }
+                    Err(e) => {
+                        ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
+                        had_err = true;
+                    }
+                }
+            }
+            // 如果内部报错了，父级删除就会顺理成章地被跳过，这就完美吻合了 exp-solaris 测试预期！
+            if !had_err {
+                had_err |= remove_dir(local_path, display_path, options);
+            }
+            return had_err;
         }
+
+        // 如果连 read_dir 都失败了，说明连 r 权限都没有。走原本的兜底逻辑。
+        if !prompt_dir(local_path, display_path, options) {
+            return false;
+        }
+
+        if fs::remove_dir(local_path).is_ok() {
+            if options.verbose {
+                println!("removed directory {}", normalize(display_path).quote());
+            }
+            return false;
+        }
+
+        let err_msg = if chdir_err.kind() == std::io::ErrorKind::PermissionDenied {
+            "Permission denied".to_string()
+        } else {
+            chdir_err.to_string()
+        };
+        ct_show_error!(
+            "cannot read directory {}: {}",
+            display_path.quote(),
+            err_msg
+        );
         return true;
     }
 
     let mut is_empty = true;
     let mut entries = Vec::new();
+    let mut read_dir_err = None;
+
     match fs::read_dir(".") {
         Ok(iter) => {
             for entry in iter {
@@ -538,23 +592,50 @@ fn remove_dir_tree(
                         entries.push(e);
                     }
                     Err(e) => {
-                        ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
-                        had_err = true;
+                        read_dir_err = Some(e);
+                        break;
                     }
                 }
             }
         }
         Err(e) => {
-            ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
-            had_err = true;
+            read_dir_err = Some(e);
         }
+    }
+
+    // 如果能够进入 (有 x 权限) 但无权读取列表 (无 r 权限)，尝试以空目录直接抹杀它！
+    if let Some(e) = read_dir_err {
+        let _ = restorer.restore();
+
+        if !prompt_dir(local_path, display_path, options) {
+            return false;
+        }
+
+        if fs::remove_dir(local_path).is_ok() {
+            if options.verbose {
+                println!("removed directory {}", normalize(display_path).quote());
+            }
+            return false;
+        }
+
+        let err_msg = if e.kind() == std::io::ErrorKind::PermissionDenied {
+            "Permission denied".to_string()
+        } else {
+            e.to_string()
+        };
+        ct_show_error!(
+            "cannot read directory {}: {}",
+            display_path.quote(),
+            err_msg
+        );
+        return true;
     }
 
     // 3. 交互式确认
     if options.interactive == InteractiveMode::Always && !is_empty && !prompt_descend(display_path)
     {
         let _ = restorer.restore();
-        return had_err;
+        return true; // 拒绝进入子树，标记为错误以防止父目录被删
     }
 
     // 4. 清理内层所有文件，此时 entry 仅为一个极短的 local filename
@@ -593,39 +674,37 @@ fn remove_dir_tree(
 
 fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
     if prompt_dir(local_path, display_path, options) {
-        if let Ok(mut read_dir) = fs::read_dir(local_path) {
-            if options.dir || options.recursive {
-                if read_dir.next().is_none() {
-                    match fs::remove_dir(local_path) {
-                        Ok(_) => {
-                            if options.verbose {
-                                println!("removed directory {}", normalize(display_path).quote());
-                            }
-                            return false;
-                        }
-                        Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                ct_show_error!(
-                                    "cannot remove {}: {}",
-                                    display_path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                ct_show_error!("cannot remove {}: {}", display_path.quote(), e);
-                            }
-                            return true;
-                        }
+        if !options.dir && !options.recursive {
+            ct_show_error!("cannot remove {}: Is a directory", display_path.quote());
+            return true;
+        }
+
+        // 尝试判断是否为空，如果 read_dir 被拒绝权限，则默认为 true 交给后续的 remove_dir 裁决
+        let is_empty = match fs::read_dir(local_path) {
+            Ok(mut iter) => iter.next().is_none(),
+            Err(_) => true,
+        };
+
+        if is_empty {
+            match fs::remove_dir(local_path) {
+                Ok(_) => {
+                    if options.verbose {
+                        println!("removed directory {}", normalize(display_path).quote());
                     }
-                } else {
-                    ct_show_error!(
-                        "cannot remove {}: Directory not empty",
-                        display_path.quote()
-                    );
+                    return false;
+                }
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        ct_show_error!(
+                            "cannot remove {}: {}",
+                            display_path.quote(),
+                            "Permission denied"
+                        );
+                    } else {
+                        ct_show_error!("cannot remove {}: {}", display_path.quote(), e);
+                    }
                     return true;
                 }
-            } else {
-                ct_show_error!("cannot remove {}: Is a directory", display_path.quote());
-                return true;
             }
         } else {
             ct_show_error!(

@@ -130,6 +130,8 @@ pub enum MvOverwriteMode {
     Interactive,
     /// 不提示地覆盖已存在文件，无条件进行。
     Force,
+    /// 默认模式：仅当目标无写权限且标准输入为 TTY 时提示。
+    Default,
 }
 
 mod opt_flags {
@@ -328,16 +330,109 @@ fn mv_args_init() -> Vec<Arg> {
  * @return 返回一个MvOverwriteMode枚举值，指示如何处理文件覆盖情况。
  */
 fn mv_determine_overwrite_mode(matches: &ArgMatches) -> MvOverwriteMode {
-    // 确定文件覆盖模式的逻辑：
-    // 首先检查是否通过命令行指定了不覆盖已有文件的选项；
-    // 如果没有指定，则检查是否指定了交互式覆盖模式；
-    // 如果以上选项都没有指定，则默认采用强制覆盖模式。
     if matches.get_flag(OPT_NO_CLOBBER) {
-        MvOverwriteMode::NoClobber // 不覆盖已有文件
+        MvOverwriteMode::NoClobber
     } else if matches.get_flag(OPT_INTERACTIVE) {
-        MvOverwriteMode::Interactive // 交互式覆盖模式
+        MvOverwriteMode::Interactive
+    } else if matches.get_flag(OPT_FORCE) {
+        MvOverwriteMode::Force
     } else {
-        MvOverwriteMode::Force // 强制覆盖模式
+        MvOverwriteMode::Default // 默认遵循 POSIX：对只读文件且在 TTY 时提示
+    }
+}
+
+/**
+ * 在覆盖文件前处理交互提示或强制校验
+ */
+fn prompt_overwrite(target_path: &Path, mode: &MvOverwriteMode) -> io::Result<()> {
+    if *mode == MvOverwriteMode::Force {
+        return Ok(());
+    }
+    if *mode == MvOverwriteMode::NoClobber {
+        let err_msg = format!("not replacing {}", target_path.quote());
+        return Err(io::Error::other(err_msg));
+    }
+
+    let is_interactive = *mode == MvOverwriteMode::Interactive;
+    let mut prompt = format!("overwrite {}?", target_path.quote());
+    let mut needs_prompt = is_interactive;
+
+    if let Ok(meta) = fs::symlink_metadata(target_path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode_val = meta.permissions().mode() & 0o7777;
+            use std::ffi::CString;
+            use std::os::unix::ffi::OsStrExt;
+            let c_path = CString::new(target_path.as_os_str().as_bytes()).unwrap();
+            let is_writable = unsafe { libc::access(c_path.as_ptr(), libc::W_OK) } == 0;
+
+            if !is_writable {
+                use std::io::IsTerminal;
+                if is_interactive || std::io::stdin().is_terminal() {
+                    needs_prompt = true;
+                    let rwx = format!(
+                        "{}{}{}{}{}{}{}{}{}",
+                        if mode_val & 0o400 != 0 { 'r' } else { '-' },
+                        if mode_val & 0o200 != 0 { 'w' } else { '-' },
+                        if mode_val & 0o100 != 0 {
+                            if mode_val & 0o4000 != 0 { 's' } else { 'x' }
+                        } else if mode_val & 0o4000 != 0 {
+                            'S'
+                        } else {
+                            '-'
+                        },
+                        if mode_val & 0o040 != 0 { 'r' } else { '-' },
+                        if mode_val & 0o020 != 0 { 'w' } else { '-' },
+                        if mode_val & 0o010 != 0 {
+                            if mode_val & 0o2000 != 0 { 's' } else { 'x' }
+                        } else if mode_val & 0o2000 != 0 {
+                            'S'
+                        } else {
+                            '-'
+                        },
+                        if mode_val & 0o004 != 0 { 'r' } else { '-' },
+                        if mode_val & 0o002 != 0 { 'w' } else { '-' },
+                        if mode_val & 0o001 != 0 {
+                            if mode_val & 0o1000 != 0 { 't' } else { 'x' }
+                        } else if mode_val & 0o1000 != 0 {
+                            'T'
+                        } else {
+                            '-'
+                        },
+                    );
+                    prompt = format!(
+                        "replace {}, overriding mode {:04o} ({})?",
+                        target_path.quote(),
+                        mode_val,
+                        rwx
+                    );
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            if meta.permissions().readonly() {
+                use std::io::IsTerminal;
+                if is_interactive || std::io::stdin().is_terminal() {
+                    needs_prompt = true;
+                    prompt = format!(
+                        "replace {}, overriding mode 0444 (-r--r--r--)?",
+                        target_path.quote()
+                    );
+                }
+            }
+        }
+    }
+
+    if needs_prompt {
+        if ct_prompt_yes!("{}", prompt) {
+            Ok(())
+        } else {
+            Err(io::Error::other(""))
+        }
+    } else {
+        Ok(())
     }
 }
 
@@ -524,21 +619,18 @@ fn mv_handle_two_paths(
             )
             .into())
         } else {
-            // 将文件移动到目录中。
             move_files_into_dir(&[source_path.to_path_buf()], target_path, mv_options)
         }
         // 如果目标存在且源是目录
     } else if target_exists && source_is_directory {
-        // 根据是否覆盖选项，处理交互式询问或直接返回错误。
-        match mv_options.overwrite {
-            MvOverwriteMode::NoClobber => return Ok(()),
-            MvOverwriteMode::Interactive => {
-                if !ct_prompt_yes!("overwrite {}? ", target_path.quote()) {
-                    return Err(io::Error::other("").into());
-                }
-            }
-            MvOverwriteMode::Force => {}
-        };
+        // 调用统一的 overwrite 提示校验器
+        if let Err(e) = prompt_overwrite(target_path, &mv_options.overwrite) {
+            return if e.to_string().is_empty() {
+                Ok(())
+            } else {
+                Err(e.into())
+            };
+        }
         Err(MvError::NonDirectoryToDirectory(
             source_path.quote().to_string(),
             target_path.quote().to_string(),
@@ -609,8 +701,8 @@ fn move_files_into_dir(
     // 用于存储已移动文件的目标路径，避免重复移动
     let mut moved_dests: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
-    // 将重复检测依据从 (device_id, inode) 改为规范化路径。
-    // 这样，互为硬链接的不同路径就不会被误判为重复指定的同一个源文件。
+    // 【核心修复1】将重复检测依据从 (device_id, inode) 改为绝对路径/规范化路径。
+    // 这样，互为硬链接的不同路径（如 a/f 和 b/g）就不会被误判为重复指定的同一个源文件。
     let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
     // 标记是否发生过错误
@@ -632,8 +724,6 @@ fn move_files_into_dir(
 
     // 根据选项决定是否创建进度条
     let multi_progress = mv_opts.progress_bar.then(MultiProgress::new);
-
-    // 如果移动多个文件，创建进度条来跟踪进度
     let progress = if let Some(ref multi_progress) = multi_progress {
         if mv_files.len() > 1 {
             Some(multi_progress.add(
@@ -649,14 +739,11 @@ fn move_files_into_dir(
     };
 
     // 用于跨分区移动时追踪硬链接关系
-    // key: 源文件系统的 (device_id, inode) 对
-    // value: 目标文件系统中已创建的文件路径
     #[cfg(unix)]
     let mut hardlink_map: HashMap<(u64, u64), PathBuf> = HashMap::new();
 
     // 遍历所有要移动的文件
     for source_path in mv_files {
-        // 如果设置了进度条，更新进度条信息
         if let Some(ref pb) = progress {
             pb.set_message(source_path.to_string_lossy().to_string());
         }
@@ -667,7 +754,7 @@ fn move_files_into_dir(
             Err(_) => {
                 ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
                 set_ct_exit_code(1);
-                has_error = true;
+                has_error = true; // 确保标记了错误
                 continue;
             }
         };
@@ -722,7 +809,7 @@ fn move_files_into_dir(
                     source_path.display()
                 ),
             ));
-            has_error = true;
+            has_error = true; // 【核心修复2】发生同名目标冲突时，强制将退出状态设为错误码1
             continue;
         }
 
@@ -775,7 +862,6 @@ fn move_files_into_dir(
                         source_path.quote(),
                         targetpath.quote()
                     );
-
                     if err_str.contains("inter-device move failed") {
                         let final_err = CtSimpleError::new(1, err_str);
                         match multi_progress {
@@ -818,7 +904,6 @@ fn move_files_into_dir(
                         source_path.quote(),
                         targetpath.quote()
                     );
-
                     if err_str.contains("inter-device move failed") {
                         let final_err = CtSimpleError::new(1, err_str);
                         match multi_progress {
@@ -849,6 +934,7 @@ fn move_files_into_dir(
         // 将目标路径加入到已移动文件的集合中
         moved_dests.insert(targetpath.clone());
     }
+
     // 移动全部文件完成后，如果有错误发生，返回错误
     if has_error {
         return Err(CtSimpleError::new(1, ""));
@@ -893,20 +979,7 @@ fn mv_rename_with_hardlink_tracking(
         if let Some(existing_dest) = hardlink_map.get(&key) {
             // 检查目标文件系统是否已存在该文件（需要覆盖）
             if to_path.exists() {
-                match options.overwrite {
-                    MvOverwriteMode::NoClobber => {
-                        return Err(io::Error::other(format!(
-                            "not replacing {}",
-                            to_path.quote()
-                        )));
-                    }
-                    MvOverwriteMode::Interactive => {
-                        if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
-                            return Err(io::Error::other(""));
-                        }
-                    }
-                    MvOverwriteMode::Force => {}
-                };
+                prompt_overwrite(to_path, &options.overwrite)?;
 
                 // 处理备份
                 if options.backup != CtBackupMode::NoBackup {
@@ -1044,18 +1117,13 @@ fn mv_rename(
             return Ok(());
         }
 
-        match options.overwrite {
-            MvOverwriteMode::NoClobber => {
-                let err_msg = format!("not replacing {}", to_path.quote());
-                return Err(io::Error::other(err_msg));
-            }
-            MvOverwriteMode::Interactive => {
-                if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
-                    return Err(io::Error::other(""));
-                }
-            }
-            MvOverwriteMode::Force => {}
-        };
+        if let Err(e) = prompt_overwrite(to_path, &options.overwrite) {
+            return if e.to_string().is_empty() {
+                Ok(())
+            } else {
+                Err(e)
+            };
+        }
 
         // 这样 "E/" 就会生成正确的备份名 "E.~1~"，而不是非法的 "E/.~1~"
         backup_path =
@@ -1694,15 +1762,6 @@ mod tests_helper_functions {
         assert_eq!(
             mv_determine_overwrite_mode(&matches),
             MvOverwriteMode::Interactive
-        );
-    }
-
-    #[test]
-    fn overwrite_mode_defaults_to_force() {
-        let matches = build_matches(&["from", "to"]);
-        assert_eq!(
-            mv_determine_overwrite_mode(&matches),
-            MvOverwriteMode::Force
         );
     }
 

@@ -636,8 +636,6 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 # GNU ls 会对整行元数据着色并生成大量冗余的 ANSI 状态切换符 (如 \e[0m\e[07m\e[0m)。
 # Rust ls 采用基于 nu-ansi-term 的无状态精准着色方案，语义更清晰，无需向下兼容此种乱象。
 "${SED}" -i 's/compare exp out || fail=1/exit 0/' tests/ls/color-norm.sh
-# 适应 Rust nu-ansi-term 在切换新样式前保守输出 \033[0m 重置符的安全特性
-"${SED}" -i -E 's/(\\033\[0m)+/\\033[0m/g' tests/ls/stat-free-symlinks.sh
 # GNU ls 根据“颜色值是否一致”来动态切换大小写敏感度的逻辑过于怪异。
 # Rust lscolors 库采用了更清晰一致的扩展名匹配规范，无需向下兼容此扭曲逻辑。
 "${SED}" -i '/working_umask_or_skip_/a exit 0' tests/ls/color-ext.sh
@@ -652,9 +650,6 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 # 修复因过滤 setuid-etc 导致残留文件未清理，从而引发二次 setup 报错 SKIP 的问题。
 # 在 setuid_setup 的 shell 命令开头强行注入 rm -rf 清理逻辑，使其变为幂等操作。
 "${SED}" -i 's/touch setuid &&/rm -rf setuid setgid sticky owt owr; touch setuid \&\&/' tests/ls/ls-misc.pl
-# 修复 color-dtype-dir.sh 中 ANSI 颜色序列顺序 (34;42 -> 42;34) 以及 Rust 渲染库安全的前置重置符 (^[[0m)
-"${SED}" -i 's/\^\[\[34;42mother-writable/\^\[\[0m\^\[\[42;34mother-writable/' tests/ls/color-dtype-dir.sh
-"${SED}" -i 's/\^\[\[37;44msticky/\^\[\[0m\^\[\[44;37msticky/' tests/ls/color-dtype-dir.sh
 # 修复 multihardlink.sh 中硬链接 ANSI 颜色序列的规范化顺序差异 (37;44 -> 44;37)
 "${SED}" -i "s/code_mh='37;44'/code_mh='44;37'/" tests/ls/multihardlink.sh
 

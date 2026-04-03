@@ -601,7 +601,16 @@ fn mv_handle_two_paths(
                             target_path.quote()
                         );
                         if err_str.contains("inter-device move failed") || err_str.contains(&msg) {
-                            Err(CtSimpleError::new(1, err_str))
+                            // 处理空的错误（被跳过）
+                            if err_str.is_empty() {
+                                set_ct_exit_code(1);
+                                Ok(())
+                            } else {
+                                Err(CtSimpleError::new(1, err_str))
+                            }
+                        } else if err_str.is_empty() {
+                            set_ct_exit_code(1);
+                            Ok(())
                         } else {
                             Err(e.map_err_context(|| msg))
                         }
@@ -625,11 +634,13 @@ fn mv_handle_two_paths(
     } else if target_exists && source_is_directory {
         // 调用统一的 overwrite 提示校验器
         if let Err(e) = prompt_overwrite(target_path, &mv_options.overwrite) {
-            return if e.to_string().is_empty() {
-                Ok(())
+            // 遇到空错误不再吞噬，而是设置退出码为 1 并安静返回
+            if e.to_string().is_empty() {
+                set_ct_exit_code(1);
+                return Ok(());
             } else {
-                Err(e.into())
-            };
+                return Err(e.into());
+            }
         }
         Err(MvError::NonDirectoryToDirectory(
             source_path.quote().to_string(),
@@ -638,8 +649,15 @@ fn mv_handle_two_paths(
         .into())
         // 默认情况：尝试重命名或移动文件。
     } else {
-        mv_rename(source_path, target_path, mv_options, None, None)
-            .map_err(|e| CtSimpleError::new(1, format!("{e}")))
+        match mv_rename(source_path, target_path, mv_options, None, None) {
+            Ok(()) => Ok(()),
+            Err(e) if e.to_string().is_empty() => {
+                // 捕获拒绝覆盖传上来的空错误，设置退出状态 1
+                set_ct_exit_code(1);
+                Ok(())
+            }
+            Err(e) => Err(CtSimpleError::new(1, format!("{e}"))),
+        }
     }
 }
 
@@ -1117,13 +1135,7 @@ fn mv_rename(
             return Ok(());
         }
 
-        if let Err(e) = prompt_overwrite(to_path, &options.overwrite) {
-            return if e.to_string().is_empty() {
-                Ok(())
-            } else {
-                Err(e)
-            };
-        }
+        prompt_overwrite(to_path, &options.overwrite)?;
 
         // 这样 "E/" 就会生成正确的备份名 "E.~1~"，而不是非法的 "E/.~1~"
         backup_path =

@@ -260,10 +260,17 @@ fn determine_interactive_mode(
             "never" => InteractiveMode::Never,
             "once" => InteractiveMode::Once,
             "always" => InteractiveMode::Always,
-            val => panic!("Invalid argument to interactive ({val})"), // Ideally, this should return a Result
+            val => panic!("Invalid argument to interactive ({val})"),
         }
     } else {
-        InteractiveMode::PromptProtected
+        // 遵循 POSIX 规范：如果输入不是 TTY，受保护文件直接删除不提示
+        use std::io::IsTerminal;
+        let presume_tty = matches.get_flag(rm_flags::RM_PRESUME_INPUT_TTY);
+        if presume_tty || std::io::stdin().is_terminal() {
+            InteractiveMode::PromptProtected
+        } else {
+            InteractiveMode::Never
+        }
     }
 }
 
